@@ -9,6 +9,7 @@ export default function Home() {
           facing quote documents. Phase 1 deploy verified — auth, database,
           and editor land in the next releases.
         </p>
+        <a className="cta" href="/generator.html">Start a Quote →</a>
         <p className="meta">v0.1 · {new Date().toLocaleDateString("en-US", {
           year: "numeric", month: "long", day: "numeric",
         })}</p>
