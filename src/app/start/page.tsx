@@ -1,5 +1,5 @@
 const OPTIONS = [
-  { type: "bulk", name: "Bulk", desc: "Raw ingredient or material in bulk packaging." },
+  { type: "bulk", name: "Bulk", desc: "Softgels, gummies, tablets, or capsules in bulk packaging." },
   { type: "contract-packaging", name: "Contract Packaging", desc: "Customer-supplied product, packaged to spec." },
   { type: "finished-product", name: "Finished Product", desc: "Ready-to-sell SKU from the PharmaCenter catalog." },
   { type: "other", name: "Other", desc: "Custom scope — describe inside the editor." },
