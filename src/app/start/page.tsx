@@ -1,8 +1,8 @@
 const OPTIONS = [
-  { type: "bulk", name: "Bulk", desc: "Softgels, gummies, tablets, or capsules in bulk packaging." },
-  { type: "contract-packaging", name: "Contract Packaging", desc: "Customer-supplied product, packaged to spec." },
-  { type: "finished-product", name: "Finished Product", desc: "Ready-to-sell SKU from the PharmaCenter catalog." },
-  { type: "other", name: "Other", desc: "Custom scope — describe inside the editor." },
+  { type: "bulk", name: "Bulk", desc: "Softgels, gummies, tablets, or capsules in bulk packaging.", href: "/start/bulk" },
+  { type: "contract-packaging", name: "Contract Packaging", desc: "Customer-supplied product, packaged to spec.", href: "/generator.html?type=contract-packaging" },
+  { type: "finished-product", name: "Finished Product", desc: "Ready-to-sell SKU from the PharmaCenter catalog.", href: "/generator.html?type=finished-product" },
+  { type: "other", name: "Other", desc: "Custom scope — describe inside the editor.", href: "/generator.html?type=other" },
 ];
 
 export default function Start() {
@@ -16,7 +16,7 @@ export default function Start() {
         </p>
         <div className="options">
           {OPTIONS.map((opt) => (
-            <a key={opt.type} className="opt" href={`/generator.html?type=${opt.type}`}>
+            <a key={opt.type} className="opt" href={opt.href}>
               <span className="opt__name">{opt.name}</span>
               <span className="opt__desc">{opt.desc}</span>
             </a>
