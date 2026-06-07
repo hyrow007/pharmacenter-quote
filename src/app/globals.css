@@ -60,6 +60,28 @@ h1 {
   margin-bottom: 24px;
 }
 
+.cta {
+  display: inline-block;
+  background: var(--teal-900);
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 12px 22px;
+  border-radius: 10px;
+  margin-bottom: 28px;
+  transition: background 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 0 rgba(15, 74, 86, 0.10), 0 6px 18px -6px rgba(15, 74, 86, 0.35);
+}
+.cta:hover {
+  background: var(--teal-700);
+  transform: translateY(-1px);
+}
+.cta:active {
+  transform: translateY(0);
+}
+
 .meta {
   font-size: 11px;
   font-weight: 700;
