@@ -5,8 +5,9 @@ export default function Home() {
         <p className="eyebrow">PharmaCenter</p>
         <h1>Quote</h1>
         <p className="lede">
-          Customer-facing tool for generating PharmaCenter quotes. Phase 1 deploy
-          verified — auth, database, and editor land in the next releases.
+          Tool to internally manage quoting work flows and generate customer
+          facing quote documents. Phase 1 deploy verified — auth, database,
+          and editor land in the next releases.
         </p>
         <p className="meta">v0.1 · {new Date().toLocaleDateString("en-US", {
           year: "numeric", month: "long", day: "numeric",
