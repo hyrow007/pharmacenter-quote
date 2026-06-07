@@ -34,6 +34,10 @@ html, body {
   box-shadow: 0 1px 2px rgba(15, 74, 86, 0.06), 0 12px 32px rgba(15, 74, 86, 0.08);
 }
 
+.card--wide {
+  max-width: 700px;
+}
+
 .eyebrow {
   font-size: 11px;
   font-weight: 700;
@@ -80,6 +84,56 @@ h1 {
 }
 .cta:active {
   transform: translateY(0);
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.opt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 1.5px solid #e3dcc9;
+  border-radius: 12px;
+  background: #fffdf8;
+  text-decoration: none;
+  color: var(--ink-1);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.opt:hover {
+  border-color: var(--teal-700);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -6px rgba(15, 74, 86, 0.18);
+}
+.opt__name {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--teal-900);
+  line-height: 1.1;
+}
+.opt__desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.backlink {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+  text-decoration: none;
+}
+.backlink:hover {
+  color: var(--teal-900);
+  text-decoration: underline;
 }
 
 .meta {
