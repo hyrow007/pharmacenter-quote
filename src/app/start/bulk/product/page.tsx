@@ -23,10 +23,11 @@ export default function BulkProduct() {
   const params = useMemo(() => readParams(), []);
 
   useEffect(() => {
-    if (!supabase) { setProducts([]); setStatus("mock"); return; }
+    const sb = supabase;
+    if (!sb) { setProducts([]); setStatus("mock"); return; }
     const term = search.trim();
     const handle = setTimeout(async () => {
-      let q = supabase
+      let q = sb
         .from("products")
         .select("id, fp_code, name, default_unit, source, external_id")
         .eq("active", true);
@@ -98,9 +99,7 @@ export default function BulkProduct() {
       <div className="card card--wide">
         <p className="eyebrow">{kicker || "Bulk Quote"}</p>
         <h1>Which product?</h1>
-        <p className="lede">
-          Pick an existing product from Fishbowl (search by code or name), or add a new one.
-        </p>
+        <p className="lede">Pick an existing product from Fishbowl (search by code or name), or add a new one.</p>
 
         <div style={{ display: "flex", gap: 0, marginBottom: 20, border: "1.5px solid #e3dcc9", borderRadius: 10, padding: 4, background: "#fffdf8" }}>
           <button type="button" style={tabBtn(mode === "existing")} onClick={() => setMode("existing")}>Existing product</button>
