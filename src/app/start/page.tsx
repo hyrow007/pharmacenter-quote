@@ -1,6 +1,6 @@
 const OPTIONS = [
   { type: "bulk", name: "Bulk", desc: "Softgels, gummies, tablets, or capsules in bulk packaging.", href: "/start/bulk" },
-  { type: "contract-packaging", name: "Contract Packaging", desc: "Customer-supplied product, packaged to spec.", href: "/generator.html?type=contract-packaging" },
+  { type: "contract-packaging", name: "Contract Packaging", desc: "Customer-supplied bulk, packaged to spec.", href: "/generator.html?type=contract-packaging" },
   { type: "finished-product", name: "Finished Product", desc: "Ready-to-sell SKU from the PharmaCenter catalog.", href: "/generator.html?type=finished-product" },
   { type: "other", name: "Other", desc: "Custom scope — describe inside the editor.", href: "/generator.html?type=other" },
 ];
