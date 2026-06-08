@@ -1,9 +1,9 @@
 const FORMS = [
-  { form: "softgel",  name: "Softgels",  desc: "Gelatin or veggie shell with a liquid fill.", href: "/generator.html?type=bulk&form=softgel" },
+  { form: "softgel",  name: "Softgels",  desc: "Gelatin or veggie shell with a liquid fill.", href: "/start/bulk/product?form=softgel" },
   { form: "gummy",    name: "Gummies",   desc: "Pectin or gelatin chewable.",                  href: "/start/bulk/gummies" },
-  { form: "tablet",   name: "Tablets",   desc: "Compressed solid-dose pressing.",              href: "/generator.html?type=bulk&form=tablet" },
-  { form: "capsule",  name: "Capsules",  desc: "Two-piece hard-shell encapsulation.",          href: "/generator.html?type=bulk&form=capsule" },
-  { form: "other",    name: "Other",     desc: "Powders, liquids, or other custom format.",    href: "/generator.html?type=bulk&form=other" },
+  { form: "tablet",   name: "Tablets",   desc: "Compressed solid-dose pressing.",              href: "/start/bulk/product?form=tablet" },
+  { form: "capsule",  name: "Capsules",  desc: "Two-piece hard-shell encapsulation.",          href: "/start/bulk/product?form=capsule" },
+  { form: "other",    name: "Other",     desc: "Powders, liquids, or other custom format.",    href: "/start/bulk/product?form=other" },
 ];
 
 export default function BulkForms() {
