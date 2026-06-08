@@ -116,7 +116,7 @@ export default function BulkProduct() {
                 <a key={p.id} className="opt" href={buildEditorUrl(p.id)}>
                   <span className="opt__name">{p.name}</span>
                   <span className="opt__desc">
-                    <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontWeight: 700, color: 'var(--teal-700)' }}>{p.fp_code}</span>
+                    <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontWeight: 700, color: 'var(--teal-700)' }}>Product Code: {p.fp_code}</span>
                     {p.default_unit ? <span style={{ marginLeft: 8 }}>· {p.default_unit}</span> : null}
                   </span>
                 </a>
