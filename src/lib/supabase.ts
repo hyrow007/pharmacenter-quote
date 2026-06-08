@@ -19,10 +19,24 @@ export const supabase: SupabaseClient | null =
 // Customer schema — matches the shared "customers" table maintained by the
 // packing-list project (populated via Fishbowl sync).
 export type Customer = {
-  id: string;                     // uuid
+  id: string;
   name: string;
-  default_ship_to: string | null; // multi-line address; first line shown as subtitle
+  default_ship_to: string | null;
   active?: boolean;
-  source?: string | null;         // e.g. "fishbowl"
-  external_id?: string | null;    // Fishbowl customer ID
+  source?: string | null;
+  external_id?: string | null;
+};
+
+// Product schema — matches the shared "products" table maintained by the
+// packing-list project (populated via Fishbowl sync). fp_code is the Fishbowl
+// product code; name is the descriptive label.
+export type Product = {
+  id: string;
+  fp_code: string;
+  name: string;
+  default_unit: string | null;
+  active?: boolean;
+  source?: string | null;
+  external_id?: string | null;
+  notes?: string | null;
 };
