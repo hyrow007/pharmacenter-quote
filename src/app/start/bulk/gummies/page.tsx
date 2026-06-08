@@ -1,7 +1,7 @@
 const SOURCES = [
-  { src: "third-party", name: "Third party", desc: "Sourced from an external manufacturer.", href: "/generator.html?type=bulk&form=gummy&source=third-party" },
-  { src: "pharmacenter", name: "Manufactured at PharmaCenter", desc: "Made in our facility.", href: "/generator.html?type=bulk&form=gummy&source=pharmacenter" },
-  { src: "other", name: "Other", desc: "Hybrid or special arrangement.", href: "/generator.html?type=bulk&form=gummy&source=other" },
+  { src: "third-party",  name: "Third party",                  desc: "Sourced from an external manufacturer.", href: "/start/bulk/product?form=gummy&source=third-party" },
+  { src: "pharmacenter", name: "Manufactured at PharmaCenter", desc: "Made in our facility.",                  href: "/start/bulk/product?form=gummy&source=pharmacenter" },
+  { src: "other",        name: "Other",                        desc: "Hybrid or special arrangement.",         href: "/start/bulk/product?form=gummy&source=other" },
 ];
 
 export default function GummiesSource() {
