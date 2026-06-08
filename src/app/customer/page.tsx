@@ -5,20 +5,15 @@ import { supabase, type Customer } from "@/lib/supabase";
 
 type Mode = "existing" | "new";
 
-// MOCK DATA — used when Supabase isn't configured yet or the customers table is empty.
-// Once env vars are set in Vercel and the table has rows, this list is ignored.
 const MOCK_CUSTOMERS: Customer[] = [
-  { id: "greenfield",       name: "Greenfield Apothecary, Inc.",      location: "Frederick, MD" },
-  { id: "bay-health",       name: "Bay Health Brands LLC",            location: "Tampa, FL" },
-  { id: "coastal-vitamins", name: "Coastal Vitamins Co.",             location: "San Diego, CA" },
-  { id: "natures-vault",    name: "Nature's Vault Distribution",      location: "Boulder, CO" },
-  { id: "pure-path",        name: "Pure Path Nutrition",              location: "Austin, TX" },
-  { id: "liberty-wellness", name: "Liberty Wellness Group",           location: "Philadelphia, PA" },
-  { id: "crescent-pharma",  name: "Crescent Pharma Supply",           location: "Chicago, IL" },
-  { id: "heritage-nutra",   name: "Heritage Nutraceuticals",          location: "Phoenix, AZ" },
-  { id: "aurora-health",    name: "Aurora Health Distributors",       location: "Portland, OR" },
-  { id: "summit-supplement", name: "Summit Supplement Co.",           location: "Denver, CO" },
+  { id: "mock-1", name: "Sample Customer A", default_ship_to: "(Supabase not configured)" },
 ];
+
+function firstLine(s: string | null | undefined): string {
+  if (!s) return "";
+  const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines[0] || "";
+}
 
 export default function Customer() {
   const [mode, setMode] = useState<Mode>("existing");
@@ -36,7 +31,8 @@ export default function Customer() {
       }
       const { data, error } = await supabase
         .from("customers")
-        .select("id, name, location")
+        .select("id, name, default_ship_to, active, source, external_id")
+        .eq("active", true)
         .order("name");
       if (cancelled) return;
       if (error || !data || data.length === 0) {
@@ -85,9 +81,7 @@ export default function Customer() {
       <div className="card card--wide">
         <p className="eyebrow">PharmaCenter</p>
         <h1>Who are we quoting?</h1>
-        <p className="lede">
-          Pick an existing customer from our Fishbowl records, or add a new one.
-        </p>
+        <p className="lede">Pick an existing customer from our Fishbowl records, or add a new one.</p>
 
         <div style={{ display: "flex", gap: 0, marginBottom: 20, border: "1.5px solid #e3dcc9", borderRadius: 10, padding: 4, background: "#fffdf8" }}>
           <button type="button" style={tabBtn(mode === "existing")} onClick={() => setMode("existing")}>Existing customer</button>
@@ -99,21 +93,19 @@ export default function Customer() {
             <input type="text" placeholder="Search customers..." value={search}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
               style={{ ...inputStyle, marginBottom: 14 }} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12, maxHeight: 320, overflowY: "auto" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12, maxHeight: 360, overflowY: "auto" }}>
               {filtered.map((c) => (
-                <a key={c.id} className="opt" href={`/start?customer=${c.id}`}>
+                <a key={c.id} className="opt" href={`/start?customer=${encodeURIComponent(c.id)}`}>
                   <span className="opt__name">{c.name}</span>
-                  <span className="opt__desc">{c.location ?? ""}</span>
+                  <span className="opt__desc">{firstLine(c.default_ship_to)}</span>
                 </a>
               ))}
               {filtered.length === 0 ? (
-                <p style={{ color: "var(--ink-3)", textAlign: "center", padding: "20px", fontSize: 14 }}>
-                  No customers match &quot;{search}&quot;.
-                </p>
+                <p style={{ color: "var(--ink-3)", textAlign: "center", padding: "20px", fontSize: 14 }}>No customers match &quot;{search}&quot;.</p>
               ) : null}
             </div>
             <p style={{ fontSize: 10, color: "var(--ink-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, marginBottom: 20 }}>
-              {source === "loading" ? "Loading…" : source === "supabase" ? "Source · Fishbowl (via Supabase)" : "Source · sample list (Supabase not configured)"}
+              {source === "loading" ? "Loading…" : source === "supabase" ? `Source · Fishbowl (via Supabase) · ${filtered.length} of ${customers.length}` : "Source · sample list (Supabase not configured)"}
             </p>
           </div>
         ) : (
@@ -133,9 +125,7 @@ export default function Customer() {
               <input type="email" value={form.email}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, email: e.target.value })} style={inputStyle} />
             </label>
-            <button type="submit" className="cta" style={{ alignSelf: "flex-start", marginBottom: 0, border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-              Continue →
-            </button>
+            <button type="submit" className="cta" style={{ alignSelf: "flex-start", marginBottom: 0, border: "none", cursor: "pointer", fontFamily: "inherit" }}>Continue →</button>
           </form>
         )}
 
