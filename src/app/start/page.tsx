@@ -22,7 +22,7 @@ export default function Start() {
             </a>
           ))}
         </div>
-        <a href="/" className="backlink">← Back</a>
+        <a href="/customer" className="backlink">← Back</a>
       </div>
     </main>
   );
