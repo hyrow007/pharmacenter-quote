@@ -47,6 +47,8 @@ export default function WorkflowReview() {
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [attachmentMeta, setAttachmentMeta] = useState<AttachmentMeta[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [mondayUrl, setMondayUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params) return;
@@ -69,11 +71,52 @@ export default function WorkflowReview() {
 
   if (!params) return null;
 
-  const addToMonday = () => {
-    // TODO: POST to /api/monday/create-item once the monday.com API key,
-    // workspace, board, and column mapping are configured.
-    setToast("Monday integration is wired up next — needs board + API key.");
-    window.setTimeout(() => setToast(null), 4200);
+  const addToMonday = async () => {
+    if (submitting || mondayUrl) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/monday/create-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: params?.type ?? null,
+          form: params?.form ?? null,
+          source: params?.source ?? null,
+          customer: params?.customer ?? null,
+          customerName: customer?.name ?? null,
+          product: params?.product ?? null,
+          productName: params?.product_name ?? null,
+          notes: params?.notes ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        const reason = data?.error || `HTTP ${res.status}`;
+        if (reason === "not_signed_in") {
+          setToast("You need to sign in first. Redirecting…");
+          window.setTimeout(() => { window.location.assign("/"); }, 1200);
+          return;
+        }
+        if (reason === "wrong_domain") {
+          setToast("Only @pharmacenterusa.com accounts can push to monday.");
+          window.setTimeout(() => setToast(null), 5000);
+          return;
+        }
+        setToast(`monday push failed: ${reason}`);
+        window.setTimeout(() => setToast(null), 6000);
+        return;
+      }
+      setMondayUrl(data.item.url);
+      setToast("Added to monday — opening the item in a new tab.");
+      window.open(data.item.url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => setToast(null), 4200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setToast(`monday push errored: ${msg}`);
+      window.setTimeout(() => setToast(null), 6000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const sectionStyle: CSSProperties = {
@@ -208,9 +251,15 @@ export default function WorkflowReview() {
           Next step
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
-          <button type="button" style={primaryAction} onClick={addToMonday}>
-            <span>Add to Monday →</span>
-            <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>Push this workflow as an item on monday.com</span>
+          <button type="button" style={primaryAction} onClick={addToMonday} disabled={submitting}>
+            <span>
+              {mondayUrl ? "Added to Monday ✓" : submitting ? "Adding…" : "Add to Monday →"}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>
+              {mondayUrl
+                ? "Click the toast link or check monday.com → Quotes board."
+                : "Push this workflow as an item on monday.com"}
+            </span>
           </button>
           <button type="button" style={blankAction} disabled aria-label="Coming soon">
             <span>—</span>
