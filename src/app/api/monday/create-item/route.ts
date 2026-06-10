@@ -31,6 +31,7 @@ type Body = {
   product?: string;
   productName?: string;
   notes?: string;
+  quantities?: string[];
 };
 
 export async function POST(request: Request) {
@@ -83,9 +84,17 @@ export async function POST(request: Request) {
     if (data?.fp_code) productCode = data.fp_code;
   }
 
-  const itemName = productCode
+  // Format quantities for monday item name, e.g. "— 500 / 1,000 / 2,500 units"
+  const cleanQuantities = (body.quantities ?? [])
+    .map((q) => String(q).trim())
+    .filter((q) => q.length > 0 && /^\d+(\.\d+)?$/.test(q));
+  const qtyTail = cleanQuantities.length > 0
+    ? ` — ${cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ")} units`
+    : "";
+
+  const itemName = (productCode
     ? `${productName} (${productCode})`
-    : productName;
+    : productName) + qtyTail;
 
   const typeParts = [
     body.type ? TYPE_LABELS[body.type] || body.type : null,
@@ -116,4 +125,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: msg }, { status: 502 });
   }
 }
-
