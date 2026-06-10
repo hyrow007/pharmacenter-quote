@@ -51,7 +51,7 @@ export default function BulkProduct() {
     if (params.source) qs.set("source", params.source);
     if (params.customer) qs.set("customer", params.customer);
     qs.set("product", productId);
-    return `/workflow/review?${qs.toString()}`;
+    return `/start/bulk/quantity?${qs.toString()}`;
   };
 
   const submitNew = (e: FormEvent) => {
@@ -73,7 +73,7 @@ export default function BulkProduct() {
       window.sessionStorage.setItem("quote.newProduct.attachments", JSON.stringify(meta));
       qs.set("attachments", String(files.length));
     }
-    window.location.href = `/workflow/review?${qs.toString()}`;
+    window.location.href = `/start/bulk/quantity?${qs.toString()}`;
   };
 
   const onFilesPicked = (e: ChangeEvent<HTMLInputElement>) => {
