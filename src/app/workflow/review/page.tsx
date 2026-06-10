@@ -19,6 +19,7 @@ function readParams() {
     product_name: sp.get("product_name"),
     notes: sp.get("notes"),
     attachments: sp.get("attachments"),
+    quantities: sp.getAll("qty"),
   };
 }
 
@@ -87,6 +88,7 @@ export default function WorkflowReview() {
           product: params?.product ?? null,
           productName: params?.product_name ?? null,
           notes: params?.notes ?? null,
+          quantities: params?.quantities ?? [],
         }),
       });
       const data = await res.json();
@@ -184,13 +186,17 @@ export default function WorkflowReview() {
     return <div style={valueStyle}>Loading…</div>;
   };
 
-  // Back link returns to the product picker preserving all upstream selections.
   const backQS = new URLSearchParams();
   if (params.type) backQS.set("type", params.type);
   if (params.form) backQS.set("form", params.form);
   if (params.source) backQS.set("source", params.source);
   if (params.customer) backQS.set("customer", params.customer);
-  const backHref = `/start/bulk/product?${backQS.toString()}`;
+  if (params.product) backQS.set("product", params.product);
+  if (params.product_name) backQS.set("product_name", params.product_name);
+  if (params.notes) backQS.set("notes", params.notes);
+  if (params.attachments) backQS.set("attachments", params.attachments);
+  for (const q of params.quantities ?? []) backQS.append("qty", q);
+  const backHref = `/start/bulk/quantity?${backQS.toString()}`;
 
   return (
     <main className="hero">
@@ -220,31 +226,63 @@ export default function WorkflowReview() {
               <div style={valueStyle}>{SOURCE_LABELS[params.source] || params.source}</div>
             </div>
           ) : null}
-          <div style={params.notes || attachmentMeta.length > 0 ? sectionStyle : lastSectionStyle}>
-            <span style={labelStyle}>Product</span>
-            {renderProduct()}
-          </div>
-          {params.notes ? (
-            <div style={attachmentMeta.length > 0 ? sectionStyle : lastSectionStyle}>
-              <span style={labelStyle}>Relevant info</span>
-              <div style={{ ...valueStyle, fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{params.notes}</div>
-            </div>
-          ) : null}
-          {attachmentMeta.length > 0 ? (
-            <div style={lastSectionStyle}>
-              <span style={labelStyle}>Attachments</span>
-              <div>
-                <div style={valueStyle}>{attachmentMeta.length} file{attachmentMeta.length === 1 ? "" : "s"} staged</div>
-                <ul style={{ listStyle: "none", padding: 0, margin: "6px 0 0 0", display: "flex", flexDirection: "column", gap: 4 }}>
-                  {attachmentMeta.map((f, i) => (
-                    <li key={i} style={{ ...subValueStyle, marginTop: 0 }}>
-                      {f.name} · {(f.size / 1024).toFixed(1)} KB
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ) : null}
+          {(() => {
+            const hasQty = (params.quantities?.length ?? 0) > 0;
+            const hasNotes = !!params.notes;
+            const hasAttachments = attachmentMeta.length > 0;
+            const isLast = (name: "product" | "qty" | "notes" | "attach") => {
+              if (name === "attach") return true;
+              if (name === "notes") return !hasAttachments;
+              if (name === "qty") return !hasNotes && !hasAttachments;
+              if (name === "product") return !hasQty && !hasNotes && !hasAttachments;
+              return false;
+            };
+            return (
+              <>
+                <div style={isLast("product") ? lastSectionStyle : sectionStyle}>
+                  <span style={labelStyle}>Product</span>
+                  {renderProduct()}
+                </div>
+                {hasQty ? (
+                  <div style={isLast("qty") ? lastSectionStyle : sectionStyle}>
+                    <span style={labelStyle}>Quantities</span>
+                    <div>
+                      <div style={valueStyle}>
+                        {params.quantities!.map((q, i) => (
+                          <span key={i}>
+                            {i > 0 ? <span style={{ color: "var(--ink-3)", margin: "0 8px" }}>·</span> : null}
+                            {Number(q).toLocaleString()} units
+                          </span>
+                        ))}
+                      </div>
+                      <div style={subValueStyle}>1 unit = 1,000</div>
+                    </div>
+                  </div>
+                ) : null}
+                {hasNotes ? (
+                  <div style={isLast("notes") ? lastSectionStyle : sectionStyle}>
+                    <span style={labelStyle}>Relevant info</span>
+                    <div style={{ ...valueStyle, fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{params.notes}</div>
+                  </div>
+                ) : null}
+                {hasAttachments ? (
+                  <div style={lastSectionStyle}>
+                    <span style={labelStyle}>Attachments</span>
+                    <div>
+                      <div style={valueStyle}>{attachmentMeta.length} file{attachmentMeta.length === 1 ? "" : "s"} staged</div>
+                      <ul style={{ listStyle: "none", padding: 0, margin: "6px 0 0 0", display: "flex", flexDirection: "column", gap: 4 }}>
+                        {attachmentMeta.map((f, i) => (
+                          <li key={i} style={{ ...subValueStyle, marginTop: 0 }}>
+                            {f.name} · {(f.size / 1024).toFixed(1)} KB
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
         </div>
 
         <h2 style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3)", marginBottom: 12 }}>
@@ -275,7 +313,7 @@ export default function WorkflowReview() {
           </button>
         </div>
 
-        <a href={backHref} className="backlink">← Back</a>
+        <a href={backHref} className="backlink">&larr; Back</a>
 
         {toast ? (
           <div style={{
