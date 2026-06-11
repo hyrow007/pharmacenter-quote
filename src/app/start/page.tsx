@@ -155,7 +155,7 @@ export default function StartWorkflow() {
     const term = customerSearch.trim();
     const handle = setTimeout(async () => {
       let q = sb.from("customers").select("id, name, default_ship_to").eq("active", true);
-      if (term.length > 0) q = q.ilike("name", `%${term}%`);
+      if (term.length === 0) { setCustomers([]); return; } q = q.ilike("name", `%${term}%`);
       const { data } = await q.order("name").limit(PAGE_SIZE);
       setCustomers((data ?? []) as CustomerRow[]);
     }, 180);
@@ -182,7 +182,7 @@ export default function StartWorkflow() {
     const term = productSearch.trim();
     const handle = setTimeout(async () => {
       let q = sb.from("products").select("id, fp_code, name, default_unit").eq("active", true);
-      if (term.length > 0) q = q.or(`fp_code.ilike.%${term}%,name.ilike.%${term}%`);
+      if (term.length === 0) { setProducts([]); return; } q = q.or(`fp_code.ilike.%${term}%,name.ilike.%${term}%`);
       const { data } = await q.order("name").limit(PAGE_SIZE);
       setProducts((data ?? []) as ProductRow[]);
     }, 180);
