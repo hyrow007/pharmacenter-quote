@@ -13,7 +13,7 @@ export default async function Home({
   } = await supabase.auth.getUser();
 
   // Signed-in users skip the landing and go straight to the customer picker.
-  if (user) redirect("/customer");
+  if (user) redirect("/start");
 
   const params = await searchParams;
   const showError = params?.auth_error === "1";
