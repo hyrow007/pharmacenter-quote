@@ -196,7 +196,7 @@ export default function WorkflowReview() {
   if (params.notes) backQS.set("notes", params.notes);
   if (params.attachments) backQS.set("attachments", params.attachments);
   for (const q of params.quantities ?? []) backQS.append("qty", q);
-  const backHref = `/start/bulk/quantity?${backQS.toString()}`;
+  const backHref = `/start?${backQS.toString()}`;
 
   return (
     <main className="hero">
