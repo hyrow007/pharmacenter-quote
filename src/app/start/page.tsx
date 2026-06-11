@@ -330,7 +330,7 @@ export default function StartWorkflow() {
                   <>
                     <input type="text" placeholder="Search customers…" value={customerSearch}
                       onChange={(e) => setCustomerSearch(e.target.value)} style={inputStyle} />
-                    <div style={{ marginTop: 10, maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                       {customers.map((c) => (
                         <button key={c.id} type="button" onClick={() => pickCustomer(c)}
                           style={{ textAlign: "left", padding: "10px 12px", background: "#fff", border: "1px solid #e3dcc9", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
@@ -421,7 +421,7 @@ export default function StartWorkflow() {
                   <>
                     <input type="text" placeholder="Search by code or name…" value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)} style={inputStyle} />
-                    <div style={{ marginTop: 10, maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                       {products.map((p) => (
                         <button key={p.id} type="button" onClick={() => pickProduct(p)}
                           style={{ textAlign: "left", padding: "10px 12px", background: "#fff", border: "1px solid #e3dcc9", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
