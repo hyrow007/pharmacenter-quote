@@ -76,21 +76,35 @@ export default function WorkflowReview() {
     if (submitting || mondayUrl) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/monday/create-item", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: params?.type ?? null,
-          form: params?.form ?? null,
-          source: params?.source ?? null,
-          customer: params?.customer ?? null,
-          customerName: customer?.name ?? null,
-          product: params?.product ?? null,
-          productName: params?.product_name ?? null,
-          notes: params?.notes ?? null,
-          quantities: params?.quantities ?? [],
-        }),
-      });
+      const payload = {
+        type: params?.type ?? null,
+        form: params?.form ?? null,
+        source: params?.source ?? null,
+        customer: params?.customer ?? null,
+        customerName: customer?.name ?? null,
+        product: params?.product ?? null,
+        productName: params?.product_name ?? null,
+        notes: params?.notes ?? null,
+        quantities: params?.quantities ?? [],
+      };
+      // Pick up the File blobs that /start stashed on window. They die on
+      // page reload, but a normal click-through preserves them.
+      const stashed =
+        (window as unknown as { __quoteWorkflowFiles?: File[] }).__quoteWorkflowFiles ?? [];
+
+      let res: Response;
+      if (stashed.length > 0) {
+        const fd = new FormData();
+        fd.append("data", JSON.stringify(payload));
+        for (const f of stashed) fd.append("files", f, f.name);
+        res = await fetch("/api/monday/create-item", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/monday/create-item", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         const reason = data?.error || `HTTP ${res.status}`;
