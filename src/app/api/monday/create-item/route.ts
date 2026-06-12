@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     ];
     if (cleanQuantities.length > 0) {
       lines.push(
-        `• Quantities: ${cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ")} units`,
+        `• Quantities: ${cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ")} units${body.type === "bulk" ? " (1 unit = 1,000)" : ""}`,
       );
     }
     if (body.notes?.trim()) {
