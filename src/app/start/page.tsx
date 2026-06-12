@@ -291,7 +291,7 @@ export default function StartWorkflow() {
       if (typeof window !== "undefined" && files.length > 0) {
         const meta = files.map((f) => ({ name: f.name, size: f.size, type: f.type }));
         window.sessionStorage.setItem("quote.newProduct.attachments", JSON.stringify(meta));
-        qs.set("attachments", String(files.length));
+        (window as unknown as { __quoteWorkflowFiles?: File[] }).__quoteWorkflowFiles = files; qs.set("attachments", String(files.length));
       }
     }
 
