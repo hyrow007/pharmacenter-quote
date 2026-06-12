@@ -101,9 +101,9 @@ export async function POST(request: Request) {
   const cleanQuantities = (body.quantities ?? [])
     .map((q) => String(q).trim())
     .filter((q) => q.length > 0 && /^\d+(\.\d+)?$/.test(q));
-  const qtyTail = cleanQuantities.length > 0
-    ? ` — ${cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ")} units`
-    : "";
+  const qtyJoined = cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ");
+  const qtyTail = qtyJoined ? ` — ${qtyJoined} units` : "";
+  const qtyColumnText = qtyJoined ? (body.type === "bulk" ? `${qtyJoined} units (1 unit = 1,000)` : `${qtyJoined} units`) : "";
 
   const itemName = (productCode
     ? `${productName} (${productCode})`
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
       itemName,
       customerName,
       typeLabel,
-      submitterMondayId: submitterId,
+      qtyText: qtyColumnText, submitterMondayId: submitterId,
     });
 
     // Compose the Rosy comment that introduces the quote on the item.
