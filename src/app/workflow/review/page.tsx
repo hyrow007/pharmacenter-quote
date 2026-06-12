@@ -1,27 +1,37 @@
 "use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import type { WorkflowAttachment } from "@/lib/storage";
+
+// Mirrors the shape defined in /start/page.tsx. We don't import from there
+// because Next.js page modules shouldn't export non-page symbols, and the
+// shape is small enough to keep in sync by hand.
+type Mode = "existing" | "new";
+type ProductEntry = {
+  uid: string;
+  mode: Mode;
+  productId: string | null;
+  newProduct: { name_desc: string; notes: string };
+  quantities: string[];
+  attachments: WorkflowAttachment[];
+};
+type WorkflowState = {
+  workflowUid: string;
+  customerMode: Mode;
+  customerId: string | null;
+  newCustomer: { name: string; contact: string; email: string };
+  type: string | null;
+  form: string | null;
+  source: string | null;
+  products: ProductEntry[];
+};
 
 type CustomerRow = { id: string; name: string; default_ship_to: string | null };
 type ProductRow = { id: string; name: string; fp_code: string | null; default_unit: string | null };
-type AttachmentMeta = { name: string; size: number; type: string };
 
-function readParams() {
-  if (typeof window === "undefined") return null;
-  const sp = new URLSearchParams(window.location.search);
-  return {
-    type: sp.get("type"),
-    form: sp.get("form"),
-    source: sp.get("source"),
-    customer: sp.get("customer"),
-    product: sp.get("product"),
-    product_name: sp.get("product_name"),
-    notes: sp.get("notes"),
-    attachments: sp.get("attachments"),
-    quantities: sp.getAll("qty"),
-  };
-}
+const STORAGE_KEY = "quote.workflow.v1";
 
 const TYPE_LABELS: Record<string, string> = {
   "bulk": "Bulk",
@@ -30,11 +40,7 @@ const TYPE_LABELS: Record<string, string> = {
   "other": "Other",
 };
 const FORM_LABELS: Record<string, string> = {
-  "softgel": "Softgels",
-  "gummy": "Gummies",
-  "tablet": "Tablets",
-  "capsule": "Capsules",
-  "other": "Other",
+  "softgel": "Softgels", "gummy": "Gummies", "tablet": "Tablets", "capsule": "Capsules", "other": "Other",
 };
 const SOURCE_LABELS: Record<string, string> = {
   "third-party": "Third party",
@@ -42,69 +48,101 @@ const SOURCE_LABELS: Record<string, string> = {
   "other": "Other source",
 };
 
+function loadState(): WorkflowState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkflowState;
+    if (!parsed.workflowUid || !Array.isArray(parsed.products)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function cleanQty(q: string): string {
+  const t = q.replace(/,/g, "").trim();
+  return /^\d+(\.\d+)?$/.test(t) ? t : "";
+}
+
 export default function WorkflowReview() {
-  const params = useMemo(() => readParams(), []);
+  const router = useRouter();
+  const [state, setState] = useState<WorkflowState | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
-  const [product, setProduct] = useState<ProductRow | null>(null);
-  const [attachmentMeta, setAttachmentMeta] = useState<AttachmentMeta[]>([]);
+  const [productMap, setProductMap] = useState<Record<string, ProductRow>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mondayUrl, setMondayUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!params) return;
+    const s = loadState();
+    setState(s);
+    setHydrated(true);
+    if (!s) return;
+
     const sb = supabase;
-    if (sb && params.customer && params.customer !== "new") {
-      sb.from("customers").select("id, name, default_ship_to").eq("id", params.customer).maybeSingle()
+    if (sb && s.customerMode === "existing" && s.customerId) {
+      sb.from("customers").select("id, name, default_ship_to").eq("id", s.customerId).maybeSingle()
         .then(({ data }) => { if (data) setCustomer(data as CustomerRow); });
     }
-    if (sb && params.product && params.product !== "new") {
-      sb.from("products").select("id, name, fp_code, default_unit").eq("id", params.product).maybeSingle()
-        .then(({ data }) => { if (data) setProduct(data as ProductRow); });
-    }
-    if (typeof window !== "undefined" && params.attachments) {
-      const raw = window.sessionStorage.getItem("quote.newProduct.attachments");
-      if (raw) {
-        try { setAttachmentMeta(JSON.parse(raw) as AttachmentMeta[]); } catch { /* ignore */ }
+    if (sb) {
+      const ids = s.products.map((p) => p.productId).filter((id): id is string => !!id && id !== "new");
+      if (ids.length > 0) {
+        sb.from("products").select("id, name, fp_code, default_unit").in("id", ids)
+          .then(({ data }) => {
+            const m: Record<string, ProductRow> = {};
+            for (const row of (data ?? []) as ProductRow[]) m[row.id] = row;
+            setProductMap(m);
+          });
       }
     }
-  }, [params]);
+  }, []);
 
-  if (!params) return null;
+  // If there's no state at all (user navigated here directly), bounce back.
+  useEffect(() => {
+    if (hydrated && !state) router.replace("/start");
+  }, [hydrated, state, router]);
+
+  if (!hydrated) return <main className="hero"><div className="card card--wide"><p className="lede">Loading…</p></div></main>;
+  if (!state) return null;
 
   const addToMonday = async () => {
     if (submitting || mondayUrl) return;
     setSubmitting(true);
     try {
-      const payload = {
-        type: params?.type ?? null,
-        form: params?.form ?? null,
-        source: params?.source ?? null,
-        customer: params?.customer ?? null,
-        customerName: customer?.name ?? null,
-        product: params?.product ?? null,
-        productName: params?.product_name ?? null,
-        notes: params?.notes ?? null,
-        quantities: params?.quantities ?? [],
-      };
-      // Pick up the File blobs that /start stashed on window. They die on
-      // page reload, but a normal click-through preserves them.
-      const stashed =
-        (window as unknown as { __quoteWorkflowFiles?: File[] }).__quoteWorkflowFiles ?? [];
+      // Build the payload from the in-memory workflow state. Attachments are
+      // passed by storage path + public URL — the server downloads and
+      // re-uploads to monday's file column.
+      const products = state.products.map((p) => ({
+        productId: p.productId,
+        productName: p.mode === "new" ? p.newProduct.name_desc : (productMap[p.productId ?? ""]?.name ?? null),
+        productCode: p.mode === "new" ? null : (productMap[p.productId ?? ""]?.fp_code ?? null),
+        notes: p.mode === "new" ? p.newProduct.notes : "",
+        quantities: p.quantities.map(cleanQty).filter((q) => q.length > 0),
+        attachments: p.attachments,
+      }));
 
-      let res: Response;
-      if (stashed.length > 0) {
-        const fd = new FormData();
-        fd.append("data", JSON.stringify(payload));
-        for (const f of stashed) fd.append("files", f, f.name);
-        res = await fetch("/api/monday/create-item", { method: "POST", body: fd });
-      } else {
-        res = await fetch("/api/monday/create-item", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
+      const customerName = state.customerMode === "existing"
+        ? (customer?.name ?? null)
+        : state.newCustomer.name;
+
+      const payload = {
+        type: state.type,
+        form: state.form,
+        source: state.source,
+        customer: state.customerMode === "existing" ? state.customerId : "new",
+        customerName,
+        newCustomer: state.customerMode === "new" ? state.newCustomer : null,
+        products,
+      };
+
+      const res = await fetch("/api/monday/create-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         const reason = data?.error || `HTTP ${res.status}`;
@@ -123,9 +161,18 @@ export default function WorkflowReview() {
         return;
       }
       setMondayUrl(data.item.url);
-      setToast("Added to monday — opening the item in a new tab.");
+      const totalFiles = products.reduce((n, p) => n + p.attachments.length, 0);
+      const uploaded = data.uploaded ?? 0;
+      const fileMsg = totalFiles === 0
+        ? "Added to monday — opening the item in a new tab."
+        : uploaded === totalFiles
+          ? `Added to monday with ${uploaded} attachment${uploaded === 1 ? "" : "s"}.`
+          : `Added to monday, but only ${uploaded}/${totalFiles} attachments uploaded. Check the item.`;
+      setToast(fileMsg);
+      // Workflow is done — clear sessionStorage so the next visit starts fresh.
+      window.sessionStorage.removeItem(STORAGE_KEY);
       window.open(data.item.url, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => setToast(null), 4200);
+      window.setTimeout(() => setToast(null), 5500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setToast(`monday push errored: ${msg}`);
@@ -135,6 +182,7 @@ export default function WorkflowReview() {
     }
   };
 
+  // ----- styles --------------------------------------------------------
   const sectionStyle: CSSProperties = {
     display: "grid", gridTemplateColumns: "150px 1fr", gap: 12,
     padding: "14px 18px", borderBottom: "1px solid #e3dcc9", alignItems: "baseline",
@@ -160,8 +208,22 @@ export default function WorkflowReview() {
     background: "#fffdf8", color: "var(--ink-3)", cursor: "not-allowed",
     fontFamily: "inherit", fontSize: 15, fontWeight: 700, textAlign: "left",
   };
+  const productRow: CSSProperties = {
+    padding: "12px 14px", border: "1px solid #d8d3c1", borderRadius: 8,
+    background: "#fff", marginBottom: 8,
+  };
 
+  // ----- renderers -----------------------------------------------------
   const renderCustomer = () => {
+    if (state.customerMode === "new") {
+      return (
+        <div>
+          <div style={valueStyle}>{state.newCustomer.name || "New customer"}</div>
+          {state.newCustomer.contact ? <div style={subValueStyle}>{state.newCustomer.contact}</div> : null}
+          {state.newCustomer.email ? <div style={subValueStyle}>{state.newCustomer.email}</div> : null}
+        </div>
+      );
+    }
     if (customer) {
       return (
         <div>
@@ -170,47 +232,8 @@ export default function WorkflowReview() {
         </div>
       );
     }
-    if (params.customer === "new") return <div style={valueStyle}>New customer</div>;
-    if (!params.customer) return <div style={valueStyle}>—</div>;
     return <div style={valueStyle}>Loading…</div>;
   };
-
-  const renderProduct = () => {
-    if (params.product === "new") {
-      return (
-        <div>
-          <div style={valueStyle}>{params.product_name || "New product"}</div>
-          <div style={subValueStyle}>New — not in Fishbowl yet</div>
-        </div>
-      );
-    }
-    if (product) {
-      return (
-        <div>
-          <div style={valueStyle}>{product.name}</div>
-          <div style={subValueStyle}>
-            <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)' }}>
-              Product Code: {product.fp_code}
-            </span>
-            {product.default_unit ? <span style={{ marginLeft: 8 }}>· {product.default_unit}</span> : null}
-          </div>
-        </div>
-      );
-    }
-    return <div style={valueStyle}>Loading…</div>;
-  };
-
-  const backQS = new URLSearchParams();
-  if (params.type) backQS.set("type", params.type);
-  if (params.form) backQS.set("form", params.form);
-  if (params.source) backQS.set("source", params.source);
-  if (params.customer) backQS.set("customer", params.customer);
-  if (params.product) backQS.set("product", params.product);
-  if (params.product_name) backQS.set("product_name", params.product_name);
-  if (params.notes) backQS.set("notes", params.notes);
-  if (params.attachments) backQS.set("attachments", params.attachments);
-  for (const q of params.quantities ?? []) backQS.append("qty", q);
-  const backHref = `/start?${backQS.toString()}`;
 
   return (
     <main className="hero">
@@ -226,77 +249,72 @@ export default function WorkflowReview() {
           </div>
           <div style={sectionStyle}>
             <span style={labelStyle}>Quote type</span>
-            <div style={valueStyle}>{params.type ? TYPE_LABELS[params.type] || params.type : "—"}</div>
+            <div style={valueStyle}>{state.type ? TYPE_LABELS[state.type] || state.type : "—"}</div>
           </div>
-          {params.form ? (
+          {state.form ? (
             <div style={sectionStyle}>
               <span style={labelStyle}>Dosage form</span>
-              <div style={valueStyle}>{FORM_LABELS[params.form] || params.form}</div>
+              <div style={valueStyle}>{FORM_LABELS[state.form] || state.form}</div>
             </div>
           ) : null}
-          {params.source ? (
+          {state.source ? (
             <div style={sectionStyle}>
               <span style={labelStyle}>Source</span>
-              <div style={valueStyle}>{SOURCE_LABELS[params.source] || params.source}</div>
+              <div style={valueStyle}>{SOURCE_LABELS[state.source] || state.source}</div>
             </div>
           ) : null}
-          {(() => {
-            const hasQty = (params.quantities?.length ?? 0) > 0;
-            const hasNotes = !!params.notes;
-            const hasAttachments = attachmentMeta.length > 0;
-            const isLast = (name: "product" | "qty" | "notes" | "attach") => {
-              if (name === "attach") return true;
-              if (name === "notes") return !hasAttachments;
-              if (name === "qty") return !hasNotes && !hasAttachments;
-              if (name === "product") return !hasQty && !hasNotes && !hasAttachments;
-              return false;
-            };
-            return (
-              <>
-                <div style={isLast("product") ? lastSectionStyle : sectionStyle}>
-                  <span style={labelStyle}>Product</span>
-                  {renderProduct()}
-                </div>
-                {hasQty ? (
-                  <div style={isLast("qty") ? lastSectionStyle : sectionStyle}>
-                    <span style={labelStyle}>Quantities</span>
-                    <div>
-                      <div style={valueStyle}>
-                        {params.quantities!.map((q, i) => (
+          <div style={lastSectionStyle}>
+            <span style={labelStyle}>Products</span>
+            <div>
+              {state.products.map((p, idx) => {
+                const isNew = p.mode === "new";
+                const pr = p.productId ? productMap[p.productId] : null;
+                const name = isNew ? (p.newProduct.name_desc || "New product") : (pr?.name ?? "Loading…");
+                const code = isNew ? null : pr?.fp_code ?? null;
+                const cleanQs = p.quantities.map(cleanQty).filter((q) => q.length > 0);
+                return (
+                  <div key={p.uid} style={productRow}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-1)" }}>{name}</div>
+                      <div style={{ fontSize: 11, color: "var(--ink-3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Product {idx + 1}</div>
+                    </div>
+                    {code ? (
+                      <div style={{ fontSize: 12, marginBottom: 6 }}>
+                        <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)', fontWeight: 700 }}>Product Code: {code}</span>
+                        {pr?.default_unit ? <span style={{ marginLeft: 8, color: "var(--ink-3)" }}>· {pr.default_unit}</span> : null}
+                      </div>
+                    ) : null}
+                    {isNew && p.newProduct.notes ? (
+                      <div style={{ fontSize: 13, color: "var(--ink-2)", whiteSpace: "pre-wrap", lineHeight: 1.5, margin: "6px 0" }}>
+                        {p.newProduct.notes}
+                      </div>
+                    ) : null}
+                    {cleanQs.length > 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 6 }}>
+                        <span style={{ color: "var(--ink-3)" }}>Quantities: </span>
+                        {cleanQs.map((q, i) => (
                           <span key={i}>
-                            {i > 0 ? <span style={{ color: "var(--ink-3)", margin: "0 8px" }}>·</span> : null}
+                            {i > 0 ? <span style={{ color: "var(--ink-3)", margin: "0 6px" }}>·</span> : null}
                             {Number(q).toLocaleString()} units
                           </span>
                         ))}
                       </div>
-                      <div style={subValueStyle}>1 unit = 1,000</div>
-                    </div>
+                    ) : null}
+                    {p.attachments.length > 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6 }}>
+                        {p.attachments.length} attachment{p.attachments.length === 1 ? "" : "s"}:
+                        <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0 0", display: "flex", flexDirection: "column", gap: 2 }}>
+                          {p.attachments.map((a) => (
+                            <li key={a.path} style={{ fontSize: 12 }}>{a.name} · {(a.size / 1024).toFixed(1)} KB</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-                {hasNotes ? (
-                  <div style={isLast("notes") ? lastSectionStyle : sectionStyle}>
-                    <span style={labelStyle}>Relevant info</span>
-                    <div style={{ ...valueStyle, fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{params.notes}</div>
-                  </div>
-                ) : null}
-                {hasAttachments ? (
-                  <div style={lastSectionStyle}>
-                    <span style={labelStyle}>Attachments</span>
-                    <div>
-                      <div style={valueStyle}>{attachmentMeta.length} file{attachmentMeta.length === 1 ? "" : "s"} staged</div>
-                      <ul style={{ listStyle: "none", padding: 0, margin: "6px 0 0 0", display: "flex", flexDirection: "column", gap: 4 }}>
-                        {attachmentMeta.map((f, i) => (
-                          <li key={i} style={{ ...subValueStyle, marginTop: 0 }}>
-                            {f.name} · {(f.size / 1024).toFixed(1)} KB
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            );
-          })()}
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <h2 style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3)", marginBottom: 12 }}>
@@ -327,7 +345,7 @@ export default function WorkflowReview() {
           </button>
         </div>
 
-        <a href={backHref} className="backlink">&larr; Back</a>
+        <a href="/start" className="backlink">&larr; Back to edit</a>
 
         {toast ? (
           <div style={{
