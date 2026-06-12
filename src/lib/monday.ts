@@ -10,6 +10,7 @@ export const QUOTES_COLUMNS = {
   date: "date4",
   customer: "text_mm466n79",
   type: "text_mm4675k1",
+  qty: "text_mm4828gk",
   submitter: "multiple_person_mm4615kr",
   files: "file_mm46grfp",
 } as const;
@@ -74,6 +75,7 @@ export type CreateItemPayload = {
   itemName: string;
   customerName: string;
   typeLabel: string;
+  qtyText?: string;
   submitterMondayId?: string | number | null;
 };
 
@@ -89,6 +91,8 @@ export async function createQuoteItem(payload: CreateItemPayload): Promise<{
     [QUOTES_COLUMNS.type]: payload.typeLabel,
   };
 
+    if (payload.qtyText && payload.qtyText.trim().length > 0) { columnValues[QUOTES_COLUMNS.qty] = payload.qtyText.trim(); }
+  
   if (payload.submitterMondayId) {
     columnValues[QUOTES_COLUMNS.submitter] = {
       personsAndTeams: [
