@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createQuoteItem, findUserByEmail } from "@/lib/monday";
+import { QUOTES_COLUMNS, createQuoteItem, findUserByEmail, postUpdate, uploadFileToColumn } from "@/lib/monday";
 
 const TYPE_LABELS: Record<string, string> = {
   "bulk": "Bulk",
@@ -46,9 +46,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "wrong_domain" }, { status: 403 });
   }
 
+  // Body is either JSON (no attachments) or multipart/form-data (with files).
+  // In multipart, the JSON payload is the "data" field and each File is
+  // appended under "files".
   let body: Body;
+  const attachments: File[] = [];
+  const contentType = request.headers.get("content-type") ?? "";
   try {
-    body = (await request.json()) as Body;
+    if (contentType.startsWith("multipart/form-data")) {
+      const fd = await request.formData();
+      const dataStr = fd.get("data");
+      body = JSON.parse(typeof dataStr === "string" ? dataStr : "{}") as Body;
+      for (const v of fd.getAll("files")) {
+        if (v instanceof File) attachments.push(v);
+      }
+    } else {
+      body = (await request.json()) as Body;
+    }
   } catch {
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
@@ -84,7 +98,6 @@ export async function POST(request: Request) {
     if (data?.fp_code) productCode = data.fp_code;
   }
 
-  // Format quantities for monday item name, e.g. "— 500 / 1,000 / 2,500 units"
   const cleanQuantities = (body.quantities ?? [])
     .map((q) => String(q).trim())
     .filter((q) => q.length > 0 && /^\d+(\.\d+)?$/.test(q));
@@ -118,7 +131,51 @@ export async function POST(request: Request) {
       typeLabel,
       submitterMondayId: submitterId,
     });
-    return NextResponse.json({ ok: true, item });
+
+    // Compose the Rosy comment that introduces the quote on the item.
+    const lines: string[] = [
+      "Hi Rosy,",
+      "",
+      "Can we please start the quoting process for the following:",
+      "",
+      `• Customer: ${customerName}`,
+      `• Quote type: ${typeLabel || "—"}`,
+      productCode
+        ? `• Product: ${productName} (${productCode})`
+        : `• Product: ${productName}`,
+    ];
+    if (cleanQuantities.length > 0) {
+      lines.push(
+        `• Quantities: ${cleanQuantities.map((q) => Number(q).toLocaleString()).join(" / ")} units`,
+      );
+    }
+    if (body.notes?.trim()) {
+      lines.push(`• Notes: ${body.notes.trim()}`);
+    }
+    if (attachments.length > 0) {
+      lines.push(
+        `• Attachments: ${attachments.length} file${attachments.length === 1 ? "" : "s"} uploaded — see the Files column.`,
+      );
+    }
+    const updateBody = lines.join("\n");
+
+    // Upload attachments first so the comment's "see Files column" pointer is
+    // accurate by the time Rosy reads it. Errors per file are logged but
+    // don't fail the whole request.
+    const uploadResults = await Promise.all(
+      attachments.map((f) => uploadFileToColumn(item.id, QUOTES_COLUMNS.files, f)),
+    );
+    const uploadedCount = uploadResults.filter((r) => r !== null).length;
+
+    // Post the comment. Failure here is non-fatal — the item is already created.
+    await postUpdate(item.id, updateBody);
+
+    return NextResponse.json({
+      ok: true,
+      item,
+      uploaded: uploadedCount,
+      attempted: attachments.length,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("create_item failed:", msg);
