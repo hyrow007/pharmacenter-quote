@@ -79,7 +79,7 @@ type Body = {
   products?: ProductPayload[];
 };
 
-async function fetchAttachmentAsFile(att: Attachment): Promise<File | null> {
+async function fetchAttachmentAsBlob(att: Attachment): Promise<Blob | null> {
   try {
     const res = await fetch(att.url, { cache: "no-store" });
     if (!res.ok) {
@@ -87,7 +87,7 @@ async function fetchAttachmentAsFile(att: Attachment): Promise<File | null> {
       return null;
     }
     const ab = await res.arrayBuffer();
-    return new File([ab], att.name, { type: att.type || "application/octet-stream" });
+    return new Blob([ab], { type: att.type || "application/octet-stream" });
   } catch (err) {
     console.error(`Attachment fetch errored: ${att.url}`, err);
     return null;
@@ -260,9 +260,9 @@ export async function POST(request: Request) {
     const allAttachments: Attachment[] = products.flatMap((p) => p.attachments);
     const uploadResults = await Promise.all(
       allAttachments.map(async (att) => {
-        const file = await fetchAttachmentAsFile(att);
-        if (!file) return null;
-        return uploadFileToColumn(item.id, QUOTES_COLUMNS.files, file);
+        const blob = await fetchAttachmentAsBlob(att);
+        if (!blob) return null;
+        return uploadFileToColumn(item.id, QUOTES_COLUMNS.files, blob, att.name);
       }),
     );
     const uploadedCount = uploadResults.filter((r) => r !== null).length;
