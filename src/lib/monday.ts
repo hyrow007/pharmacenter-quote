@@ -2,6 +2,7 @@
 // MONDAY_API_TOKEN is a personal access token and must never reach the browser.
 
 const MONDAY_GRAPHQL_URL = "https://api.monday.com/v2";
+const MONDAY_FILE_URL = "https://api.monday.com/v2/file";
 
 export const QUOTES_BOARD_ID = 18417125005;
 
@@ -126,3 +127,62 @@ export async function createQuoteItem(payload: CreateItemPayload): Promise<{
   };
 }
 
+/**
+ * Post an update (comment) on a monday item. Used to add the
+ * "Hi Rosy, can we please start the quoting process…" intro.
+ */
+export async function postUpdate(itemId: string, body: string): Promise<string | null> {
+  const query = `
+    mutation ($itemId: ID!, $body: String!) {
+      create_update(item_id: $itemId, body: $body) {
+        id
+      }
+    }
+  `;
+  const result = await gql<{ create_update: { id: string } }>(query, { itemId, body });
+  if (result.errors?.length) {
+    console.error("monday create_update errors:", result.errors);
+    return null;
+  }
+  return result.data?.create_update?.id ?? null;
+}
+
+/**
+ * Upload a file to a file-type column on a monday item.
+ * Uses monday's multipart-form-data /v2/file endpoint.
+ */
+export async function uploadFileToColumn(
+  itemId: string,
+  columnId: string,
+  file: File,
+): Promise<{ id: string } | null> {
+  const query = `
+    mutation add_file($file: File!, $itemId: ID!, $columnId: String!) {
+      add_file_to_column(file: $file, item_id: $itemId, column_id: $columnId) {
+        id
+      }
+    }
+  `;
+  const formData = new FormData();
+  formData.append("query", query);
+  formData.append("variables", JSON.stringify({ itemId, columnId }));
+  formData.append("variables[file]", file, file.name);
+
+  const res = await fetch(MONDAY_FILE_URL, {
+    method: "POST",
+    headers: {
+      Authorization: token(),
+      "API-Version": "2024-10",
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  const result = (await res.json()) as MondayResponse<{ add_file_to_column: { id: string } }>;
+  if (result.errors?.length || !result.data?.add_file_to_column) {
+    const message = result.errors?.[0]?.message || result.error_message || `HTTP ${res.status}`;
+    console.error(`monday add_file_to_column failed for ${file.name}:`, message);
+    return null;
+  }
+  return result.data.add_file_to_column;
+}
