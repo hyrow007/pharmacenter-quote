@@ -190,44 +190,39 @@ export async function postUpdate(itemId: string, body: string): Promise<string |
 export async function uploadFileToColumn(
   itemId: string,
   columnId: string,
-  file: File,
+  blob: Blob,
+  filename: string,
 ): Promise<{ id: string } | null> {
-  // monday wants the GraphQL operation in a multipart "operations" field with
-  // `$file` as a placeholder, plus a "map" telling it which form part fills
-  // that placeholder, plus the actual binary under that part name. The
-  // `variables[file]` shortcut used previously didn't reliably attach the
-  // file in Node 20's fetch (it would parse, but $file came through null
-  // and monday returned a non-JSON 4xx, blowing up await res.json()).
+  // monday's /v2/file endpoint uses a custom multipart layout:
+  //   query:           the GraphQL mutation string with $file declared
+  //   variables:       JSON-encoded variables EXCLUDING the file
+  //   variables[file]: the actual binary, bound to the $file variable by name
+  //
+  // We pass a Blob + explicit filename instead of a File so the Content-Type
+  // and filename on the multipart part are exactly what monday expects, with
+  // no dependence on the runtime's File constructor.
   const query = `mutation ($file: File!, $itemId: ID!, $columnId: String!) {
     add_file_to_column(file: $file, item_id: $itemId, column_id: $columnId) { id }
   }`;
-  const operations = {
-    query,
-    variables: { file: null, itemId, columnId },
-  };
-  const map = { "0": ["variables.file"] };
 
   const formData = new FormData();
-  formData.append("operations", JSON.stringify(operations));
-  formData.append("map", JSON.stringify(map));
-  formData.append("0", file, file.name);
+  formData.append("query", query);
+  formData.append("variables", JSON.stringify({ itemId, columnId }));
+  formData.append("variables[file]", blob, filename);
 
   try {
     const res = await fetch(MONDAY_FILE_URL, {
       method: "POST",
-      headers: {
-        Authorization: token(),
-        "API-Version": "2024-10",
-      },
+      headers: { Authorization: token() },
       body: formData,
       cache: "no-store",
     });
 
-    // Read raw body once so we can log it on failure instead of getting
-    // a generic "Unexpected end of JSON input" error.
+    // Read the body as text first so a non-JSON response surfaces the
+    // monday error message in our logs instead of a generic JSON-parse crash.
     const raw = await res.text();
     if (!raw) {
-      console.error(`monday add_file_to_column empty body for ${file.name}: HTTP ${res.status}`);
+      console.error(`monday add_file_to_column empty body for ${filename}: HTTP ${res.status}`);
       return null;
     }
 
@@ -236,19 +231,19 @@ export async function uploadFileToColumn(
       parsed = JSON.parse(raw) as MondayResponse<{ add_file_to_column: { id: string } }>;
     } catch {
       console.error(
-        `monday add_file_to_column non-JSON for ${file.name}: HTTP ${res.status} body=${raw.slice(0, 500)}`,
+        `monday add_file_to_column non-JSON for ${filename}: HTTP ${res.status} body=${raw.slice(0, 500)}`,
       );
       return null;
     }
 
     if (parsed.errors?.length || !parsed.data?.add_file_to_column) {
       const message = parsed.errors?.[0]?.message || parsed.error_message || `HTTP ${res.status}`;
-      console.error(`monday add_file_to_column failed for ${file.name}:`, message);
+      console.error(`monday add_file_to_column failed for ${filename}:`, message);
       return null;
     }
     return parsed.data.add_file_to_column;
   } catch (err) {
-    console.error(`monday add_file_to_column threw for ${file.name}:`, err);
+    console.error(`monday add_file_to_column threw for ${filename}:`, err);
     return null;
   }
 }
