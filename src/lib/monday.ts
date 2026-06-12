@@ -1,11 +1,18 @@
 // Thin wrapper around the monday.com GraphQL API. Server-side only —
 // MONDAY_API_TOKEN is a personal access token and must never reach the browser.
+//
+// Board mapping is centralised here so the route handler stays focused on
+// shaping the payload from the workflow URL params.
 
 const MONDAY_GRAPHQL_URL = "https://api.monday.com/v2";
 const MONDAY_FILE_URL = "https://api.monday.com/v2/file";
 
+// The board these items land on. See the board structure documented in the
+// `Quotes` monday board (created 2026-06-10 by Jairo Osorno, ID 18417125005).
 export const QUOTES_BOARD_ID = 18417125005;
 
+// Column IDs on the Quotes board. Update if the board structure changes —
+// fetch with `get_board_info` and refresh this map.
 export const QUOTES_COLUMNS = {
   date: "date4",
   customer: "text_mm466n79",
@@ -43,12 +50,29 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
       "API-Version": "2024-10",
     },
     body: JSON.stringify({ query, variables }),
+    // Server-side only — no caching of mutations.
     cache: "no-store",
   });
-  const body = (await res.json()) as MondayResponse<T>;
-  return body;
+  // Read the body as text first so a non-JSON response (HTML error page,
+  // rate-limit notice, empty 5xx) surfaces with the actual content instead
+  // of crashing on JSON.parse and erasing the diagnostic.
+  const raw = await res.text();
+  if (!raw) {
+    return { errors: [{ message: `HTTP ${res.status} (empty body)` }] } as MondayResponse<T>;
+  }
+  try {
+    return JSON.parse(raw) as MondayResponse<T>;
+  } catch {
+    console.error(`monday gql non-JSON response HTTP ${res.status}: ${raw.slice(0, 500)}`);
+    return { errors: [{ message: `non-JSON HTTP ${res.status}: ${raw.slice(0, 200)}` }] } as MondayResponse<T>;
+  }
 }
 
+/**
+ * Look up a monday user by email. Returns null if no user matches.
+ * Used so we can populate the Submitter people column with the signed-in
+ * Supabase user's monday person ID.
+ */
 export async function findUserByEmail(email: string): Promise<MondayUserLookup> {
   const query = `
     query ($emails: [String!]) {
@@ -79,11 +103,14 @@ export type CreateItemPayload = {
   submitterMondayId?: string | number | null;
 };
 
+/**
+ * Create a new item on the Quotes board. Returns the new item ID + URL.
+ */
 export async function createQuoteItem(payload: CreateItemPayload): Promise<{
   id: string;
   url: string;
 }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
   const columnValues: Record<string, unknown> = {
     [QUOTES_COLUMNS.date]: { date: today },
@@ -91,8 +118,10 @@ export async function createQuoteItem(payload: CreateItemPayload): Promise<{
     [QUOTES_COLUMNS.type]: payload.typeLabel,
   };
 
-    if (payload.qtyText && payload.qtyText.trim().length > 0) { columnValues[QUOTES_COLUMNS.qty] = payload.qtyText.trim(); }
-  
+  if (payload.qtyText && payload.qtyText.trim().length > 0) {
+    columnValues[QUOTES_COLUMNS.qty] = payload.qtyText.trim();
+  }
+
   if (payload.submitterMondayId) {
     columnValues[QUOTES_COLUMNS.submitter] = {
       personsAndTeams: [
@@ -134,6 +163,7 @@ export async function createQuoteItem(payload: CreateItemPayload): Promise<{
 /**
  * Post an update (comment) on a monday item. Used to add the
  * "Hi Rosy, can we please start the quoting process…" intro.
+ * Returns the new update ID, or null on failure (we log and keep going).
  */
 export async function postUpdate(itemId: string, body: string): Promise<string | null> {
   const query = `
@@ -153,40 +183,72 @@ export async function postUpdate(itemId: string, body: string): Promise<string |
 
 /**
  * Upload a file to a file-type column on a monday item.
- * Uses monday's multipart-form-data /v2/file endpoint.
+ * Uses monday's multipart-form-data /v2/file endpoint (separate from the
+ * GraphQL /v2 endpoint). The `variables[file]` field name is the magic
+ * monday uses to attach the binary to the GraphQL $file variable.
  */
 export async function uploadFileToColumn(
   itemId: string,
   columnId: string,
   file: File,
 ): Promise<{ id: string } | null> {
-  const query = `
-    mutation add_file($file: File!, $itemId: ID!, $columnId: String!) {
-      add_file_to_column(file: $file, item_id: $itemId, column_id: $columnId) {
-        id
-      }
-    }
-  `;
+  // monday wants the GraphQL operation in a multipart "operations" field with
+  // `$file` as a placeholder, plus a "map" telling it which form part fills
+  // that placeholder, plus the actual binary under that part name. The
+  // `variables[file]` shortcut used previously didn't reliably attach the
+  // file in Node 20's fetch (it would parse, but $file came through null
+  // and monday returned a non-JSON 4xx, blowing up await res.json()).
+  const query = `mutation ($file: File!, $itemId: ID!, $columnId: String!) {
+    add_file_to_column(file: $file, item_id: $itemId, column_id: $columnId) { id }
+  }`;
+  const operations = {
+    query,
+    variables: { file: null, itemId, columnId },
+  };
+  const map = { "0": ["variables.file"] };
+
   const formData = new FormData();
-  formData.append("query", query);
-  formData.append("variables", JSON.stringify({ itemId, columnId }));
-  formData.append("variables[file]", file, file.name);
+  formData.append("operations", JSON.stringify(operations));
+  formData.append("map", JSON.stringify(map));
+  formData.append("0", file, file.name);
 
-  const res = await fetch(MONDAY_FILE_URL, {
-    method: "POST",
-    headers: {
-      Authorization: token(),
-      "API-Version": "2024-10",
-    },
-    body: formData,
-    cache: "no-store",
-  });
+  try {
+    const res = await fetch(MONDAY_FILE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: token(),
+        "API-Version": "2024-10",
+      },
+      body: formData,
+      cache: "no-store",
+    });
 
-  const result = (await res.json()) as MondayResponse<{ add_file_to_column: { id: string } }>;
-  if (result.errors?.length || !result.data?.add_file_to_column) {
-    const message = result.errors?.[0]?.message || result.error_message || `HTTP ${res.status}`;
-    console.error(`monday add_file_to_column failed for ${file.name}:`, message);
+    // Read raw body once so we can log it on failure instead of getting
+    // a generic "Unexpected end of JSON input" error.
+    const raw = await res.text();
+    if (!raw) {
+      console.error(`monday add_file_to_column empty body for ${file.name}: HTTP ${res.status}`);
+      return null;
+    }
+
+    let parsed: MondayResponse<{ add_file_to_column: { id: string } }>;
+    try {
+      parsed = JSON.parse(raw) as MondayResponse<{ add_file_to_column: { id: string } }>;
+    } catch {
+      console.error(
+        `monday add_file_to_column non-JSON for ${file.name}: HTTP ${res.status} body=${raw.slice(0, 500)}`,
+      );
+      return null;
+    }
+
+    if (parsed.errors?.length || !parsed.data?.add_file_to_column) {
+      const message = parsed.errors?.[0]?.message || parsed.error_message || `HTTP ${res.status}`;
+      console.error(`monday add_file_to_column failed for ${file.name}:`, message);
+      return null;
+    }
+    return parsed.data.add_file_to_column;
+  } catch (err) {
+    console.error(`monday add_file_to_column threw for ${file.name}:`, err);
     return null;
   }
-  return result.data.add_file_to_column;
 }
