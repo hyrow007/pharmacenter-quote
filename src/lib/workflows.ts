@@ -44,12 +44,23 @@ export type WorkflowState = {
   products: ProductEntry[];
 };
 
+// Lifecycle of a workflow. "in_progress" is the default until the user
+// explicitly marks a quote as Won or Lost. Mirrors the DB CHECK constraint.
+export type WorkflowStatus = "in_progress" | "won" | "lost";
+
+export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
+  in_progress: "In Progress",
+  won: "Won",
+  lost: "Lost",
+};
+
 export type WorkflowRow = {
   id: string;
   created_by_email: string;
   created_at: string;
   updated_at: string;
   state: WorkflowState;
+  status: WorkflowStatus;
   monday_item_id: string | null;
   monday_item_url: string | null;
   monday_last_pushed_at: string | null;
