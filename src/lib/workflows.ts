@@ -8,25 +8,13 @@
 
 import type { WorkflowAttachment } from "./storage";
 
-// Loose Supabase client surface — we only need `.from(...).select(...).eq(...).maybeSingle()`,
-// which both the @supabase/ssr server client and the @supabase/supabase-js
-// anon client expose. Typing the full generic SupabaseClient<Database> would
-// require feeding it the project's table types, which we don't currently have.
-type AnySupabase = {
-  from: (table: string) => {
-    select: (cols: string) => {
-      eq: (
-        col: string,
-        val: string,
-      ) => {
-        maybeSingle: () => Promise<{
-          data: { email: string } | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
-};
+// We don't have generated Database types, so trying to use the real
+// SupabaseClient generic from either @supabase/ssr or @supabase/supabase-js
+// here makes TS attempt to unify two different deeply-instantiated query
+// builders and trip the "Type instantiation is excessively deep" check.
+// `any` here is intentional and contained — it leaks into one helper only.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabase = any;
 
 export type WorkflowMode = "existing" | "new";
 
