@@ -55,7 +55,7 @@ export default async function WorkflowPage({ params }: Ctx) {
   const { data } = await supabase
     .from("workflows")
     .select(
-      "id, created_by_email, created_at, updated_at, state, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .eq("id", id)
     .maybeSingle();

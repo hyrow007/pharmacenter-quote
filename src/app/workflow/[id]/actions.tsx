@@ -7,7 +7,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import type { WorkflowRow } from "@/lib/workflows";
+import { WORKFLOW_STATUS_LABELS, type WorkflowRow, type WorkflowStatus } from "@/lib/workflows";
 import type { Customer } from "@/lib/supabase";
 
 type ProductRow = { id: string; name: string; fp_code: string | null };
@@ -62,6 +62,39 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
   // a full page refresh (server-rendered URL is the source of truth on load).
   const [mondayUrl, setMondayUrl] = useState<string | null>(workflow.monday_item_url);
   const alreadyPushed = !!mondayUrl;
+
+  // Optimistic status — the API roundtrips and we render the new pill
+  // immediately. Falls back to the server value on next render.
+  const [status, setStatus] = useState<WorkflowStatus>(workflow.status ?? "in_progress");
+  const [statusSaving, setStatusSaving] = useState<WorkflowStatus | null>(null);
+
+  const setWorkflowStatus = async (next: WorkflowStatus) => {
+    if (status === next || statusSaving) return;
+    const prev = status;
+    setStatus(next);
+    setStatusSaving(next);
+    try {
+      const res = await fetch(`/api/workflows/${workflow.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setStatus(prev);
+        showToast(`Couldn't change status: ${data?.error || res.status}`, 6500);
+        return;
+      }
+      showToast(`Marked as ${WORKFLOW_STATUS_LABELS[next]}.`);
+      router.refresh();
+    } catch (err) {
+      setStatus(prev);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Status save errored: ${msg}`, 6500);
+    } finally {
+      setStatusSaving(null);
+    }
+  };
 
   const showToast = (msg: string, ms = 5500) => {
     setToast(msg);
@@ -183,8 +216,48 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
 
   const canDelete = isOwner || isAdmin;
 
+  const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
+
   return (
     <>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--ink-3)",
+            marginRight: 4,
+          }}
+        >
+          Status
+        </span>
+        {STATUS_ORDER.map((s) => {
+          const active = status === s;
+          const saving = statusSaving === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setWorkflowStatus(s)}
+              disabled={active || !!statusSaving}
+              className={`status-pill status-pill--${s.replace("_", "-")} status-pill--button ${active ? "status-pill--active" : ""}`}
+            >
+              {saving ? "Saving…" : WORKFLOW_STATUS_LABELS[s]}
+            </button>
+          );
+        })}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
         <button type="button" style={primaryAction} onClick={pushToMonday} disabled={submitting}>
           <span>
