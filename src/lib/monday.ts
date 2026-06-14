@@ -193,21 +193,20 @@ export async function uploadFileToColumn(
   blob: Blob,
   filename: string,
 ): Promise<{ id: string } | null> {
-  // monday's /v2/file endpoint uses a custom multipart layout:
-  //   query:           the GraphQL mutation string with $file declared
-  //   variables:       JSON-encoded variables EXCLUDING the file
-  //   variables[file]: the actual binary, bound to the $file variable by name
+  // monday's /v2/file endpoint is finicky:
+  //   - The ONLY variable it accepts is $file. item_id and column_id must be
+  //     literal values inside the GraphQL string — passing them as $itemId /
+  //     $columnId variables causes monday to return an empty 400.
+  //   - The file goes in a form field literally named "variables[file]".
   //
-  // We pass a Blob + explicit filename instead of a File so the Content-Type
-  // and filename on the multipart part are exactly what monday expects, with
-  // no dependence on the runtime's File constructor.
-  const query = `mutation ($file: File!, $itemId: ID!, $columnId: String!) {
-    add_file_to_column(file: $file, item_id: $itemId, column_id: $columnId) { id }
+  // Pass a Blob + explicit filename rather than a File so the multipart
+  // part's filename and Content-Type don't depend on the runtime's File ctor.
+  const query = `mutation ($file: File!) {
+    add_file_to_column(file: $file, item_id: ${itemId}, column_id: "${columnId}") { id }
   }`;
 
   const formData = new FormData();
   formData.append("query", query);
-  formData.append("variables", JSON.stringify({ itemId, columnId }));
   formData.append("variables[file]", blob, filename);
 
   try {
