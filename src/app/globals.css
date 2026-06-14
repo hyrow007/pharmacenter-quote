@@ -8,6 +8,9 @@
   --paper: #fffdf8;
   --ink-1: #19272b;
   --ink-3: #6e7c80;
+  --stone: #e3dcc9;
+  --sage-pill-bg: #e8f1d8;
+  --sage-pill-ink: #4d6e2c;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -97,7 +100,7 @@ h1 {
   flex-direction: column;
   gap: 6px;
   padding: 18px 20px;
-  border: 1.5px solid #e3dcc9;
+  border: 1.5px solid var(--stone);
   border-radius: 12px;
   background: #fffdf8;
   text-decoration: none;
@@ -141,5 +144,324 @@ h1 {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ============================================================
+   App shell + top nav (used by /workflows, /workflow/[id], /start)
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--cream);
+}
+
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+  border-bottom: 1px solid var(--stone);
+}
+
+.app-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 28px;
+  min-height: 60px;
+}
+
+.app-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-nav__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.app-nav__brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.app-nav__brand-top {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--teal-900);
+}
+.app-nav__brand-bottom {
+  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--teal-900);
+  margin-top: 3px;
+  letter-spacing: 0.005em;
+}
+
+.app-nav__divider {
+  width: 1px;
+  height: 32px;
+  background: var(--stone);
+  margin: 0 6px;
+}
+
+.app-nav__links {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.app-nav__link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-1);
+  text-decoration: none;
+  padding: 6px 2px;
+  line-height: 1.2;
+  transition: color 0.15s ease;
+}
+.app-nav__link:hover {
+  color: var(--teal-700);
+}
+.app-nav__link--active {
+  color: var(--teal-900);
+}
+.app-nav__link--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 2px;
+  background: var(--teal-700);
+  border-radius: 1px;
+}
+
+.app-nav__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.app-nav__email {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Full-width page wrapper (replaces the centered .hero/.card)
+   ============================================================ */
+
+.page {
+  flex: 1;
+  width: 100%;
+  padding: 36px 28px 64px;
+}
+
+.page__inner {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.page__inner--narrow {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.page-header__title {
+  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--teal-900);
+  margin-bottom: 6px;
+}
+
+.page-header__subtitle {
+  font-size: 14px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+.page-header__action {
+  flex-shrink: 0;
+}
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--teal-900);
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.button-primary:hover {
+  background: var(--teal-700);
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   Search input
+   ============================================================ */
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--stone);
+  border-radius: 10px;
+  font-size: 14px;
+  background: var(--paper);
+  color: var(--ink-1);
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  margin-bottom: 18px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--teal-700);
+  box-shadow: 0 0 0 3px rgba(29, 108, 123, 0.12);
+}
+
+/* ============================================================
+   Table (workflow listing)
+   ============================================================ */
+
+.table {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.table__head {
+  display: grid;
+  grid-template-columns: 1.7fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  gap: 14px;
+  padding: 12px 18px;
+  background: #f7f4ea;
+  border-bottom: 1px solid var(--stone);
+}
+
+.table__head-cell {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.table__row {
+  display: grid;
+  grid-template-columns: 1.7fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--stone);
+  color: var(--ink-1);
+  text-decoration: none;
+  align-items: center;
+  transition: background 0.12s ease;
+}
+.table__row:last-child {
+  border-bottom: none;
+}
+.table__row:hover {
+  background: #fcf9ef;
+}
+
+.table__cell {
+  font-size: 13.5px;
+  color: var(--ink-1);
+  min-width: 0;
+}
+
+.table__cell--strong {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.table__cell-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table__empty {
+  padding: 56px 24px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.table__empty-title {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 28px;
+  color: var(--teal-900);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+/* ============================================================
+   Status pills
+   ============================================================ */
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-pill--pushed {
+  background: var(--sage-pill-bg);
+  color: var(--sage-pill-ink);
+}
+
+.status-pill--draft {
+  background: #f0eee5;
   color: var(--ink-3);
 }
