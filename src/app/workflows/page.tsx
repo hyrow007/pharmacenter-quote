@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { CSSProperties } from "react";
 import { createClient } from "@/lib/auth/server";
 import type { WorkflowRow } from "@/lib/workflows";
+import AppHeader from "../_components/AppHeader";
+import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
 
 // Workflow inbox — every quote workflow visible to the signed-in user.
 // Server component so the customer/product joins happen on the server in one
-// round-trip instead of N debounced fetches in the browser.
+// round-trip instead of N debounced fetches in the browser. The live-filter
+// search box is delegated to <WorkflowTable/> (client) which receives the
+// pre-shaped rows.
 
 const TYPE_LABELS: Record<string, string> = {
   "bulk": "Bulk",
@@ -23,7 +26,7 @@ function relativeTime(iso: string): string {
   const now = Date.now();
   const diff = Math.max(0, now - then);
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return "just now";
+  if (sec < 60) return "now";
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m ago`;
   const hr = Math.floor(min / 60);
@@ -33,6 +36,11 @@ function relativeTime(iso: string): string {
   if (day < 30) return `${Math.floor(day / 7)}w ago`;
   if (day < 365) return `${Math.floor(day / 30)}mo ago`;
   return `${Math.floor(day / 365)}y ago`;
+}
+
+function localPart(email: string): string {
+  const at = email.indexOf("@");
+  return at > 0 ? email.slice(0, at) : email;
 }
 
 export default async function WorkflowsPage() {
@@ -54,7 +62,7 @@ export default async function WorkflowsPage() {
 
   const rows: WorkflowRow[] = (rawRows ?? []) as WorkflowRow[];
 
-  // Resolve customer names in one query.
+  // Resolve customer names (+ ship-to subtitle) in one query.
   const customerIds = Array.from(
     new Set(
       rows
@@ -62,119 +70,119 @@ export default async function WorkflowsPage() {
         .filter((id): id is string => !!id),
     ),
   );
-  const customerNames: Record<string, string> = {};
+  const customerInfo: Record<string, { name: string; ship: string | null }> = {};
   if (customerIds.length > 0) {
-    const { data } = await supabase.from("customers").select("id, name").in("id", customerIds);
-    for (const c of (data ?? []) as Array<{ id: string; name: string }>) {
-      customerNames[c.id] = c.name;
+    const { data } = await supabase
+      .from("customers")
+      .select("id, name, default_ship_to")
+      .in("id", customerIds);
+    for (const c of (data ?? []) as Array<{ id: string; name: string; default_ship_to: string | null }>) {
+      customerInfo[c.id] = { name: c.name, ship: c.default_ship_to };
     }
   }
 
-  // ----- styles --------------------------------------------------------
-  const cardStyle: CSSProperties = {
-    display: "block", textDecoration: "none",
-    padding: "16px 18px", borderRadius: 12,
-    border: "1.5px solid #e3dcc9", background: "#fffdf8",
-    color: "var(--ink-1)", marginBottom: 10,
-    transition: "border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease",
-  };
-  const rowGrid: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1.4fr 1fr auto auto",
-    gap: 14, alignItems: "center",
-  };
-  const badgePushed: CSSProperties = {
-    display: "inline-block", padding: "3px 10px", borderRadius: 999,
-    background: "var(--sage)", color: "var(--teal-900)",
-    fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
-  };
-  const badgeUnpushed: CSSProperties = {
-    display: "inline-block", padding: "3px 10px", borderRadius: 999,
-    background: "#fff", border: "1.5px solid #e3dcc9",
-    color: "var(--ink-3)", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
-  };
-  const newButton: CSSProperties = {
-    display: "inline-flex", alignItems: "center", gap: 8,
-    padding: "10px 18px", background: "var(--teal-900)",
-    color: "#fff", border: "none", borderRadius: 10,
-    fontSize: 14, fontWeight: 700, cursor: "pointer",
-    fontFamily: "inherit", letterSpacing: "0.01em", textDecoration: "none",
-  };
+  // Resolve product names (for single-product label "Name (CODE)").
+  const productIds = Array.from(
+    new Set(
+      rows.flatMap((r) =>
+        r.state.products
+          .map((p) => p.productId)
+          .filter((pid): pid is string => !!pid && pid !== "new"),
+      ),
+    ),
+  );
+  const productInfo: Record<string, { name: string; code: string | null }> = {};
+  if (productIds.length > 0) {
+    const { data } = await supabase
+      .from("products")
+      .select("id, name, fp_code")
+      .in("id", productIds);
+    for (const p of (data ?? []) as Array<{ id: string; name: string; fp_code: string | null }>) {
+      productInfo[p.id] = { name: p.name, code: p.fp_code };
+    }
+  }
+
+  const display: WorkflowDisplayRow[] = rows.map((row) => {
+    const state = row.state;
+    const customerName =
+      state.customerMode === "new"
+        ? state.newCustomer?.name || "New customer"
+        : (state.customerId && customerInfo[state.customerId]?.name) || "Unknown customer";
+    const customerSub =
+      state.customerMode === "new"
+        ? state.newCustomer?.contact || ""
+        : (state.customerId && customerInfo[state.customerId]?.ship) || "";
+    const typeLabel = [
+      state.type ? TYPE_LABELS[state.type] || state.type : null,
+      state.form ? FORM_LABELS[state.form] || state.form : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const products = state.products ?? [];
+    let productLabel = "";
+    let productSearchBlob = "";
+    if (products.length === 1) {
+      const p = products[0];
+      if (p.mode === "new") {
+        productLabel = p.newProduct?.name_desc || "New product";
+      } else if (p.productId && productInfo[p.productId]) {
+        const info = productInfo[p.productId];
+        productLabel = info.code ? `${info.name} (${info.code})` : info.name;
+      } else {
+        productLabel = "Product";
+      }
+      productSearchBlob = productLabel;
+    } else if (products.length > 1) {
+      productLabel = `${products.length} products`;
+      productSearchBlob = products
+        .map((p) => {
+          if (p.mode === "new") return p.newProduct?.name_desc || "";
+          if (p.productId && productInfo[p.productId]) {
+            const info = productInfo[p.productId];
+            return `${info.name} ${info.code || ""}`;
+          }
+          return "";
+        })
+        .join(" ");
+    }
+
+    return {
+      id: row.id,
+      customerName,
+      customerSub,
+      typeLabel,
+      productLabel,
+      productSearchBlob,
+      submitterFull: row.created_by_email,
+      submitterShort: localPart(row.created_by_email),
+      updatedRelative: relativeTime(row.updated_at),
+      updatedSort: new Date(row.updated_at).getTime(),
+      pushed: !!row.monday_item_id,
+    };
+  });
 
   return (
-    <main className="hero">
-      <div className="card card--wide">
-        <p className="eyebrow">PharmaCenter · Workflow</p>
-        <h1>Quote workflows</h1>
-        <p className="lede">Every quote workflow we&rsquo;ve got in flight, newest activity on top.</p>
+    <div className="app-shell">
+      <AppHeader user={{ email: user.email! }} />
+      <main className="page">
+        <div className="page__inner">
+          <div className="page-header">
+            <div>
+              <h1 className="page-header__title">Work Flows</h1>
+              <p className="page-header__subtitle">
+                Your drafts and every pushed workflow across the workspace.
+              </p>
+            </div>
+            <div className="page-header__action">
+              <Link href="/start" className="button-primary">
+                + New workflow
+              </Link>
+            </div>
+          </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, gap: 12 }}>
-          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-            {rows.length} workflow{rows.length === 1 ? "" : "s"}
-          </span>
-          <Link href="/start" style={newButton}>Start new workflow →</Link>
+          <WorkflowTable rows={display} />
         </div>
-
-        {rows.length === 0 ? (
-          <div
-            style={{
-              padding: "32px 24px", textAlign: "center",
-              border: "1.5px dashed #e3dcc9", borderRadius: 12,
-              color: "var(--ink-3)",
-            }}
-          >
-            <p style={{ fontSize: 14, marginBottom: 12 }}>No workflows yet.</p>
-            <Link href="/start" style={{ color: "var(--teal-700)", fontWeight: 700, textDecoration: "none" }}>
-              Start the first one →
-            </Link>
-          </div>
-        ) : (
-          <div>
-            {rows.map((row) => {
-              const state = row.state;
-              const customerLabel =
-                state.customerMode === "new"
-                  ? state.newCustomer?.name || "New customer"
-                  : (state.customerId && customerNames[state.customerId]) || "Unknown customer";
-              const typeParts = [
-                state.type ? TYPE_LABELS[state.type] || state.type : null,
-                state.form ? FORM_LABELS[state.form] || state.form : null,
-              ].filter(Boolean) as string[];
-              const productCount = state.products?.length ?? 0;
-              const pushed = !!row.monday_item_id;
-              return (
-                <Link key={row.id} href={`/workflow/${row.id}`} style={cardStyle}>
-                  <div style={rowGrid}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-1)" }}>
-                        {customerLabel}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>
-                        {typeParts.length > 0 ? typeParts.join(" · ") : "—"}
-                        {productCount > 0
-                          ? ` · ${productCount} product${productCount === 1 ? "" : "s"}`
-                          : ""}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--ink-3)" }}>
-                      <div>{row.created_by_email}</div>
-                      <div style={{ marginTop: 2 }}>Updated {relativeTime(row.updated_at)}</div>
-                    </div>
-                    <div>
-                      {pushed ? (
-                        <span style={badgePushed}>Pushed</span>
-                      ) : (
-                        <span style={badgeUnpushed}>Not pushed</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 18, color: "var(--teal-700)" }}>→</div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
