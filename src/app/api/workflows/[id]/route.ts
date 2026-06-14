@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import {
   isAdmin,
+  type SalesOrder,
   type WorkflowRow,
   type WorkflowState,
   type WorkflowStatus,
@@ -11,19 +12,45 @@ import {
 //   → { ok: true, workflow, isAdmin, isOwner }
 //
 // PUT /api/workflows/[id]
-// Body: { state?: WorkflowState, status?: WorkflowStatus }
+// Body: { state?: WorkflowState, status?: WorkflowStatus, sales_orders?: SalesOrder[] }
 //   → { ok: true, workflow }
-// Either or both fields may be present. Sending neither is a 400.
+// Any subset of fields may be present. Sending none is a 400.
+// Server rules:
+//   - status === "won" REQUIRES a non-empty, well-formed sales_orders array.
+//   - status set to anything else clears sales_orders to [] automatically.
+//   - status unchanged but sales_orders sent → store as-is (edit while Won).
 //
 // DELETE /api/workflows/[id]
 //   → { ok: true } or 403 if RLS rejects.
 
 const COLS =
-  "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at";
+  "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at";
 
 const VALID_STATUSES: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
-type PutBody = { state?: WorkflowState; status?: WorkflowStatus };
+type PutBody = {
+  state?: WorkflowState;
+  status?: WorkflowStatus;
+  sales_orders?: SalesOrder[];
+};
+
+// Narrow + sanitise an unknown payload into a SalesOrder[]. Returns null when
+// the array contains anything invalid (empty so_number, non-finite value, etc.)
+// so the caller can 400 out.
+function parseSalesOrders(raw: unknown): SalesOrder[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: SalesOrder[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return null;
+    const rec = item as Record<string, unknown>;
+    const so = typeof rec.so_number === "string" ? rec.so_number.trim() : "";
+    const val = typeof rec.value === "number" ? rec.value : Number(rec.value);
+    if (!so) return null;
+    if (!Number.isFinite(val) || val <= 0) return null;
+    out.push({ so_number: so, value: val });
+  }
+  return out;
+}
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -82,7 +109,11 @@ export async function PUT(request: Request, ctx: Ctx) {
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
 
-  const patch: { state?: WorkflowState; status?: WorkflowStatus } = {};
+  const patch: {
+    state?: WorkflowState;
+    status?: WorkflowStatus;
+    sales_orders?: SalesOrder[];
+  } = {};
   if (body.state && typeof body.state === "object") {
     patch.state = body.state;
   }
@@ -92,6 +123,35 @@ export async function PUT(request: Request, ctx: Ctx) {
     }
     patch.status = body.status;
   }
+
+  // Sales-order handling. Three cases:
+  //   1. Caller is setting status=won → sales_orders are mandatory + valid.
+  //   2. Caller is setting status to anything else → wipe sales_orders to [].
+  //   3. status unchanged but sales_orders sent → store sanitised array
+  //      (used by the "Edit sales orders" affordance while already Won).
+  if (patch.status === "won") {
+    const parsed = parseSalesOrders(body.sales_orders);
+    if (!parsed || parsed.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "sales_orders_required" },
+        { status: 400 },
+      );
+    }
+    patch.sales_orders = parsed;
+  } else if (patch.status === "in_progress" || patch.status === "lost") {
+    // Leaving Won — discard any recorded SOs.
+    patch.sales_orders = [];
+  } else if (body.sales_orders !== undefined) {
+    const parsed = parseSalesOrders(body.sales_orders);
+    if (!parsed) {
+      return NextResponse.json(
+        { ok: false, error: "invalid_sales_orders" },
+        { status: 400 },
+      );
+    }
+    patch.sales_orders = parsed;
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ ok: false, error: "nothing_to_update" }, { status: 400 });
   }
