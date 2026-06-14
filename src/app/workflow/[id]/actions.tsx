@@ -125,13 +125,21 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
       if (url) setMondayUrl(url);
       const totalFiles = products.reduce((n, p) => n + p.attachments.length, 0);
       const uploaded = data.uploaded ?? 0;
+      const skipped = data.skipped ?? 0;
       const verb = mode === "update" ? "Update posted to monday" : "Added to monday";
+      // For an update push we want the user to know that files already on the
+      // monday item weren't re-uploaded (that's the point of dedup). For a
+      // create push, skipped should be zero so we don't mention it.
       const fileMsg =
         totalFiles === 0
           ? `${verb} — opening the item in a new tab.`
-          : uploaded === totalFiles
-            ? `${verb} with ${uploaded} attachment${uploaded === 1 ? "" : "s"}.`
-            : `${verb}, but only ${uploaded}/${totalFiles} attachments uploaded.`;
+          : uploaded === 0 && skipped > 0
+            ? `${verb}. No new files — ${skipped} already on the item.`
+            : skipped > 0
+              ? `${verb} with ${uploaded} new attachment${uploaded === 1 ? "" : "s"} (${skipped} already on the item).`
+              : uploaded === totalFiles
+                ? `${verb} with ${uploaded} attachment${uploaded === 1 ? "" : "s"}.`
+                : `${verb}, but only ${uploaded}/${totalFiles} attachments uploaded.`;
       showToast(fileMsg);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       // Refresh server-side data so the "Last pushed" timestamp is current.
@@ -190,7 +198,7 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
           </span>
           <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>
             {alreadyPushed
-              ? "Post a fresh comment + re-upload attachments to the existing item."
+              ? "Post a fresh comment. Only files added since the last push are uploaded."
               : "Create the Quotes-board item and ping Rosy."}
           </span>
         </button>
