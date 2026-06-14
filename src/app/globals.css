@@ -208,25 +208,30 @@ h1 {
   display: block;
 }
 
+/* Single-line layout: "Quote" big in serif, "Work Flows" smaller italic in
+   muted serif right next to it — mirrors the sister Packing List app's
+   "Packing List Generator" wordmark. */
 .app-nav__product {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   line-height: 1;
 }
 .app-nav__product-main {
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 600;
   color: var(--teal-900);
   letter-spacing: 0.005em;
 }
 .app-nav__product-sub {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--sage-700);
-  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .app-nav__divider {
@@ -393,7 +398,7 @@ h1 {
 
 .table__head {
   display: grid;
-  grid-template-columns: 1.7fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  grid-template-columns: 80px 1.6fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
   gap: 14px;
   padding: 12px 18px;
   background: #f7f4ea;
@@ -410,7 +415,7 @@ h1 {
 
 .table__row {
   display: grid;
-  grid-template-columns: 1.7fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  grid-template-columns: 80px 1.6fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
   gap: 14px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--stone);
@@ -445,6 +450,17 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Quote number cell — monospace-ish, tabular numerals, teal so it reads as
+   an ID at a glance even before the customer name registers. */
+.table__cell-quote-number {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--teal-700);
+  font-feature-settings: "tnum" 1;
 }
 
 .table__empty {
@@ -541,4 +557,278 @@ h1 {
 .status-pill--active.status-pill--lost {
   background: #ece8d8;
   border-color: var(--ink-3);
+}
+
+/* ============================================================
+   Sales orders — inline form on /workflow/[id] + summary card.
+   The form is opened when the user clicks Won (or "Edit sales orders"
+   while already won). Visual language: paper bg + stone borders to
+   match the rest of the workflow page; sage-green CTA reserved for
+   "Save as Won" so the affirmative action reads at a glance.
+   ============================================================ */
+
+.so-edit-link {
+  background: transparent;
+  border: none;
+  color: var(--teal-700);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin-left: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.so-edit-link:hover:not(:disabled) {
+  color: var(--teal-900);
+}
+.so-edit-link:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.so-form {
+  border: 1.5px solid var(--stone);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 18px 18px 16px;
+  margin: -4px 0 22px;
+  box-shadow: 0 1px 0 rgba(15, 74, 86, 0.04), 0 6px 18px -10px rgba(15, 74, 86, 0.18);
+}
+
+.so-form__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.so-form__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal-900);
+}
+
+.so-form__hint {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+.so-form__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.so-form__row {
+  display: grid;
+  grid-template-columns: 1fr 180px 32px;
+  gap: 10px;
+  align-items: center;
+}
+
+.so-form__input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--stone);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.so-form__input:focus {
+  outline: none;
+  border-color: var(--teal-700);
+  box-shadow: 0 0 0 3px rgba(29, 108, 123, 0.12);
+}
+.so-form__input:disabled {
+  background: var(--cream-soft);
+  color: var(--ink-3);
+}
+
+.so-form__value-wrap {
+  position: relative;
+}
+.so-form__value-prefix {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  font-weight: 700;
+  font-size: 14px;
+  pointer-events: none;
+}
+.so-form__input--value {
+  padding-left: 24px;
+}
+
+.so-form__remove {
+  background: transparent;
+  border: 1.5px solid var(--stone);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.so-form__remove:hover:not(:disabled) {
+  color: #8b2f2f;
+  border-color: #d8b3b3;
+  background: #fdf6f6;
+}
+.so-form__remove:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.so-form__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1.5px dashed var(--sage-300);
+  border-radius: 10px;
+  color: var(--sage-700);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  margin-bottom: 14px;
+}
+.so-form__add:hover:not(:disabled) {
+  border-color: var(--sage-700);
+  background: var(--sage-pill-bg);
+  color: var(--sage-700);
+}
+.so-form__add:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.so-form__error {
+  background: #fdf6f6;
+  border: 1px solid #d8b3b3;
+  color: #8b2f2f;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.so-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.so-form__cancel {
+  background: transparent;
+  border: 1.5px solid var(--stone);
+  border-radius: 10px;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.so-form__cancel:hover:not(:disabled) {
+  border-color: var(--ink-3);
+  color: var(--ink-1);
+}
+.so-form__cancel:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.so-form__save {
+  background: var(--sage-700);
+  border: 1.5px solid var(--sage-700);
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 0 rgba(95, 142, 58, 0.18), 0 6px 18px -8px rgba(95, 142, 58, 0.45);
+}
+.so-form__save:hover:not(:disabled) {
+  background: #547d33;
+  transform: translateY(-1px);
+}
+.so-form__save:disabled {
+  cursor: default;
+  opacity: 0.7;
+  transform: none;
+}
+
+/* Summary-card SO list — shown after the products section when status=won. */
+.sales-orders-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sales-orders-summary__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ink-1);
+}
+
+.sales-orders-summary__so {
+  font-weight: 600;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--teal-700);
+}
+
+.sales-orders-summary__sep {
+  color: var(--ink-3);
+}
+
+.sales-orders-summary__val {
+  font-weight: 600;
+}
+
+.sales-orders-summary__total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--stone);
+  font-size: 13px;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+.sales-orders-summary__total strong {
+  color: var(--sage-700);
+  font-size: 15px;
+  margin-left: 4px;
+}
+
+/* Won workflows in the listing table get a small muted dollar subtitle
+   under the status pill. Reuses the existing table cell-sub treatment. */
+.table__cell-sub--won {
+  color: var(--sage-700);
+  font-weight: 700;
+  font-size: 11.5px;
+  margin-top: 4px;
+  letter-spacing: 0.01em;
 }
