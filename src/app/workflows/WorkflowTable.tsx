@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import type { WorkflowStatus } from "@/lib/workflows";
+import { WORKFLOW_STATUS_LABELS } from "@/lib/workflows";
 
 // Client child of /workflows. Owns the search box + live filtering. The
 // parent (server) page does the data fetching + customer-name join, then
@@ -19,6 +21,7 @@ export type WorkflowDisplayRow = {
   updatedRelative: string;
   updatedSort: number;
   pushed: boolean;
+  status: WorkflowStatus;
 };
 
 type Props = {
@@ -98,14 +101,8 @@ export default function WorkflowTable({ rows }: Props) {
                   {row.updatedRelative}
                 </div>
                 <div className="table__cell">
-                  <span
-                    className={
-                      row.pushed
-                        ? "status-pill status-pill--pushed"
-                        : "status-pill status-pill--draft"
-                    }
-                  >
-                    {row.pushed ? "Pushed" : "Draft"}
+                  <span className={`status-pill status-pill--${row.status.replace("_", "-")}`}>
+                    {WORKFLOW_STATUS_LABELS[row.status]}
                   </span>
                 </div>
               </Link>

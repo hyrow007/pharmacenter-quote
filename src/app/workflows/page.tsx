@@ -43,6 +43,15 @@ function localPart(email: string): string {
   return at > 0 ? email.slice(0, at) : email;
 }
 
+// Title-case a string like "jairo osorno" → "Jairo Osorno".
+function titleCase(s: string): string {
+  return s
+    .split(" ")
+    .filter((w) => w.length > 0)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export default async function WorkflowsPage() {
   const supabase = await createClient();
   const {
@@ -56,7 +65,7 @@ export default async function WorkflowsPage() {
   const { data: rawRows } = await supabase
     .from("workflows")
     .select(
-      "id, created_by_email, created_at, updated_at, state, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .order("updated_at", { ascending: false });
 
@@ -78,6 +87,22 @@ export default async function WorkflowsPage() {
       .in("id", customerIds);
     for (const c of (data ?? []) as Array<{ id: string; name: string; default_ship_to: string | null }>) {
       customerInfo[c.id] = { name: c.name, ship: c.default_ship_to };
+    }
+  }
+
+  // Resolve submitter display names. The user_directory view (SQL migration)
+  // exposes the Google SSO full_name from auth.users for any signed-in user.
+  // Fallback to a title-cased local-part of the email if the view doesn't
+  // have an entry yet (e.g. a service account or an email that's never signed in).
+  const submitterEmails = Array.from(new Set(rows.map((r) => r.created_by_email)));
+  const submitterNames: Record<string, string> = {};
+  if (submitterEmails.length > 0) {
+    const { data: directoryRows } = await supabase
+      .from("user_directory")
+      .select("email, display_name")
+      .in("email", submitterEmails);
+    for (const d of (directoryRows ?? []) as Array<{ email: string; display_name: string | null }>) {
+      if (d.display_name) submitterNames[d.email] = d.display_name;
     }
   }
 
@@ -154,10 +179,11 @@ export default async function WorkflowsPage() {
       productLabel,
       productSearchBlob,
       submitterFull: row.created_by_email,
-      submitterShort: localPart(row.created_by_email),
+      submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
       updatedRelative: relativeTime(row.updated_at),
       updatedSort: new Date(row.updated_at).getTime(),
       pushed: !!row.monday_item_id,
+      status: row.status ?? "in_progress",
     };
   });
 
