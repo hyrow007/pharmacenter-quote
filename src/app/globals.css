@@ -1,22 +1,42 @@
-/* PharmaCenter palette */
+/* PharmaCenter palette — kept in lockstep with the sister Packing List app's
+ * brand stylesheet (see legacy/packing-list.css) so the two web apps look
+ * like they belong together. When the brand deck moves, update both. */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Nunito:wght@400;600;700&display=swap");
+
 :root {
+  /* Official PharmaCenter brand */
   --teal-900: #0f4a56;
   --teal-700: #1d6c7b;
-  --sage: #bcd596;
-  --green: #7fb04f;
-  --cream: #faf9f5;
+  --teal-500: #3a8d9c;
+  --sage-700: #5f8e3a;
+  --sage-500: #7fb04f;
+  --sage-300: #bcd596;
+  --cream: #f6efe3;
+  --cream-soft: #fbf6ec;
   --paper: #fffdf8;
-  --ink-1: #19272b;
-  --ink-3: #6e7c80;
+  --ink-1: #1f2a2d;
+  --ink-2: #415056;
+  --ink-3: #8a9498;
   --stone: #e3dcc9;
-  --sage-pill-bg: #e8f1d8;
-  --sage-pill-ink: #4d6e2c;
+  --stone-2: #efe9da;
+
+  /* Legacy aliases — older modules still reference --sage and --green. */
+  --sage: var(--sage-300);
+  --green: var(--sage-500);
+
+  /* Status pill colours (sage wash for "pushed") */
+  --sage-pill-bg: #eef4ee;
+  --sage-pill-ink: var(--sage-700);
+
+  /* Fonts */
+  --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --sans: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
   background: var(--cream);
   color: var(--ink-1);
   -webkit-font-smoothing: antialiased;
@@ -51,7 +71,7 @@ html, body {
 }
 
 h1 {
-  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-weight: 500;
   font-size: 56px;
   line-height: 1;
@@ -177,44 +197,43 @@ h1 {
 .app-nav__brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   text-decoration: none;
   color: inherit;
 }
 
-.app-nav__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+.app-nav__logo {
+  height: 40px;
+  width: auto;
+  display: block;
 }
 
-.app-nav__brand-text {
+.app-nav__product {
   display: flex;
   flex-direction: column;
   line-height: 1;
 }
-.app-nav__brand-top {
+.app-nav__product-main {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--teal-900);
+  letter-spacing: 0.005em;
+}
+.app-nav__product-sub {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
-  color: var(--teal-900);
-}
-.app-nav__brand-bottom {
-  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--teal-900);
-  margin-top: 3px;
-  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  color: var(--sage-700);
+  margin-top: 4px;
 }
 
 .app-nav__divider {
   width: 1px;
-  height: 32px;
+  height: 36px;
   background: var(--stone);
-  margin: 0 6px;
+  margin: 0 4px;
 }
 
 .app-nav__links {
