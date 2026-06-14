@@ -211,18 +211,24 @@ export async function POST(request: Request) {
 
   // If the caller passed a workflowId, pre-load the existing monday id so
   // we can decide whether this is a fresh create or an update on an existing
-  // item. The DB row is the source of truth — never trust the client.
+  // item. Also load the set of Supabase Storage paths we've already shipped
+  // to monday for this workflow so the update push doesn't re-upload
+  // unchanged files. The DB row is the source of truth — never trust the
+  // client on either of these.
   let existingMondayItemId: string | null = null;
   let existingMondayItemUrl: string | null = null;
+  let alreadyPushedPaths = new Set<string>();
   if (body.workflowId) {
     const { data: wfRow } = await supabase
       .from("workflows")
-      .select("monday_item_id, monday_item_url")
+      .select("monday_item_id, monday_item_url, pushed_attachment_paths")
       .eq("id", body.workflowId)
       .maybeSingle();
     if (wfRow) {
       existingMondayItemId = (wfRow.monday_item_id as string | null) ?? null;
       existingMondayItemUrl = (wfRow.monday_item_url as string | null) ?? null;
+      const paths = (wfRow.pushed_attachment_paths as string[] | null) ?? [];
+      alreadyPushedPaths = new Set(paths);
     }
   }
   const isUpdateMode = body.mode === "update" && !!existingMondayItemId;
@@ -289,31 +295,44 @@ export async function POST(request: Request) {
 
     const updateBody = lines.join("\n");
 
-    // Re-upload every attachment on each push. Monday keeps a stable list of
-    // files on the column, so an "update" push genuinely appends new uploads.
-    // (Worst case: duplicates show up; better than losing files.)
+    // Only upload attachments we haven't successfully shipped to monday
+    // before for this workflow. The dedup key is the Supabase Storage path
+    // — those are uuid-prefixed so every distinct upload has a unique key.
+    // On the first push, alreadyPushedPaths is empty and everything uploads.
+    // On an update push, only genuinely new attachments go up.
     const allAttachments: Attachment[] = products.flatMap((p) => p.attachments);
+    const toUpload = allAttachments.filter((a) => !alreadyPushedPaths.has(a.path));
+    const skippedCount = allAttachments.length - toUpload.length;
     const uploadResults = await Promise.all(
-      allAttachments.map(async (att) => {
+      toUpload.map(async (att) => {
         const blob = await fetchAttachmentAsBlob(att);
-        if (!blob) return null;
-        return uploadFileToColumn(item.id, QUOTES_COLUMNS.files, blob, att.name);
+        if (!blob) return { path: att.path, ok: false };
+        const result = await uploadFileToColumn(item.id, QUOTES_COLUMNS.files, blob, att.name);
+        return { path: att.path, ok: !!result };
       }),
     );
-    const uploadedCount = uploadResults.filter((r) => r !== null).length;
+    const uploadedCount = uploadResults.filter((r) => r.ok).length;
+    const newlyPushedPaths = uploadResults.filter((r) => r.ok).map((r) => r.path);
 
     await postUpdate(item.id, updateBody);
 
-    // Save the monday link back onto the workflow row so /workflow/[id] can
-    // surface it next render. Best-effort — if this fails the user still has
-    // the monday URL in the response and can come back later.
+    // Save the monday link + merge the freshly-pushed paths into the
+    // workflow row so the next update push knows to skip them. Best-effort
+    // — if this save fails the user still has the monday URL in the
+    // response, but the dedup memory will be wrong on the next push and
+    // they'll re-upload duplicates. That's recoverable; we log and continue.
     if (body.workflowId) {
+      const mergedPaths = Array.from(new Set([
+        ...Array.from(alreadyPushedPaths),
+        ...newlyPushedPaths,
+      ]));
       const { error: linkErr } = await supabase
         .from("workflows")
         .update({
           monday_item_id: item.id,
           monday_item_url: item.url,
           monday_last_pushed_at: new Date().toISOString(),
+          pushed_attachment_paths: mergedPaths,
         })
         .eq("id", body.workflowId);
       if (linkErr) {
@@ -326,7 +345,8 @@ export async function POST(request: Request) {
       item,
       mode: isUpdateMode ? "update" : "create",
       uploaded: uploadedCount,
-      attempted: allAttachments.length,
+      skipped: skippedCount,
+      attempted: toUpload.length,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
