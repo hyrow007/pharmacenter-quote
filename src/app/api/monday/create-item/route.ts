@@ -77,6 +77,9 @@ type Body = {
   customerName?: string;
   newCustomer?: { name?: string; contact?: string; email?: string };
   products?: ProductPayload[];
+  // New (workflows era) — link the monday push back to a DB workflow row.
+  workflowId?: string;
+  mode?: "create" | "update";
 };
 
 async function fetchAttachmentAsBlob(att: Attachment): Promise<Blob | null> {
@@ -206,23 +209,52 @@ export async function POST(request: Request) {
     console.warn("Submitter lookup failed; continuing without it:", err);
   }
 
-  try {
-    const item = await createQuoteItem({
-      itemName,
-      customerName,
-      typeLabel,
-      qtyText: qtyColumnText,
-      submitterMondayId: submitterId,
-    });
+  // If the caller passed a workflowId, pre-load the existing monday id so
+  // we can decide whether this is a fresh create or an update on an existing
+  // item. The DB row is the source of truth — never trust the client.
+  let existingMondayItemId: string | null = null;
+  let existingMondayItemUrl: string | null = null;
+  if (body.workflowId) {
+    const { data: wfRow } = await supabase
+      .from("workflows")
+      .select("monday_item_id, monday_item_url")
+      .eq("id", body.workflowId)
+      .maybeSingle();
+    if (wfRow) {
+      existingMondayItemId = (wfRow.monday_item_id as string | null) ?? null;
+      existingMondayItemUrl = (wfRow.monday_item_url as string | null) ?? null;
+    }
+  }
+  const isUpdateMode = body.mode === "update" && !!existingMondayItemId;
 
-    const lines: string[] = [
-      "Hi Rosy,",
-      "",
-      "Can we please start the quoting process for the following:",
-      "",
-      `• Customer: ${customerName}`,
-      `• Quote type: ${typeLabel || "—"}`,
-    ];
+  try {
+    const item = isUpdateMode
+      ? { id: existingMondayItemId as string, url: existingMondayItemUrl as string }
+      : await createQuoteItem({
+          itemName,
+          customerName,
+          typeLabel,
+          qtyText: qtyColumnText,
+          submitterMondayId: submitterId,
+        });
+
+    const lines: string[] = isUpdateMode
+      ? [
+          "Hi Rosy,",
+          "",
+          "Quick update on this workflow — current state below:",
+          "",
+          `• Customer: ${customerName}`,
+          `• Quote type: ${typeLabel || "—"}`,
+        ]
+      : [
+          "Hi Rosy,",
+          "",
+          "Can we please start the quoting process for the following:",
+          "",
+          `• Customer: ${customerName}`,
+          `• Quote type: ${typeLabel || "—"}`,
+        ];
 
     if (products.length === 1) {
       const p = products[0];
@@ -257,6 +289,9 @@ export async function POST(request: Request) {
 
     const updateBody = lines.join("\n");
 
+    // Re-upload every attachment on each push. Monday keeps a stable list of
+    // files on the column, so an "update" push genuinely appends new uploads.
+    // (Worst case: duplicates show up; better than losing files.)
     const allAttachments: Attachment[] = products.flatMap((p) => p.attachments);
     const uploadResults = await Promise.all(
       allAttachments.map(async (att) => {
@@ -269,9 +304,27 @@ export async function POST(request: Request) {
 
     await postUpdate(item.id, updateBody);
 
+    // Save the monday link back onto the workflow row so /workflow/[id] can
+    // surface it next render. Best-effort — if this fails the user still has
+    // the monday URL in the response and can come back later.
+    if (body.workflowId) {
+      const { error: linkErr } = await supabase
+        .from("workflows")
+        .update({
+          monday_item_id: item.id,
+          monday_item_url: item.url,
+          monday_last_pushed_at: new Date().toISOString(),
+        })
+        .eq("id", body.workflowId);
+      if (linkErr) {
+        console.error("workflow monday-link save failed:", linkErr.message);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       item,
+      mode: isUpdateMode ? "update" : "create",
       uploaded: uploadedCount,
       attempted: allAttachments.length,
     });
