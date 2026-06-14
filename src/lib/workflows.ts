@@ -54,17 +54,35 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
   lost: "Lost",
 };
 
+// Recorded when a workflow is marked Won — one entry per Sales Order tied to
+// this quote. Persisted as the JSONB `sales_orders` column on `workflows`.
+// `value` is in whole-dollar units (no currency code, en-US assumed).
+export type SalesOrder = {
+  so_number: string;
+  value: number; // dollars
+};
+
 export type WorkflowRow = {
   id: string;
+  // Per-workflow sequential number backed by a Postgres sequence. Display
+  // form is "Q" followed by the number zero-padded to 4 digits (Q0001).
+  // Stable for the life of the row even after edits.
+  quote_number: number;
   created_by_email: string;
   created_at: string;
   updated_at: string;
   state: WorkflowState;
   status: WorkflowStatus;
+  sales_orders: SalesOrder[];
   monday_item_id: string | null;
   monday_item_url: string | null;
   monday_last_pushed_at: string | null;
 };
+
+/** Format a quote_number as the user-facing "Q0001" string. */
+export function formatQuoteNumber(n: number): string {
+  return `Q${String(n).padStart(4, "0")}`;
+}
 
 /**
  * Check whether an email is registered in the `admins` table. Used by the
