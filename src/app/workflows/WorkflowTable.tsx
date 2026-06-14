@@ -11,6 +11,8 @@ import { WORKFLOW_STATUS_LABELS } from "@/lib/workflows";
 
 export type WorkflowDisplayRow = {
   id: string;
+  // Already-formatted quote number, e.g. "Q0001".
+  quoteNumberLabel: string;
   customerName: string;
   customerSub: string;
   typeLabel: string;
@@ -22,6 +24,9 @@ export type WorkflowDisplayRow = {
   updatedSort: number;
   pushed: boolean;
   status: WorkflowStatus;
+  // Server-formatted USD total of the row's sales_orders, e.g. "$12,400.00".
+  // Empty string when status !== "won" or there are no recorded SOs.
+  salesOrdersTotalLabel: string;
 };
 
 type Props = {
@@ -36,6 +41,7 @@ export default function WorkflowTable({ rows }: Props) {
     if (!q) return rows;
     return rows.filter((r) => {
       const hay = [
+        r.quoteNumberLabel,
         r.customerName,
         r.customerSub,
         r.typeLabel,
@@ -54,7 +60,7 @@ export default function WorkflowTable({ rows }: Props) {
     <>
       <input
         type="text"
-        placeholder="Search customer, product, type, or submitter…"
+        placeholder="Search quote #, customer, product, type, or submitter…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="search-input"
@@ -72,6 +78,7 @@ export default function WorkflowTable({ rows }: Props) {
       ) : (
         <div className="table">
           <div className="table__head">
+            <div className="table__head-cell">Quote #</div>
             <div className="table__head-cell">Customer</div>
             <div className="table__head-cell">Quote type</div>
             <div className="table__head-cell">Products</div>
@@ -86,6 +93,9 @@ export default function WorkflowTable({ rows }: Props) {
           ) : (
             filtered.map((row) => (
               <Link key={row.id} href={`/workflow/${row.id}`} className="table__row">
+                <div className="table__cell">
+                  <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
+                </div>
                 <div className="table__cell">
                   <span className="table__cell--strong">{row.customerName}</span>
                   {row.customerSub ? (
@@ -104,6 +114,11 @@ export default function WorkflowTable({ rows }: Props) {
                   <span className={`status-pill status-pill--${row.status.replace("_", "-")}`}>
                     {WORKFLOW_STATUS_LABELS[row.status]}
                   </span>
+                  {row.salesOrdersTotalLabel ? (
+                    <span className="table__cell-sub table__cell-sub--won">
+                      {row.salesOrdersTotalLabel}
+                    </span>
+                  ) : null}
                 </div>
               </Link>
             ))

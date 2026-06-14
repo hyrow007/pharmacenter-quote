@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
-import type { WorkflowRow } from "@/lib/workflows";
+import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
 
@@ -52,6 +52,11 @@ function titleCase(s: string): string {
     .join(" ");
 }
 
+const usdFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
 export default async function WorkflowsPage() {
   const supabase = await createClient();
   const {
@@ -65,7 +70,7 @@ export default async function WorkflowsPage() {
   const { data: rawRows } = await supabase
     .from("workflows")
     .select(
-      "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .order("updated_at", { ascending: false });
 
@@ -171,8 +176,18 @@ export default async function WorkflowsPage() {
         .join(" ");
     }
 
+    // Precompute the won-total dollar label on the server so the client
+    // table doesn't need any extra deps to format currency. Only meaningful
+    // when status is won; empty string otherwise.
+    const status = row.status ?? "in_progress";
+    const sos = Array.isArray(row.sales_orders) ? row.sales_orders : [];
+    const total = sos.reduce((sum, so) => sum + (Number(so.value) || 0), 0);
+    const salesOrdersTotalLabel =
+      status === "won" && sos.length > 0 ? usdFormatter.format(total) : "";
+
     return {
       id: row.id,
+      quoteNumberLabel: formatQuoteNumber(row.quote_number),
       customerName,
       customerSub,
       typeLabel,
@@ -183,7 +198,8 @@ export default async function WorkflowsPage() {
       updatedRelative: relativeTime(row.updated_at),
       updatedSort: new Date(row.updated_at).getTime(),
       pushed: !!row.monday_item_id,
-      status: row.status ?? "in_progress",
+      status,
+      salesOrdersTotalLabel,
     };
   });
 
