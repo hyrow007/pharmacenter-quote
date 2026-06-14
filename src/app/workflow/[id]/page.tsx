@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/auth/server";
-import { isAdmin, type WorkflowRow } from "@/lib/workflows";
+import { formatQuoteNumber, isAdmin, type WorkflowRow } from "@/lib/workflows";
 import AppHeader from "../../_components/AppHeader";
 import WorkflowActions from "./actions";
 
@@ -37,6 +37,11 @@ function formatTimestamp(iso: string): string {
   });
 }
 
+const usdFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
 type Ctx = { params: Promise<{ id: string }> };
 
 export default async function WorkflowPage({ params }: Ctx) {
@@ -55,7 +60,7 @@ export default async function WorkflowPage({ params }: Ctx) {
   const { data } = await supabase
     .from("workflows")
     .select(
-      "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -142,7 +147,18 @@ export default async function WorkflowPage({ params }: Ctx) {
       <main className="page">
         <div className="page__inner--narrow" style={{ position: "relative" }}>
         <div style={{ marginBottom: 22 }}>
-          <p className="eyebrow" style={{ marginBottom: 6 }}>PharmaCenter · Workflow</p>
+          <p className="eyebrow" style={{ marginBottom: 6 }}>
+            PharmaCenter · Workflow ·{" "}
+            <span
+              style={{
+                fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                letterSpacing: "0.04em",
+                color: "var(--teal-700)",
+              }}
+            >
+              {formatQuoteNumber(workflow.quote_number)}
+            </span>
+          </p>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
             <h1 className="page-header__title" style={{ marginBottom: 0 }}>
               Work Flow
@@ -225,7 +241,7 @@ export default async function WorkflowPage({ params }: Ctx) {
               <div style={valueStyle}>{SOURCE_LABELS[state.source] || state.source}</div>
             </div>
           ) : null}
-          <div style={lastSectionStyle}>
+          <div style={workflow.status === "won" && workflow.sales_orders?.length ? sectionStyle : lastSectionStyle}>
             <span style={labelStyle}>Products</span>
             <div>
               {state.products.map((p, idx) => {
@@ -283,6 +299,28 @@ export default async function WorkflowPage({ params }: Ctx) {
               })}
             </div>
           </div>
+          {workflow.status === "won" && workflow.sales_orders?.length ? (
+            <div style={lastSectionStyle}>
+              <span style={labelStyle}>Sales orders</span>
+              <div className="sales-orders-summary">
+                {workflow.sales_orders.map((so, idx) => (
+                  <div key={`${so.so_number}-${idx}`} className="sales-orders-summary__row">
+                    <span className="sales-orders-summary__so">SO# {so.so_number}</span>
+                    <span className="sales-orders-summary__sep">—</span>
+                    <span className="sales-orders-summary__val">{usdFormatter.format(so.value)}</span>
+                  </div>
+                ))}
+                <div className="sales-orders-summary__total">
+                  Total{" "}
+                  <strong>
+                    {usdFormatter.format(
+                      workflow.sales_orders.reduce((sum, so) => sum + (Number(so.value) || 0), 0),
+                    )}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <h2 style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3)", marginBottom: 12 }}>

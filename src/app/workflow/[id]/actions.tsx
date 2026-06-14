@@ -7,8 +7,23 @@
 
 import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { WORKFLOW_STATUS_LABELS, type WorkflowRow, type WorkflowStatus } from "@/lib/workflows";
+import {
+  WORKFLOW_STATUS_LABELS,
+  type SalesOrder,
+  type WorkflowRow,
+  type WorkflowStatus,
+} from "@/lib/workflows";
 import type { Customer } from "@/lib/supabase";
+
+// Draft row used by the inline Won form. Both fields are strings until we
+// validate-and-coerce on save (numbers via parseFloat). Keeps controlled
+// inputs predictable and avoids "" → 0 surprises while the user types.
+type SalesOrderDraft = { so_number: string; value: string };
+
+function draftsFromSalesOrders(rows: SalesOrder[]): SalesOrderDraft[] {
+  if (!rows || rows.length === 0) return [{ so_number: "", value: "" }];
+  return rows.map((r) => ({ so_number: r.so_number, value: String(r.value) }));
+}
 
 type ProductRow = { id: string; name: string; fp_code: string | null };
 
@@ -68,10 +83,55 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
   const [status, setStatus] = useState<WorkflowStatus>(workflow.status ?? "in_progress");
   const [statusSaving, setStatusSaving] = useState<WorkflowStatus | null>(null);
 
-  const setWorkflowStatus = async (next: WorkflowStatus) => {
-    if (status === next || statusSaving) return;
+  // Inline Sales Order form. Opens when the user clicks the Won pill (either
+  // to flip *into* Won, or to edit the SOs while already Won). We hold the
+  // current SOs locally so the summary card can re-render after a save
+  // without waiting for the router refresh roundtrip.
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(workflow.sales_orders ?? []);
+  const [soFormOpen, setSoFormOpen] = useState(false);
+  const [soDrafts, setSoDrafts] = useState<SalesOrderDraft[]>(
+    draftsFromSalesOrders(workflow.sales_orders ?? []),
+  );
+  const [soError, setSoError] = useState<string | null>(null);
+  const [soSaving, setSoSaving] = useState(false);
+
+  const showToast = (msg: string, ms = 5500) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((prev) => (prev === msg ? null : prev)), ms);
+  };
+
+  const openSoForm = (initial: SalesOrder[]) => {
+    setSoDrafts(draftsFromSalesOrders(initial));
+    setSoError(null);
+    setSoFormOpen(true);
+  };
+
+  const closeSoForm = () => {
+    setSoFormOpen(false);
+    setSoError(null);
+  };
+
+  // Won click: either open the form (to enter SOs) or, if already won, open
+  // it pre-populated with the current SOs so the user can tweak them.
+  const onWonClick = () => {
+    if (statusSaving || soSaving) return;
+    openSoForm(salesOrders);
+  };
+
+  // In-progress / Lost click. If we're leaving Won, warn first — server will
+  // clear sales_orders, and we don't want that to be a silent surprise.
+  const onNonWonClick = async (next: WorkflowStatus) => {
+    if (status === next || statusSaving || soSaving) return;
+    if (status === "won") {
+      const ok = window.confirm(
+        "Changing away from Won will clear the recorded sales orders. Continue?",
+      );
+      if (!ok) return;
+    }
     const prev = status;
+    const prevSos = salesOrders;
     setStatus(next);
+    setSalesOrders([]);
     setStatusSaving(next);
     try {
       const res = await fetch(`/api/workflows/${workflow.id}`, {
@@ -82,6 +142,7 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         setStatus(prev);
+        setSalesOrders(prevSos);
         showToast(`Couldn't change status: ${data?.error || res.status}`, 6500);
         return;
       }
@@ -89,6 +150,7 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
       router.refresh();
     } catch (err) {
       setStatus(prev);
+      setSalesOrders(prevSos);
       const msg = err instanceof Error ? err.message : String(err);
       showToast(`Status save errored: ${msg}`, 6500);
     } finally {
@@ -96,9 +158,73 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
     }
   };
 
-  const showToast = (msg: string, ms = 5500) => {
-    setToast(msg);
-    window.setTimeout(() => setToast((prev) => (prev === msg ? null : prev)), ms);
+  const setDraftField = (idx: number, field: keyof SalesOrderDraft, val: string) => {
+    setSoDrafts((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: val } : r)));
+  };
+  const addDraftRow = () => {
+    setSoDrafts((rows) => [...rows, { so_number: "", value: "" }]);
+  };
+  const removeDraftRow = (idx: number) => {
+    setSoDrafts((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== idx)));
+  };
+
+  const submitSoForm = async () => {
+    if (soSaving) return;
+    // Validate: at least one row, every row has a non-empty SO + value > 0.
+    const cleaned: SalesOrder[] = [];
+    for (const d of soDrafts) {
+      const so = d.so_number.trim();
+      const val = parseFloat(d.value);
+      if (!so) {
+        setSoError("Every row needs an SO number.");
+        return;
+      }
+      if (!Number.isFinite(val) || val <= 0) {
+        setSoError("Every row needs a dollar value greater than zero.");
+        return;
+      }
+      cleaned.push({ so_number: so, value: val });
+    }
+    if (cleaned.length === 0) {
+      setSoError("Add at least one sales order.");
+      return;
+    }
+
+    // Optimistic: flip status + SOs immediately, roll back on error.
+    const wasWon = status === "won";
+    const prevStatus = status;
+    const prevSos = salesOrders;
+    setStatus("won");
+    setSalesOrders(cleaned);
+    setSoError(null);
+    setSoSaving(true);
+    try {
+      const body = wasWon
+        ? { sales_orders: cleaned }
+        : { status: "won" as const, sales_orders: cleaned };
+      const res = await fetch(`/api/workflows/${workflow.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setStatus(prevStatus);
+        setSalesOrders(prevSos);
+        showToast(`Couldn't save sales orders: ${data?.error || res.status}`, 6500);
+        return;
+      }
+      showToast(wasWon ? "Sales orders updated." : "Marked as Won.");
+      setSoFormOpen(false);
+      router.refresh();
+    } catch (err) {
+      setStatus(prevStatus);
+      setSalesOrders(prevSos);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Sales order save errored: ${msg}`, 6500);
+    } finally {
+      setSoSaving(false);
+    }
   };
 
   const pushToMonday = async () => {
@@ -244,19 +370,115 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
         {STATUS_ORDER.map((s) => {
           const active = status === s;
           const saving = statusSaving === s;
+          // Won is special: clicking it never PUTs directly — it opens the SO
+          // form. Whether the form turns into a "create" or an "edit" save is
+          // decided inside submitSoForm based on the current status.
+          const onClick = s === "won" ? onWonClick : () => onNonWonClick(s);
+          // We allow clicking Won even when active so users can edit SOs.
+          const isDisabled = s === "won"
+            ? !!statusSaving || soSaving
+            : active || !!statusSaving || soSaving;
           return (
             <button
               key={s}
               type="button"
-              onClick={() => setWorkflowStatus(s)}
-              disabled={active || !!statusSaving}
+              onClick={onClick}
+              disabled={isDisabled}
               className={`status-pill status-pill--${s.replace("_", "-")} status-pill--button ${active ? "status-pill--active" : ""}`}
             >
               {saving ? "Saving…" : WORKFLOW_STATUS_LABELS[s]}
             </button>
           );
         })}
+        {status === "won" && !soFormOpen ? (
+          <button
+            type="button"
+            onClick={() => openSoForm(salesOrders)}
+            className="so-edit-link"
+            disabled={soSaving}
+          >
+            Edit sales orders
+          </button>
+        ) : null}
       </div>
+
+      {soFormOpen ? (
+        <div className="so-form">
+          <div className="so-form__header">
+            <span className="so-form__title">
+              {status === "won" ? "Edit sales orders" : "Record sales orders for this win"}
+            </span>
+            <span className="so-form__hint">
+              At least one SO number and a dollar value greater than zero.
+            </span>
+          </div>
+          <div className="so-form__rows">
+            {soDrafts.map((d, idx) => (
+              <div key={idx} className="so-form__row">
+                <input
+                  type="text"
+                  className="so-form__input so-form__input--so"
+                  placeholder="SO # (e.g. 12345)"
+                  value={d.so_number}
+                  onChange={(e) => setDraftField(idx, "so_number", e.target.value)}
+                  disabled={soSaving}
+                />
+                <div className="so-form__value-wrap">
+                  <span className="so-form__value-prefix">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    className="so-form__input so-form__input--value"
+                    placeholder="Value"
+                    value={d.value}
+                    onChange={(e) => setDraftField(idx, "value", e.target.value)}
+                    disabled={soSaving}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="so-form__remove"
+                  onClick={() => removeDraftRow(idx)}
+                  aria-label="Remove sales order"
+                  disabled={soDrafts.length <= 1 || soSaving}
+                  title={soDrafts.length <= 1 ? "Keep at least one row" : "Remove this row"}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="so-form__add"
+            onClick={addDraftRow}
+            disabled={soSaving}
+          >
+            + Add another sales order
+          </button>
+          {soError ? <div className="so-form__error">{soError}</div> : null}
+          <div className="so-form__actions">
+            <button
+              type="button"
+              className="so-form__cancel"
+              onClick={closeSoForm}
+              disabled={soSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="so-form__save"
+              onClick={submitSoForm}
+              disabled={soSaving}
+            >
+              {soSaving ? "Saving…" : "Save as Won"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
         <button type="button" style={primaryAction} onClick={pushToMonday} disabled={submitting}>
