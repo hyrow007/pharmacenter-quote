@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/auth/server";
 import { isAdmin, type WorkflowRow } from "@/lib/workflows";
+import AppHeader from "../../_components/AppHeader";
 import WorkflowActions from "./actions";
 
 // Workflow management page. Replaces the role formerly played by
@@ -129,14 +130,48 @@ export default async function WorkflowPage({ params }: Ctx) {
     return <div style={valueStyle}>—</div>;
   })();
 
+  const customerHeading = (() => {
+    if (state.customerMode === "new") return state.newCustomer.name || "New customer";
+    if (customer) return customer.name;
+    return "Workflow";
+  })();
+
   return (
-    <main className="hero">
-      <div className="card card--wide" style={{ position: "relative" }}>
-        <p className="eyebrow">PharmaCenter · Workflow</p>
-        <h1>Workflow</h1>
-        <p className="lede">
-          Snapshot of this quote workflow. Push it to monday, edit, or hand it off.
-        </p>
+    <div className="app-shell">
+      <AppHeader user={{ email: user.email! }} />
+      <main className="page">
+        <div className="page__inner--narrow" style={{ position: "relative" }}>
+        <div style={{ marginBottom: 22 }}>
+          <p className="eyebrow" style={{ marginBottom: 6 }}>PharmaCenter · Workflow</p>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+            <h1 className="page-header__title" style={{ marginBottom: 0 }}>
+              Work Flow
+            </h1>
+            <span
+              className={
+                workflow.monday_item_id
+                  ? "status-pill status-pill--pushed"
+                  : "status-pill status-pill--draft"
+              }
+            >
+              {workflow.monday_item_id ? "Pushed" : "Draft"}
+            </span>
+          </div>
+          <div
+            style={{
+              fontFamily: '"Cormorant Garamond", Georgia, serif',
+              fontSize: 26,
+              color: "var(--teal-700)",
+              marginTop: 6,
+              fontWeight: 500,
+            }}
+          >
+            {customerHeading}
+          </div>
+          <p className="lede" style={{ marginTop: 10, marginBottom: 0 }}>
+            Snapshot of this quote workflow. Push it to monday, edit, or hand it off.
+          </p>
+        </div>
 
         {/* ----- Meta strip ----- */}
         <div
@@ -265,7 +300,8 @@ export default async function WorkflowPage({ params }: Ctx) {
         />
 
         <a href="/workflows" className="backlink">&larr; Back to all workflows</a>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
