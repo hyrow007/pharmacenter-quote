@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, type ChangeEvent, type FormEvent, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent, type CSSProperties } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
+import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry } from "@/lib/workflows";
 
 // ----- catalogue ----------------------------------------------------------
 
@@ -37,28 +38,10 @@ type CustomerRow = { id: string; name: string; default_ship_to: string | null };
 type ProductRow = Pick<Product, "id" | "name" | "fp_code" | "default_unit">;
 type Mode = "existing" | "new";
 
-type ProductEntry = {
-  uid: string;
-  mode: Mode;
-  productId: string | null;
-  newProduct: { name_desc: string; notes: string };
-  quantities: string[];
-  attachments: WorkflowAttachment[];
-  // Hydrated display fields (not persisted)
-  _name?: string | null;
-  _code?: string | null;
-};
-
-type WorkflowState = {
-  workflowUid: string;
-  customerMode: Mode;
-  customerId: string | null;
-  newCustomer: { name: string; contact: string; email: string };
-  type: string | null;
-  form: string | null;
-  source: string | null;
-  products: ProductEntry[];
-};
+// Re-export the shared shapes under local names so the existing JSX (which
+// references `ProductEntry` / `WorkflowState`) keeps compiling.
+type ProductEntry = SharedProductEntry;
+type WorkflowState = SharedWorkflowState;
 
 // Lightweight uuid for React keys + storage prefix.
 function uid(): string {
@@ -175,22 +158,66 @@ const productCardStyle: CSSProperties = {
 
 // ----- component ----------------------------------------------------------
 
-export default function StartWorkflow() {
+// Next 14 requires components using `useSearchParams` to sit inside a
+// Suspense boundary; otherwise the whole page bails out of static rendering.
+export default function StartWorkflowPage() {
+  return (
+    <Suspense fallback={<main className="hero"><div className="card card--wide"><p className="lede">Loading…</p></div></main>}>
+      <StartWorkflow />
+    </Suspense>
+  );
+}
+
+function StartWorkflow() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?workflow=<uuid> → editing an existing workflow row.
+  const editingId = searchParams.get("workflow");
 
   // Single source of truth for the workflow form.
   const [state, setState] = useState<WorkflowState>(() => blankState());
   const [hydrated, setHydrated] = useState(false);
+  // Tracks the DB id when we're editing — null for a fresh workflow.
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Hydrate from sessionStorage on mount (skip during SSR).
+  // Hydrate either from the DB (if editing) or from sessionStorage (drafts).
   useEffect(() => {
-    setState(loadState());
-    setHydrated(true);
-  }, []);
+    let cancelled = false;
+    async function hydrate() {
+      if (editingId) {
+        // Loading an existing workflow row. Skip sessionStorage entirely so
+        // a stale draft from a previous workflow can't bleed in.
+        try {
+          const res = await fetch(`/api/workflows/${editingId}`, { cache: "no-store" });
+          const data = await res.json();
+          if (!cancelled && res.ok && data?.ok && data.workflow) {
+            const row = data.workflow as WorkflowRow;
+            setWorkflowId(row.id);
+            setState(row.state);
+            setHydrated(true);
+            return;
+          }
+          // Fall through to draft on any failure — better than a blank screen.
+        } catch (err) {
+          console.error("workflow hydrate failed:", err);
+        }
+      }
+      if (!cancelled) {
+        setState(loadState());
+        setHydrated(true);
+      }
+    }
+    hydrate();
+    return () => { cancelled = true; };
+  }, [editingId]);
 
-  // Auto-save to sessionStorage on every change once hydrated. We don't
-  // persist the hydrated `_name` / `_code` fields — those are display-only
-  // and get re-fetched on remount from product IDs.
+  // Auto-save the in-progress draft to sessionStorage on every change. We
+  // skip persisting hydrated `_name` / `_code` — those are display-only and
+  // get re-fetched on remount from product IDs. When editing an existing
+  // workflow we still mirror to sessionStorage so an accidental tab close
+  // doesn't lose the pending edits before submit.
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
     const toSave: WorkflowState = {
@@ -357,13 +384,53 @@ export default function StartWorkflow() {
   };
 
   // ----- submit --------------------------------------------------------
-  const submit = (e?: FormEvent) => {
+  // Strip the display-only `_name` / `_code` from products before sending —
+  // they get re-resolved server-side from `productId` anyway.
+  const serializableState = (): WorkflowState => ({
+    ...state,
+    products: state.products.map((p) => ({
+      ...p, _name: undefined, _code: undefined,
+    })),
+  });
+
+  const submit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
-    if (!canSubmit) return;
-    // sessionStorage already holds the full state; review page reads it.
-    // router.push keeps the SPA mounted so attachment refs in storage are
-    // unaffected (and there are no in-memory file blobs to lose).
-    router.push("/workflow/review");
+    if (!canSubmit || saving) return;
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const payload = { state: serializableState() };
+      const url = workflowId ? `/api/workflows/${workflowId}` : "/api/workflows";
+      const method = workflowId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data.workflow?.id) {
+        const reason = data?.error || `HTTP ${res.status}`;
+        if (reason === "not_signed_in") {
+          setSaveError("You need to sign in first. Redirecting…");
+          window.setTimeout(() => router.push("/"), 1200);
+          return;
+        }
+        setSaveError(`Save failed: ${reason}`);
+        return;
+      }
+      const savedId = data.workflow.id as string;
+      // Workflow now lives in the DB — drop the draft so the next /start
+      // visit starts clean.
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+      }
+      router.push(`/workflow/${savedId}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveError(`Save errored: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ----- pickers -------------------------------------------------------
@@ -400,7 +467,7 @@ export default function StartWorkflow() {
     <main className="hero">
       <div className="card card--wide">
         <p className="eyebrow">PharmaCenter · Workflow</p>
-        <h1>Start a quote workflow</h1>
+        <h1>{workflowId ? "Editing workflow" : "Start a quote workflow"}</h1>
         <p className="lede">Pull together everything we need to quote this, then send it where it needs to go.</p>
 
         <form onSubmit={submit} style={{ marginTop: 18 }}>
@@ -594,19 +661,24 @@ export default function StartWorkflow() {
           </div>
 
           {/* ----- CTA ----- */}
-          <button type="submit" disabled={!canSubmit}
+          <button type="submit" disabled={!canSubmit || saving}
             style={{
               display: "block", width: "100%", marginTop: 8,
-              padding: "14px 16px", background: canSubmit ? "var(--teal-900)" : "#cdd5cc",
+              padding: "14px 16px", background: canSubmit && !saving ? "var(--teal-900)" : "#cdd5cc",
               color: "#fff", border: "none", borderRadius: 10,
-              fontSize: 15, fontWeight: 700, cursor: canSubmit ? "pointer" : "not-allowed",
+              fontSize: 15, fontWeight: 700, cursor: canSubmit && !saving ? "pointer" : "not-allowed",
               fontFamily: "inherit", letterSpacing: "0.01em",
             }}>
-            Review &amp; continue →
+            {saving ? "Saving…" : workflowId ? "Save changes →" : "Save & continue →"}
           </button>
           {!canSubmit ? (
             <p style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 10, textAlign: "center" }}>
               Still need: {missing.join(", ")}.
+            </p>
+          ) : null}
+          {saveError ? (
+            <p style={{ fontSize: 12, color: "#8b2f2f", marginTop: 10, textAlign: "center" }}>
+              {saveError}
             </p>
           ) : null}
         </form>
