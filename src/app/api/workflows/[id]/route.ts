@@ -1,21 +1,29 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
-import { isAdmin, type WorkflowRow, type WorkflowState } from "@/lib/workflows";
+import {
+  isAdmin,
+  type WorkflowRow,
+  type WorkflowState,
+  type WorkflowStatus,
+} from "@/lib/workflows";
 
 // GET /api/workflows/[id]
 //   → { ok: true, workflow, isAdmin, isOwner }
 //
 // PUT /api/workflows/[id]
-// Body: { state: WorkflowState }
+// Body: { state?: WorkflowState, status?: WorkflowStatus }
 //   → { ok: true, workflow }
+// Either or both fields may be present. Sending neither is a 400.
 //
 // DELETE /api/workflows/[id]
 //   → { ok: true } or 403 if RLS rejects.
 
 const COLS =
-  "id, created_by_email, created_at, updated_at, state, monday_item_id, monday_item_url, monday_last_pushed_at";
+  "id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at";
 
-type PutBody = { state?: WorkflowState };
+const VALID_STATUSES: WorkflowStatus[] = ["in_progress", "won", "lost"];
+
+type PutBody = { state?: WorkflowState; status?: WorkflowStatus };
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -73,14 +81,25 @@ export async function PUT(request: Request, ctx: Ctx) {
   } catch {
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
-  if (!body.state || typeof body.state !== "object") {
-    return NextResponse.json({ ok: false, error: "missing_state" }, { status: 400 });
+
+  const patch: { state?: WorkflowState; status?: WorkflowStatus } = {};
+  if (body.state && typeof body.state === "object") {
+    patch.state = body.state;
+  }
+  if (body.status !== undefined) {
+    if (!VALID_STATUSES.includes(body.status)) {
+      return NextResponse.json({ ok: false, error: "invalid_status" }, { status: 400 });
+    }
+    patch.status = body.status;
+  }
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ ok: false, error: "nothing_to_update" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("workflows")
-    // updated_at has a DB trigger to bump itself; we only send the state.
-    .update({ state: body.state })
+    // updated_at has a DB trigger to bump itself; we only send the diff.
+    .update(patch)
     .eq("id", id)
     .select(COLS)
     .single();
