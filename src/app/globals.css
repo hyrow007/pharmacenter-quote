@@ -484,3 +484,61 @@ h1 {
   background: #f0eee5;
   color: var(--ink-3);
 }
+
+/* In Progress = teal wash, Won = sage-green, Lost = warm gray. */
+.status-pill--in-progress {
+  background: #e3eef0;
+  color: var(--teal-700);
+}
+
+.status-pill--won {
+  background: var(--sage-pill-bg);
+  color: var(--sage-pill-ink);
+}
+
+.status-pill--lost {
+  background: #f0eee5;
+  color: var(--ink-3);
+}
+
+/* When a status pill doubles as a button (the workflow management page) it
+   gets a thin border + cursor. The active one is bolder so the user knows
+   what the current state is at a glance. */
+.status-pill--button {
+  border: 1.5px solid transparent;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 5px 14px;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.status-pill--button:hover:not(:disabled) {
+  border-color: currentColor;
+}
+.status-pill--button:disabled {
+  cursor: default;
+}
+.status-pill--button.status-pill--in-progress {
+  border-color: #cfe0e3;
+  color: var(--teal-700);
+}
+.status-pill--button.status-pill--won {
+  border-color: #d4e3b6;
+  color: var(--sage-pill-ink);
+}
+.status-pill--button.status-pill--lost {
+  border-color: #e0d9c4;
+  color: var(--ink-3);
+}
+.status-pill--active.status-pill--in-progress {
+  background: #e3eef0;
+  border-color: var(--teal-700);
+}
+.status-pill--active.status-pill--won {
+  background: var(--sage-pill-bg);
+  border-color: var(--sage-700);
+}
+.status-pill--active.status-pill--lost {
+  background: #ece8d8;
+  border-color: var(--ink-3);
+}
