@@ -41,7 +41,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("workflows")
-    .select("id, created_by_email, created_at, updated_at, state, monday_item_id, monday_item_url, monday_last_pushed_at")
+    .select("id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at")
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       created_by_email: user.email,
       state: body.state,
     })
-    .select("id, created_by_email, created_at, updated_at, state, monday_item_id, monday_item_url, monday_last_pushed_at")
+    .select("id, created_by_email, created_at, updated_at, state, status, monday_item_id, monday_item_url, monday_last_pushed_at")
     .single();
 
   if (error || !data) {
