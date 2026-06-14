@@ -33,7 +33,7 @@ export default function AppHeader({ user }: Props) {
           <span className="app-nav__divider" aria-hidden="true" />
           <span className="app-nav__product">
             <span className="app-nav__product-main">Quote</span>
-            <span className="app-nav__product-sub">Generator</span>
+            <span className="app-nav__product-sub">Work Flows</span>
           </span>
         </Link>
 
