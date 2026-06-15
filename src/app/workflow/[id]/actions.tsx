@@ -20,9 +20,37 @@ import type { Customer } from "@/lib/supabase";
 // inputs predictable and avoids "" → 0 surprises while the user types.
 type SalesOrderDraft = { so_number: string; value: string };
 
+// Strip everything except digits + one decimal point, then re-insert commas
+// every 3 digits to the left of the decimal so the user sees "1,234.56" as
+// they type. The value gets parsed back to a Number on submit.
+function formatValueInput(raw: string): string {
+  const cleaned = raw.replace(/[^\d.]/g, "");
+  // Collapse multiple dots — keep only the first.
+  const firstDot = cleaned.indexOf(".");
+  const safe =
+    firstDot === -1
+      ? cleaned
+      : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+  const [intPart, decPart] = safe.split(".");
+  const withCommas = (intPart || "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart === undefined) return withCommas;
+  // Cap decimals at 2 places — anything more is dropped.
+  return `${withCommas}.${decPart.slice(0, 2)}`;
+}
+
+function parseValueInput(formatted: string): number {
+  return parseFloat(formatted.replace(/,/g, ""));
+}
+
+function valueForDisplay(n: number): string {
+  // For pre-filling the edit form with existing SOs: re-format with commas
+  // and two decimals.
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function draftsFromSalesOrders(rows: SalesOrder[]): SalesOrderDraft[] {
   if (!rows || rows.length === 0) return [{ so_number: "", value: "" }];
-  return rows.map((r) => ({ so_number: r.so_number, value: String(r.value) }));
+  return rows.map((r) => ({ so_number: r.so_number, value: valueForDisplay(r.value) }));
 }
 
 type ProductRow = { id: string; name: string; fp_code: string | null };
@@ -174,7 +202,7 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
     const cleaned: SalesOrder[] = [];
     for (const d of soDrafts) {
       const so = d.so_number.trim();
-      const val = parseFloat(d.value);
+      const val = parseValueInput(d.value);
       if (!so) {
         setSoError("Every row needs an SO number.");
         return;
@@ -426,14 +454,12 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
                 <div className="so-form__value-wrap">
                   <span className="so-form__value-prefix">$</span>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="0.01"
-                    min="0"
                     className="so-form__input so-form__input--value"
                     placeholder="Value"
                     value={d.value}
-                    onChange={(e) => setDraftField(idx, "value", e.target.value)}
+                    onChange={(e) => setDraftField(idx, "value", formatValueInput(e.target.value))}
                     disabled={soSaving}
                   />
                 </div>

@@ -29,11 +29,18 @@ function cleanQty(q: string): string {
   return /^\d+(\.\d+)?$/.test(t) ? t : "";
 }
 
+// Page is server-rendered, which means toLocaleString without an explicit
+// timeZone option picks up the Vercel runtime's timezone (UTC). Pin to
+// PharmaCenter's HQ timezone (US Eastern) so everyone in the company sees
+// the same wall-clock time on every screen.
+const TIMESTAMP_TZ = "America/New_York";
 function formatTimestamp(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric",
     hour: "numeric", minute: "2-digit",
+    timeZone: TIMESTAMP_TZ,
+    timeZoneName: "short",
   });
 }
 
