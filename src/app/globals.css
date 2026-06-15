@@ -398,7 +398,7 @@ h1 {
 
 .table__head {
   display: grid;
-  grid-template-columns: 80px 1.6fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  grid-template-columns: 1.6fr 80px 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
   gap: 14px;
   padding: 12px 18px;
   background: #f7f4ea;
@@ -415,7 +415,7 @@ h1 {
 
 .table__row {
   display: grid;
-  grid-template-columns: 80px 1.6fr 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
+  grid-template-columns: 1.6fr 80px 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
   gap: 14px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--stone);
