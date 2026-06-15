@@ -421,7 +421,10 @@ h1 {
   border-bottom: 1px solid var(--stone);
   color: var(--ink-1);
   text-decoration: none;
-  align-items: center;
+  /* Was align-items:center, but multi-product workflows render a stack
+     of names in the Products column — top-align so the first product
+     lines up with the customer + quote # in adjacent cells. */
+  align-items: start;
   transition: background 0.12s ease;
 }
 .table__row:last-child {
@@ -450,6 +453,18 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Each product on its own line in the Products column. The cell itself is
+   already flex-column so a stack of <span>s lays out vertically. Keep the
+   line gap tight so a multi-product workflow doesn't push other rows off
+   their visual rhythm. */
+.table__cell-product-line {
+  display: block;
+  line-height: 1.35;
+}
+.table__cell-product-line + .table__cell-product-line {
+  margin-top: 2px;
 }
 
 /* Quote number cell — monospace-ish, tabular numerals, teal so it reads as
