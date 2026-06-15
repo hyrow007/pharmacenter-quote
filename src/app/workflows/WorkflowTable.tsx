@@ -78,8 +78,8 @@ export default function WorkflowTable({ rows }: Props) {
       ) : (
         <div className="table">
           <div className="table__head">
-            <div className="table__head-cell">Quote #</div>
             <div className="table__head-cell">Customer</div>
+            <div className="table__head-cell">Quote #</div>
             <div className="table__head-cell">Quote type</div>
             <div className="table__head-cell">Products</div>
             <div className="table__head-cell">Submitter</div>
@@ -94,13 +94,13 @@ export default function WorkflowTable({ rows }: Props) {
             filtered.map((row) => (
               <Link key={row.id} href={`/workflow/${row.id}`} className="table__row">
                 <div className="table__cell">
-                  <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
-                </div>
-                <div className="table__cell">
                   <span className="table__cell--strong">{row.customerName}</span>
                   {row.customerSub ? (
                     <span className="table__cell-sub">{row.customerSub}</span>
                   ) : null}
+                </div>
+                <div className="table__cell">
+                  <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
                 </div>
                 <div className="table__cell">{row.typeLabel || "—"}</div>
                 <div className="table__cell">{row.productLabel || "—"}</div>
