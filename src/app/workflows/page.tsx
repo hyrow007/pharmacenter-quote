@@ -149,32 +149,18 @@ export default async function WorkflowsPage() {
       .filter(Boolean)
       .join(" · ");
     const products = state.products ?? [];
-    let productLabel = "";
-    let productSearchBlob = "";
-    if (products.length === 1) {
-      const p = products[0];
-      if (p.mode === "new") {
-        productLabel = p.newProduct?.name_desc || "New product";
-      } else if (p.productId && productInfo[p.productId]) {
+    // Build a list of human-readable per-product labels so the Products
+    // column can stack each name (one per line) instead of collapsing a
+    // multi-product workflow to "N products".
+    const productLabels: string[] = products.map((p) => {
+      if (p.mode === "new") return p.newProduct?.name_desc || "New product";
+      if (p.productId && productInfo[p.productId]) {
         const info = productInfo[p.productId];
-        productLabel = info.code ? `${info.name} (${info.code})` : info.name;
-      } else {
-        productLabel = "Product";
+        return info.code ? `${info.name} (${info.code})` : info.name;
       }
-      productSearchBlob = productLabel;
-    } else if (products.length > 1) {
-      productLabel = `${products.length} products`;
-      productSearchBlob = products
-        .map((p) => {
-          if (p.mode === "new") return p.newProduct?.name_desc || "";
-          if (p.productId && productInfo[p.productId]) {
-            const info = productInfo[p.productId];
-            return `${info.name} ${info.code || ""}`;
-          }
-          return "";
-        })
-        .join(" ");
-    }
+      return "Product";
+    });
+    const productSearchBlob = productLabels.join(" ");
 
     // Precompute the won-total dollar label on the server so the client
     // table doesn't need any extra deps to format currency. Only meaningful
@@ -191,7 +177,7 @@ export default async function WorkflowsPage() {
       customerName,
       customerSub,
       typeLabel,
-      productLabel,
+      productLabels,
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),

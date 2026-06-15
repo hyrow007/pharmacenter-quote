@@ -16,7 +16,9 @@ export type WorkflowDisplayRow = {
   customerName: string;
   customerSub: string;
   typeLabel: string;
-  productLabel: string;
+  // One label per product on the workflow. The cell renders each on its
+  // own line so multi-product workflows don't collapse to "N products".
+  productLabels: string[];
   productSearchBlob: string;
   submitterFull: string;
   submitterShort: string;
@@ -45,7 +47,7 @@ export default function WorkflowTable({ rows }: Props) {
         r.customerName,
         r.customerSub,
         r.typeLabel,
-        r.productLabel,
+        ...r.productLabels,
         r.productSearchBlob,
         r.submitterFull,
         r.submitterShort,
@@ -103,7 +105,17 @@ export default function WorkflowTable({ rows }: Props) {
                   <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
                 </div>
                 <div className="table__cell">{row.typeLabel || "—"}</div>
-                <div className="table__cell">{row.productLabel || "—"}</div>
+                <div className="table__cell">
+                  {row.productLabels.length === 0 ? (
+                    "—"
+                  ) : (
+                    row.productLabels.map((label, i) => (
+                      <span key={i} className="table__cell-product-line">
+                        {label}
+                      </span>
+                    ))
+                  )}
+                </div>
                 <div className="table__cell" title={row.submitterFull}>
                   {row.submitterShort}
                 </div>
