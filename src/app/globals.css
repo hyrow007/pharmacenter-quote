@@ -1018,3 +1018,72 @@ h1 {
   color: var(--ink-3);
   letter-spacing: 0.01em;
 }
+
+/* ============================================================
+   Inline description editor (workflows listing table cell)
+   The cell sits inside the row's <Link>, so we have to make
+   the input look like static text until the user focuses it.
+   Once focused, draw the same field outline as the description
+   editor on /workflow/[id] for visual consistency.
+   ============================================================ */
+
+.table__cell--description {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.description-cell__input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-1);
+  outline: none;
+  transition: border-color 0.12s ease, background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.description-cell__input::placeholder {
+  color: var(--ink-3);
+  font-style: italic;
+  opacity: 0.85;
+}
+.table__row:hover .description-cell__input:not(:focus) {
+  /* Hint that the cell is editable: a soft border appears on row hover. */
+  border-color: rgba(15, 74, 86, 0.18);
+  background: rgba(255, 253, 248, 0.7);
+}
+.description-cell__input:focus {
+  border-color: var(--teal-700);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px rgba(29, 108, 123, 0.12);
+}
+.description-cell__input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.description-cell__status {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+  white-space: nowrap;
+}
+
+.table__inline-error {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #fdecec;
+  border: 1px solid #d8b3b3;
+  border-radius: 8px;
+  color: #8b2f2f;
+  font-size: 13px;
+  cursor: pointer;
+}
