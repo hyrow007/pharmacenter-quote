@@ -155,8 +155,10 @@ export default async function WorkflowsPage() {
       .join(" · ");
     const products = state.products ?? [];
     // Auto-computed one-line description ("Omega 3 + Vitamin D3 Softgels").
-    // Prefer the user-typed override if it's set. Falls back to "—" when
-    // there are no products to summarise and no override either.
+    // The inline editor on /workflows uses the override directly as the input
+    // value (empty string = "no override") and falls back to the auto label
+    // as placeholder, so we pass both fields through separately. The
+    // descriptionLabel is kept around as a read-only fallback for search.
     const productNameMap: Record<string, string> = {};
     for (const [pid, info] of Object.entries(productInfo)) {
       productNameMap[pid] = info.name;
@@ -164,6 +166,7 @@ export default async function WorkflowsPage() {
     const autoDescription = buildAutoDescription(state, productNameMap);
     const resolvedDescription = resolveDescription(row.description_override, autoDescription);
     const descriptionLabel = resolvedDescription.length > 0 ? resolvedDescription : "—";
+    const descriptionOverride = (row.description_override ?? "").trim();
     // The search blob still includes the code so users can find a workflow
     // by typing the Fishbowl SKU even though the visible cell doesn't show it.
     const productSearchBlob = products
@@ -193,6 +196,8 @@ export default async function WorkflowsPage() {
       customerSub,
       typeLabel,
       descriptionLabel,
+      autoDescription,
+      descriptionOverride,
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
