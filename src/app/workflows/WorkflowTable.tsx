@@ -16,9 +16,9 @@ export type WorkflowDisplayRow = {
   customerName: string;
   customerSub: string;
   typeLabel: string;
-  // One label per product on the workflow. The cell renders each on its
-  // own line so multi-product workflows don't collapse to "N products".
-  productLabels: string[];
+  // One-line summary of the workflow's products — e.g. "Omega 3 Softgels"
+  // or "Omega 3 + Vitamin D3 Softgels". Built on the server in page.tsx.
+  descriptionLabel: string;
   productSearchBlob: string;
   submitterFull: string;
   submitterShort: string;
@@ -47,7 +47,7 @@ export default function WorkflowTable({ rows }: Props) {
         r.customerName,
         r.customerSub,
         r.typeLabel,
-        ...r.productLabels,
+        r.descriptionLabel,
         r.productSearchBlob,
         r.submitterFull,
         r.submitterShort,
@@ -62,7 +62,7 @@ export default function WorkflowTable({ rows }: Props) {
     <>
       <input
         type="text"
-        placeholder="Search quote #, customer, product, type, or submitter…"
+        placeholder="Search quote #, customer, description, type, or submitter…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="search-input"
@@ -83,7 +83,7 @@ export default function WorkflowTable({ rows }: Props) {
             <div className="table__head-cell">Customer</div>
             <div className="table__head-cell">Quote #</div>
             <div className="table__head-cell">Quote type</div>
-            <div className="table__head-cell">Products</div>
+            <div className="table__head-cell">Description</div>
             <div className="table__head-cell">Submitter</div>
             <div className="table__head-cell">Updated &#x25BC;</div>
             <div className="table__head-cell">Status</div>
@@ -105,17 +105,7 @@ export default function WorkflowTable({ rows }: Props) {
                   <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
                 </div>
                 <div className="table__cell">{row.typeLabel || "—"}</div>
-                <div className="table__cell">
-                  {row.productLabels.length === 0 ? (
-                    "—"
-                  ) : (
-                    row.productLabels.map((label, i) => (
-                      <span key={i} className="table__cell-product-line">
-                        {label}
-                      </span>
-                    ))
-                  )}
-                </div>
+                <div className="table__cell">{row.descriptionLabel || "—"}</div>
                 <div className="table__cell" title={row.submitterFull}>
                   {row.submitterShort}
                 </div>

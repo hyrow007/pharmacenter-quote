@@ -149,18 +149,37 @@ export default async function WorkflowsPage() {
       .filter(Boolean)
       .join(" · ");
     const products = state.products ?? [];
-    // Build a list of human-readable per-product labels so the Products
-    // column can stack each name (one per line) instead of collapsing a
-    // multi-product workflow to "N products".
-    const productLabels: string[] = products.map((p) => {
+    // Build a one-line "Description" summary like "Omega 3 + Vitamin D3
+    // Softgels" — product names joined with " + " plus the dosage-form
+    // label tacked on the end when the workflow is bulk (the form is what
+    // makes the description feel like a short SKU description). For
+    // non-bulk workflows we drop the form because it's empty or implied.
+    const rawProductNames = products.map((p) => {
       if (p.mode === "new") return p.newProduct?.name_desc || "New product";
-      if (p.productId && productInfo[p.productId]) {
-        const info = productInfo[p.productId];
-        return info.code ? `${info.name} (${info.code})` : info.name;
-      }
+      if (p.productId && productInfo[p.productId]) return productInfo[p.productId].name;
       return "Product";
     });
-    const productSearchBlob = productLabels.join(" ");
+    const namesJoined = rawProductNames.join(" + ");
+    const formForDescription = state.type === "bulk" && state.form
+      ? FORM_LABELS[state.form] || state.form
+      : "";
+    const descriptionLabel = rawProductNames.length === 0
+      ? "—"
+      : formForDescription
+        ? `${namesJoined} ${formForDescription}`
+        : namesJoined;
+    // The search blob still includes the code so users can find a workflow
+    // by typing the Fishbowl SKU even though the visible cell doesn't show it.
+    const productSearchBlob = products
+      .map((p) => {
+        if (p.mode === "new") return p.newProduct?.name_desc || "";
+        if (p.productId && productInfo[p.productId]) {
+          const info = productInfo[p.productId];
+          return `${info.name} ${info.code || ""}`;
+        }
+        return "";
+      })
+      .join(" ");
 
     // Precompute the won-total dollar label on the server so the client
     // table doesn't need any extra deps to format currency. Only meaningful
@@ -177,7 +196,7 @@ export default async function WorkflowsPage() {
       customerName,
       customerSub,
       typeLabel,
-      productLabels,
+      descriptionLabel,
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
