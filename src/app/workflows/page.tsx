@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
-import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
+import {
+  buildAutoDescription,
+  formatQuoteNumber,
+  resolveDescription,
+  type WorkflowRow,
+} from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
 
@@ -70,7 +75,7 @@ export default async function WorkflowsPage() {
   const { data: rawRows } = await supabase
     .from("workflows")
     .select(
-      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, description_override, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .order("updated_at", { ascending: false });
 
@@ -149,25 +154,16 @@ export default async function WorkflowsPage() {
       .filter(Boolean)
       .join(" · ");
     const products = state.products ?? [];
-    // Build a one-line "Description" summary like "Omega 3 + Vitamin D3
-    // Softgels" — product names joined with " + " plus the dosage-form
-    // label tacked on the end when the workflow is bulk (the form is what
-    // makes the description feel like a short SKU description). For
-    // non-bulk workflows we drop the form because it's empty or implied.
-    const rawProductNames = products.map((p) => {
-      if (p.mode === "new") return p.newProduct?.name_desc || "New product";
-      if (p.productId && productInfo[p.productId]) return productInfo[p.productId].name;
-      return "Product";
-    });
-    const namesJoined = rawProductNames.join(" + ");
-    const formForDescription = state.type === "bulk" && state.form
-      ? FORM_LABELS[state.form] || state.form
-      : "";
-    const descriptionLabel = rawProductNames.length === 0
-      ? "—"
-      : formForDescription
-        ? `${namesJoined} ${formForDescription}`
-        : namesJoined;
+    // Auto-computed one-line description ("Omega 3 + Vitamin D3 Softgels").
+    // Prefer the user-typed override if it's set. Falls back to "—" when
+    // there are no products to summarise and no override either.
+    const productNameMap: Record<string, string> = {};
+    for (const [pid, info] of Object.entries(productInfo)) {
+      productNameMap[pid] = info.name;
+    }
+    const autoDescription = buildAutoDescription(state, productNameMap);
+    const resolvedDescription = resolveDescription(row.description_override, autoDescription);
+    const descriptionLabel = resolvedDescription.length > 0 ? resolvedDescription : "—";
     // The search blob still includes the code so users can find a workflow
     // by typing the Fishbowl SKU even though the visible cell doesn't show it.
     const productSearchBlob = products
