@@ -664,10 +664,16 @@ export default function WorkflowActions({
           </button>
         )}
 
-        <button type="button" style={blankAction} disabled aria-label="Coming soon">
-          <span>—</span>
-          <span style={{ fontSize: 12, fontWeight: 400 }}>Coming soon</span>
-        </button>
+        <a
+          href={`/pricing?from=${workflow.id}`}
+          style={editAction}
+          aria-label="Open the pricing calculator"
+        >
+          <span>Pricing Calculator →</span>
+          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+            Landed cost + margin → sale price.
+          </span>
+        </a>
       </div>
 
       {toast ? (
