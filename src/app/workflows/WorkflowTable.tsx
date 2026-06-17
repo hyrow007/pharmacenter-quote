@@ -45,6 +45,11 @@ export type WorkflowDisplayRow = {
   // Server-formatted USD total of the row's sales_orders, e.g. "$12,400.00".
   // Empty string when status !== "won" or there are no recorded SOs.
   salesOrdersTotalLabel: string;
+  // True when the signed-in user is the workflow's creator or a member of
+  // the admins table. Mirrors the RLS DELETE policy — used to decide whether
+  // to render the inline trash button. RLS still enforces the rule server
+  // side, this is purely a UI signal.
+  canDelete: boolean;
 };
 
 type Props = {
@@ -66,11 +71,23 @@ export default function WorkflowTable({ rows }: Props) {
   // A small toast/status banner anchored at the bottom of the table when a
   // save errors. Successful saves are silent — the input retains the value.
   const [error, setError] = useState<string | null>(null);
+  // Rows the user just deleted. We hide them optimistically while the API
+  // round-trips so the UI feels instant. router.refresh() will eventually
+  // re-fetch and the row will be gone from the server payload too.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
+  // While a delete is in flight we want to disable the button (and dim it)
+  // to prevent double-fires; failing that we'd send two DELETEs back to back.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const visibleRows = useMemo(
+    () => (removedIds.size === 0 ? rows : rows.filter((r) => !removedIds.has(r.id))),
+    [rows, removedIds],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
+    if (!q) return visibleRows;
+    return visibleRows.filter((r) => {
       const draft = drafts[r.id];
       const liveDescription = draft ? draft.value : r.descriptionOverride;
       const hay = [
@@ -88,7 +105,7 @@ export default function WorkflowTable({ rows }: Props) {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, search, drafts]);
+  }, [visibleRows, search, drafts]);
 
   const setDraftValue = useCallback((id: string, baseline: string, value: string) => {
     setDrafts((prev) => ({
@@ -96,6 +113,61 @@ export default function WorkflowTable({ rows }: Props) {
       [id]: { value, baseline, saving: prev[id]?.saving ?? false },
     }));
   }, []);
+
+  // Inline delete from the row's trash button. The browser confirm() is the
+  // standard "are you sure" — we keep it lightweight, matching the detail
+  // page's affordance. RLS enforces owner-or-admin on the API side, so a
+  // forbidden response (which shouldn't happen since canDelete is server-
+  // computed) still bounces gracefully.
+  const deleteRow = useCallback(
+    async (id: string, label: string) => {
+      if (deletingId) return;
+      const ok = window.confirm(
+        `Delete ${label}? This cannot be undone. Files in storage will remain.`,
+      );
+      if (!ok) return;
+      setError(null);
+      setDeletingId(id);
+      // Optimistic hide.
+      setRemovedIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      try {
+        const res = await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          const reason = data?.error || `HTTP ${res.status}`;
+          // Roll back the optimistic hide.
+          setRemovedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          setError(
+            reason === "forbidden"
+              ? "Only the workflow owner or an admin can delete this."
+              : `Delete failed: ${reason}`,
+          );
+          return;
+        }
+        // Refresh server data so the row is gone from the next render too.
+        router.refresh();
+      } catch (err) {
+        setRemovedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Delete errored: ${msg}`);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [deletingId, router],
+  );
 
   const commitDraft = useCallback(
     async (id: string, baseline: string, autoLabel: string, raw: string) => {
@@ -209,7 +281,7 @@ export default function WorkflowTable({ rows }: Props) {
                   <div className="table__cell" style={{ color: "var(--ink-3)" }}>
                     {row.updatedRelative}
                   </div>
-                  <div className="table__cell">
+                  <div className="table__cell table__cell--status">
                     <span className={`status-pill status-pill--${row.status.replace("_", "-")}`}>
                       {WORKFLOW_STATUS_LABELS[row.status]}
                     </span>
@@ -217,6 +289,29 @@ export default function WorkflowTable({ rows }: Props) {
                       <span className="table__cell-sub table__cell-sub--won">
                         {row.salesOrdersTotalLabel}
                       </span>
+                    ) : null}
+                    {row.canDelete ? (
+                      <button
+                        type="button"
+                        className="row-delete"
+                        aria-label={`Delete ${row.quoteNumberLabel}`}
+                        title="Delete workflow"
+                        disabled={deletingId === row.id}
+                        // Stop the click from reaching the parent <Link>;
+                        // otherwise Next would navigate to /workflow/[id]
+                        // before our handler even runs.
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteRow(
+                            row.id,
+                            `${row.quoteNumberLabel} (${row.customerName})`,
+                          );
+                        }}
+                      >
+                        {deletingId === row.id ? "…" : "✕"}
+                      </button>
                     ) : null}
                   </div>
                 </Link>

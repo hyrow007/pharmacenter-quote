@@ -4,6 +4,7 @@ import { createClient } from "@/lib/auth/server";
 import {
   buildAutoDescription,
   formatQuoteNumber,
+  isAdmin,
   resolveDescription,
   type WorkflowRow,
 } from "@/lib/workflows";
@@ -71,6 +72,11 @@ export default async function WorkflowsPage() {
   if (!user || !user.email?.endsWith("@pharmacenterusa.com")) {
     redirect("/");
   }
+
+  // Admin lookup is cheap (single-row SELECT on a small table) and lets us
+  // pre-decide per-row whether to render the inline delete button. RLS still
+  // enforces ownership on the DELETE itself, so this is purely a UI signal.
+  const admin = await isAdmin(supabase, user.email);
 
   const { data: rawRows } = await supabase
     .from("workflows")
@@ -198,6 +204,9 @@ export default async function WorkflowsPage() {
       descriptionLabel,
       autoDescription,
       descriptionOverride,
+      // RLS rule: owner OR member of admins table. Mirror that here so the
+      // trash button only appears for rows the user can actually delete.
+      canDelete: admin || row.created_by_email === user.email,
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
