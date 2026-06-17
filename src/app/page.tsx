@@ -12,8 +12,10 @@ export default async function Home({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Signed-in users skip the landing and go straight to the customer picker.
-  if (user) redirect("/start");
+  // Signed-in users land on the workflows inbox so they see every
+  // existing quote first. From there, "+ New workflow" → /start?fresh=1
+  // is the explicit blank-slate path; clicking a row resumes/edits.
+  if (user) redirect("/workflows");
 
   const params = await searchParams;
   const showError = params?.auth_error === "1";
