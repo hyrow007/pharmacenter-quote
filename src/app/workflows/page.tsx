@@ -231,7 +231,7 @@ export default async function WorkflowsPage() {
               </p>
             </div>
             <div className="page-header__action">
-              <Link href="/start" className="button-primary">
+              <Link href="/start?fresh=1" className="button-primary">
                 + New workflow
               </Link>
             </div>

@@ -232,7 +232,7 @@ export default function WorkflowTable({ rows }: Props) {
         <div className="table">
           <div className="table__empty">
             <div className="table__empty-title">No workflows yet</div>
-            <Link href="/start" className="button-primary">
+            <Link href="/start?fresh=1" className="button-primary">
               + Create your first
             </Link>
           </div>
