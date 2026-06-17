@@ -24,14 +24,22 @@ import {
 //   → { ok: true } or 403 if RLS rejects.
 
 const COLS =
-  "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at";
+  "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, description_override, monday_item_id, monday_item_url, monday_last_pushed_at";
 
 const VALID_STATUSES: WorkflowStatus[] = ["in_progress", "won", "lost"];
+
+// Hard cap on the override so a stray paste can't blow up the listing.
+// Matches an arbitrary "two-line max-ish" UX limit; the actual DB column is
+// TEXT (no limit), this is purely an input-validation guard.
+const DESCRIPTION_OVERRIDE_MAX = 200;
 
 type PutBody = {
   state?: WorkflowState;
   status?: WorkflowStatus;
   sales_orders?: SalesOrder[];
+  // null / "" / whitespace-only → clear the override and fall back to the
+  // server-computed label. Otherwise persist the trimmed string.
+  description_override?: string | null;
 };
 
 // Narrow + sanitise an unknown payload into a SalesOrder[]. Returns null when
@@ -113,6 +121,7 @@ export async function PUT(request: Request, ctx: Ctx) {
     state?: WorkflowState;
     status?: WorkflowStatus;
     sales_orders?: SalesOrder[];
+    description_override?: string | null;
   } = {};
   if (body.state && typeof body.state === "object") {
     patch.state = body.state;
@@ -122,6 +131,31 @@ export async function PUT(request: Request, ctx: Ctx) {
       return NextResponse.json({ ok: false, error: "invalid_status" }, { status: 400 });
     }
     patch.status = body.status;
+  }
+  // description_override: null / empty / whitespace clears the override.
+  // Otherwise we trim + length-cap before storing. We deliberately allow this
+  // field even when nothing else changes — it's the most common "small edit".
+  if (body.description_override !== undefined) {
+    if (body.description_override === null) {
+      patch.description_override = null;
+    } else if (typeof body.description_override === "string") {
+      const trimmed = body.description_override.trim();
+      if (trimmed.length === 0) {
+        patch.description_override = null;
+      } else if (trimmed.length > DESCRIPTION_OVERRIDE_MAX) {
+        return NextResponse.json(
+          { ok: false, error: "description_too_long" },
+          { status: 400 },
+        );
+      } else {
+        patch.description_override = trimmed;
+      }
+    } else {
+      return NextResponse.json(
+        { ok: false, error: "invalid_description_override" },
+        { status: 400 },
+      );
+    }
   }
 
   // Sales-order handling. Three cases:
