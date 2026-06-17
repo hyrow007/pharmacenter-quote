@@ -74,6 +74,10 @@ export type WorkflowRow = {
   state: WorkflowState;
   status: WorkflowStatus;
   sales_orders: SalesOrder[];
+  // Optional user-typed override for the description that shows in the
+  // /workflows listing. When null/empty, the server falls back to a label
+  // computed from the products + form (see buildAutoDescription).
+  description_override: string | null;
   monday_item_id: string | null;
   monday_item_url: string | null;
   monday_last_pushed_at: string | null;
@@ -82,6 +86,55 @@ export type WorkflowRow = {
 /** Format a quote_number as the user-facing "Q0001" string. */
 export function formatQuoteNumber(n: number): string {
   return `Q${String(n).padStart(4, "0")}`;
+}
+
+// Dosage form labels — kept here (not in the page) so the auto-description
+// helper can share them with the listing/management pages.
+const DESCRIPTION_FORM_LABELS: Record<string, string> = {
+  softgel: "Softgels",
+  gummy: "Gummies",
+  tablet: "Tablets",
+  capsule: "Capsules",
+  other: "Other",
+};
+
+/**
+ * Single-line "Description" summary used in both the workflows table and the
+ * inline description editor placeholder. Built from product names + the
+ * dosage form (for bulk) so "Omega 3 + Vitamin D3 Softgels" comes out
+ * verbatim. Callers pass in their own lookup of productId → display name so
+ * this helper doesn't need to know about the DB schema.
+ *
+ * Empty string when there are no products — callers decide whether to show
+ * "—" or a different placeholder.
+ */
+export function buildAutoDescription(
+  state: WorkflowState,
+  productNameById: Record<string, string>,
+): string {
+  const products = state.products ?? [];
+  const names = products.map((p) => {
+    if (p.mode === "new") return p.newProduct?.name_desc || "New product";
+    if (p.productId && productNameById[p.productId]) return productNameById[p.productId];
+    return "Product";
+  });
+  if (names.length === 0) return "";
+  const joined = names.join(" + ");
+  const formLabel =
+    state.type === "bulk" && state.form
+      ? DESCRIPTION_FORM_LABELS[state.form] || state.form
+      : "";
+  return formLabel ? `${joined} ${formLabel}` : joined;
+}
+
+/** Picks the user-typed override when present, otherwise the auto-label. */
+export function resolveDescription(
+  override: string | null | undefined,
+  auto: string,
+): string {
+  const trimmed = override?.trim();
+  if (trimmed) return trimmed;
+  return auto;
 }
 
 /**
