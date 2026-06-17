@@ -1,20 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 // Pricing calculator client component. All math is dollar-and-percent simple
-// arithmetic so we can derive everything from the input strings live as the
-// user types. Inputs are kept as strings (with comma formatting for dollars)
-// so we can render exactly what the user typed; we re-parse to numbers per
-// render rather than holding a parallel numeric state — that way there's no
-// risk of the displayed string drifting from the underlying number.
+// arithmetic, derived from input strings live as the user types. Inputs are
+// kept as strings (with comma formatting for dollars) so we can render
+// exactly what the user typed and re-parse to numbers per render.
 
 type Mode = "markup" | "gross-margin";
+type VendorMode = "existing" | "new";
 
-// Strip everything except digits and a single decimal point, cap to two
-// decimal places, then re-insert thousands commas. Used for all dollar
-// inputs. Returns the user-visible string; pair with parseValueInput to
-// recover the number.
+// Per-workflow-product dropdown option passed in from the server.
+export type WorkflowProductOption = {
+  uid: string;
+  label: string;
+  sub: string | null;
+  // Pre-fill value for the calculator's quantity input when the user picks
+  // this product. Already formatted with commas if applicable.
+  quantity: string | null;
+};
+
+// Row shape we get back from the vendors table search. Mirrors the columns
+// declared by the vendors schema migration.
+type VendorRow = {
+  id: string;
+  name: string;
+};
+
+const VENDOR_SEARCH_LIMIT = 12;
+
+// ---------- input formatters ----------
+
 function formatValueInput(raw: string): string {
   const cleaned = raw.replace(/[^\d.]/g, "");
   const firstDot = cleaned.indexOf(".");
@@ -28,7 +45,6 @@ function formatValueInput(raw: string): string {
   return `${withCommas}.${decPart.slice(0, 2)}`;
 }
 
-// Percentages allow up to two decimals (e.g. "8.25%") but no commas.
 function formatPercentInput(raw: string): string {
   const cleaned = raw.replace(/[^\d.]/g, "");
   const firstDot = cleaned.indexOf(".");
@@ -42,7 +58,6 @@ function formatPercentInput(raw: string): string {
 }
 
 function formatQtyInput(raw: string): string {
-  // Whole units only — quantities are integer in our context.
   const digits = raw.replace(/\D/g, "");
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -74,7 +89,110 @@ const pct = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-export default function PricingCalculator() {
+type Props = {
+  workflowProducts: WorkflowProductOption[];
+  workflowLabel: string | null;
+};
+
+export default function PricingCalculator({ workflowProducts, workflowLabel }: Props) {
+  // --- Workflow product picker ----------------------------------------
+  // Only relevant when we were launched from a workflow. "" means "not picked"
+  // — the dropdown shows "Choose product" in that state.
+  const [workflowProductUid, setWorkflowProductUid] = useState<string>("");
+
+  const pickedProduct = useMemo(
+    () => workflowProducts.find((p) => p.uid === workflowProductUid) ?? null,
+    [workflowProducts, workflowProductUid],
+  );
+
+  // --- Vendor picker --------------------------------------------------
+  // Mirrors the customer selector UX on /start: toggle between existing
+  // (autocomplete from vendors table) and new (free-text). The selected
+  // vendor never gets persisted by this page — it's purely informational
+  // for the user while they explore pricing.
+  const [vendorMode, setVendorMode] = useState<VendorMode>("existing");
+  const [vendorId, setVendorId] = useState<string | null>(null);
+  const [vendorName, setVendorName] = useState<string | null>(null);
+  const [vendorSearch, setVendorSearch] = useState<string>("");
+  const [vendorResults, setVendorResults] = useState<VendorRow[]>([]);
+  const [vendorSearching, setVendorSearching] = useState(false);
+  // True when the user is actively browsing the dropdown — once they pick a
+  // vendor we collapse the search list. The "Change" link reopens it.
+  const [vendorEditing, setVendorEditing] = useState(true);
+  const [newVendorName, setNewVendorName] = useState<string>("");
+
+  // Debounced search against the vendors table. We use ilike so any
+  // substring matches, matching how the customer selector behaves.
+  useEffect(() => {
+    if (vendorMode !== "existing") {
+      setVendorResults([]);
+      return;
+    }
+    const term = vendorSearch.trim();
+    if (term.length === 0) {
+      setVendorResults([]);
+      return;
+    }
+    const sb = supabase;
+    if (!sb) return;
+    setVendorSearching(true);
+    const handle = setTimeout(async () => {
+      const { data, error } = await sb
+        .from("vendors")
+        .select("id, name")
+        .eq("active", true)
+        .ilike("name", `%${term}%`)
+        .order("name")
+        .limit(VENDOR_SEARCH_LIMIT);
+      // Table may not exist yet in the schema (early bootstrap); swallow
+      // and treat as "no results" so the UI doesn't surface a scary error.
+      if (error) {
+        console.warn("vendors search failed:", error.message);
+        setVendorResults([]);
+      } else {
+        setVendorResults((data ?? []) as VendorRow[]);
+      }
+      setVendorSearching(false);
+    }, 180);
+    return () => {
+      clearTimeout(handle);
+      setVendorSearching(false);
+    };
+  }, [vendorSearch, vendorMode]);
+
+  const pickVendor = (v: VendorRow) => {
+    setVendorId(v.id);
+    setVendorName(v.name);
+    setVendorSearch(v.name);
+    setVendorEditing(false);
+    setVendorResults([]);
+  };
+
+  const resetVendor = () => {
+    setVendorId(null);
+    setVendorName(null);
+    setVendorSearch("");
+    setVendorEditing(true);
+    setVendorResults([]);
+  };
+
+  const onVendorModeChange = (next: VendorMode) => {
+    setVendorMode(next);
+    // Clear cross-mode state so we don't keep stale picks lingering.
+    setVendorId(null);
+    setVendorName(null);
+    setVendorSearch("");
+    setVendorResults([]);
+    setVendorEditing(true);
+  };
+
+  const selectedVendorDisplay =
+    vendorMode === "existing"
+      ? vendorName
+      : newVendorName.trim().length > 0
+        ? newVendorName.trim()
+        : null;
+
   // --- Inputs ----------------------------------------------------------
   const [unitCost, setUnitCost] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
@@ -82,10 +200,17 @@ export default function PricingCalculator() {
   const [dutiesPct, setDutiesPct] = useState<string>("");
   const [handling, setHandling] = useState<string>("");
   const [margin, setMargin] = useState<string>("30");
-  // "markup" = sale = cost × (1 + m%). "gross-margin" = m = (sale − cost) / sale.
-  // We default to gross-margin because that's how distributors typically
-  // think about pricing here, but offer the toggle since both are common.
   const [marginMode, setMarginMode] = useState<Mode>("gross-margin");
+
+  // When the user picks a workflow product, copy its quantity into the qty
+  // field (overwriting whatever was there). They can still edit afterwards.
+  const onPickWorkflowProduct = (uid: string) => {
+    setWorkflowProductUid(uid);
+    const product = workflowProducts.find((p) => p.uid === uid);
+    if (product?.quantity) {
+      setQuantity(formatQtyInput(product.quantity));
+    }
+  };
 
   // --- Derived ---------------------------------------------------------
   const results = useMemo(() => {
@@ -101,10 +226,6 @@ export default function PricingCalculator() {
     const landedTotal = productCost + fr + dutiesAmount + hd;
     const landedPerUnit = q > 0 ? landedTotal / q : 0;
 
-    // Sale price per unit derived from the chosen margin convention.
-    // For gross-margin mode we guard against margin >= 100% (would divide
-    // by zero / go negative); cap the formula at 99.99% so the math stays
-    // finite even if a curious user types 100.
     let salePerUnit = 0;
     if (landedPerUnit > 0) {
       if (marginMode === "markup") {
@@ -116,8 +237,6 @@ export default function PricingCalculator() {
     }
     const totalRevenue = salePerUnit * q;
     const grossProfit = totalRevenue - landedTotal;
-    // Effective gross margin and markup for the result panel — gives the
-    // user a sanity check that the numbers match what they intended.
     const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
     const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
 
@@ -136,6 +255,7 @@ export default function PricingCalculator() {
   }, [unitCost, quantity, freight, dutiesPct, handling, margin, marginMode]);
 
   const reset = () => {
+    setWorkflowProductUid("");
     setUnitCost("");
     setQuantity("");
     setFreight("");
@@ -143,10 +263,166 @@ export default function PricingCalculator() {
     setHandling("");
     setMargin("30");
     setMarginMode("gross-margin");
+    resetVendor();
+    setNewVendorName("");
+    setVendorMode("existing");
   };
 
   return (
     <div className="pricing">
+      {workflowProducts.length > 0 ? (
+        <section className="pricing__section">
+          <h2 className="pricing__section-title">
+            Workflow product
+            {workflowLabel ? (
+              <span className="pricing__section-tag">{workflowLabel}</span>
+            ) : null}
+          </h2>
+          <label className="pricing__field">
+            <span className="pricing__label">Pricing for</span>
+            <div className="pricing__input-wrap">
+              <select
+                className="pricing__input pricing__input--select"
+                value={workflowProductUid}
+                onChange={(e) => onPickWorkflowProduct(e.target.value)}
+              >
+                <option value="">Choose a product…</option>
+                {workflowProducts.map((p) => (
+                  <option key={p.uid} value={p.uid}>
+                    {p.label}
+                    {p.sub ? ` — ${p.sub}` : ""}
+                    {p.quantity ? ` (${p.quantity} units)` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </label>
+          {pickedProduct ? (
+            <p className="pricing__hint">
+              Picking <strong>{pickedProduct.label}</strong> filled in the
+              quantity below — adjust it if you&rsquo;re pricing a different
+              run size.
+            </p>
+          ) : (
+            <p className="pricing__hint">
+              Pick the product on this workflow you&rsquo;re pricing for. The
+              quantity from that product will pre-fill below.
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      <section className="pricing__section">
+        <h2 className="pricing__section-title">Vendor</h2>
+        <div className="pricing__vendor-toggle" role="radiogroup" aria-label="Vendor mode">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={vendorMode === "existing"}
+            className={`pricing__mode ${vendorMode === "existing" ? "pricing__mode--active" : ""}`}
+            onClick={() => onVendorModeChange("existing")}
+          >
+            Existing vendor
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={vendorMode === "new"}
+            className={`pricing__mode ${vendorMode === "new" ? "pricing__mode--active" : ""}`}
+            onClick={() => onVendorModeChange("new")}
+          >
+            New vendor
+          </button>
+        </div>
+
+        {vendorMode === "existing" ? (
+          vendorName && !vendorEditing ? (
+            <div className="pricing__vendor-picked">
+              <div>
+                <div className="pricing__vendor-picked-name">{vendorName}</div>
+                <div className="pricing__vendor-picked-sub">
+                  From Fishbowl vendor directory
+                </div>
+              </div>
+              <button
+                type="button"
+                className="pricing__vendor-change"
+                onClick={resetVendor}
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="pricing__vendor-search">
+              <label className="pricing__field">
+                <span className="pricing__label">Search vendors</span>
+                <div className="pricing__input-wrap">
+                  <input
+                    type="text"
+                    className="pricing__input"
+                    placeholder="Start typing a vendor name…"
+                    value={vendorSearch}
+                    onChange={(e) => {
+                      setVendorSearch(e.target.value);
+                      setVendorEditing(true);
+                      if (vendorId) {
+                        setVendorId(null);
+                        setVendorName(null);
+                      }
+                    }}
+                    autoComplete="off"
+                  />
+                </div>
+              </label>
+              {vendorSearch.trim().length > 0 ? (
+                vendorResults.length > 0 ? (
+                  <ul className="pricing__vendor-list">
+                    {vendorResults.map((v) => (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          className="pricing__vendor-option"
+                          onClick={() => pickVendor(v)}
+                        >
+                          {v.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : vendorSearching ? (
+                  <p className="pricing__hint pricing__hint--inline">Searching…</p>
+                ) : (
+                  <p className="pricing__hint pricing__hint--inline">
+                    No vendors matched &ldquo;{vendorSearch.trim()}&rdquo;. Try
+                    switching to <strong>New vendor</strong> if this one
+                    isn&rsquo;t in Fishbowl yet.
+                  </p>
+                )
+              ) : null}
+            </div>
+          )
+        ) : (
+          <label className="pricing__field">
+            <span className="pricing__label">Vendor name</span>
+            <div className="pricing__input-wrap">
+              <input
+                type="text"
+                className="pricing__input"
+                placeholder="e.g. New Asia Pharma Co."
+                value={newVendorName}
+                onChange={(e) => setNewVendorName(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          </label>
+        )}
+
+        <p className="pricing__hint">
+          Vendor is informational — it doesn&rsquo;t change the math. Helpful
+          when you&rsquo;re comparing quotes from different suppliers.
+        </p>
+      </section>
+
       <section className="pricing__section">
         <h2 className="pricing__section-title">Product cost</h2>
         <div className="pricing__row">
@@ -296,6 +572,26 @@ export default function PricingCalculator() {
             Reset
           </button>
         </div>
+
+        {pickedProduct || selectedVendorDisplay ? (
+          <div className="pricing__context">
+            {pickedProduct ? (
+              <div className="pricing__context-pair">
+                <span className="pricing__context-label">Product</span>
+                <span className="pricing__context-value">{pickedProduct.label}</span>
+              </div>
+            ) : null}
+            {selectedVendorDisplay ? (
+              <div className="pricing__context-pair">
+                <span className="pricing__context-label">Vendor</span>
+                <span className="pricing__context-value">
+                  {selectedVendorDisplay}
+                  {vendorMode === "new" ? " · New" : ""}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {!results.hasInputs ? (
           <p className="pricing__empty">

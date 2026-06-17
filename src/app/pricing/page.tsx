@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
+import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
-import PricingCalculator from "./PricingCalculator";
+import PricingCalculator, { type WorkflowProductOption } from "./PricingCalculator";
 
-// Standalone pricing calculator. Server shell handles auth, the actual
-// interactive form is a client component below. We accept an optional
-// ?from=<workflowId> query so the "back" link can return to the workflow
-// the user launched the calculator from — when absent we fall back to
-// the workflows listing.
+// Standalone pricing calculator. Server shell handles auth + (optionally)
+// hydrates the workflow whose products show up in the product dropdown.
+// The interactive form is a client component below.
 
 type Ctx = {
   searchParams: Promise<{ from?: string }>;
@@ -27,6 +26,64 @@ export default async function PricingPage({ searchParams }: Ctx) {
   const backHref = from ? `/workflow/${from}` : "/workflows";
   const backLabel = from ? "Back to workflow" : "Back to all workflows";
 
+  // Hydrate workflow products when we have ?from=<id>. Each entry becomes
+  // a dropdown option in the calculator. We resolve existing-product names
+  // through the products table so the dropdown label matches what shows up
+  // on the workflow detail page.
+  let workflowProducts: WorkflowProductOption[] = [];
+  let workflowLabel: string | null = null;
+  if (from) {
+    const { data: workflowRow } = await supabase
+      .from("workflows")
+      .select("id, quote_number, state")
+      .eq("id", from)
+      .maybeSingle();
+    if (workflowRow) {
+      const w = workflowRow as Pick<WorkflowRow, "id" | "quote_number" | "state">;
+      workflowLabel = formatQuoteNumber(w.quote_number);
+      const products = w.state.products ?? [];
+
+      // Hydrate names for existing products via one bulk SELECT.
+      const productIds = products
+        .map((p) => p.productId)
+        .filter((id): id is string => !!id && id !== "new");
+      const productNameMap: Record<string, { name: string; code: string | null }> = {};
+      if (productIds.length > 0) {
+        const { data: pRows } = await supabase
+          .from("products")
+          .select("id, name, fp_code")
+          .in("id", productIds);
+        for (const row of (pRows ?? []) as Array<{ id: string; name: string; fp_code: string | null }>) {
+          productNameMap[row.id] = { name: row.name, code: row.fp_code };
+        }
+      }
+
+      workflowProducts = products.map((p, idx) => {
+        let label = `Product ${idx + 1}`;
+        let sub: string | null = null;
+        if (p.mode === "new") {
+          label = p.newProduct?.name_desc?.trim() || label;
+          sub = "New product";
+        } else if (p.productId && productNameMap[p.productId]) {
+          const info = productNameMap[p.productId];
+          label = info.name;
+          sub = info.code ? `Code ${info.code}` : null;
+        }
+        // First non-empty quantity wins — usually a workflow only has one
+        // quantity per product anyway, but we accept multiples.
+        const firstQty = (p.quantities ?? []).find(
+          (q) => q.replace(/,/g, "").trim().length > 0,
+        );
+        return {
+          uid: p.uid,
+          label,
+          sub,
+          quantity: firstQty || null,
+        };
+      });
+    }
+  }
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
@@ -35,6 +92,7 @@ export default async function PricingPage({ searchParams }: Ctx) {
           <div style={{ marginBottom: 22 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
               PharmaCenter · Tools
+              {workflowLabel ? ` · ${workflowLabel}` : ""}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
               Pricing Calculator
@@ -45,7 +103,10 @@ export default async function PricingPage({ searchParams }: Ctx) {
             </p>
           </div>
 
-          <PricingCalculator />
+          <PricingCalculator
+            workflowProducts={workflowProducts}
+            workflowLabel={workflowLabel}
+          />
 
           <a href={backHref} className="backlink">
             &larr; {backLabel}
