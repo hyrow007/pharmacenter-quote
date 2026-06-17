@@ -1138,3 +1138,266 @@ h1 {
   cursor: default;
   opacity: 0.5;
 }
+
+/* ============================================================
+   Pricing calculator
+   Stacked sections — Product / Inbound / Pricing — followed by
+   a results panel that lights up as soon as cost + quantity are
+   present. Inputs reuse the so-form input language so the visual
+   weight stays consistent with the sales-order editor.
+   ============================================================ */
+
+.pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.pricing__section {
+  padding: 18px 20px;
+  border: 1.5px solid var(--stone);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.pricing__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--teal-900);
+  margin: 0 0 14px 0;
+}
+.pricing__section-title--results {
+  color: var(--ink-3);
+}
+
+.pricing__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.pricing__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pricing__field--margin {
+  max-width: 220px;
+}
+.pricing__field--mode {
+  align-self: end;
+}
+
+.pricing__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.pricing__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--stone);
+  border-radius: 10px;
+  background: #fffdf8;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.pricing__input-wrap:focus-within {
+  border-color: var(--teal-700);
+  box-shadow: 0 0 0 3px rgba(29, 108, 123, 0.12);
+}
+
+.pricing__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--ink-1);
+  outline: none;
+  padding: 0;
+}
+.pricing__input::placeholder {
+  color: var(--ink-3);
+  opacity: 0.7;
+}
+.pricing__input--money,
+.pricing__input--pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing__input-prefix,
+.pricing__input-suffix {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+
+.pricing__hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.5;
+  margin: 12px 0 0 0;
+}
+
+.pricing__mode-toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--cream);
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.pricing__mode {
+  background: transparent;
+  border: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.pricing__mode:hover {
+  color: var(--teal-900);
+}
+.pricing__mode--active {
+  background: var(--paper);
+  color: var(--teal-900);
+  box-shadow: 0 1px 2px rgba(15, 74, 86, 0.08);
+}
+
+.pricing__results {
+  padding: 20px 22px 22px;
+  border: 1.5px solid var(--teal-700);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffdf8 0%, var(--cream-soft) 100%);
+}
+
+.pricing__results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pricing__reset {
+  background: transparent;
+  border: 1px solid var(--stone);
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.pricing__reset:hover {
+  border-color: var(--teal-700);
+  color: var(--teal-900);
+}
+
+.pricing__empty {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin: 0;
+  padding: 18px 0 6px;
+  font-style: italic;
+}
+
+.pricing__breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+.pricing__breakdown + .pricing__breakdown {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--stone);
+}
+
+.pricing__breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink-1);
+  padding: 4px 0;
+}
+.pricing__breakdown-row--muted {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.pricing__breakdown-row--emphasis {
+  font-weight: 700;
+  color: var(--teal-900);
+  border-top: 1px solid var(--stone);
+  padding-top: 8px;
+  margin-top: 4px;
+  font-size: 14.5px;
+}
+
+.pricing__breakdown-label {
+  flex: 1;
+}
+
+.pricing__breakdown-value {
+  font-variant-numeric: tabular-nums;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.pricing__breakdown-row--emphasis .pricing__breakdown-value {
+  font-size: 15px;
+}
+
+.pricing__highlight {
+  margin: 14px 0;
+  padding: 18px 20px;
+  background: var(--teal-900);
+  color: #fff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.pricing__highlight-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.pricing__highlight-value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing__highlight-sub {
+  font-size: 12.5px;
+  opacity: 0.78;
+}
