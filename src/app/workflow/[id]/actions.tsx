@@ -5,7 +5,7 @@
 // server component can do `auth.getUser()` + Supabase fetches without dragging
 // the whole page over the client boundary.
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   WORKFLOW_STATUS_LABELS,
@@ -61,6 +61,10 @@ type Props = {
   productMap: Record<string, ProductRow>;
   isOwner: boolean;
   isAdmin: boolean;
+  // Auto-computed description label ("Omega 3 + Vitamin D3 Softgels") used as
+  // the placeholder for the inline description editor. When the user clears
+  // their override we fall back to this on the listing page too.
+  autoDescription: string;
 };
 
 const primaryAction: CSSProperties = {
@@ -95,11 +99,28 @@ function cleanQty(q: string): string {
   return /^\d+(\.\d+)?$/.test(t) ? t : "";
 }
 
-export default function WorkflowActions({ workflow, customer, productMap, isOwner, isAdmin }: Props) {
+export default function WorkflowActions({
+  workflow,
+  customer,
+  productMap,
+  isOwner,
+  isAdmin,
+  autoDescription,
+}: Props) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Inline description editor. Persists to workflows.description_override.
+  // We hold the input as the "draft" while editing, then commit on blur or
+  // Enter. Empty/whitespace clears the override and the listing reverts to
+  // the auto-computed label. baseline is the last value we successfully
+  // committed — used to skip no-op saves and to roll back on error.
+  const initialOverride = workflow.description_override?.trim() ?? "";
+  const [descDraft, setDescDraft] = useState<string>(initialOverride);
+  const [descBaseline, setDescBaseline] = useState<string>(initialOverride);
+  const [descSaving, setDescSaving] = useState(false);
 
   // Local mirror of the monday URL so the button can flip its label without
   // a full page refresh (server-rendered URL is the source of truth on load).
@@ -255,6 +276,57 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
     }
   };
 
+  const commitDescription = async () => {
+    const next = descDraft.trim();
+    if (next === descBaseline) return; // no-op save
+    if (descSaving) return;
+    setDescSaving(true);
+    const prevBaseline = descBaseline;
+    // Optimistic: assume the save succeeds and only roll back on error.
+    setDescBaseline(next);
+    try {
+      const res = await fetch(`/api/workflows/${workflow.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // Send null when cleared so the API stores NULL and the listing
+        // falls back to the auto-label.
+        body: JSON.stringify({ description_override: next === "" ? null : next }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setDescBaseline(prevBaseline);
+        setDescDraft(prevBaseline);
+        const reason = data?.error || `HTTP ${res.status}`;
+        if (reason === "description_too_long") {
+          showToast("Description is too long — keep it under 200 characters.", 6500);
+        } else {
+          showToast(`Couldn't save description: ${reason}`, 6500);
+        }
+        return;
+      }
+      showToast(next === "" ? "Reset to default description." : "Description saved.", 3500);
+      router.refresh();
+    } catch (err) {
+      setDescBaseline(prevBaseline);
+      setDescDraft(prevBaseline);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Description save errored: ${msg}`, 6500);
+    } finally {
+      setDescSaving(false);
+    }
+  };
+
+  const onDescKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur(); // triggers commit via onBlur
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setDescDraft(descBaseline); // discard pending edits
+      e.currentTarget.blur();
+    }
+  };
+
   const pushToMonday = async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -374,6 +446,51 @@ export default function WorkflowActions({ workflow, customer, productMap, isOwne
 
   return (
     <>
+      <div className="description-editor">
+        <label htmlFor="workflow-description-input" className="description-editor__label">
+          Description
+        </label>
+        <div className="description-editor__field">
+          <input
+            id="workflow-description-input"
+            type="text"
+            className="description-editor__input"
+            value={descDraft}
+            placeholder={autoDescription || "Add a short description"}
+            onChange={(e) => setDescDraft(e.target.value)}
+            onBlur={commitDescription}
+            onKeyDown={onDescKeyDown}
+            maxLength={200}
+            disabled={descSaving}
+            autoComplete="off"
+          />
+          {descSaving ? (
+            <span className="description-editor__status">Saving…</span>
+          ) : descBaseline ? (
+            <button
+              type="button"
+              className="description-editor__reset"
+              onClick={() => {
+                setDescDraft("");
+                // Defer the commit by a tick so the input reflects "" first.
+                window.setTimeout(commitDescription, 0);
+              }}
+              disabled={descSaving}
+              title="Reset to the default (auto-generated) description"
+            >
+              Reset to default
+            </button>
+          ) : (
+            <span className="description-editor__status description-editor__status--muted">
+              Using default
+            </span>
+          )}
+        </div>
+        <p className="description-editor__hint">
+          Shows in the workflows list. Leave blank to use the auto-generated label.
+        </p>
+      </div>
+
       <div
         style={{
           display: "flex",

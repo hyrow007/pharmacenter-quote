@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/auth/server";
-import { formatQuoteNumber, isAdmin, type WorkflowRow } from "@/lib/workflows";
+import {
+  buildAutoDescription,
+  formatQuoteNumber,
+  isAdmin,
+  type WorkflowRow,
+} from "@/lib/workflows";
 import AppHeader from "../../_components/AppHeader";
 import WorkflowActions from "./actions";
 
@@ -67,7 +72,7 @@ export default async function WorkflowPage({ params }: Ctx) {
   const { data } = await supabase
     .from("workflows")
     .select(
-      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, monday_item_id, monday_item_url, monday_last_pushed_at",
+      "id, quote_number, created_by_email, created_at, updated_at, state, status, sales_orders, description_override, monday_item_id, monday_item_url, monday_last_pushed_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -102,6 +107,15 @@ export default async function WorkflowPage({ params }: Ctx) {
       productMap[r.id] = r;
     }
   }
+
+  // Auto-computed "Description" label — matches the one shown in the
+  // /workflows listing. Used as the placeholder in the inline description
+  // editor so the user can see what the listing would show by default.
+  const productNameMap: Record<string, string> = {};
+  for (const [pid, info] of Object.entries(productMap)) {
+    productNameMap[pid] = info.name;
+  }
+  const autoDescription = buildAutoDescription(workflow.state, productNameMap);
 
   // Resolve "Created by" to a Google-SSO full name via the user_directory
   // view. Falls back to the raw email if the user has never signed in (so
@@ -309,9 +323,37 @@ export default async function WorkflowPage({ params }: Ctx) {
                     {p.attachments.length > 0 ? (
                       <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6 }}>
                         {p.attachments.length} attachment{p.attachments.length === 1 ? "" : "s"}:
-                        <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0 0", display: "flex", flexDirection: "column", gap: 2 }}>
+                        <ul className="attachment-list">
                           {p.attachments.map((a) => (
-                            <li key={a.path} style={{ fontSize: 12 }}>{a.name} · {(a.size / 1024).toFixed(1)} KB</li>
+                            <li key={a.path} className="attachment-list__item">
+                              {a.url ? (
+                                <a
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="attachment-list__link"
+                                  // The browser uses the response's
+                                  // Content-Disposition when the link is
+                                  // opened in the same tab. Supabase Storage
+                                  // returns inline by default, which is what
+                                  // we want for previewable types (PDF,
+                                  // images). Users can right-click → save.
+                                  title={`Open ${a.name}`}
+                                >
+                                  <span className="attachment-list__icon" aria-hidden="true">
+                                    &#x1F4CE;
+                                  </span>
+                                  <span className="attachment-list__name">{a.name}</span>
+                                  <span className="attachment-list__size">
+                                    {(a.size / 1024).toFixed(1)} KB
+                                  </span>
+                                </a>
+                              ) : (
+                                <span className="attachment-list__name attachment-list__name--missing">
+                                  {a.name} · {(a.size / 1024).toFixed(1)} KB
+                                </span>
+                              )}
+                            </li>
                           ))}
                         </ul>
                       </div>
@@ -357,6 +399,7 @@ export default async function WorkflowPage({ params }: Ctx) {
           )}
           isOwner={owner}
           isAdmin={admin}
+          autoDescription={autoDescription}
         />
 
         <a href="/workflows" className="backlink">&larr; Back to all workflows</a>
