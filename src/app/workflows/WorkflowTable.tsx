@@ -190,9 +190,6 @@ export default function WorkflowTable({ rows }: Props) {
                 <Link key={row.id} href={`/workflow/${row.id}`} className="table__row">
                   <div className="table__cell">
                     <span className="table__cell--strong">{row.customerName}</span>
-                    {row.customerSub ? (
-                      <span className="table__cell-sub">{row.customerSub}</span>
-                    ) : null}
                   </div>
                   <div className="table__cell">
                     <span className="table__cell-quote-number">{row.quoteNumberLabel}</span>
