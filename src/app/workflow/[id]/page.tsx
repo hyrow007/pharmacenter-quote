@@ -103,6 +103,19 @@ export default async function WorkflowPage({ params }: Ctx) {
     }
   }
 
+  // Resolve "Created by" to a Google-SSO full name via the user_directory
+  // view. Falls back to the raw email if the user has never signed in (so
+  // there's no auth.users row to read full_name from).
+  let createdByDisplay = workflow.created_by_email;
+  {
+    const { data: dir } = await supabase
+      .from("user_directory")
+      .select("display_name")
+      .eq("email", workflow.created_by_email)
+      .maybeSingle();
+    if (dir?.display_name) createdByDisplay = dir.display_name;
+  }
+
   // ----- styles --------------------------------------------------------
   const sectionStyle: CSSProperties = {
     display: "grid", gridTemplateColumns: "150px 1fr", gap: 12,
@@ -205,7 +218,9 @@ export default async function WorkflowPage({ params }: Ctx) {
             fontSize: 12, color: "var(--ink-3)",
           }}
         >
-          <span><strong style={{ color: "var(--ink-1)" }}>Created by:</strong> {workflow.created_by_email}</span>
+          <span title={workflow.created_by_email}>
+            <strong style={{ color: "var(--ink-1)" }}>Created by:</strong> {createdByDisplay}
+          </span>
           <span><strong style={{ color: "var(--ink-1)" }}>Created:</strong> {formatTimestamp(workflow.created_at)}</span>
           <span><strong style={{ color: "var(--ink-1)" }}>Updated:</strong> {formatTimestamp(workflow.updated_at)}</span>
           {workflow.monday_item_url ? (
