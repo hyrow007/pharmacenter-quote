@@ -10,6 +10,10 @@ import { supabase } from "@/lib/supabase";
 
 type Mode = "markup" | "gross-margin";
 type VendorMode = "existing" | "new";
+// Shipping origin — affects whether duties apply. "usa" treats the duties
+// percentage as zero and hides the input; "international" exposes it. The
+// product cost stays whatever the user types regardless of origin.
+type ShippingOrigin = "usa" | "international";
 
 // Per-workflow-product dropdown option passed in from the server.
 export type WorkflowProductOption = {
@@ -194,6 +198,7 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
         : null;
 
   // --- Inputs ----------------------------------------------------------
+  const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>("usa");
   const [unitCost, setUnitCost] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [freight, setFreight] = useState<string>("");
@@ -217,7 +222,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
     const u = num(unitCost);
     const q = num(quantity);
     const fr = num(freight);
-    const dp = num(dutiesPct) / 100;
+    // Domestic (USA) shipments don't pay customs duties — treat the duties
+    // percentage as zero regardless of what the (hidden) input holds.
+    const dp = shippingOrigin === "usa" ? 0 : num(dutiesPct) / 100;
     const hd = num(handling);
     const mPct = num(margin) / 100;
 
@@ -252,10 +259,11 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
       effectiveMarkup,
       hasInputs: u > 0 && q > 0,
     };
-  }, [unitCost, quantity, freight, dutiesPct, handling, margin, marginMode]);
+  }, [unitCost, quantity, freight, dutiesPct, handling, margin, marginMode, shippingOrigin]);
 
   const reset = () => {
     setWorkflowProductUid("");
+    setShippingOrigin("usa");
     setUnitCost("");
     setQuantity("");
     setFreight("");
@@ -460,6 +468,33 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
 
       <section className="pricing__section">
         <h2 className="pricing__section-title">Inbound costs</h2>
+        <div className="pricing__field" style={{ marginBottom: 14 }}>
+          <span className="pricing__label">Shipping origin</span>
+          <div
+            className="pricing__mode-toggle"
+            role="radiogroup"
+            aria-label="Shipping origin"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={shippingOrigin === "usa"}
+              className={`pricing__mode ${shippingOrigin === "usa" ? "pricing__mode--active" : ""}`}
+              onClick={() => setShippingOrigin("usa")}
+            >
+              USA (domestic)
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={shippingOrigin === "international"}
+              className={`pricing__mode ${shippingOrigin === "international" ? "pricing__mode--active" : ""}`}
+              onClick={() => setShippingOrigin("international")}
+            >
+              International
+            </button>
+          </div>
+        </div>
         <div className="pricing__row">
           <label className="pricing__field">
             <span className="pricing__label">Freight (total)</span>
@@ -476,21 +511,23 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
               />
             </div>
           </label>
-          <label className="pricing__field">
-            <span className="pricing__label">Duties</span>
-            <div className="pricing__input-wrap">
-              <input
-                type="text"
-                inputMode="decimal"
-                className="pricing__input pricing__input--pct"
-                value={dutiesPct}
-                onChange={(e) => setDutiesPct(formatPercentInput(e.target.value))}
-                placeholder="0"
-                autoComplete="off"
-              />
-              <span className="pricing__input-suffix">%</span>
-            </div>
-          </label>
+          {shippingOrigin === "international" ? (
+            <label className="pricing__field">
+              <span className="pricing__label">Duties</span>
+              <div className="pricing__input-wrap">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--pct"
+                  value={dutiesPct}
+                  onChange={(e) => setDutiesPct(formatPercentInput(e.target.value))}
+                  placeholder="0"
+                  autoComplete="off"
+                />
+                <span className="pricing__input-suffix">%</span>
+              </div>
+            </label>
+          ) : null}
           <label className="pricing__field">
             <span className="pricing__label">Other fees</span>
             <div className="pricing__input-wrap">
@@ -508,9 +545,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           </label>
         </div>
         <p className="pricing__hint">
-          Duties are applied as a percent of the product cost. Freight and
-          other fees are total dollar amounts and get distributed across the
-          full quantity.
+          {shippingOrigin === "international"
+            ? "Duties are applied as a percent of the product cost. Freight and other fees are total dollar amounts distributed across the full quantity."
+            : "Domestic shipments — no customs duties. Freight and other fees are total dollar amounts distributed across the full quantity."}
         </p>
       </section>
 
@@ -601,7 +638,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           <>
             <div className="pricing__breakdown">
               <Row label="Product cost subtotal" value={usd.format(results.productCost)} />
-              <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
+              {shippingOrigin === "international" ? (
+                <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
+              ) : null}
               <Row label="Freight" value={usd.format(num(freight))} muted />
               <Row label="Other fees" value={usd.format(num(handling))} muted />
               <Row
