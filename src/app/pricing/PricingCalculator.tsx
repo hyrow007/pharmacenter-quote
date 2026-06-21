@@ -204,6 +204,10 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
   const [freight, setFreight] = useState<string>("");
   const [dutiesPct, setDutiesPct] = useState<string>("");
   const [handling, setHandling] = useState<string>("");
+  // Lab / analytical testing fee. Usually a flat per-batch charge from a
+  // third-party testing lab; we treat it like freight/handling — total
+  // dollars added to landed cost and distributed across the full qty.
+  const [testing, setTesting] = useState<string>("");
   const [margin, setMargin] = useState<string>("30");
   const [marginMode, setMarginMode] = useState<Mode>("gross-margin");
 
@@ -226,11 +230,12 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
     // percentage as zero regardless of what the (hidden) input holds.
     const dp = shippingOrigin === "usa" ? 0 : num(dutiesPct) / 100;
     const hd = num(handling);
+    const ts = num(testing);
     const mPct = num(margin) / 100;
 
     const productCost = u * q;
     const dutiesAmount = productCost * dp;
-    const landedTotal = productCost + fr + dutiesAmount + hd;
+    const landedTotal = productCost + fr + dutiesAmount + hd + ts;
     const landedPerUnit = q > 0 ? landedTotal / q : 0;
 
     let salePerUnit = 0;
@@ -259,7 +264,7 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
       effectiveMarkup,
       hasInputs: u > 0 && q > 0,
     };
-  }, [unitCost, quantity, freight, dutiesPct, handling, margin, marginMode, shippingOrigin]);
+  }, [unitCost, quantity, freight, dutiesPct, handling, testing, margin, marginMode, shippingOrigin]);
 
   const reset = () => {
     setWorkflowProductUid("");
@@ -269,6 +274,7 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
     setFreight("");
     setDutiesPct("");
     setHandling("");
+    setTesting("");
     setMargin("30");
     setMarginMode("gross-margin");
     resetVendor();
@@ -529,6 +535,21 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
             </label>
           ) : null}
           <label className="pricing__field">
+            <span className="pricing__label">Lab testing</span>
+            <div className="pricing__input-wrap">
+              <span className="pricing__input-prefix">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="pricing__input pricing__input--money"
+                value={testing}
+                onChange={(e) => setTesting(formatValueInput(e.target.value))}
+                placeholder="0.00"
+                autoComplete="off"
+              />
+            </div>
+          </label>
+          <label className="pricing__field">
             <span className="pricing__label">Other fees</span>
             <div className="pricing__input-wrap">
               <span className="pricing__input-prefix">$</span>
@@ -546,8 +567,8 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
         </div>
         <p className="pricing__hint">
           {shippingOrigin === "international"
-            ? "Duties are applied as a percent of the product cost. Freight and other fees are total dollar amounts distributed across the full quantity."
-            : "Domestic shipments — no customs duties. Freight and other fees are total dollar amounts distributed across the full quantity."}
+            ? "Duties are applied as a percent of the product cost. Freight, lab testing, and other fees are total dollar amounts distributed across the full quantity."
+            : "Domestic shipments — no customs duties. Freight, lab testing, and other fees are total dollar amounts distributed across the full quantity."}
         </p>
       </section>
 
@@ -642,6 +663,7 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
                 <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
               ) : null}
               <Row label="Freight" value={usd.format(num(freight))} muted />
+              <Row label="Lab testing" value={usd.format(num(testing))} muted />
               <Row label="Other fees" value={usd.format(num(handling))} muted />
               <Row
                 label="Landed cost (in warehouse)"
