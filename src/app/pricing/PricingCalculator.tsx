@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import type { PricingSnapshot, WorkflowState } from "@/lib/workflows";
 
 // Pricing calculator client component. All math is dollar-and-percent simple
 // arithmetic, derived from input strings live as the user types. Inputs are
@@ -133,16 +134,55 @@ const pct = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+// Tiny "just now / 2m ago" helper used in the save-status text. Lives here
+// to avoid pulling in a full date library for one label.
+function relativeFromNow(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "";
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 30) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
 type Props = {
   workflowProducts: WorkflowProductOption[];
   workflowLabel: string | null;
+  // When non-null, the calculator was opened from /workflow/[id]?from=... and
+  // is allowed to write pricing snapshots back into that workflow's state.
+  workflowId: string | null;
+  // Full workflow.state needed for the PUT — we merge our pricing changes
+  // into it and send the whole object back, since the workflow update
+  // endpoint replaces state wholesale rather than deep-merging.
+  workflowState: WorkflowState | null;
+  // Already-saved snapshots keyed by ProductEntry.uid. We hydrate from this
+  // when the user picks a product.
+  pricingByProductUid: Record<string, PricingSnapshot>;
 };
 
-export default function PricingCalculator({ workflowProducts, workflowLabel }: Props) {
+export default function PricingCalculator({
+  workflowProducts,
+  workflowLabel,
+  workflowId,
+  workflowState,
+  pricingByProductUid,
+}: Props) {
   // --- Workflow product picker ----------------------------------------
   // Only relevant when we were launched from a workflow. "" means "not picked"
   // — the dropdown shows "Choose product" in that state.
   const [workflowProductUid, setWorkflowProductUid] = useState<string>("");
+
+  // --- Save-to-workflow state ----------------------------------------
+  // Only used when workflowId is set. We track the in-flight save plus the
+  // last-known save timestamp so the UI can render "Saved · just now".
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const pickedProduct = useMemo(
     () => workflowProducts.find((p) => p.uid === workflowProductUid) ?? null,
@@ -264,15 +304,63 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
     ? { freight: true, insurance: false, duties: false, customs: false }
     : INCOTERM_FIELDS[incoterm];
 
-  // When the user picks a workflow product, copy its quantity into the qty
-  // field (overwriting whatever was there). They can still edit afterwards.
+  // When the user picks a workflow product:
+  //   - If we have a saved pricing snapshot for that product, hydrate every
+  //     calculator field from it (lossless re-edit of the saved calculation).
+  //   - Otherwise, just copy the product's quantity into the qty field
+  //     (overwriting whatever was there). They can still edit afterwards.
   const onPickWorkflowProduct = (uid: string) => {
     setWorkflowProductUid(uid);
+    const snap = uid ? pricingByProductUid[uid] : undefined;
+    if (snap) {
+      // --- Hydrate from saved snapshot ---
+      setShippingOrigin(snap.shippingOrigin);
+      setIncoterm(snap.incoterm);
+      setUnitCost(snap.unitCost);
+      setQuantity(snap.quantity);
+      setFreight(snap.freight);
+      setInsurance(snap.insurance);
+      setCustomsBroker(snap.customsBroker);
+      setDutiesPct(snap.dutiesPct);
+      setHandling(snap.handling);
+      setTesting(snap.testing);
+      setMargin(snap.margin);
+      setMarginMode(snap.marginMode);
+      // Vendor: prefer the existing-vendor selection if we have an id;
+      // otherwise drop into "new" mode with the saved name.
+      if (snap.vendorMode === "existing" && snap.vendorId) {
+        setVendorMode("existing");
+        setVendorId(snap.vendorId);
+        setVendorName(snap.vendorLabel);
+        setVendorSearch(snap.vendorLabel ?? "");
+        setVendorEditing(false);
+        setVendorResults([]);
+      } else if (snap.vendorMode === "new") {
+        setVendorMode("new");
+        setNewVendorName(snap.newVendorName);
+        resetVendor();
+      } else {
+        resetVendor();
+        setNewVendorName("");
+      }
+      setLastSavedAt(snap.savedAt);
+      setSaveError(null);
+      return;
+    }
+    // No saved snapshot — fall back to default behavior.
+    setLastSavedAt(null);
+    setSaveError(null);
     const product = workflowProducts.find((p) => p.uid === uid);
     if (product?.quantity) {
       setQuantity(formatQtyInput(product.quantity));
     }
   };
+
+  // --- Can we save right now? -----------------------------------------
+  // True only when launched from a workflow AND a product has been picked
+  // AND there are usable inputs to save. The button is hidden otherwise so
+  // we don't dangle a meaningless action in the UI.
+  const canSave = !!workflowId && !!workflowState && !!workflowProductUid;
 
   // --- Derived ---------------------------------------------------------
   const results = useMemo(() => {
@@ -329,6 +417,81 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
     visibility.freight, visibility.insurance, visibility.duties, visibility.customs,
   ]);
 
+  // Build the snapshot we'd persist if the user hit Save right now. Pulls
+  // every relevant input + the freshly-computed results. The vendor label
+  // is whatever's currently displayed (existing pick or typed new name) so
+  // the workflow view can show vendor context without re-joining.
+  const buildSnapshot = (): PricingSnapshot => {
+    const vendorLabel =
+      vendorMode === "existing" ? vendorName : newVendorName.trim() || null;
+    return {
+      vendorMode,
+      vendorId: vendorMode === "existing" ? vendorId : null,
+      vendorLabel,
+      newVendorName: vendorMode === "new" ? newVendorName : "",
+      shippingOrigin,
+      incoterm,
+      unitCost,
+      quantity,
+      freight,
+      insurance,
+      customsBroker,
+      dutiesPct,
+      handling,
+      testing,
+      margin,
+      marginMode,
+      result: {
+        landedTotal: results.landedTotal,
+        landedPerUnit: results.landedPerUnit,
+        salePerUnit: results.salePerUnit,
+        totalRevenue: results.totalRevenue,
+        grossProfit: results.grossProfit,
+        effectiveMargin: results.effectiveMargin,
+        effectiveMarkup: results.effectiveMarkup,
+      },
+      savedAt: new Date().toISOString(),
+      // Server validates the user, so we just pass a hint here for the UI
+      // — actual auth identity is rederived server-side on the PUT.
+      savedByEmail: "",
+    };
+  };
+
+  const onSave = async () => {
+    if (!workflowId || !workflowState || !workflowProductUid) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const snap = buildSnapshot();
+      const nextPricing: Record<string, PricingSnapshot> = {
+        ...(workflowState.pricing ?? {}),
+        [workflowProductUid]: snap,
+      };
+      const nextState: WorkflowState = {
+        ...workflowState,
+        pricing: nextPricing,
+      };
+      const res = await fetch(`/api/workflows/${workflowId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: nextState }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `save_failed_${res.status}`);
+      }
+      setLastSavedAt(snap.savedAt);
+      // Mutate the in-memory map so subsequent product switches see the
+      // latest snapshot without a round-trip. The server is source of truth
+      // — on next page load it'll come back identically.
+      pricingByProductUid[workflowProductUid] = snap;
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "save_failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const reset = () => {
     setWorkflowProductUid("");
     setShippingOrigin("usa");
@@ -379,9 +542,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           </label>
           {pickedProduct ? (
             <p className="pricing__hint">
-              Picking <strong>{pickedProduct.label}</strong> filled in the
-              quantity below — adjust it if you&rsquo;re pricing a different
-              run size.
+              {lastSavedAt
+                ? <>Loaded a saved calculation for <strong>{pickedProduct.label}</strong>. Edit anything you want and hit Save to overwrite it.</>
+                : <>Picking <strong>{pickedProduct.label}</strong> filled in the quantity below — adjust it if you&rsquo;re pricing a different run size.</>}
             </p>
           ) : (
             <p className="pricing__hint">
@@ -389,6 +552,44 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
               quantity from that product will pre-fill below.
             </p>
           )}
+          {canSave ? (
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="button-primary"
+                onClick={onSave}
+                disabled={saving || !results.hasInputs}
+                title={
+                  !results.hasInputs
+                    ? "Enter a unit cost and quantity first"
+                    : "Save this calculation to the workflow"
+                }
+              >
+                {saving ? "Saving…" : "Save to workflow"}
+              </button>
+              {saveError ? (
+                <span style={{ fontSize: 13, color: "#b91c1c" }}>
+                  Couldn&rsquo;t save: {saveError}
+                </span>
+              ) : lastSavedAt ? (
+                <span style={{ fontSize: 13, color: "#64748b" }}>
+                  Saved {relativeFromNow(lastSavedAt)}
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, color: "#64748b" }}>
+                  Not yet saved for this product.
+                </span>
+              )}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

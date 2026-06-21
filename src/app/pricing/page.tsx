@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
-import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
+import {
+  formatQuoteNumber,
+  type PricingSnapshot,
+  type WorkflowRow,
+  type WorkflowState,
+} from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import PricingCalculator, { type WorkflowProductOption } from "./PricingCalculator";
 
@@ -32,6 +37,8 @@ export default async function PricingPage({ searchParams }: Ctx) {
   // on the workflow detail page.
   let workflowProducts: WorkflowProductOption[] = [];
   let workflowLabel: string | null = null;
+  let workflowState: WorkflowState | null = null;
+  let pricingByProductUid: Record<string, PricingSnapshot> = {};
   if (from) {
     const { data: workflowRow } = await supabase
       .from("workflows")
@@ -41,6 +48,8 @@ export default async function PricingPage({ searchParams }: Ctx) {
     if (workflowRow) {
       const w = workflowRow as Pick<WorkflowRow, "id" | "quote_number" | "state">;
       workflowLabel = formatQuoteNumber(w.quote_number);
+      workflowState = w.state;
+      pricingByProductUid = w.state.pricing ?? {};
       const products = w.state.products ?? [];
 
       // Hydrate names for existing products via one bulk SELECT.
@@ -106,6 +115,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
           <PricingCalculator
             workflowProducts={workflowProducts}
             workflowLabel={workflowLabel}
+            workflowId={from ?? null}
+            workflowState={workflowState}
+            pricingByProductUid={pricingByProductUid}
           />
 
           <a href={backHref} className="backlink">
