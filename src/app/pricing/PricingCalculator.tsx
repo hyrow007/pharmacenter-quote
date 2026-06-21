@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 // Pricing calculator client component. All math is dollar-and-percent simple
@@ -566,28 +566,12 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
             </div>
           </div>
           {shippingOrigin === "international" ? (
-            <label className="pricing__field">
+            <div className="pricing__field">
               <span className="pricing__label">Shipping terms (Incoterm)</span>
-              <div className="pricing__input-wrap">
-                <select
-                  className="pricing__input pricing__input--select"
-                  value={incoterm}
-                  onChange={(e) => setIncoterm(e.target.value as Incoterm)}
-                >
-                  {(Object.keys(INCOTERM_LABELS) as Incoterm[]).map((t) => (
-                    <option key={t} value={t}>{INCOTERM_LABELS[t]}</option>
-                  ))}
-                </select>
-              </div>
-            </label>
+              <IncotermSelect value={incoterm} onChange={setIncoterm} />
+            </div>
           ) : null}
         </div>
-
-        {shippingOrigin === "international" ? (
-          <p className="pricing__hint" style={{ marginTop: 10, marginBottom: 14 }}>
-            {INCOTERM_DESCRIPTIONS[incoterm]}
-          </p>
-        ) : null}
 
         <div className="pricing__row" style={{ marginTop: 4 }}>
           {visibility.freight ? (
@@ -836,6 +820,122 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+// Custom Incoterm dropdown — native <select> can't style options with
+// descriptions, so we render a button that opens a panel listing each term
+// with its full label on top and a small muted description below. Click
+// outside or press Escape to close.
+function IncotermSelect({
+  value,
+  onChange,
+}: {
+  value: Incoterm;
+  onChange: (v: Incoterm) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const terms = Object.keys(INCOTERM_LABELS) as Incoterm[];
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="pricing__input pricing__input--select"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          cursor: "pointer",
+        }}
+      >
+        <div style={{ fontWeight: 500 }}>{INCOTERM_LABELS[value]}</div>
+        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, lineHeight: 1.4 }}>
+          {INCOTERM_DESCRIPTIONS[value]}
+        </div>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 8,
+            boxShadow: "0 12px 32px rgba(15, 23, 42, 0.12)",
+            zIndex: 30,
+            maxHeight: 360,
+            overflowY: "auto",
+            padding: 4,
+          }}
+        >
+          {terms.map((t) => {
+            const selected = t === value;
+            return (
+              <button
+                key={t}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  onChange(t);
+                  setOpen(false);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  background: selected ? "#f1f5f9" : "transparent",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  marginBottom: 2,
+                }}
+                onMouseEnter={(e) => {
+                  if (!selected) e.currentTarget.style.background = "#f8fafc";
+                }}
+                onMouseLeave={(e) => {
+                  if (!selected) e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <div style={{ fontWeight: 500, fontSize: 14, color: "#0f172a" }}>
+                  {INCOTERM_LABELS[t]}
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, lineHeight: 1.4 }}>
+                  {INCOTERM_DESCRIPTIONS[t]}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
