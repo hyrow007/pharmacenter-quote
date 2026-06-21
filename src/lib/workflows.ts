@@ -31,11 +31,22 @@ export type ProductEntry = {
   _code?: string | null;
 };
 
-// A saved pricing-calculator snapshot tied to one workflow product.
+// A saved pricing-calculator snapshot. A workflow can have many — they show
+// up as Excel-style tabs in the calculator. Each tab targets one workflow
+// product (optional) so a single workflow with multiple products can have
+// independent pricing per product without losing context.
 // All money/percent inputs are stored as their string representation (matches
 // what the calculator UI uses) so re-hydration is lossless. Results are also
 // included so the workflow detail view can summarise without re-doing math.
 export type PricingSnapshot = {
+  // Stable id for this tab — generated client-side, never reused.
+  tabId: string;
+  // Optional user-facing tab label. When null we auto-derive from the picked
+  // product name (or fall back to "Tab N" via the tab index).
+  label: string | null;
+  // The workflow product this tab is pricing. Empty string = not picked yet.
+  workflowProductUid: string;
+
   // Vendor context — either a saved vendor row or a free-form new vendor name
   // typed in the calculator.
   vendorMode: "existing" | "new";
@@ -85,9 +96,15 @@ export type WorkflowState = {
   form: string | null;
   source: string | null;
   products: ProductEntry[];
-  // Pricing snapshots keyed by ProductEntry.uid. Optional for backward
-  // compatibility with workflows created before this feature.
-  pricing?: Record<string, PricingSnapshot>;
+  // Pricing tabs in order. Each entry is the saved state of one calculator
+  // tab. Order is meaningful (it matches the order shown in the calculator
+  // tab bar). Optional for backward compatibility with workflows created
+  // before this feature.
+  //
+  // Historical note: an earlier version of this field used a
+  // Record<productUid, snapshot> shape. The hydration code accepts both
+  // shapes so existing rows still load.
+  pricing?: PricingSnapshot[];
 };
 
 // Lifecycle of a workflow. "in_progress" is the default until the user
