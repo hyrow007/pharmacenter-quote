@@ -160,29 +160,201 @@ type Props = {
   // into it and send the whole object back, since the workflow update
   // endpoint replaces state wholesale rather than deep-merging.
   workflowState: WorkflowState | null;
-  // Already-saved snapshots keyed by ProductEntry.uid. We hydrate from this
-  // when the user picks a product.
-  pricingByProductUid: Record<string, PricingSnapshot>;
+  // Saved tabs, in display order. Empty array = no saved tabs yet.
+  initialPricingTabs: PricingSnapshot[];
 };
+
+// Per-tab persisted state. We keep every input + the last-save timestamp
+// here so switching tabs is "save current state into the old tab, hydrate
+// from the new tab". Vendor search/edit UX flags live alongside the rest
+// so they survive a tab switch too.
+type TabState = {
+  tabId: string;
+  label: string | null;
+  workflowProductUid: string;
+  vendorMode: VendorMode;
+  vendorId: string | null;
+  vendorName: string | null;
+  vendorSearch: string;
+  vendorEditing: boolean;
+  newVendorName: string;
+  shippingOrigin: ShippingOrigin;
+  incoterm: Incoterm;
+  unitCost: string;
+  quantity: string;
+  freight: string;
+  insurance: string;
+  customsBroker: string;
+  dutiesPct: string;
+  handling: string;
+  testing: string;
+  margin: string;
+  marginMode: Mode;
+  savedAt: string | null;
+};
+
+function newTabId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `tab-${crypto.randomUUID()}`;
+  }
+  return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Defaults for a freshly added blank tab.
+function blankTab(): TabState {
+  return {
+    tabId: newTabId(),
+    label: null,
+    workflowProductUid: "",
+    vendorMode: "existing",
+    vendorId: null,
+    vendorName: null,
+    vendorSearch: "",
+    vendorEditing: true,
+    newVendorName: "",
+    shippingOrigin: "usa",
+    incoterm: "CIF",
+    unitCost: "",
+    quantity: "",
+    freight: "",
+    insurance: "",
+    customsBroker: "",
+    dutiesPct: "",
+    handling: "",
+    testing: "",
+    margin: "30",
+    marginMode: "gross-margin",
+    savedAt: null,
+  };
+}
+
+// Pull a TabState out of a saved PricingSnapshot. We can't recover the
+// vendorSearch / vendorEditing UX flags, so reset them to sensible defaults
+// based on whether a vendor was selected.
+function tabFromSnapshot(snap: PricingSnapshot): TabState {
+  const hasVendor = snap.vendorMode === "existing" && !!snap.vendorId;
+  return {
+    tabId: snap.tabId || newTabId(),
+    label: snap.label ?? null,
+    workflowProductUid: snap.workflowProductUid || "",
+    vendorMode: snap.vendorMode,
+    vendorId: snap.vendorId,
+    vendorName: snap.vendorLabel,
+    vendorSearch: hasVendor ? (snap.vendorLabel ?? "") : "",
+    vendorEditing: !hasVendor,
+    newVendorName: snap.newVendorName,
+    shippingOrigin: snap.shippingOrigin,
+    incoterm: snap.incoterm,
+    unitCost: snap.unitCost,
+    quantity: snap.quantity,
+    freight: snap.freight,
+    insurance: snap.insurance,
+    customsBroker: snap.customsBroker,
+    dutiesPct: snap.dutiesPct,
+    handling: snap.handling,
+    testing: snap.testing,
+    margin: snap.margin,
+    marginMode: snap.marginMode,
+    savedAt: snap.savedAt,
+  };
+}
+
+// Extracted math — used by both the live useMemo for the active tab and the
+// save handler when it needs to snapshot results for inactive tabs.
+function computeResults(input: {
+  unitCost: string;
+  quantity: string;
+  freight: string;
+  insurance: string;
+  customsBroker: string;
+  dutiesPct: string;
+  handling: string;
+  testing: string;
+  margin: string;
+  marginMode: Mode;
+  shippingOrigin: ShippingOrigin;
+  incoterm: Incoterm;
+}) {
+  const u = num(input.unitCost);
+  const q = num(input.quantity);
+  const visibility = input.shippingOrigin === "usa"
+    ? { freight: true, insurance: false, duties: false, customs: false }
+    : INCOTERM_FIELDS[input.incoterm];
+  const fr = visibility.freight ? num(input.freight) : 0;
+  const ins = visibility.insurance ? num(input.insurance) : 0;
+  const cb = visibility.customs ? num(input.customsBroker) : 0;
+  const dp = visibility.duties ? num(input.dutiesPct) / 100 : 0;
+  const hd = num(input.handling);
+  const ts = num(input.testing);
+  const mPct = num(input.margin) / 100;
+
+  const productCost = u * q;
+  const dutiesAmount = productCost * dp;
+  const landedTotal = productCost + fr + ins + cb + dutiesAmount + hd + ts;
+  const landedPerUnit = q > 0 ? landedTotal / q : 0;
+  let salePerUnit = 0;
+  if (landedPerUnit > 0) {
+    if (input.marginMode === "markup") {
+      salePerUnit = landedPerUnit * (1 + mPct);
+    } else {
+      const capped = Math.min(mPct, 0.9999);
+      salePerUnit = landedPerUnit / (1 - capped);
+    }
+  }
+  const totalRevenue = salePerUnit * q;
+  const grossProfit = totalRevenue - landedTotal;
+  const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
+  const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
+
+  return {
+    productCost,
+    dutiesAmount,
+    landedTotal,
+    landedPerUnit,
+    salePerUnit,
+    totalRevenue,
+    grossProfit,
+    effectiveMargin,
+    effectiveMarkup,
+    hasInputs: u > 0 && q > 0,
+  };
+}
 
 export default function PricingCalculator({
   workflowProducts,
   workflowLabel,
   workflowId,
   workflowState,
-  pricingByProductUid,
+  initialPricingTabs,
 }: Props) {
+  // --- Tabs ------------------------------------------------------------
+  // Excel-style tabs at the top. Each tab is one independent calculator
+  // state. Switching tabs writes the current input state into the old
+  // tab's slot, then hydrates from the new tab's slot.
+  const [tabs, setTabs] = useState<TabState[]>(() =>
+    initialPricingTabs.length > 0
+      ? initialPricingTabs.map(tabFromSnapshot)
+      : [blankTab()],
+  );
+  const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
+  // Auto-numbered fallback when a tab doesn't have a label / picked product.
+  // We just use "Tab N" based on display position.
+
   // --- Workflow product picker ----------------------------------------
   // Only relevant when we were launched from a workflow. "" means "not picked"
-  // — the dropdown shows "Choose product" in that state.
-  const [workflowProductUid, setWorkflowProductUid] = useState<string>("");
+  // — the dropdown shows "Choose product" in that state. Tab-scoped.
+  const [workflowProductUid, setWorkflowProductUid] = useState<string>(
+    () => tabs[0]?.workflowProductUid ?? "",
+  );
 
   // --- Save-to-workflow state ----------------------------------------
   // Only used when workflowId is set. We track the in-flight save plus the
   // last-known save timestamp so the UI can render "Saved · just now".
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    () => tabs[0]?.savedAt ?? null,
+  );
 
   const pickedProduct = useMemo(
     () => workflowProducts.find((p) => p.uid === workflowProductUid) ?? null,
@@ -191,19 +363,30 @@ export default function PricingCalculator({
 
   // --- Vendor picker --------------------------------------------------
   // Mirrors the customer selector UX on /start: toggle between existing
-  // (autocomplete from vendors table) and new (free-text). The selected
-  // vendor never gets persisted by this page — it's purely informational
-  // for the user while they explore pricing.
-  const [vendorMode, setVendorMode] = useState<VendorMode>("existing");
-  const [vendorId, setVendorId] = useState<string | null>(null);
-  const [vendorName, setVendorName] = useState<string | null>(null);
-  const [vendorSearch, setVendorSearch] = useState<string>("");
+  // (autocomplete from vendors table) and new (free-text). All vendor
+  // fields are tab-scoped — switching tabs replaces them via applyTab.
+  const [vendorMode, setVendorMode] = useState<VendorMode>(
+    () => tabs[0]?.vendorMode ?? "existing",
+  );
+  const [vendorId, setVendorId] = useState<string | null>(
+    () => tabs[0]?.vendorId ?? null,
+  );
+  const [vendorName, setVendorName] = useState<string | null>(
+    () => tabs[0]?.vendorName ?? null,
+  );
+  const [vendorSearch, setVendorSearch] = useState<string>(
+    () => tabs[0]?.vendorSearch ?? "",
+  );
   const [vendorResults, setVendorResults] = useState<VendorRow[]>([]);
   const [vendorSearching, setVendorSearching] = useState(false);
   // True when the user is actively browsing the dropdown — once they pick a
   // vendor we collapse the search list. The "Change" link reopens it.
-  const [vendorEditing, setVendorEditing] = useState(true);
-  const [newVendorName, setNewVendorName] = useState<string>("");
+  const [vendorEditing, setVendorEditing] = useState(
+    () => tabs[0]?.vendorEditing ?? true,
+  );
+  const [newVendorName, setNewVendorName] = useState<string>(
+    () => tabs[0]?.newVendorName ?? "",
+  );
 
   // Debounced search against the vendors table. We use ilike so any
   // substring matches, matching how the customer selector behaves.
@@ -278,24 +461,36 @@ export default function PricingCalculator({
         : null;
 
   // --- Inputs ----------------------------------------------------------
-  const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>("usa");
+  // Every cost-input hook seeds from tabs[0] so a workflow that already has
+  // saved tabs lands on the first tab pre-filled. Switching tabs writes the
+  // current values into the previous tab and replays setters with the new
+  // tab's values (see switchTab below).
+  const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>(
+    () => tabs[0]?.shippingOrigin ?? "usa",
+  );
   // Default Incoterm. Only meaningful when shippingOrigin is "international".
   // CIF is the most common term we quote against — supplier pays freight +
   // insurance to the destination port and we cover duties + customs.
-  const [incoterm, setIncoterm] = useState<Incoterm>("CIF");
-  const [unitCost, setUnitCost] = useState<string>("");
-  const [quantity, setQuantity] = useState<string>("");
-  const [freight, setFreight] = useState<string>("");
+  const [incoterm, setIncoterm] = useState<Incoterm>(
+    () => tabs[0]?.incoterm ?? "CIF",
+  );
+  const [unitCost, setUnitCost] = useState<string>(() => tabs[0]?.unitCost ?? "");
+  const [quantity, setQuantity] = useState<string>(() => tabs[0]?.quantity ?? "");
+  const [freight, setFreight] = useState<string>(() => tabs[0]?.freight ?? "");
   // International-shipment specific cost slots. Each is a total-dollar
   // amount distributed across qty (same as freight/handling).
-  const [insurance, setInsurance] = useState<string>("");
-  const [customsBroker, setCustomsBroker] = useState<string>("");
-  const [dutiesPct, setDutiesPct] = useState<string>("");
-  const [handling, setHandling] = useState<string>("");
+  const [insurance, setInsurance] = useState<string>(() => tabs[0]?.insurance ?? "");
+  const [customsBroker, setCustomsBroker] = useState<string>(
+    () => tabs[0]?.customsBroker ?? "",
+  );
+  const [dutiesPct, setDutiesPct] = useState<string>(() => tabs[0]?.dutiesPct ?? "");
+  const [handling, setHandling] = useState<string>(() => tabs[0]?.handling ?? "");
   // Lab / analytical testing fee. Constant on all terms — always shown.
-  const [testing, setTesting] = useState<string>("");
-  const [margin, setMargin] = useState<string>("30");
-  const [marginMode, setMarginMode] = useState<Mode>("gross-margin");
+  const [testing, setTesting] = useState<string>(() => tabs[0]?.testing ?? "");
+  const [margin, setMargin] = useState<string>(() => tabs[0]?.margin ?? "30");
+  const [marginMode, setMarginMode] = useState<Mode>(
+    () => tabs[0]?.marginMode ?? "gross-margin",
+  );
 
   // Which buyer-side cost inputs to show for the current shipping mode.
   // For USA we hide everything Incoterm-related and only keep freight +
@@ -304,52 +499,11 @@ export default function PricingCalculator({
     ? { freight: true, insurance: false, duties: false, customs: false }
     : INCOTERM_FIELDS[incoterm];
 
-  // When the user picks a workflow product:
-  //   - If we have a saved pricing snapshot for that product, hydrate every
-  //     calculator field from it (lossless re-edit of the saved calculation).
-  //   - Otherwise, just copy the product's quantity into the qty field
-  //     (overwriting whatever was there). They can still edit afterwards.
+  // When the user picks a workflow product, copy its quantity into the qty
+  // field (overwriting whatever was there). Saved-snapshot hydration lives
+  // at the tab level now — switching tabs handles the full hydrate path.
   const onPickWorkflowProduct = (uid: string) => {
     setWorkflowProductUid(uid);
-    const snap = uid ? pricingByProductUid[uid] : undefined;
-    if (snap) {
-      // --- Hydrate from saved snapshot ---
-      setShippingOrigin(snap.shippingOrigin);
-      setIncoterm(snap.incoterm);
-      setUnitCost(snap.unitCost);
-      setQuantity(snap.quantity);
-      setFreight(snap.freight);
-      setInsurance(snap.insurance);
-      setCustomsBroker(snap.customsBroker);
-      setDutiesPct(snap.dutiesPct);
-      setHandling(snap.handling);
-      setTesting(snap.testing);
-      setMargin(snap.margin);
-      setMarginMode(snap.marginMode);
-      // Vendor: prefer the existing-vendor selection if we have an id;
-      // otherwise drop into "new" mode with the saved name.
-      if (snap.vendorMode === "existing" && snap.vendorId) {
-        setVendorMode("existing");
-        setVendorId(snap.vendorId);
-        setVendorName(snap.vendorLabel);
-        setVendorSearch(snap.vendorLabel ?? "");
-        setVendorEditing(false);
-        setVendorResults([]);
-      } else if (snap.vendorMode === "new") {
-        setVendorMode("new");
-        setNewVendorName(snap.newVendorName);
-        resetVendor();
-      } else {
-        resetVendor();
-        setNewVendorName("");
-      }
-      setLastSavedAt(snap.savedAt);
-      setSaveError(null);
-      return;
-    }
-    // No saved snapshot — fall back to default behavior.
-    setLastSavedAt(null);
-    setSaveError(null);
     const product = workflowProducts.find((p) => p.uid === uid);
     if (product?.quantity) {
       setQuantity(formatQtyInput(product.quantity));
@@ -357,78 +511,54 @@ export default function PricingCalculator({
   };
 
   // --- Can we save right now? -----------------------------------------
-  // True only when launched from a workflow AND a product has been picked
-  // AND there are usable inputs to save. The button is hidden otherwise so
-  // we don't dangle a meaningless action in the UI.
-  const canSave = !!workflowId && !!workflowState && !!workflowProductUid;
+  // True whenever the calculator was opened from a workflow. We don't gate
+  // on workflowProductUid anymore because tabs may legitimately be unlabelled
+  // (e.g. a scratch tab the user hasn't picked a product for yet).
+  const canSave = !!workflowId && !!workflowState;
 
   // --- Derived ---------------------------------------------------------
-  const results = useMemo(() => {
-    const u = num(unitCost);
-    const q = num(quantity);
-    // Only count buyer-side costs that are currently visible — when a field
-    // is hidden because the Incoterm covers it, its value drops out of the
-    // math even if the user previously typed something. Lab testing and
-    // "other fees" are always counted.
-    const fr = visibility.freight ? num(freight) : 0;
-    const ins = visibility.insurance ? num(insurance) : 0;
-    const cb = visibility.customs ? num(customsBroker) : 0;
-    const dp = visibility.duties ? num(dutiesPct) / 100 : 0;
-    const hd = num(handling);
-    const ts = num(testing);
-    const mPct = num(margin) / 100;
+  // Active-tab live results. Delegates to the shared computeResults helper
+  // so the save handler can re-derive results for inactive tabs from their
+  // stored inputs without duplicating math.
+  const results = useMemo(
+    () =>
+      computeResults({
+        unitCost,
+        quantity,
+        freight,
+        insurance,
+        customsBroker,
+        dutiesPct,
+        handling,
+        testing,
+        margin,
+        marginMode,
+        shippingOrigin,
+        incoterm,
+      }),
+    [
+      unitCost, quantity,
+      freight, insurance, customsBroker, dutiesPct, handling, testing,
+      margin, marginMode,
+      shippingOrigin, incoterm,
+    ],
+  );
 
-    const productCost = u * q;
-    const dutiesAmount = productCost * dp;
-    const landedTotal = productCost + fr + ins + cb + dutiesAmount + hd + ts;
-    const landedPerUnit = q > 0 ? landedTotal / q : 0;
-
-    let salePerUnit = 0;
-    if (landedPerUnit > 0) {
-      if (marginMode === "markup") {
-        salePerUnit = landedPerUnit * (1 + mPct);
-      } else {
-        const capped = Math.min(mPct, 0.9999);
-        salePerUnit = landedPerUnit / (1 - capped);
-      }
-    }
-    const totalRevenue = salePerUnit * q;
-    const grossProfit = totalRevenue - landedTotal;
-    const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
-    const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
-
+  // --- Tab swap helpers -----------------------------------------------
+  // Grab every current input field as a TabState. Used right before we
+  // change activeTabIndex so the previous tab keeps the user's edits.
+  function snapshotCurrentTab(): TabState {
+    const current = tabs[activeTabIndex];
     return {
-      productCost,
-      dutiesAmount,
-      landedTotal,
-      landedPerUnit,
-      salePerUnit,
-      totalRevenue,
-      grossProfit,
-      effectiveMargin,
-      effectiveMarkup,
-      hasInputs: u > 0 && q > 0,
-    };
-  }, [
-    unitCost, quantity,
-    freight, insurance, customsBroker, dutiesPct, handling, testing,
-    margin, marginMode,
-    shippingOrigin, incoterm,
-    visibility.freight, visibility.insurance, visibility.duties, visibility.customs,
-  ]);
-
-  // Build the snapshot we'd persist if the user hit Save right now. Pulls
-  // every relevant input + the freshly-computed results. The vendor label
-  // is whatever's currently displayed (existing pick or typed new name) so
-  // the workflow view can show vendor context without re-joining.
-  const buildSnapshot = (): PricingSnapshot => {
-    const vendorLabel =
-      vendorMode === "existing" ? vendorName : newVendorName.trim() || null;
-    return {
+      tabId: current?.tabId ?? newTabId(),
+      label: current?.label ?? null,
+      workflowProductUid,
       vendorMode,
-      vendorId: vendorMode === "existing" ? vendorId : null,
-      vendorLabel,
-      newVendorName: vendorMode === "new" ? newVendorName : "",
+      vendorId,
+      vendorName,
+      vendorSearch,
+      vendorEditing,
+      newVendorName,
       shippingOrigin,
       incoterm,
       unitCost,
@@ -441,32 +571,166 @@ export default function PricingCalculator({
       testing,
       margin,
       marginMode,
+      savedAt: lastSavedAt,
+    };
+  }
+
+  // Push a TabState into every input setter. Order-sensitive only inasmuch as
+  // React batches setters in event handlers, so we don't need to be careful.
+  function applyTab(t: TabState) {
+    setWorkflowProductUid(t.workflowProductUid);
+    setVendorMode(t.vendorMode);
+    setVendorId(t.vendorId);
+    setVendorName(t.vendorName);
+    setVendorSearch(t.vendorSearch);
+    setVendorEditing(t.vendorEditing);
+    setVendorResults([]);
+    setNewVendorName(t.newVendorName);
+    setShippingOrigin(t.shippingOrigin);
+    setIncoterm(t.incoterm);
+    setUnitCost(t.unitCost);
+    setQuantity(t.quantity);
+    setFreight(t.freight);
+    setInsurance(t.insurance);
+    setCustomsBroker(t.customsBroker);
+    setDutiesPct(t.dutiesPct);
+    setHandling(t.handling);
+    setTesting(t.testing);
+    setMargin(t.margin);
+    setMarginMode(t.marginMode);
+    setLastSavedAt(t.savedAt);
+    setSaveError(null);
+  }
+
+  function switchTab(newIndex: number) {
+    if (newIndex === activeTabIndex) return;
+    if (newIndex < 0 || newIndex >= tabs.length) return;
+    const snap = snapshotCurrentTab();
+    setTabs((prev) =>
+      prev.map((t, i) => (i === activeTabIndex ? snap : t)),
+    );
+    setActiveTabIndex(newIndex);
+    applyTab(tabs[newIndex]);
+  }
+
+  function addTab() {
+    const snap = snapshotCurrentTab();
+    const fresh = blankTab();
+    setTabs((prev) => [
+      ...prev.map((t, i) => (i === activeTabIndex ? snap : t)),
+      fresh,
+    ]);
+    // The new tab is at the end of the freshly-extended array.
+    setActiveTabIndex(tabs.length);
+    applyTab(fresh);
+  }
+
+  function removeTab(index: number) {
+    if (tabs.length <= 1) return; // always keep at least one tab
+    const nextTabs = tabs.filter((_, i) => i !== index);
+    setTabs(nextTabs);
+    if (index === activeTabIndex) {
+      // Closing the active tab — focus the neighbour to the left (or 0).
+      const newIndex = Math.max(0, index - 1);
+      setActiveTabIndex(newIndex);
+      applyTab(nextTabs[newIndex]);
+    } else if (index < activeTabIndex) {
+      // Closing a tab to the left of the active one shifts our index down.
+      setActiveTabIndex(activeTabIndex - 1);
+    }
+  }
+
+  // Update just the active tab's label (used by the inline tab-rename UI).
+  function setActiveTabLabel(next: string) {
+    const trimmed = next.trim();
+    setTabs((prev) =>
+      prev.map((t, i) =>
+        i === activeTabIndex ? { ...t, label: trimmed.length === 0 ? null : trimmed } : t,
+      ),
+    );
+  }
+
+  // Display labels for the tab bar. Falls back to picked-product name, then
+  // to "Tab N" so every tab has something visible.
+  const tabDisplayLabels = useMemo(() => {
+    return tabs.map((t, i) => {
+      if (t.label && t.label.trim().length > 0) return t.label.trim();
+      const picked = workflowProducts.find((p) => p.uid === t.workflowProductUid);
+      if (picked) return picked.label;
+      return `Tab ${i + 1}`;
+    });
+  }, [tabs, workflowProducts]);
+
+  // Take a TabState → PricingSnapshot ready for the workflow PUT. We
+  // re-derive `result` from the inputs so each tab (even inactive ones)
+  // carries an accurate result snapshot.
+  function snapshotFromTab(t: TabState, fallbackSavedAt: string): PricingSnapshot {
+    const r = computeResults({
+      unitCost: t.unitCost,
+      quantity: t.quantity,
+      freight: t.freight,
+      insurance: t.insurance,
+      customsBroker: t.customsBroker,
+      dutiesPct: t.dutiesPct,
+      handling: t.handling,
+      testing: t.testing,
+      margin: t.margin,
+      marginMode: t.marginMode,
+      shippingOrigin: t.shippingOrigin,
+      incoterm: t.incoterm,
+    });
+    const vendorLabel =
+      t.vendorMode === "existing" ? t.vendorName : t.newVendorName.trim() || null;
+    return {
+      tabId: t.tabId,
+      label: t.label,
+      workflowProductUid: t.workflowProductUid,
+      vendorMode: t.vendorMode,
+      vendorId: t.vendorMode === "existing" ? t.vendorId : null,
+      vendorLabel,
+      newVendorName: t.vendorMode === "new" ? t.newVendorName : "",
+      shippingOrigin: t.shippingOrigin,
+      incoterm: t.incoterm,
+      unitCost: t.unitCost,
+      quantity: t.quantity,
+      freight: t.freight,
+      insurance: t.insurance,
+      customsBroker: t.customsBroker,
+      dutiesPct: t.dutiesPct,
+      handling: t.handling,
+      testing: t.testing,
+      margin: t.margin,
+      marginMode: t.marginMode,
       result: {
-        landedTotal: results.landedTotal,
-        landedPerUnit: results.landedPerUnit,
-        salePerUnit: results.salePerUnit,
-        totalRevenue: results.totalRevenue,
-        grossProfit: results.grossProfit,
-        effectiveMargin: results.effectiveMargin,
-        effectiveMarkup: results.effectiveMarkup,
+        landedTotal: r.landedTotal,
+        landedPerUnit: r.landedPerUnit,
+        salePerUnit: r.salePerUnit,
+        totalRevenue: r.totalRevenue,
+        grossProfit: r.grossProfit,
+        effectiveMargin: r.effectiveMargin,
+        effectiveMarkup: r.effectiveMarkup,
       },
-      savedAt: new Date().toISOString(),
-      // Server validates the user, so we just pass a hint here for the UI
-      // — actual auth identity is rederived server-side on the PUT.
+      savedAt: t.savedAt ?? fallbackSavedAt,
       savedByEmail: "",
     };
-  };
+  }
 
   const onSave = async () => {
-    if (!workflowId || !workflowState || !workflowProductUid) return;
+    if (!workflowId || !workflowState) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const snap = buildSnapshot();
-      const nextPricing: Record<string, PricingSnapshot> = {
-        ...(workflowState.pricing ?? {}),
-        [workflowProductUid]: snap,
-      };
+      // Snapshot the active tab into the tabs array first so we capture
+      // the user's latest edits in this exact save.
+      const now = new Date().toISOString();
+      const currentSnap = snapshotCurrentTab();
+      const stampedActive: TabState = { ...currentSnap, savedAt: now };
+      const nextTabs = tabs.map((t, i) =>
+        i === activeTabIndex ? stampedActive : t,
+      );
+      // Build PricingSnapshot[] for every tab — inactive tabs use their
+      // existing savedAt if present, otherwise the same `now` stamp.
+      const nextPricing = nextTabs.map((t) => snapshotFromTab(t, now));
       const nextState: WorkflowState = {
         ...workflowState,
         pricing: nextPricing,
@@ -480,11 +744,8 @@ export default function PricingCalculator({
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error || `save_failed_${res.status}`);
       }
-      setLastSavedAt(snap.savedAt);
-      // Mutate the in-memory map so subsequent product switches see the
-      // latest snapshot without a round-trip. The server is source of truth
-      // — on next page load it'll come back identically.
-      pricingByProductUid[workflowProductUid] = snap;
+      setTabs(nextTabs);
+      setLastSavedAt(now);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "save_failed");
     } finally {
@@ -513,6 +774,142 @@ export default function PricingCalculator({
 
   return (
     <div className="pricing">
+      {canSave ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "10px 14px",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: 10,
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "#64748b" }}>
+              Workflow
+              {workflowLabel ? ` ${workflowLabel}` : ""}
+            </span>
+            {saveError ? (
+              <span style={{ fontSize: 13, color: "#b91c1c" }}>
+                Couldn&rsquo;t save: {saveError}
+              </span>
+            ) : lastSavedAt ? (
+              <span style={{ fontSize: 13, color: "#64748b" }}>
+                · Saved {relativeFromNow(lastSavedAt)}
+              </span>
+            ) : (
+              <span style={{ fontSize: 13, color: "#64748b" }}>
+                · Not yet saved
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="button-primary"
+            onClick={onSave}
+            disabled={saving}
+            title="Save every tab on this calculator to the workflow"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Excel-style tab bar. Only meaningful in workflow context — outside
+          a workflow the user has no place to save the tab anyway, so we hide
+          the bar entirely. */}
+      {canSave ? (
+      <div
+        role="tablist"
+        aria-label="Pricing tabs"
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 4,
+          borderBottom: "1px solid #e2e8f0",
+          marginBottom: 14,
+          overflowX: "auto",
+        }}
+      >
+        {tabs.map((t, i) => {
+          const active = i === activeTabIndex;
+          const label = tabDisplayLabels[i];
+          return (
+            <div
+              key={t.tabId}
+              role="tab"
+              aria-selected={active}
+              onClick={() => switchTab(i)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 12px",
+                borderTopLeftRadius: 8,
+                borderTopRightRadius: 8,
+                border: "1px solid #e2e8f0",
+                borderBottom: active ? "1px solid #fff" : "1px solid #e2e8f0",
+                background: active ? "#fff" : "#f1f5f9",
+                cursor: active ? "default" : "pointer",
+                fontSize: 14,
+                fontWeight: active ? 600 : 500,
+                color: active ? "#0f172a" : "#475569",
+                marginBottom: -1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span>{label}</span>
+              {tabs.length > 1 ? (
+                <button
+                  type="button"
+                  aria-label={`Close ${label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Remove "${label}" tab?`)) {
+                      removeTab(i);
+                    }
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    lineHeight: 1,
+                    padding: "0 2px",
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          onClick={addTab}
+          title="Add a new pricing tab"
+          style={{
+            background: "transparent",
+            border: "1px dashed #cbd5e1",
+            borderRadius: 8,
+            padding: "6px 10px",
+            color: "#475569",
+            cursor: "pointer",
+            fontSize: 13,
+            marginLeft: 4,
+            marginBottom: 0,
+          }}
+        >
+          + Add tab
+        </button>
+      </div>
+      ) : null}
+
       {workflowProducts.length > 0 ? (
         <section className="pricing__section">
           <h2 className="pricing__section-title">
@@ -540,11 +937,24 @@ export default function PricingCalculator({
               </select>
             </div>
           </label>
+          <label className="pricing__field" style={{ marginTop: 10 }}>
+            <span className="pricing__label">Tab label (optional)</span>
+            <div className="pricing__input-wrap">
+              <input
+                type="text"
+                className="pricing__input"
+                value={tabs[activeTabIndex]?.label ?? ""}
+                onChange={(e) => setActiveTabLabel(e.target.value)}
+                placeholder={tabDisplayLabels[activeTabIndex] ?? ""}
+                maxLength={48}
+              />
+            </div>
+          </label>
           {pickedProduct ? (
             <p className="pricing__hint">
-              {lastSavedAt
-                ? <>Loaded a saved calculation for <strong>{pickedProduct.label}</strong>. Edit anything you want and hit Save to overwrite it.</>
-                : <>Picking <strong>{pickedProduct.label}</strong> filled in the quantity below — adjust it if you&rsquo;re pricing a different run size.</>}
+              Pricing <strong>{pickedProduct.label}</strong>. Each tab carries
+              its own product + costs, so use <em>+ Add tab</em> above to
+              quote another product without losing this one.
             </p>
           ) : (
             <p className="pricing__hint">
@@ -552,44 +962,6 @@ export default function PricingCalculator({
               quantity from that product will pre-fill below.
             </p>
           )}
-          {canSave ? (
-            <div
-              style={{
-                marginTop: 12,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <button
-                type="button"
-                className="button-primary"
-                onClick={onSave}
-                disabled={saving || !results.hasInputs}
-                title={
-                  !results.hasInputs
-                    ? "Enter a unit cost and quantity first"
-                    : "Save this calculation to the workflow"
-                }
-              >
-                {saving ? "Saving…" : "Save to workflow"}
-              </button>
-              {saveError ? (
-                <span style={{ fontSize: 13, color: "#b91c1c" }}>
-                  Couldn&rsquo;t save: {saveError}
-                </span>
-              ) : lastSavedAt ? (
-                <span style={{ fontSize: 13, color: "#64748b" }}>
-                  Saved {relativeFromNow(lastSavedAt)}
-                </span>
-              ) : (
-                <span style={{ fontSize: 13, color: "#64748b" }}>
-                  Not yet saved for this product.
-                </span>
-              )}
-            </div>
-          ) : null}
         </section>
       ) : null}
 

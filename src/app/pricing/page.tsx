@@ -38,7 +38,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
   let workflowProducts: WorkflowProductOption[] = [];
   let workflowLabel: string | null = null;
   let workflowState: WorkflowState | null = null;
-  let pricingByProductUid: Record<string, PricingSnapshot> = {};
+  // Initial tab snapshots — normalised to an array even if an older row used
+  // the keyed-by-product shape (Record<productUid, snapshot>).
+  let initialPricingTabs: PricingSnapshot[] = [];
   if (from) {
     const { data: workflowRow } = await supabase
       .from("workflows")
@@ -49,7 +51,24 @@ export default async function PricingPage({ searchParams }: Ctx) {
       const w = workflowRow as Pick<WorkflowRow, "id" | "quote_number" | "state">;
       workflowLabel = formatQuoteNumber(w.quote_number);
       workflowState = w.state;
-      pricingByProductUid = w.state.pricing ?? {};
+      // Accept both shapes for backward compatibility:
+      //   - PricingSnapshot[] (current)
+      //   - Record<productUid, PricingSnapshot> (legacy) → map to array,
+      //     synthesising a tabId from the key if the snapshot doesn't carry one.
+      const rawPricing = w.state.pricing as
+        | PricingSnapshot[]
+        | Record<string, PricingSnapshot>
+        | undefined;
+      if (Array.isArray(rawPricing)) {
+        initialPricingTabs = rawPricing;
+      } else if (rawPricing && typeof rawPricing === "object") {
+        initialPricingTabs = Object.entries(rawPricing).map(([key, snap]) => ({
+          ...snap,
+          tabId: snap.tabId || `legacy-${key}`,
+          label: snap.label ?? null,
+          workflowProductUid: snap.workflowProductUid || key,
+        }));
+      }
       const products = w.state.products ?? [];
 
       // Hydrate names for existing products via one bulk SELECT.
@@ -117,7 +136,7 @@ export default async function PricingPage({ searchParams }: Ctx) {
             workflowLabel={workflowLabel}
             workflowId={from ?? null}
             workflowState={workflowState}
-            pricingByProductUid={pricingByProductUid}
+            initialPricingTabs={initialPricingTabs}
           />
 
           <a href={backHref} className="backlink">
