@@ -237,7 +237,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
   // --- Inputs ----------------------------------------------------------
   const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>("usa");
   // Default Incoterm. Only meaningful when shippingOrigin is "international".
-  const [incoterm, setIncoterm] = useState<Incoterm>("FOB");
+  // CIF is the most common term we quote against — supplier pays freight +
+  // insurance to the destination port and we cover duties + customs.
+  const [incoterm, setIncoterm] = useState<Incoterm>("CIF");
   const [unitCost, setUnitCost] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [freight, setFreight] = useState<string>("");
@@ -327,7 +329,7 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
   const reset = () => {
     setWorkflowProductUid("");
     setShippingOrigin("usa");
-    setIncoterm("FOB");
+    setIncoterm("CIF");
     setUnitCost("");
     setQuantity("");
     setFreight("");
