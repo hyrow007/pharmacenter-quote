@@ -15,6 +15,43 @@ type VendorMode = "existing" | "new";
 // product cost stays whatever the user types regardless of origin.
 type ShippingOrigin = "usa" | "international";
 
+// Incoterms 2020 for international shipments. Each term flips which cost
+// inputs the buyer is responsible for. The matrix below (INCOTERM_FIELDS)
+// is the source of truth — change there to update the visible inputs.
+type Incoterm = "EXW" | "FOB" | "CFR" | "CIF" | "DAP" | "DDP";
+
+const INCOTERM_LABELS: Record<Incoterm, string> = {
+  EXW: "EXW — Ex Works",
+  FOB: "FOB — Free On Board",
+  CFR: "CFR — Cost & Freight",
+  CIF: "CIF — Cost, Insurance & Freight",
+  DAP: "DAP — Delivered at Place",
+  DDP: "DDP — Delivered Duty Paid",
+};
+
+const INCOTERM_DESCRIPTIONS: Record<Incoterm, string> = {
+  EXW: "You pay everything from the supplier's door — international freight, insurance, duties, and customs clearance.",
+  FOB: "Supplier delivers to the ship at the origin port. You pay international freight, insurance, duties, and customs clearance.",
+  CFR: "Supplier pays freight to the destination port. You pay insurance, duties, and customs clearance.",
+  CIF: "Supplier pays freight + insurance to the destination port. You pay duties and customs clearance.",
+  DAP: "Supplier delivers to the place you name. You pay duties and customs clearance.",
+  DDP: "Supplier handles everything including duties. Your only extras are lab testing and any other miscellaneous fees.",
+};
+
+// Which buyer-side cost fields show up for each Incoterm. Lab testing and
+// "other fees" are always shown (constants across all terms).
+const INCOTERM_FIELDS: Record<
+  Incoterm,
+  { freight: boolean; insurance: boolean; duties: boolean; customs: boolean }
+> = {
+  EXW: { freight: true, insurance: true, duties: true, customs: true },
+  FOB: { freight: true, insurance: true, duties: true, customs: true },
+  CFR: { freight: false, insurance: true, duties: true, customs: true },
+  CIF: { freight: false, insurance: false, duties: true, customs: true },
+  DAP: { freight: false, insurance: false, duties: true, customs: true },
+  DDP: { freight: false, insurance: false, duties: false, customs: false },
+};
+
 // Per-workflow-product dropdown option passed in from the server.
 export type WorkflowProductOption = {
   uid: string;
@@ -199,17 +236,28 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
 
   // --- Inputs ----------------------------------------------------------
   const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>("usa");
+  // Default Incoterm. Only meaningful when shippingOrigin is "international".
+  const [incoterm, setIncoterm] = useState<Incoterm>("FOB");
   const [unitCost, setUnitCost] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [freight, setFreight] = useState<string>("");
+  // International-shipment specific cost slots. Each is a total-dollar
+  // amount distributed across qty (same as freight/handling).
+  const [insurance, setInsurance] = useState<string>("");
+  const [customsBroker, setCustomsBroker] = useState<string>("");
   const [dutiesPct, setDutiesPct] = useState<string>("");
   const [handling, setHandling] = useState<string>("");
-  // Lab / analytical testing fee. Usually a flat per-batch charge from a
-  // third-party testing lab; we treat it like freight/handling — total
-  // dollars added to landed cost and distributed across the full qty.
+  // Lab / analytical testing fee. Constant on all terms — always shown.
   const [testing, setTesting] = useState<string>("");
   const [margin, setMargin] = useState<string>("30");
   const [marginMode, setMarginMode] = useState<Mode>("gross-margin");
+
+  // Which buyer-side cost inputs to show for the current shipping mode.
+  // For USA we hide everything Incoterm-related and only keep freight +
+  // testing + other fees. For international we let the Incoterm decide.
+  const visibility = shippingOrigin === "usa"
+    ? { freight: true, insurance: false, duties: false, customs: false }
+    : INCOTERM_FIELDS[incoterm];
 
   // When the user picks a workflow product, copy its quantity into the qty
   // field (overwriting whatever was there). They can still edit afterwards.
@@ -225,17 +273,21 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
   const results = useMemo(() => {
     const u = num(unitCost);
     const q = num(quantity);
-    const fr = num(freight);
-    // Domestic (USA) shipments don't pay customs duties — treat the duties
-    // percentage as zero regardless of what the (hidden) input holds.
-    const dp = shippingOrigin === "usa" ? 0 : num(dutiesPct) / 100;
+    // Only count buyer-side costs that are currently visible — when a field
+    // is hidden because the Incoterm covers it, its value drops out of the
+    // math even if the user previously typed something. Lab testing and
+    // "other fees" are always counted.
+    const fr = visibility.freight ? num(freight) : 0;
+    const ins = visibility.insurance ? num(insurance) : 0;
+    const cb = visibility.customs ? num(customsBroker) : 0;
+    const dp = visibility.duties ? num(dutiesPct) / 100 : 0;
     const hd = num(handling);
     const ts = num(testing);
     const mPct = num(margin) / 100;
 
     const productCost = u * q;
     const dutiesAmount = productCost * dp;
-    const landedTotal = productCost + fr + dutiesAmount + hd + ts;
+    const landedTotal = productCost + fr + ins + cb + dutiesAmount + hd + ts;
     const landedPerUnit = q > 0 ? landedTotal / q : 0;
 
     let salePerUnit = 0;
@@ -264,14 +316,23 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
       effectiveMarkup,
       hasInputs: u > 0 && q > 0,
     };
-  }, [unitCost, quantity, freight, dutiesPct, handling, testing, margin, marginMode, shippingOrigin]);
+  }, [
+    unitCost, quantity,
+    freight, insurance, customsBroker, dutiesPct, handling, testing,
+    margin, marginMode,
+    shippingOrigin, incoterm,
+    visibility.freight, visibility.insurance, visibility.duties, visibility.customs,
+  ]);
 
   const reset = () => {
     setWorkflowProductUid("");
     setShippingOrigin("usa");
+    setIncoterm("FOB");
     setUnitCost("");
     setQuantity("");
     setFreight("");
+    setInsurance("");
+    setCustomsBroker("");
     setDutiesPct("");
     setHandling("");
     setTesting("");
@@ -474,50 +535,96 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
 
       <section className="pricing__section">
         <h2 className="pricing__section-title">Inbound costs</h2>
-        <div className="pricing__field" style={{ marginBottom: 14 }}>
-          <span className="pricing__label">Shipping origin</span>
-          <div
-            className="pricing__mode-toggle"
-            role="radiogroup"
-            aria-label="Shipping origin"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={shippingOrigin === "usa"}
-              className={`pricing__mode ${shippingOrigin === "usa" ? "pricing__mode--active" : ""}`}
-              onClick={() => setShippingOrigin("usa")}
-            >
-              USA (domestic)
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={shippingOrigin === "international"}
-              className={`pricing__mode ${shippingOrigin === "international" ? "pricing__mode--active" : ""}`}
-              onClick={() => setShippingOrigin("international")}
-            >
-              International
-            </button>
-          </div>
-        </div>
         <div className="pricing__row">
-          <label className="pricing__field">
-            <span className="pricing__label">Freight (total)</span>
-            <div className="pricing__input-wrap">
-              <span className="pricing__input-prefix">$</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                className="pricing__input pricing__input--money"
-                value={freight}
-                onChange={(e) => setFreight(formatValueInput(e.target.value))}
-                placeholder="0.00"
-                autoComplete="off"
-              />
+          <div className="pricing__field">
+            <span className="pricing__label">Shipping origin</span>
+            <div
+              className="pricing__mode-toggle"
+              role="radiogroup"
+              aria-label="Shipping origin"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={shippingOrigin === "usa"}
+                className={`pricing__mode ${shippingOrigin === "usa" ? "pricing__mode--active" : ""}`}
+                onClick={() => setShippingOrigin("usa")}
+              >
+                USA (domestic)
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={shippingOrigin === "international"}
+                className={`pricing__mode ${shippingOrigin === "international" ? "pricing__mode--active" : ""}`}
+                onClick={() => setShippingOrigin("international")}
+              >
+                International
+              </button>
             </div>
-          </label>
+          </div>
           {shippingOrigin === "international" ? (
+            <label className="pricing__field">
+              <span className="pricing__label">Shipping terms (Incoterm)</span>
+              <div className="pricing__input-wrap">
+                <select
+                  className="pricing__input pricing__input--select"
+                  value={incoterm}
+                  onChange={(e) => setIncoterm(e.target.value as Incoterm)}
+                >
+                  {(Object.keys(INCOTERM_LABELS) as Incoterm[]).map((t) => (
+                    <option key={t} value={t}>{INCOTERM_LABELS[t]}</option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          ) : null}
+        </div>
+
+        {shippingOrigin === "international" ? (
+          <p className="pricing__hint" style={{ marginTop: 10, marginBottom: 14 }}>
+            {INCOTERM_DESCRIPTIONS[incoterm]}
+          </p>
+        ) : null}
+
+        <div className="pricing__row" style={{ marginTop: 4 }}>
+          {visibility.freight ? (
+            <label className="pricing__field">
+              <span className="pricing__label">
+                {shippingOrigin === "international" ? "Freight (international + inland)" : "Freight (total)"}
+              </span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={freight}
+                  onChange={(e) => setFreight(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
+              </div>
+            </label>
+          ) : null}
+          {visibility.insurance ? (
+            <label className="pricing__field">
+              <span className="pricing__label">Insurance</span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={insurance}
+                  onChange={(e) => setInsurance(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
+              </div>
+            </label>
+          ) : null}
+          {visibility.duties ? (
             <label className="pricing__field">
               <span className="pricing__label">Duties</span>
               <div className="pricing__input-wrap">
@@ -531,6 +638,23 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
                   autoComplete="off"
                 />
                 <span className="pricing__input-suffix">%</span>
+              </div>
+            </label>
+          ) : null}
+          {visibility.customs ? (
+            <label className="pricing__field">
+              <span className="pricing__label">Customs broker</span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={customsBroker}
+                  onChange={(e) => setCustomsBroker(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
               </div>
             </label>
           ) : null}
@@ -566,9 +690,9 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           </label>
         </div>
         <p className="pricing__hint">
-          {shippingOrigin === "international"
-            ? "Duties are applied as a percent of the product cost. Freight, lab testing, and other fees are total dollar amounts distributed across the full quantity."
-            : "Domestic shipments — no customs duties. Freight, lab testing, and other fees are total dollar amounts distributed across the full quantity."}
+          {visibility.duties
+            ? "Duties are applied as a percent of the product cost. All other inbound costs are total dollar amounts distributed across the full quantity."
+            : "All inbound costs shown are total dollar amounts distributed across the full quantity."}
         </p>
       </section>
 
@@ -659,10 +783,18 @@ export default function PricingCalculator({ workflowProducts, workflowLabel }: P
           <>
             <div className="pricing__breakdown">
               <Row label="Product cost subtotal" value={usd.format(results.productCost)} />
-              {shippingOrigin === "international" ? (
+              {visibility.duties ? (
                 <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
               ) : null}
-              <Row label="Freight" value={usd.format(num(freight))} muted />
+              {visibility.freight ? (
+                <Row label="Freight" value={usd.format(num(freight))} muted />
+              ) : null}
+              {visibility.insurance ? (
+                <Row label="Insurance" value={usd.format(num(insurance))} muted />
+              ) : null}
+              {visibility.customs ? (
+                <Row label="Customs broker" value={usd.format(num(customsBroker))} muted />
+              ) : null}
               <Row label="Lab testing" value={usd.format(num(testing))} muted />
               <Row label="Other fees" value={usd.format(num(handling))} muted />
               <Row
