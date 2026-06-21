@@ -31,6 +31,49 @@ export type ProductEntry = {
   _code?: string | null;
 };
 
+// A saved pricing-calculator snapshot tied to one workflow product.
+// All money/percent inputs are stored as their string representation (matches
+// what the calculator UI uses) so re-hydration is lossless. Results are also
+// included so the workflow detail view can summarise without re-doing math.
+export type PricingSnapshot = {
+  // Vendor context — either a saved vendor row or a free-form new vendor name
+  // typed in the calculator.
+  vendorMode: "existing" | "new";
+  vendorId: string | null;
+  vendorLabel: string | null; // human-readable vendor name at save time
+  newVendorName: string;
+
+  // Cost inputs (strings to preserve exact formatting the user typed).
+  shippingOrigin: "usa" | "international";
+  incoterm: "EXW" | "FOB" | "CFR" | "CIF" | "DAP" | "DDP";
+  unitCost: string;
+  quantity: string;
+  freight: string;
+  insurance: string;
+  customsBroker: string;
+  dutiesPct: string;
+  handling: string;
+  testing: string;
+  margin: string;
+  marginMode: "markup" | "gross-margin";
+
+  // Snapshot of computed results at the moment of save. Stored as plain
+  // numbers in dollars — useful for the workflow listing summary so it
+  // doesn't have to redo arithmetic.
+  result: {
+    landedTotal: number;
+    landedPerUnit: number;
+    salePerUnit: number;
+    totalRevenue: number;
+    grossProfit: number;
+    effectiveMargin: number;
+    effectiveMarkup: number;
+  };
+
+  savedAt: string; // ISO timestamp
+  savedByEmail: string;
+};
+
 export type WorkflowState = {
   // Storage prefix for attachments. Generated once on the client when a fresh
   // workflow is created. Stays stable even after the DB row's UUID is known.
@@ -42,6 +85,9 @@ export type WorkflowState = {
   form: string | null;
   source: string | null;
   products: ProductEntry[];
+  // Pricing snapshots keyed by ProductEntry.uid. Optional for backward
+  // compatibility with workflows created before this feature.
+  pricing?: Record<string, PricingSnapshot>;
 };
 
 // Lifecycle of a workflow. "in_progress" is the default until the user
