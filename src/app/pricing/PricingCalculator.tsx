@@ -117,11 +117,14 @@ const usd = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+// Kept as a separate formatter in case we ever want sub-cent precision back,
+// but for now every price/cost display uses 2 decimal places — the per-unit
+// values were too noisy when shown to 4 decimals.
 const usdFine = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const pct = new Intl.NumberFormat("en-US", {
