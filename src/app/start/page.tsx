@@ -57,6 +57,9 @@ function newProductEntry(): ProductEntry {
     newProduct: { name_desc: "", notes: "" },
     quantities: [""],
     attachments: [],
+    // Default to "purchase" — most workflows need sourcing. Users flip to
+    // "stock" when they confirm we already have inventory on hand.
+    sourceMode: "purchase",
   };
 }
 
@@ -173,6 +176,10 @@ function StartWorkflow() {
   const searchParams = useSearchParams();
   // ?workflow=<uuid> → editing an existing workflow row.
   const editingId = searchParams.get("workflow");
+  // ?fresh=1 → user clicked "+ New workflow". Wipe any leftover draft
+  // before hydrating so they don't inherit fields from the last quote
+  // they were working on.
+  const fresh = searchParams.get("fresh") === "1";
 
   // Single source of truth for the workflow form.
   const [state, setState] = useState<WorkflowState>(() => blankState());
@@ -205,13 +212,23 @@ function StartWorkflow() {
         }
       }
       if (!cancelled) {
-        setState(loadState());
+        if (fresh) {
+          // Explicit new-workflow entry. Drop any stale draft so the form
+          // starts blank — the user shouldn't see fields from a quote they
+          // already pushed/edited last.
+          if (typeof window !== "undefined") {
+            window.sessionStorage.removeItem(STORAGE_KEY);
+          }
+          setState(blankState());
+        } else {
+          setState(loadState());
+        }
         setHydrated(true);
       }
     }
     hydrate();
     return () => { cancelled = true; };
-  }, [editingId]);
+  }, [editingId, fresh]);
 
   // Auto-save the in-progress draft to sessionStorage on every change. We
   // skip persisting hydrated `_name` / `_code` — those are display-only and
@@ -463,12 +480,75 @@ function StartWorkflow() {
     );
   }
 
+  // "Looks like a draft" heuristic — we only show the "Discard draft" link
+  // when we hydrated from sessionStorage AND there's something to discard.
+  // (No workflowId means we're not editing a saved row.)
+  const looksLikeDraft =
+    !workflowId &&
+    !fresh &&
+    (!!state.customerId ||
+      !!state.type ||
+      !!state.form ||
+      state.products.some(
+        (p) => p.productId || (p.newProduct?.name_desc ?? "").trim().length > 0,
+      ));
+
+  const discardDraft = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    }
+    // Hard navigate so the URL gains ?fresh=1 and the page rehydrates blank.
+    window.location.href = "/start?fresh=1";
+  };
+
   return (
     <main className="hero">
       <div className="card card--wide">
         <p className="eyebrow">PharmaCenter · Workflow</p>
         <h1>{workflowId ? "Editing workflow" : "Start a quote workflow"}</h1>
         <p className="lede">Pull together everything we need to quote this, then send it where it needs to go.</p>
+
+        {looksLikeDraft ? (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "10px 14px",
+              background: "#fffdf8",
+              border: "1px dashed #e3dcc9",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "var(--ink-2)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              Resumed an in-progress draft. Need to quote something different?
+            </span>
+            <button
+              type="button"
+              onClick={discardDraft}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--stone)",
+                color: "var(--teal-700)",
+                fontFamily: "inherit",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                padding: "6px 12px",
+                borderRadius: 8,
+                cursor: "pointer",
+              }}
+            >
+              Discard draft
+            </button>
+          </div>
+        ) : null}
 
         <form onSubmit={submit} style={{ marginTop: 18 }}>
 
@@ -586,6 +666,59 @@ function StartWorkflow() {
                     </button>
                   ) : null}
                 </div>
+                {/* Source toggle — Purchase vs Existing stock. Stock items
+                    skip the monday push (no need to source) and skip inbound
+                    costs in the pricing calculator (landed cost already in
+                    Fishbowl). Default is Purchase. */}
+                <div style={{ marginBottom: 12 }}>
+                  <span style={labelText}>Source</span>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    {(["purchase", "stock"] as const).map((mode) => {
+                      const active = (p.sourceMode ?? "purchase") === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() =>
+                            setProduct(p.uid, (cur) => ({ ...cur, sourceMode: mode }))
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: active
+                              ? "2px solid var(--teal-700)"
+                              : "1.5px solid #e3dcc9",
+                            background: active ? "#f0fdfa" : "#fffdf8",
+                            color: active ? "var(--teal-700)" : "var(--ink-2)",
+                            fontWeight: active ? 700 : 600,
+                            fontSize: 13,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            textAlign: "left",
+                          }}
+                        >
+                          <div>
+                            {mode === "purchase" ? "Purchase needed" : "Existing stock"}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 500,
+                              color: "var(--ink-3)",
+                              marginTop: 2,
+                            }}
+                          >
+                            {mode === "purchase"
+                              ? "Source via monday + add inbound costs"
+                              : "We have it — skip sourcing + inbound costs"}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <ProductPicker
                   entry={p}
                   results={productResults[p.uid] ?? []}
