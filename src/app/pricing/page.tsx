@@ -38,6 +38,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
   let workflowProducts: WorkflowProductOption[] = [];
   let workflowLabel: string | null = null;
   let workflowState: WorkflowState | null = null;
+  // Resolved customer label (existing customer name or new-customer name).
+  // Falls back to null if the workflow isn't ready / has no customer.
+  let customerName: string | null = null;
   // Initial tab snapshots — normalised to an array even if an older row used
   // the keyed-by-product shape (Record<productUid, snapshot>).
   let initialPricingTabs: PricingSnapshot[] = [];
@@ -69,6 +72,19 @@ export default async function PricingPage({ searchParams }: Ctx) {
           workflowProductUid: snap.workflowProductUid || key,
         }));
       }
+      // Resolve customer name. "new" mode keeps the typed-in name on the
+      // workflow state; "existing" mode needs a SELECT against customers.
+      if (w.state.customerMode === "new") {
+        customerName = w.state.newCustomer?.name?.trim() || null;
+      } else if (w.state.customerId) {
+        const { data: customerRow } = await supabase
+          .from("customers")
+          .select("name")
+          .eq("id", w.state.customerId)
+          .maybeSingle();
+        customerName = (customerRow?.name as string | undefined) ?? null;
+      }
+
       const products = w.state.products ?? [];
 
       // Hydrate names for existing products via one bulk SELECT.
@@ -137,6 +153,7 @@ export default async function PricingPage({ searchParams }: Ctx) {
             workflowId={from ?? null}
             workflowState={workflowState}
             initialPricingTabs={initialPricingTabs}
+            customerName={customerName}
           />
 
           <a href={backHref} className="backlink">
