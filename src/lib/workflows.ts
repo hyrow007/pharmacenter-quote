@@ -18,6 +18,16 @@ type AnySupabase = any;
 
 export type WorkflowMode = "existing" | "new";
 
+// Sourcing mode for a workflow product.
+//   - "purchase": default. We don't have stock; the product needs to be
+//     sourced. Goes through the normal monday push for sourcing and the
+//     pricing calculator's inbound-cost flow.
+//   - "stock":    we already have inventory in our warehouse. The landed
+//     cost is already known in Fishbowl, so the pricing calculator skips
+//     inbound costs (freight/duties/insurance/etc.) and the monday push
+//     excludes this product (Rosy doesn't need to source it).
+export type ProductSourceMode = "purchase" | "stock";
+
 export type ProductEntry = {
   uid: string;
   mode: WorkflowMode;
@@ -25,6 +35,9 @@ export type ProductEntry = {
   newProduct: { name_desc: string; notes: string };
   quantities: string[];
   attachments: WorkflowAttachment[];
+  // Optional for backward compatibility with workflows saved before this
+  // field existed — those rows behave like "purchase" by default.
+  sourceMode?: ProductSourceMode;
   // Hydrated display fields — not persisted to JSONB. Marked optional so the
   // server-loaded rows (which won't have them) typecheck.
   _name?: string | null;
