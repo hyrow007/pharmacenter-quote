@@ -774,50 +774,82 @@ export default function PricingCalculator({
 
   return (
     <div className="pricing">
-      {canSave ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            padding: "10px 14px",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            borderRadius: 10,
-            marginBottom: 14,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {/* Header action bar — always shown so the Print/Save-PDF button is
+          available even on scratch calculations outside any workflow. The
+          Save-to-workflow button only appears when we have workflow context. */}
+      <div
+        className="pricing-header-bar"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "10px 14px",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: 10,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {canSave ? (
+            <>
+              <span style={{ fontSize: 13, color: "#64748b" }}>
+                Workflow
+                {workflowLabel ? ` ${workflowLabel}` : ""}
+              </span>
+              {saveError ? (
+                <span style={{ fontSize: 13, color: "#b91c1c" }}>
+                  Couldn&rsquo;t save: {saveError}
+                </span>
+              ) : lastSavedAt ? (
+                <span style={{ fontSize: 13, color: "#64748b" }}>
+                  · Saved {relativeFromNow(lastSavedAt)}
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, color: "#64748b" }}>
+                  · Not yet saved
+                </span>
+              )}
+            </>
+          ) : (
             <span style={{ fontSize: 13, color: "#64748b" }}>
-              Workflow
-              {workflowLabel ? ` ${workflowLabel}` : ""}
+              Scratch calculation — use Print / Save PDF to keep a copy.
             </span>
-            {saveError ? (
-              <span style={{ fontSize: 13, color: "#b91c1c" }}>
-                Couldn&rsquo;t save: {saveError}
-              </span>
-            ) : lastSavedAt ? (
-              <span style={{ fontSize: 13, color: "#64748b" }}>
-                · Saved {relativeFromNow(lastSavedAt)}
-              </span>
-            ) : (
-              <span style={{ fontSize: 13, color: "#64748b" }}>
-                · Not yet saved
-              </span>
-            )}
-          </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"
-            className="button-primary"
-            onClick={onSave}
-            disabled={saving}
-            title="Save every tab on this calculator to the workflow"
+            className="button-secondary"
+            onClick={() => window.print()}
+            title='Open the browser print dialog. Choose "Save as PDF" as the destination to get a one-page PDF of this tab.'
+            style={{
+              background: "#fff",
+              color: "#0f172a",
+              border: "1px solid #cbd5e1",
+              padding: "8px 14px",
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
           >
-            {saving ? "Saving…" : "Save"}
+            Print / Save PDF
           </button>
+          {canSave ? (
+            <button
+              type="button"
+              className="button-primary"
+              onClick={onSave}
+              disabled={saving}
+              title="Save every tab on this calculator to the workflow"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       {/* Excel-style tab bar. Only meaningful in workflow context — outside
           a workflow the user has no place to save the tab anyway, so we hide
@@ -1396,6 +1428,250 @@ export default function PricingCalculator({
           </>
         )}
       </section>
+
+      {/* ------------------------------------------------------------------
+          Print-only summary. Hidden on screen, shown only when the user
+          triggers print (browser print dialog → Save as PDF). Renders the
+          ACTIVE tab's data as a compact one-page sheet. The @media print
+          stylesheet below hides everything else on the page.
+          ------------------------------------------------------------------ */}
+      <div className="pricing-print" aria-hidden>
+        <div className="pricing-print__header">
+          <div>
+            <div className="pricing-print__eyebrow">PharmaCenter · Pricing Summary</div>
+            <div className="pricing-print__title">
+              {tabDisplayLabels[activeTabIndex] || "Untitled"}
+            </div>
+            {workflowLabel ? (
+              <div className="pricing-print__sub">Workflow {workflowLabel}</div>
+            ) : null}
+          </div>
+          <div className="pricing-print__date">
+            {new Date().toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </div>
+        </div>
+
+        <h3 className="pricing-print__section-title">Context</h3>
+        <table className="pricing-print__table">
+          <tbody>
+            {pickedProduct ? (
+              <tr>
+                <td>Product</td>
+                <td>
+                  {pickedProduct.label}
+                  {pickedProduct.sub ? ` — ${pickedProduct.sub}` : ""}
+                </td>
+              </tr>
+            ) : null}
+            <tr>
+              <td>Vendor</td>
+              <td>{selectedVendorDisplay || "—"}</td>
+            </tr>
+            <tr>
+              <td>Shipping origin</td>
+              <td>{shippingOrigin === "usa" ? "USA (domestic)" : "International"}</td>
+            </tr>
+            {shippingOrigin === "international" ? (
+              <tr>
+                <td>Shipping terms</td>
+                <td>{INCOTERM_LABELS[incoterm]}</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+
+        <h3 className="pricing-print__section-title">Inputs</h3>
+        <table className="pricing-print__table">
+          <tbody>
+            <tr>
+              <td>Unit cost</td>
+              <td>{usd.format(num(unitCost))}</td>
+            </tr>
+            <tr>
+              <td>Quantity</td>
+              <td>{quantity ? Number(quantity.replace(/,/g, "")).toLocaleString("en-US") : "—"}</td>
+            </tr>
+            {visibility.freight ? (
+              <tr>
+                <td>Freight</td>
+                <td>{usd.format(num(freight))}</td>
+              </tr>
+            ) : null}
+            {visibility.insurance ? (
+              <tr>
+                <td>Insurance</td>
+                <td>{usd.format(num(insurance))}</td>
+              </tr>
+            ) : null}
+            {visibility.duties ? (
+              <tr>
+                <td>Duties</td>
+                <td>{dutiesPct || "0"}%</td>
+              </tr>
+            ) : null}
+            {visibility.customs ? (
+              <tr>
+                <td>Customs broker</td>
+                <td>{usd.format(num(customsBroker))}</td>
+              </tr>
+            ) : null}
+            <tr>
+              <td>Lab testing</td>
+              <td>{usd.format(num(testing))}</td>
+            </tr>
+            <tr>
+              <td>Other fees</td>
+              <td>{usd.format(num(handling))}</td>
+            </tr>
+            <tr>
+              <td>{marginMode === "markup" ? "Markup" : "Gross margin"}</td>
+              <td>{margin || "0"}%</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 className="pricing-print__section-title">Results</h3>
+        <table className="pricing-print__table">
+          <tbody>
+            <tr>
+              <td>Product cost subtotal</td>
+              <td>{usd.format(results.productCost)}</td>
+            </tr>
+            {visibility.duties ? (
+              <tr>
+                <td>Duties</td>
+                <td>{usd.format(results.dutiesAmount)}</td>
+              </tr>
+            ) : null}
+            <tr className="pricing-print__row--emphasis">
+              <td>Landed cost (in warehouse)</td>
+              <td>{usd.format(results.landedTotal)}</td>
+            </tr>
+            <tr>
+              <td>Landed cost per unit</td>
+              <td>{usd.format(results.landedPerUnit)}</td>
+            </tr>
+            <tr className="pricing-print__row--emphasis">
+              <td>Sale price per unit</td>
+              <td>{usd.format(results.salePerUnit)}</td>
+            </tr>
+            <tr>
+              <td>Total revenue</td>
+              <td>{usd.format(results.totalRevenue)}</td>
+            </tr>
+            <tr>
+              <td>Gross profit</td>
+              <td>{usd.format(results.grossProfit)}</td>
+            </tr>
+            <tr>
+              <td>Effective margin</td>
+              <td>{pct.format(results.effectiveMargin)}</td>
+            </tr>
+            <tr>
+              <td>Effective markup</td>
+              <td>{pct.format(results.effectiveMarkup)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="pricing-print__footer">
+          Generated by PharmaCenter Quote ·{" "}
+          {new Date().toLocaleString("en-US")}
+        </div>
+      </div>
+
+      {/* Print stylesheet — keep the print summary hidden on screen, then on
+          print hide everything else and show the summary fullscreen. */}
+      <style>{`
+        .pricing-print { display: none; }
+        @media print {
+          /* Hide every element outside the print summary, including the
+             page chrome, the calculator form, and any sticky bars. */
+          body * { visibility: hidden !important; }
+          .pricing-print, .pricing-print * { visibility: visible !important; }
+          .pricing-print {
+            display: block !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 0.5in;
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+              Roboto, "Helvetica Neue", Arial, sans-serif;
+          }
+          .pricing-print__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+          }
+          .pricing-print__eyebrow {
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+          }
+          .pricing-print__title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 2px;
+          }
+          .pricing-print__sub {
+            font-size: 12px;
+            color: #475569;
+            margin-top: 2px;
+          }
+          .pricing-print__date {
+            font-size: 12px;
+            color: #475569;
+          }
+          .pricing-print__section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #475569;
+            margin: 14px 0 6px;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 4px;
+          }
+          .pricing-print__table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .pricing-print__table td {
+            padding: 4px 0;
+            font-size: 12px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .pricing-print__table td:first-child { color: #475569; }
+          .pricing-print__table td:last-child {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+          }
+          .pricing-print__row--emphasis td {
+            font-weight: 700;
+            color: #0f172a;
+            border-top: 1px solid #0f172a;
+            border-bottom: 1px solid #0f172a;
+          }
+          .pricing-print__footer {
+            margin-top: 18px;
+            font-size: 10px;
+            color: #94a3b8;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+          }
+          @page { margin: 0.4in; size: letter; }
+        }
+      `}</style>
     </div>
   );
 }
