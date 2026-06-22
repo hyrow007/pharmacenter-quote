@@ -67,6 +67,10 @@ type ProductPayload = {
   notes?: string;
   quantities?: string[];
   attachments?: Attachment[];
+  // "stock" items are excluded from the push entirely — we already have
+  // them in inventory, Rosy doesn't need to source them. Optional for
+  // backward compatibility with older clients.
+  sourceMode?: "purchase" | "stock";
 };
 
 type Body = {
@@ -133,7 +137,23 @@ export async function POST(request: Request) {
     if (data?.name) customerName = data.name;
   }
 
-  const productIdsToResolve = (body.products ?? [])
+  // Filter out "stock" products before anything else — they don't need
+  // sourcing because we already have inventory in our warehouse. If the
+  // entire workflow is stock-only we short-circuit with a clear error so
+  // the UI can explain why nothing was pushed.
+  const allProducts = body.products ?? [];
+  const purchaseProducts = allProducts.filter((p) => p.sourceMode !== "stock");
+  if (allProducts.length > 0 && purchaseProducts.length === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "all_products_in_stock",
+      },
+      { status: 400 },
+    );
+  }
+
+  const productIdsToResolve = purchaseProducts
     .map((p) => p.productId)
     .filter((id): id is string => !!id && id !== "new");
   const resolvedProducts: Record<string, { name: string | null; fp_code: string | null }> = {};
@@ -146,7 +166,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const products = (body.products ?? []).map((p) => {
+  const products = purchaseProducts.map((p) => {
     const resolved = p.productId && p.productId !== "new" ? resolvedProducts[p.productId] : null;
     const name = (resolved?.name) ?? p.productName ?? "New product";
     const code = (resolved?.fp_code) ?? p.productCode ?? null;
