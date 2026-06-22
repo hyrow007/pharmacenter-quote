@@ -123,6 +123,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
           label,
           sub,
           quantity: firstQty || null,
+          // Carry sourceMode through so the calculator can skip inbound
+          // costs for products we already have in stock.
+          sourceMode: p.sourceMode ?? "purchase",
         };
       });
     }

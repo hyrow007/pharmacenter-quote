@@ -62,6 +62,10 @@ export type WorkflowProductOption = {
   // Pre-fill value for the calculator's quantity input when the user picks
   // this product. Already formatted with commas if applicable.
   quantity: string | null;
+  // "stock" products skip the inbound-cost section because the landed cost
+  // is already known in Fishbowl. Optional for back-compat — older workflow
+  // products without the field behave like "purchase".
+  sourceMode?: "purchase" | "stock";
 };
 
 // Row shape we get back from the vendors table search. Mirrors the columns
@@ -381,6 +385,11 @@ export default function PricingCalculator({
     () => workflowProducts.find((p) => p.uid === workflowProductUid) ?? null,
     [workflowProducts, workflowProductUid],
   );
+  // True when the user picked an "existing stock" product on the workflow.
+  // Hides every inbound-cost input (freight/insurance/duties/customs/lab/
+  // other fees) because the landed cost is already known from Fishbowl —
+  // the calculator collapses to unit cost × qty + margin = sale price.
+  const isStockProduct = pickedProduct?.sourceMode === "stock";
 
   // --- Vendor picker --------------------------------------------------
   // Mirrors the customer selector UX on /start: toggle between existing
@@ -516,9 +525,13 @@ export default function PricingCalculator({
   // Which buyer-side cost inputs to show for the current shipping mode.
   // For USA we hide everything Incoterm-related and only keep freight +
   // testing + other fees. For international we let the Incoterm decide.
-  const visibility = shippingOrigin === "usa"
-    ? { freight: true, insurance: false, duties: false, customs: false }
-    : INCOTERM_FIELDS[incoterm];
+  // For stock products every inbound cost is hidden — the landed cost is
+  // already in Fishbowl, so unit cost × qty IS the landed total.
+  const visibility = isStockProduct
+    ? { freight: false, insurance: false, duties: false, customs: false }
+    : shippingOrigin === "usa"
+      ? { freight: true, insurance: false, duties: false, customs: false }
+      : INCOTERM_FIELDS[incoterm];
 
   // When the user picks a workflow product, copy its quantity into the qty
   // field (overwriting whatever was there). Saved-snapshot hydration lives
@@ -540,18 +553,20 @@ export default function PricingCalculator({
   // --- Derived ---------------------------------------------------------
   // Active-tab live results. Delegates to the shared computeResults helper
   // so the save handler can re-derive results for inactive tabs from their
-  // stored inputs without duplicating math.
+  // stored inputs without duplicating math. For stock products we zero
+  // out every inbound cost so the landed total collapses to product cost
+  // (which the user enters as the known landed unit cost from Fishbowl).
   const results = useMemo(
     () =>
       computeResults({
         unitCost,
         quantity,
-        freight,
-        insurance,
-        customsBroker,
-        dutiesPct,
-        handling,
-        testing,
+        freight: isStockProduct ? "" : freight,
+        insurance: isStockProduct ? "" : insurance,
+        customsBroker: isStockProduct ? "" : customsBroker,
+        dutiesPct: isStockProduct ? "" : dutiesPct,
+        handling: isStockProduct ? "" : handling,
+        testing: isStockProduct ? "" : testing,
         margin,
         marginMode,
         shippingOrigin,
@@ -562,6 +577,7 @@ export default function PricingCalculator({
       freight, insurance, customsBroker, dutiesPct, handling, testing,
       margin, marginMode,
       shippingOrigin, incoterm,
+      isStockProduct,
     ],
   );
 
@@ -1169,6 +1185,24 @@ export default function PricingCalculator({
         </div>
       </section>
 
+      {isStockProduct ? (
+        <section
+          className="pricing__section"
+          style={{ background: "#f0fdfa", borderColor: "#99f6e4" }}
+        >
+          <h2 className="pricing__section-title">Inbound costs</h2>
+          <p
+            className="pricing__hint"
+            style={{ color: "#0f766e", fontWeight: 500 }}
+          >
+            This product is <strong>existing stock</strong>. The landed cost is
+            already in Fishbowl, so freight, duties, insurance, customs broker,
+            lab testing, and other fees don&rsquo;t apply here. Enter the known
+            landed unit cost above and the calculator will go straight to the
+            sale price using just your margin.
+          </p>
+        </section>
+      ) : (
       <section className="pricing__section">
         <h2 className="pricing__section-title">Inbound costs</h2>
         <div className="pricing__row">
@@ -1315,6 +1349,7 @@ export default function PricingCalculator({
             : "All inbound costs shown are total dollar amounts distributed across the full quantity."}
         </p>
       </section>
+      )}
 
       <section className="pricing__section">
         <h2 className="pricing__section-title">Pricing</h2>
@@ -1504,15 +1539,29 @@ export default function PricingCalculator({
                 </td>
               </tr>
             ) : null}
-            <tr>
-              <td>Vendor</td>
-              <td>{selectedVendorDisplay || "—"}</td>
-            </tr>
-            <tr>
-              <td>Shipping origin</td>
-              <td>{shippingOrigin === "usa" ? "USA (domestic)" : "International"}</td>
-            </tr>
-            {shippingOrigin === "international" ? (
+            {pickedProduct ? (
+              <tr>
+                <td>Source</td>
+                <td>
+                  {isStockProduct
+                    ? "Existing stock (landed cost from Fishbowl)"
+                    : "Purchase needed"}
+                </td>
+              </tr>
+            ) : null}
+            {isStockProduct ? null : (
+              <tr>
+                <td>Vendor</td>
+                <td>{selectedVendorDisplay || "—"}</td>
+              </tr>
+            )}
+            {isStockProduct ? null : (
+              <tr>
+                <td>Shipping origin</td>
+                <td>{shippingOrigin === "usa" ? "USA (domestic)" : "International"}</td>
+              </tr>
+            )}
+            {!isStockProduct && shippingOrigin === "international" ? (
               <tr>
                 <td>Shipping terms</td>
                 <td>{INCOTERM_LABELS[incoterm]}</td>
