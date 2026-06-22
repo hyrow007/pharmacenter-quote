@@ -343,6 +343,9 @@ export default function WorkflowActions({
         notes: p.mode === "new" ? p.newProduct.notes : "",
         quantities: p.quantities.map(cleanQty).filter((q) => q.length > 0),
         attachments: p.attachments,
+        // Carry the source mode through so the route can filter out stock
+        // items from the items-to-source list before sending to Rosy.
+        sourceMode: p.sourceMode ?? "purchase",
       }));
       const customerName =
         state.customerMode === "existing" ? customer?.name ?? null : state.newCustomer.name;
@@ -375,6 +378,13 @@ export default function WorkflowActions({
         }
         if (reason === "wrong_domain") {
           showToast("Only @pharmacenterusa.com accounts can push to monday.");
+          return;
+        }
+        if (reason === "all_products_in_stock") {
+          showToast(
+            "Nothing to push — every product on this workflow is marked Existing stock. Mark at least one as Purchase needed first.",
+            8000,
+          );
           return;
         }
         showToast(`monday push failed: ${reason}`, 6500);
