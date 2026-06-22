@@ -680,7 +680,22 @@ function StartWorkflow() {
                           key={mode}
                           type="button"
                           onClick={() =>
-                            setProduct(p.uid, (cur) => ({ ...cur, sourceMode: mode }))
+                            setProduct(p.uid, (cur) => ({
+                              ...cur,
+                              sourceMode: mode,
+                              // Existing-stock products can't be "new" by
+                              // definition (we don't stock products that
+                              // don't exist yet) — force the entry back to
+                              // "existing" mode and wipe any in-progress
+                              // new-product fields so they don't bleed back
+                              // if the user flips Source again.
+                              ...(mode === "stock"
+                                ? {
+                                    mode: "existing" as const,
+                                    newProduct: { name_desc: "", notes: "" },
+                                  }
+                                : {}),
+                            }))
                           }
                           style={{
                             flex: 1,
@@ -852,10 +867,15 @@ function ProductPicker(props: {
         </div>
       ) : (
         <>
-          <div style={tabsStyle}>
-            <button type="button" style={tabBtn(p.mode === "existing")} onClick={() => onSetMode("existing")}>Existing</button>
-            <button type="button" style={tabBtn(p.mode === "new")} onClick={() => onSetMode("new")}>New product</button>
-          </div>
+          {/* Hide the Existing/New tabs entirely when this entry is marked
+              as "Existing stock" — by definition we only have inventory of
+              products that already exist, so "New product" doesn't apply. */}
+          {(p.sourceMode ?? "purchase") === "stock" ? null : (
+            <div style={tabsStyle}>
+              <button type="button" style={tabBtn(p.mode === "existing")} onClick={() => onSetMode("existing")}>Existing</button>
+              <button type="button" style={tabBtn(p.mode === "new")} onClick={() => onSetMode("new")}>New product</button>
+            </div>
+          )}
           {p.mode === "existing" ? (
             <>
               <input type="text" placeholder="Search by code or name…" value={search}
