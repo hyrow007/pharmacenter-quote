@@ -139,6 +139,20 @@ const pct = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+// Escape a value for safe interpolation into the issued-quote HTML. We're
+// building the doc as a raw string before window.open()ing it, so any
+// customer/vendor/product field could otherwise inject markup.
+function htmlEscape(s: string | number | null | undefined): string {
+  if (s === null || s === undefined) return "";
+  const str = String(s);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Tiny "just now / 2m ago" helper used in the save-status text. Lives here
 // to avoid pulling in a full date library for one label.
 function relativeFromNow(iso: string): string {
@@ -153,6 +167,456 @@ function relativeFromNow(iso: string): string {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.floor(hr / 24);
   return `${day}d ago`;
+}
+
+// ----------------------------------------------------------------------
+// Customer-facing quote PDF builder.
+// Spits out a complete self-contained HTML document we can window.open()
+// and then trigger window.print() on. Styled with PharmaCenter brand
+// tokens lifted from the Packing List generator so the two documents
+// feel like a matched set.
+//
+// `lineItems` is whatever the calculator's tabs computed to — one row per
+// tab. The `notes` and `terms` blocks are baked in (from the Excel quote
+// template the team currently uses).
+// ----------------------------------------------------------------------
+type QuoteLineItem = {
+  itemRef: string;       // e.g. "ITEM 1"
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+function buildQuoteHtml(args: {
+  customerName: string | null;
+  customerAddress: string | null;       // multi-line ok
+  customerContact: string | null;       // e.g. for new customers
+  customerEmail: string | null;
+  workflowLabel: string | null;         // doubles as the QUOTE #
+  preparerName: string;
+  preparerEmail: string;
+  lineItems: QuoteLineItem[];
+}): string {
+  const today = new Date();
+  const validUntil = new Date(today);
+  validUntil.setDate(validUntil.getDate() + 15);
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  const fmtMoney = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  const total = args.lineItems.reduce(
+    (sum, li) => sum + li.unitPrice * li.quantity,
+    0,
+  );
+
+  const itemRowsHtml = args.lineItems
+    .map((li, idx) => `
+      <tr>
+        <td class="q-items__item">${htmlEscape(li.itemRef || `ITEM ${idx + 1}`)}</td>
+        <td class="q-items__desc">${htmlEscape(li.description)}</td>
+        <td class="q-items__qty">${li.quantity.toLocaleString("en-US")}</td>
+        <td class="q-items__price">${htmlEscape(fmtMoney.format(li.unitPrice))}</td>
+        <td class="q-items__amount">${htmlEscape(fmtMoney.format(li.unitPrice * li.quantity))}</td>
+      </tr>
+    `).join("");
+
+  // Pad to at least 6 rows so the layout matches the Excel template feel.
+  const padRowsHtml = Array.from({
+    length: Math.max(0, 6 - args.lineItems.length),
+  }).map(() => `
+      <tr>
+        <td class="q-items__item">&nbsp;</td>
+        <td class="q-items__desc">&nbsp;</td>
+        <td class="q-items__qty">&nbsp;</td>
+        <td class="q-items__price">&nbsp;</td>
+        <td class="q-items__amount">&nbsp;</td>
+      </tr>
+    `).join("");
+
+  const preparedForLines: string[] = [];
+  if (args.customerName) preparedForLines.push(args.customerName);
+  if (args.customerAddress) {
+    for (const line of args.customerAddress.split(/\r?\n/)) {
+      const t = line.trim();
+      if (t) preparedForLines.push(t);
+    }
+  }
+  if (args.customerContact && !preparedForLines.includes(args.customerContact)) {
+    preparedForLines.push(args.customerContact);
+  }
+  if (args.customerEmail && !preparedForLines.includes(args.customerEmail)) {
+    preparedForLines.push(args.customerEmail);
+  }
+  const preparedForHtml = preparedForLines
+    .map((l, i) => `<div class="q-prep__line${i === 0 ? " q-prep__line--strong" : ""}">${htmlEscape(l)}</div>`)
+    .join("");
+
+  const quoteNumber = args.workflowLabel ?? "—";
+  const preparedBy = args.preparerName?.trim() || args.preparerEmail || "Sales";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Quote ${htmlEscape(quoteNumber)} · ${htmlEscape(args.customerName ?? "PharmaCenter")}</title>
+<style>
+  /* PharmaCenter brand tokens — lifted from the Packing List stylesheet so
+     this quote sits next to it as a matched pair. */
+  :root {
+    --teal-900:#0f4a56;
+    --teal-700:#1d6c7b;
+    --teal-500:#3a8d9c;
+    --sage-700:#5f8e3a;
+    --sage-500:#7fb04f;
+    --cream:#f6efe3;
+    --cream-soft:#fbf6ec;
+    --paper:#fffdf8;
+    --ink:#1f2a2d;
+    --ink-2:#415056;
+    --ink-3:#8a9498;
+    --line:#e3dcc9;
+    --line-2:#efe9da;
+    --bg:#e7ddc8;
+    --sans:"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Arial, sans-serif;
+    --serif:"Cormorant Garamond", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 10.5pt;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+  .q-stage {
+    display: flex; justify-content: center; padding: 26px 0 60px;
+  }
+  .q-sheet {
+    width: 8.5in;
+    min-height: 11in;
+    background: var(--paper);
+    padding: 0.62in;
+    display: flex; flex-direction: column;
+    box-shadow: 0 1px 0 rgba(15,74,86,.04), 0 18px 44px -22px rgba(15,74,86,.32);
+  }
+
+  /* Letterhead ----------------------------------------------------- */
+  .q-lh {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; padding-bottom: 14px;
+    border-bottom: 2.5px solid var(--teal-700);
+  }
+  .q-lh__brand {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .q-lh__co {
+    font-family: var(--serif);
+    font-size: 30px; font-weight: 500; line-height: 1;
+    color: var(--teal-900); letter-spacing: -0.01em;
+  }
+  .q-lh__tag {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--sage-700);
+  }
+  .q-lh__info {
+    text-align: right; font-size: 8.8px; line-height: 1.62; color: var(--ink-2);
+  }
+  .q-lh__addr-label {
+    font-size: 9.6px; font-weight: 700; color: var(--teal-900);
+  }
+  .q-lh__addr {
+    margin-top: 5px; color: var(--teal-700); font-weight: 700; font-size: 9.4px;
+    white-space: pre-line;
+  }
+
+  /* Title band ---------------------------------------------------- */
+  .q-title {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding-top: 16px; margin-bottom: 6px;
+  }
+  .q-title h1 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 56px; font-weight: 500; letter-spacing: -0.005em;
+    color: var(--teal-900); line-height: 0.9;
+  }
+  .q-title__meta {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 6px 14px;
+    text-align: right;
+    font-size: 9px;
+  }
+  .q-title__meta dt {
+    font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .q-title__meta dd {
+    margin: 0; font-weight: 600; color: var(--ink); font-size: 11px;
+  }
+
+  /* Prepared For block ------------------------------------------- */
+  .q-prep {
+    margin-top: 22px; display: flex; gap: 32px;
+  }
+  .q-prep__col {
+    flex: 1;
+  }
+  .q-prep__heading {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--ink-3);
+    border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 8px;
+  }
+  .q-prep__line { font-size: 11px; color: var(--ink-2); line-height: 1.45; }
+  .q-prep__line--strong { font-weight: 700; color: var(--teal-900); font-size: 12.5px; }
+
+  /* Items table -------------------------------------------------- */
+  .q-items {
+    margin-top: 22px;
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .q-items thead th {
+    background: var(--cream);
+    color: var(--teal-900);
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1.5px solid var(--teal-700);
+  }
+  .q-items th.q-items__qty,
+  .q-items th.q-items__price,
+  .q-items th.q-items__amount { text-align: right; }
+  .q-items td {
+    padding: 10px;
+    font-size: 10.5px;
+    border-bottom: 1px solid var(--line-2);
+    vertical-align: top;
+  }
+  .q-items__item { width: 80px; font-weight: 700; color: var(--teal-700); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .q-items__desc { color: var(--ink); }
+  .q-items__qty { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+  .q-items__price { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+  .q-items__amount { width: 130px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .q-totals {
+    display: flex; justify-content: flex-end;
+    margin-top: 14px;
+  }
+  .q-totals__inner {
+    min-width: 280px; display: grid; grid-template-columns: auto auto;
+    gap: 6px 18px; align-items: center;
+  }
+  .q-totals dt { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); text-align: right; }
+  .q-totals dd { margin: 0; font-size: 14px; font-weight: 700; color: var(--teal-900); text-align: right; font-variant-numeric: tabular-nums; }
+  .q-totals .q-totals__grand dd { font-size: 17px; }
+
+  /* Notes block --------------------------------------------------- */
+  .q-notes {
+    margin-top: 18px; padding: 12px 14px;
+    background: var(--cream-soft); border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .q-notes__heading {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 6px;
+  }
+  .q-notes ul { margin: 0; padding-left: 18px; font-size: 10px; color: var(--ink-2); }
+  .q-notes li { margin: 2px 0; }
+
+  /* Preparer line ------------------------------------------------- */
+  .q-prepared-by {
+    margin-top: 18px;
+    font-size: 10px; color: var(--ink-2);
+  }
+  .q-prepared-by strong { color: var(--teal-900); }
+
+  /* Terms --------------------------------------------------------- */
+  .q-terms {
+    margin-top: 22px; padding-top: 14px;
+    border-top: 1px solid var(--line);
+    page-break-before: always;
+  }
+  .q-terms__title {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--teal-900); margin-bottom: 10px;
+  }
+  .q-terms p { margin: 6px 0; font-size: 9.5px; line-height: 1.55; color: var(--ink-2); }
+  .q-terms strong { color: var(--teal-900); }
+
+  /* Signature block --------------------------------------------- */
+  .q-sign {
+    margin-top: 26px; padding-top: 18px;
+    border-top: 2px solid var(--teal-700);
+  }
+  .q-sign__heading {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--teal-900); margin-bottom: 18px;
+  }
+  .q-sign__grid {
+    display: grid; grid-template-columns: 2fr 1.5fr 1fr;
+    gap: 22px;
+  }
+  .q-sign__cell { display: flex; flex-direction: column; }
+  .q-sign__line {
+    border-bottom: 1.2px solid var(--ink); height: 26px;
+  }
+  .q-sign__caption {
+    margin-top: 4px;
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* Print ---------------------------------------------------- */
+  @page { margin: 0.4in; size: letter; }
+  @media print {
+    body { background: #fff !important; }
+    .q-stage { padding: 0 !important; }
+    .q-sheet { box-shadow: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="q-stage">
+    <div class="q-sheet">
+
+      <header class="q-lh">
+        <div class="q-lh__brand">
+          <div class="q-lh__co">PharmaCenter</div>
+          <div class="q-lh__tag">Bulk Quote</div>
+        </div>
+        <div class="q-lh__info">
+          <div class="q-lh__addr-label">PharmaCenter, LLC</div>
+          <div class="q-lh__addr">15851 SW 41st Street, Suite #300
+Davie, FL 33331
+(954) 384-8728</div>
+        </div>
+      </header>
+
+      <section class="q-title">
+        <h1>Quote</h1>
+        <dl class="q-title__meta">
+          <dt>Prepared Date</dt><dd>${htmlEscape(fmtDate(today))}</dd>
+          <dt>Valid Until</dt><dd>${htmlEscape(fmtDate(validUntil))}</dd>
+          <dt>Quote&nbsp;#</dt><dd>${htmlEscape(quoteNumber)}</dd>
+        </dl>
+      </section>
+
+      <section class="q-prep">
+        <div class="q-prep__col">
+          <div class="q-prep__heading">Prepared For</div>
+          ${preparedForHtml || '<div class="q-prep__line">—</div>'}
+        </div>
+      </section>
+
+      <table class="q-items">
+        <thead>
+          <tr>
+            <th class="q-items__item">Items</th>
+            <th class="q-items__desc">Description</th>
+            <th class="q-items__qty">Quantity</th>
+            <th class="q-items__price">Price</th>
+            <th class="q-items__amount">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemRowsHtml}
+          ${padRowsHtml}
+        </tbody>
+      </table>
+
+      <div class="q-totals">
+        <dl class="q-totals__inner q-totals__grand">
+          <dt>Total</dt>
+          <dd>${htmlEscape(fmtMoney.format(total))}</dd>
+        </dl>
+      </div>
+
+      <div class="q-notes">
+        <div class="q-notes__heading">Notes</div>
+        <ul>
+          <li>All pricing is ex-works PharmaCenter LLC (Davie, FL).</li>
+          <li>Pallet fee of $15.00 will be applied per pallet unless replacements in good condition are provided.</li>
+        </ul>
+      </div>
+
+      <p class="q-prepared-by">
+        This quote was prepared by <strong>${htmlEscape(preparedBy)}</strong>.
+        If you have any questions concerning this quotation, contact ${htmlEscape(preparedBy)} at (954) 384-8728 or ${htmlEscape(args.preparerEmail || "sales@pharmacenterusa.com")}.
+      </p>
+
+      <section class="q-terms">
+        <div class="q-terms__title">This quotation is subject to the following terms and conditions:</div>
+        <p>The ability of PharmaCenter, LLC to manufacture or package product(s) will depend upon the combination of ingredients, bulk product and/or packaging components and their behaviours on production equipment. This will be determined on the equipment during the manufacturing of your order. Additionally, if non-stock ingredients and/or packaging components are included, additional testing and verification may be needed, and manufacturing/packaging restrictions may be encountered.</p>
+
+        <p><strong>APPROVAL:</strong> To approve an order for the proceeding quoted product(s)/service(s), please sign, and return the quote with purchase order. Digital signatures from authorized personnel shall be considered adequate for approval. For additional order information please contact your account manager.</p>
+
+        <p><strong>ACKNOWLEDGMENT:</strong> The information and Product(s)/service(s) herein are to the best of PharmaCenter, LLC's knowledge, true, and accurate. PharmaCenter, LLC warrants that it will manufacture/package products, or cause to have manufactured/packaged the Product(s) in conformity with all the information, formulas and specifications set forth herein. Provided the Product(s) were handled with reasonable care after leaving PharmaCenter LLC's possession, and within no later than fifteen (15) business days after arrival of products at customer's location, a written notice to PharmaCenter, LLC should be given of any defect or failure to conform with the herein specifications. PharmaCenter LLC at its option agrees to provide a credit in the amount of the purchase price of the non-confirming products, or to replace such products. PharmaCenter LLC shall not be responsible for any delay in the performance or orders or in the delivery of the products, or for any loss or damages arising from such delay, if such delay is directly or indirectly caused by, or arises from events beyond our control, including but not limited to strikes or other labor difficulties, fire, flood, accidents, riots, electrical or other power failure or shortage, delays or defaults of carriers or customs, failure or curtailment in PharmaCenter LLC's usual sources of supply or government orders. No warranty is given or is to be implied in respect of any recommendations or suggestions which may be made or that any use will not infringe any intellectual property. Customer acknowledges that this order may contain proprietary ingredients, which are subject to specifications, guidelines, and protection under the law. Customer represents and agrees to follow all guidelines and specifications for any proprietary product(s). Due to manufacturing of customer Product(s), Customers may be subject to an industry standard 10% overage of the quantity ordered, a percentage that will be reflected on the Customer's Invoice.</p>
+
+        <p><strong>FINANCIAL TERMS:</strong> Please contact your account manager or PharmaCenter, LLC's finance department for payment terms beyond those represented herein by this final quote.</p>
+
+        <p><strong>PURCHASE ORDER STATEMENTS:</strong> PharmaCenter, LLC will not accept any order accompanied by any purchase terms and conditions statements without prior authorization by an officer of PharmaCenter, LLC.</p>
+
+        <p><strong>CONFIDENTIALITY:</strong> This document and the information within this document, including the product formula, is confidential information. Nothing contained herein may be disclosed to any third party without PharmaCenter LLC's prior approval. DO NOT use this document or the information contained within this document to obtain a competitive quote(s).</p>
+
+        <p><strong>PRODUCT SAFETY:</strong> Persons taking prescription or OTC medications should consult with a healthcare professional prior to taking any dietary supplements.</p>
+
+        <p><strong>SHIPMENT:</strong> Lead times are contingent upon receipt and lab release of all materials and packaging components at time of order. To ensure your inventory is not disrupted by the newly mandated, additional testing requirements of the FDA, we strongly encourage you to incorporate a few extra weeks into your inventory level review to minimize the impact new ingredient testing requirements may have throughout the supply chain. PharmaCenter is not responsible for any loss or damaged items that may occur during delivery or shipping of goods to the customer's location.</p>
+
+        <p><strong>SHELF LIFE:</strong> Suggested Expiration Date from Date of Manufacture *3 year* Initial shelf-life estimate based on ingredients and similar product data which has been collected from properly-stored materials. Each unique combination of ingredients, packaging, and storage conditions present uncertainty to the shelf-life estimate. This is only an estimation of shelf life, packaging, and storage quality, and not a real-time analysis. Customers are highly encouraged to independently verify the stability performance of their product. Since PharmaCenter, LLC has no control over individual storage practices, we must disclaim any liability or warranty for particular results.</p>
+      </section>
+
+      <section class="q-sign">
+        <div class="q-sign__heading">Agreed and Accepted</div>
+        <div class="q-sign__grid">
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">Name</div>
+          </div>
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">Title</div>
+          </div>
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">Date</div>
+          </div>
+        </div>
+        <div class="q-sign__grid" style="margin-top:22px;">
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">Signature</div>
+          </div>
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">Company</div>
+          </div>
+          <div class="q-sign__cell">
+            <div class="q-sign__line"></div>
+            <div class="q-sign__caption">PO #</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+  <script>
+    // Auto-open the print dialog so "Save as PDF" is one click away.
+    window.addEventListener("load", () => {
+      setTimeout(() => { try { window.print(); } catch (_) {} }, 250);
+    });
+  </script>
+</body>
+</html>`;
 }
 
 type Props = {
@@ -170,6 +634,15 @@ type Props = {
   // Resolved customer name from the workflow (existing customer or
   // newly-entered name). Null when not in workflow context or unresolved.
   customerName: string | null;
+  // Customer ship-to address (only present for existing customers).
+  customerAddress: string | null;
+  // Contact / email captured at workflow-creation time when the customer
+  // was entered as "new". Populates the PREPARED FOR block on the quote.
+  newCustomerContact: string | null;
+  newCustomerEmail: string | null;
+  // Signed-in preparer's email + display name. Used in the quote footer.
+  preparerEmail: string;
+  preparerName: string | null;
 };
 
 // Per-tab persisted state. We keep every input + the last-save timestamp
@@ -335,6 +808,11 @@ export default function PricingCalculator({
   workflowState,
   initialPricingTabs,
   customerName,
+  customerAddress,
+  newCustomerContact,
+  newCustomerEmail,
+  preparerEmail,
+  preparerName,
 }: Props) {
   // --- Tabs ------------------------------------------------------------
   // Excel-style tabs at the top. Each tab is one independent calculator
@@ -752,6 +1230,69 @@ export default function PricingCalculator({
     };
   }
 
+  // Open a brand-new browser window with a fully-styled customer-facing
+  // quote HTML, then auto-trigger print so the user can Save as PDF. Each
+  // tab on the calculator becomes one line item on the quote — line item
+  // description prefers a saved tab label, else the picked product name,
+  // else "Tab N".
+  const onIssueQuote = () => {
+    // Snapshot the active tab so its latest in-flight edits show up.
+    const current = snapshotCurrentTab();
+    const snapshotted = tabs.map((t, i) => (i === activeTabIndex ? current : t));
+    const lineItems: QuoteLineItem[] = snapshotted.map((t, i) => {
+      const r = computeResults({
+        unitCost: t.unitCost,
+        quantity: t.quantity,
+        // For stock items the inbound costs don't apply — match what the
+        // calculator UI shows.
+        freight: t.freight,
+        insurance: t.insurance,
+        customsBroker: t.customsBroker,
+        dutiesPct: t.dutiesPct,
+        handling: t.handling,
+        testing: t.testing,
+        margin: t.margin,
+        marginMode: t.marginMode,
+        shippingOrigin: t.shippingOrigin,
+        incoterm: t.incoterm,
+      });
+      const product = workflowProducts.find((p) => p.uid === t.workflowProductUid);
+      const desc =
+        (t.label && t.label.trim().length > 0 && t.label.trim()) ||
+        product?.label ||
+        `Tab ${i + 1}`;
+      const qty = num(t.quantity);
+      return {
+        itemRef: `ITEM ${i + 1}`,
+        description: product?.sub ? `${desc} — ${product.sub}` : desc,
+        quantity: qty,
+        unitPrice: r.salePerUnit,
+      };
+    });
+
+    const html = buildQuoteHtml({
+      customerName,
+      customerAddress,
+      customerContact: newCustomerContact,
+      customerEmail: newCustomerEmail,
+      workflowLabel,
+      preparerName: preparerName ?? "",
+      preparerEmail,
+      lineItems,
+    });
+
+    const w = window.open("", "_blank", "noopener");
+    if (!w) {
+      window.alert(
+        "Couldn't open the quote window — please allow popups for this site and try again.",
+      );
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
   const onSave = async () => {
     if (!workflowId || !workflowState) return;
     setSaving(true);
@@ -878,6 +1419,23 @@ export default function PricingCalculator({
             }}
           >
             Print / Save PDF
+          </button>
+          <button
+            type="button"
+            onClick={onIssueQuote}
+            title="Generate a customer-facing quote (PDF) with every tab as a line item."
+            style={{
+              background: "var(--teal-700, #1d6c7b)",
+              color: "#fff",
+              border: "1px solid var(--teal-900, #0f4a56)",
+              padding: "8px 14px",
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Issue a Quote
           </button>
           {canSave ? (
             <button

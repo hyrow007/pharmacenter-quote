@@ -13,6 +13,41 @@ import PricingCalculator, { type WorkflowProductOption } from "./PricingCalculat
 // hydrates the workflow whose products show up in the product dropdown.
 // The interactive form is a client component below.
 
+// Title-case "jairo osorno" → "Jairo Osorno". Same util that lives on the
+// workflows page; duplicated here so we don't have to widen the workflows
+// lib surface for a single one-liner.
+function titleCase(s: string): string {
+  return s
+    .split(" ")
+    .filter((w) => w.length > 0)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// Look up a Google SSO display_name from auth.users via the user_directory
+// view, with a graceful fallback to a title-cased local-part of the email.
+async function resolvePreparerName(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  email: string | undefined,
+): Promise<string | null> {
+  if (!email) return null;
+  try {
+    const { data } = await supabase
+      .from("user_directory")
+      .select("display_name")
+      .eq("email", email)
+      .maybeSingle();
+    const name = (data?.display_name as string | undefined) ?? null;
+    if (name && name.trim().length > 0) return name.trim();
+  } catch {
+    // Fall through to email-derived fallback below.
+  }
+  const at = email.indexOf("@");
+  const local = at > 0 ? email.slice(0, at) : email;
+  return titleCase(local.replace(/[._-]+/g, " "));
+}
+
 type Ctx = {
   searchParams: Promise<{ from?: string }>;
 };
@@ -41,6 +76,14 @@ export default async function PricingPage({ searchParams }: Ctx) {
   // Resolved customer label (existing customer name or new-customer name).
   // Falls back to null if the workflow isn't ready / has no customer.
   let customerName: string | null = null;
+  // Customer ship-to (multi-line address blob). Only present for existing
+  // customers — for "new" mode the customer hasn't been saved to the
+  // customers table yet so we have no address on file.
+  let customerAddress: string | null = null;
+  // Optional contact info captured at workflow-creation time when the
+  // customer was entered as "new". Used in the quote's PREPARED FOR block.
+  let newCustomerContact: string | null = null;
+  let newCustomerEmail: string | null = null;
   // Initial tab snapshots — normalised to an array even if an older row used
   // the keyed-by-product shape (Record<productUid, snapshot>).
   let initialPricingTabs: PricingSnapshot[] = [];
@@ -72,17 +115,22 @@ export default async function PricingPage({ searchParams }: Ctx) {
           workflowProductUid: snap.workflowProductUid || key,
         }));
       }
-      // Resolve customer name. "new" mode keeps the typed-in name on the
-      // workflow state; "existing" mode needs a SELECT against customers.
+      // Resolve customer name + ship-to. "new" mode keeps the typed-in
+      // name + contact info on the workflow state; "existing" mode needs a
+      // SELECT against customers (where we also have the default_ship_to
+      // address blob used in the quote's PREPARED FOR block).
       if (w.state.customerMode === "new") {
         customerName = w.state.newCustomer?.name?.trim() || null;
+        newCustomerContact = w.state.newCustomer?.contact?.trim() || null;
+        newCustomerEmail = w.state.newCustomer?.email?.trim() || null;
       } else if (w.state.customerId) {
         const { data: customerRow } = await supabase
           .from("customers")
-          .select("name")
+          .select("name, default_ship_to")
           .eq("id", w.state.customerId)
           .maybeSingle();
         customerName = (customerRow?.name as string | undefined) ?? null;
+        customerAddress = (customerRow?.default_ship_to as string | undefined) ?? null;
       }
 
       const products = w.state.products ?? [];
@@ -157,6 +205,11 @@ export default async function PricingPage({ searchParams }: Ctx) {
             workflowState={workflowState}
             initialPricingTabs={initialPricingTabs}
             customerName={customerName}
+            customerAddress={customerAddress}
+            newCustomerContact={newCustomerContact}
+            newCustomerEmail={newCustomerEmail}
+            preparerEmail={user.email ?? ""}
+            preparerName={await resolvePreparerName(supabase, user.email)}
           />
 
           <a href={backHref} className="backlink">
