@@ -216,12 +216,12 @@ function buildQuoteHtml(args: {
 
   const itemRowsHtml = args.lineItems
     .map((li, idx) => `
-      <tr>
-        <td class="q-items__item">${htmlEscape(li.itemRef || `ITEM ${idx + 1}`)}</td>
-        <td class="q-items__desc">${htmlEscape(li.description)}</td>
-        <td class="q-items__qty">${li.quantity.toLocaleString("en-US")}</td>
-        <td class="q-items__price">${htmlEscape(fmtMoney.format(li.unitPrice))}</td>
-        <td class="q-items__amount">${htmlEscape(fmtMoney.format(li.unitPrice * li.quantity))}</td>
+      <tr data-row>
+        <td class="q-items__item" contenteditable="true">${htmlEscape(li.itemRef || `ITEM ${idx + 1}`)}</td>
+        <td class="q-items__desc" contenteditable="true">${htmlEscape(li.description)}</td>
+        <td class="q-items__qty" contenteditable="true" data-qty>${li.quantity.toLocaleString("en-US")}</td>
+        <td class="q-items__price" contenteditable="true" data-price>${htmlEscape(fmtMoney.format(li.unitPrice))}</td>
+        <td class="q-items__amount" data-amount>${htmlEscape(fmtMoney.format(li.unitPrice * li.quantity))}</td>
       </tr>
     `).join("");
 
@@ -243,7 +243,7 @@ function buildQuoteHtml(args: {
     preparedForLines.push(args.customerEmail);
   }
   const preparedForHtml = preparedForLines
-    .map((l, i) => `<div class="q-prep__line${i === 0 ? " q-prep__line--strong" : ""}">${htmlEscape(l)}</div>`)
+    .map((l, i) => `<div class="q-prep__line${i === 0 ? " q-prep__line--strong" : ""}" contenteditable="true">${htmlEscape(l)}</div>`)
     .join("");
 
   const quoteNumber = args.workflowLabel ?? "—";
@@ -466,16 +466,65 @@ function buildQuoteHtml(args: {
     color: var(--ink-3);
   }
 
+  /* Editable affordance --------------------------------------- */
+  /* Subtle hover/focus halo so users know the fields are editable
+     without it looking like a form on the printed PDF. */
+  [contenteditable="true"] { outline: none; transition: background-color 0.15s; }
+  [contenteditable="true"]:hover {
+    background: rgba(29, 108, 123, 0.05);
+    box-shadow: 0 0 0 2px rgba(29, 108, 123, 0.12);
+    border-radius: 3px;
+  }
+  [contenteditable="true"]:focus {
+    background: rgba(29, 108, 123, 0.08);
+    box-shadow: 0 0 0 2px rgba(29, 108, 123, 0.35);
+    border-radius: 3px;
+  }
+
+  /* Floating toolbar --------------------------------------- */
+  .q-toolbar {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    display: flex; gap: 8px; align-items: center;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(15, 74, 86, 0.18);
+  }
+  .q-toolbar__hint {
+    font-size: 11px; color: var(--ink-3); margin-right: 4px;
+  }
+  .q-toolbar__btn {
+    background: var(--teal-700); color: #fff;
+    border: 1px solid var(--teal-900);
+    padding: 7px 14px;
+    border-radius: 7px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  .q-toolbar__btn:hover { background: var(--teal-900); }
+
   /* Print ---------------------------------------------------- */
   @page { margin: 0.4in; size: letter; }
   @media print {
     body { background: #fff !important; }
     .q-stage { padding: 0 !important; }
     .q-sheet { box-shadow: none !important; }
+    /* Hide editing chrome on the printed copy. */
+    .q-toolbar { display: none !important; }
+    [contenteditable="true"]:hover,
+    [contenteditable="true"]:focus {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
   }
 </style>
 </head>
 <body>
+  <div class="q-toolbar" aria-hidden="true">
+    <span class="q-toolbar__hint">Editable — click any field to change.</span>
+    <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
+  </div>
   <div class="q-stage">
     <div class="q-sheet">
 
@@ -495,16 +544,16 @@ Davie, FL 33331
       <section class="q-title">
         <h1>Quote</h1>
         <dl class="q-title__meta">
-          <dt>Prepared Date</dt><dd>${htmlEscape(fmtDate(today))}</dd>
-          <dt>Valid Until</dt><dd>${htmlEscape(fmtDate(validUntil))}</dd>
-          <dt>Quote&nbsp;#</dt><dd>${htmlEscape(quoteNumber)}</dd>
+          <dt>Prepared Date</dt><dd contenteditable="true">${htmlEscape(fmtDate(today))}</dd>
+          <dt>Valid Until</dt><dd contenteditable="true">${htmlEscape(fmtDate(validUntil))}</dd>
+          <dt>Quote&nbsp;#</dt><dd contenteditable="true">${htmlEscape(quoteNumber)}</dd>
         </dl>
       </section>
 
       <section class="q-prep">
         <div class="q-prep__col">
           <div class="q-prep__heading">Prepared For</div>
-          ${preparedForHtml || '<div class="q-prep__line">—</div>'}
+          ${preparedForHtml || '<div class="q-prep__line" contenteditable="true">—</div>'}
         </div>
       </section>
 
@@ -526,19 +575,19 @@ Davie, FL 33331
       <div class="q-totals">
         <dl class="q-totals__inner q-totals__grand">
           <dt>Total</dt>
-          <dd>${htmlEscape(fmtMoney.format(total))}</dd>
+          <dd data-total>${htmlEscape(fmtMoney.format(total))}</dd>
         </dl>
       </div>
 
       <div class="q-notes">
         <div class="q-notes__heading">Notes</div>
-        <ul>
+        <ul contenteditable="true">
           <li>All pricing is ex-works PharmaCenter LLC (Davie, FL).</li>
           <li>Pallet fee of $15.00 will be applied per pallet unless replacements in good condition are provided.</li>
         </ul>
       </div>
 
-      <p class="q-prepared-by">
+      <p class="q-prepared-by" contenteditable="true">
         This quote was prepared by <strong>${htmlEscape(preparedBy)}</strong>.
         If you have any questions concerning this quotation, contact ${htmlEscape(preparedBy)} at (954) 384-8728 or ${htmlEscape(args.preparerEmail || "sales@pharmacenterusa.com")}.
       </p>
@@ -599,10 +648,80 @@ Davie, FL 33331
     </div>
   </div>
   <script>
-    // Auto-open the print dialog so "Save as PDF" is one click away.
-    window.addEventListener("load", () => {
-      setTimeout(() => { try { window.print(); } catch (_) {} }, 250);
-    });
+    // Quote editor — runs after the document loads. Lets the user tweak
+    // any contenteditable field, auto-recomputes line-item Amount and the
+    // Total when Qty or Price are edited, and wires the "Save / Print PDF"
+    // button to window.print() (where the user picks "Save as PDF").
+    (function () {
+      var money = new Intl.NumberFormat("en-US", {
+        style: "currency", currency: "USD",
+        minimumFractionDigits: 2, maximumFractionDigits: 2,
+      });
+
+      // Parse a user-typed cell value as a number. Strip currency symbols,
+      // commas, whitespace; allow a leading minus. Returns 0 on garbage so
+      // a typo doesn't blow up the total.
+      function parseNum(s) {
+        if (s == null) return 0;
+        var cleaned = String(s).replace(/[^0-9.\\-]/g, "");
+        if (cleaned === "" || cleaned === "-" || cleaned === ".") return 0;
+        var n = parseFloat(cleaned);
+        return isFinite(n) ? n : 0;
+      }
+
+      function recompute() {
+        var rows = document.querySelectorAll("[data-row]");
+        var total = 0;
+        rows.forEach(function (row) {
+          var qtyCell = row.querySelector("[data-qty]");
+          var priceCell = row.querySelector("[data-price]");
+          var amtCell = row.querySelector("[data-amount]");
+          if (!qtyCell || !priceCell || !amtCell) return;
+          var qty = parseNum(qtyCell.textContent);
+          var price = parseNum(priceCell.textContent);
+          var amt = qty * price;
+          amtCell.textContent = money.format(amt);
+          total += amt;
+        });
+        var totalCell = document.querySelector("[data-total]");
+        if (totalCell) totalCell.textContent = money.format(total);
+      }
+
+      // Reformat the cell when the user finishes editing so the qty/price
+      // visually snaps back to canonical form (1,000 / $22.14) even if
+      // they typed "1000" or "22.1".
+      function reformatCell(cell, mode) {
+        var n = parseNum(cell.textContent);
+        if (mode === "qty") {
+          cell.textContent = n.toLocaleString("en-US");
+        } else if (mode === "price") {
+          cell.textContent = money.format(n);
+        }
+      }
+
+      // Wire input + blur events on every Qty / Price cell.
+      document.querySelectorAll("[data-qty]").forEach(function (el) {
+        el.addEventListener("input", recompute);
+        el.addEventListener("blur", function () { reformatCell(el, "qty"); recompute(); });
+      });
+      document.querySelectorAll("[data-price]").forEach(function (el) {
+        el.addEventListener("input", recompute);
+        el.addEventListener("blur", function () { reformatCell(el, "price"); recompute(); });
+      });
+
+      // Print button.
+      var btn = document.getElementById("q-print-btn");
+      if (btn) {
+        btn.addEventListener("click", function () {
+          // Blur whatever's focused so any in-flight edit gets reformatted
+          // + folded into the total before we print.
+          if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
+          setTimeout(function () { window.print(); }, 50);
+        });
+      }
+    })();
   </script>
 </body>
 </html>`;
