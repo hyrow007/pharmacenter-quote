@@ -453,7 +453,7 @@ function buildQuoteHtml(args: {
     color: var(--teal-900); margin-bottom: 18px;
   }
   .q-sign__grid {
-    display: grid; grid-template-columns: 2fr 1.5fr 1fr;
+    display: grid; grid-template-columns: 1.4fr 1.6fr 1fr;
     gap: 22px;
   }
   .q-sign__cell { display: flex; flex-direction: column; }
@@ -622,25 +622,11 @@ Davie, FL 33331
           </div>
           <div class="q-sign__cell">
             <div class="q-sign__line"></div>
-            <div class="q-sign__caption">Title</div>
-          </div>
-          <div class="q-sign__cell">
-            <div class="q-sign__line"></div>
-            <div class="q-sign__caption">Date</div>
-          </div>
-        </div>
-        <div class="q-sign__grid" style="margin-top:22px;">
-          <div class="q-sign__cell">
-            <div class="q-sign__line"></div>
             <div class="q-sign__caption">Signature</div>
           </div>
           <div class="q-sign__cell">
             <div class="q-sign__line"></div>
-            <div class="q-sign__caption">Company</div>
-          </div>
-          <div class="q-sign__cell">
-            <div class="q-sign__line"></div>
-            <div class="q-sign__caption">PO #</div>
+            <div class="q-sign__caption">Date</div>
           </div>
         </div>
       </section>
