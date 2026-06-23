@@ -225,18 +225,8 @@ function buildQuoteHtml(args: {
       </tr>
     `).join("");
 
-  // Pad to at least 6 rows so the layout matches the Excel template feel.
-  const padRowsHtml = Array.from({
-    length: Math.max(0, 6 - args.lineItems.length),
-  }).map(() => `
-      <tr>
-        <td class="q-items__item">&nbsp;</td>
-        <td class="q-items__desc">&nbsp;</td>
-        <td class="q-items__qty">&nbsp;</td>
-        <td class="q-items__price">&nbsp;</td>
-        <td class="q-items__amount">&nbsp;</td>
-      </tr>
-    `).join("");
+  // No padding rows — the table sits tight against the real line items so
+  // a one-item quote doesn't look like it has half a page of empty rows.
 
   const preparedForLines: string[] = [];
   if (args.customerName) preparedForLines.push(args.customerName);
@@ -530,7 +520,6 @@ Davie, FL 33331
         </thead>
         <tbody>
           ${itemRowsHtml}
-          ${padRowsHtml}
         </tbody>
       </table>
 
