@@ -1281,16 +1281,26 @@ export default function PricingCalculator({
       lineItems,
     });
 
-    const w = window.open("", "_blank", "noopener");
+    // Use a Blob URL instead of document.write. Two reasons:
+    //   1. window.open(..., "noopener") returns null, which used to leave
+    //      the user staring at an empty about:blank. Now there's nothing
+    //      special to do — the new tab loads the HTML directly.
+    //   2. document.write after the new window's initial about:blank loads
+    //      is timing-sensitive and sometimes leaves the page blank.
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, "_blank");
     if (!w) {
       window.alert(
         "Couldn't open the quote window — please allow popups for this site and try again.",
       );
+      URL.revokeObjectURL(url);
       return;
     }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    // Revoke the URL after a delay so the browser has time to load it.
+    // 30 seconds is generous; the blob is tiny so memory pressure isn't
+    // a concern even if the user keeps the tab open.
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
   const onSave = async () => {
