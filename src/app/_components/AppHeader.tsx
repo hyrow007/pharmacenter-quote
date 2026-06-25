@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { createClient } from "@/lib/auth/server";
+import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { SignOutButton } from "../auth-buttons";
+import AdminToggle from "./AdminToggle";
 import NavLinks from "./NavLinks";
 
 // Top navigation bar — sits flush on every signed-in page. Mirrors the look
@@ -10,12 +13,18 @@ import NavLinks from "./NavLinks";
 // Server component so the user's email comes straight from the RSC tree
 // without bouncing through the client boundary. The active-link highlight
 // is delegated to <NavLinks/> (client) because it needs usePathname.
+//
+// We also resolve `isAdmin` here so the AdminToggle can be rendered for
+// admins on every page without each page having to pass the flag in.
 
 type Props = {
   user: { email: string };
 };
 
-export default function AppHeader({ user }: Props) {
+export default async function AppHeader({ user }: Props) {
+  const supabase = await createClient();
+  const admin = await checkIsAdmin(supabase, user.email);
+
   return (
     <header className="app-nav">
       <div className="app-nav__inner">
@@ -40,6 +49,7 @@ export default function AppHeader({ user }: Props) {
         <NavLinks />
 
         <div className="app-nav__user">
+          {admin ? <AdminToggle /> : null}
           <span className="app-nav__email" title={user.email}>
             {user.email}
           </span>
