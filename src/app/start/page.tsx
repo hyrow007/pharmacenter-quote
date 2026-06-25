@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry } from "@/lib/workflows";
+import { useEffectiveAdmin } from "@/lib/access";
 
 // ----- catalogue ----------------------------------------------------------
 
@@ -110,6 +111,18 @@ const pillBase: CSSProperties = {
 const pillActive: CSSProperties = {
   ...pillBase, background: "var(--teal-900)", color: "#fff", borderColor: "var(--teal-900)",
 };
+// Greyed-out pill for features the current user can't access yet (e.g.
+// non-admins seeing Contract Packaging or "Manufactured at PharmaCenter"
+// gummies). Looks visually similar to disabled native form controls but
+// stays consistent with the surrounding pill style.
+const pillMuted: CSSProperties = {
+  ...pillBase,
+  background: "#f5f1e6",
+  color: "var(--ink-3)",
+  borderColor: "#e3dcc9",
+  cursor: "not-allowed",
+  opacity: 0.7,
+};
 const inputStyle: CSSProperties = {
   width: "100%", padding: "10px 14px", border: "1.5px solid #e3dcc9",
   borderRadius: 8, fontSize: 14, background: "#fff",
@@ -180,6 +193,54 @@ function StartWorkflow() {
   // before hydrating so they don't inherit fields from the last quote
   // they were working on.
   const fresh = searchParams.get("fresh") === "1";
+
+  // Effective-admin gate. Non-admins (and admins in "view as user" mode)
+  // are temporarily restricted to creating Bulk workflows in any dosage
+  // form EXCEPT gummies sourced from PharmaCenter. Everything else on the
+  // /start page renders as muted/disabled pills until the admin promotes
+  // the user or flips back to admin view.
+  const { effectiveAdmin } = useEffectiveAdmin();
+
+  // Per-rule helpers — pulled out as functions so the JSX stays readable.
+  function isTypeAllowed(typeId: string): boolean {
+    if (effectiveAdmin) return true;
+    return typeId === "bulk";
+  }
+  function isFormAllowed(_formId: string): boolean {
+    // All dosage forms are allowed for users — the gummy + PharmaCenter
+    // combo is blocked at the source step instead.
+    return true;
+  }
+  function isSourceAllowed(sourceId: string, formId: string | null): boolean {
+    if (effectiveAdmin) return true;
+    // The one feature we're holding back from users right now.
+    if (formId === "gummy" && sourceId === "pharmacenter") return false;
+    return true;
+  }
+
+  // If the user is currently sitting on a now-disallowed selection (e.g.
+  // they had a Contract Packaging draft and we flipped them to user mode),
+  // clear it so the form doesn't carry a hidden disallowed value to submit.
+  useEffect(() => {
+    setState((s) => {
+      const next = { ...s };
+      let touched = false;
+      if (s.type && !isTypeAllowed(s.type)) {
+        next.type = null;
+        next.form = null;
+        next.source = null;
+        touched = true;
+      }
+      if (s.source && !isSourceAllowed(s.source, s.form)) {
+        next.source = null;
+        touched = true;
+      }
+      return touched ? next : s;
+    });
+    // We deliberately exclude isTypeAllowed/isSourceAllowed from deps —
+    // they close over `effectiveAdmin` which IS the dep we care about.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveAdmin]);
 
   // Single source of truth for the workflow form.
   const [state, setState] = useState<WorkflowState>(() => blankState());
@@ -612,10 +673,29 @@ function StartWorkflow() {
           <div style={sectionStyle}>
             <p style={sectionLabelStyle}>Quote type</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {TYPES.map((t) => (
-                <button key={t.id} type="button" onClick={() => pickType(t.id)}
-                  style={state.type === t.id ? pillActive : pillBase}>{t.name}</button>
-              ))}
+              {TYPES.map((t) => {
+                const allowed = isTypeAllowed(t.id);
+                const active = state.type === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={!allowed}
+                    onClick={() => allowed && pickType(t.id)}
+                    title={allowed ? "" : "Admin only — coming soon for users."}
+                    style={
+                      !allowed
+                        ? pillMuted
+                        : active
+                          ? pillActive
+                          : pillBase
+                    }
+                  >
+                    {t.name}
+                    {!allowed ? " 🔒" : ""}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -624,11 +704,36 @@ function StartWorkflow() {
             <div style={sectionStyle}>
               <p style={sectionLabelStyle}>Dosage form</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {FORMS.map((f) => (
-                  <button key={f.id} type="button"
-                    onClick={() => setState((s) => ({ ...s, form: f.id, source: f.id === "gummy" ? s.source : null }))}
-                    style={state.form === f.id ? pillActive : pillBase}>{f.name}</button>
-                ))}
+                {FORMS.map((f) => {
+                  const allowed = isFormAllowed(f.id);
+                  const active = state.form === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      disabled={!allowed}
+                      onClick={() =>
+                        allowed &&
+                        setState((s) => ({
+                          ...s,
+                          form: f.id,
+                          source: f.id === "gummy" ? s.source : null,
+                        }))
+                      }
+                      title={allowed ? "" : "Admin only — coming soon for users."}
+                      style={
+                        !allowed
+                          ? pillMuted
+                          : active
+                            ? pillActive
+                            : pillBase
+                      }
+                    >
+                      {f.name}
+                      {!allowed ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -638,10 +743,29 @@ function StartWorkflow() {
             <div style={sectionStyle}>
               <p style={sectionLabelStyle}>Source</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {SOURCES.map((s) => (
-                  <button key={s.id} type="button" onClick={() => setField("source", s.id)}
-                    style={state.source === s.id ? pillActive : pillBase}>{s.name}</button>
-                ))}
+                {SOURCES.map((s) => {
+                  const allowed = isSourceAllowed(s.id, state.form);
+                  const active = state.source === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={!allowed}
+                      onClick={() => allowed && setField("source", s.id)}
+                      title={allowed ? "" : "Admin only — coming soon for users."}
+                      style={
+                        !allowed
+                          ? pillMuted
+                          : active
+                            ? pillActive
+                            : pillBase
+                      }
+                    >
+                      {s.name}
+                      {!allowed ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
