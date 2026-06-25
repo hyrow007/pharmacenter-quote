@@ -24,10 +24,12 @@ const FORMS = [
   { id: "other", name: "Other" },
 ];
 
+// Gummies are only sourced as Third party or Manufactured at PharmaCenter.
+// We don't have an "Other" source for gummies — keeping the list tight
+// avoids the UX of presenting a pointless option.
 const SOURCES = [
   { id: "third-party", name: "Third party" },
   { id: "pharmacenter", name: "Manufactured at PharmaCenter" },
-  { id: "other", name: "Other" },
 ];
 
 const PAGE_SIZE = 50;
