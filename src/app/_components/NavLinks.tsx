@@ -13,6 +13,7 @@ export default function NavLinks() {
 
   const isWorkflows =
     pathname === "/workflows" || pathname.startsWith("/workflow/") || pathname === "/start";
+  const isFeedback = pathname.startsWith("/feedback");
   const isAdmin = pathname.startsWith("/admin");
 
   return (
@@ -23,12 +24,12 @@ export default function NavLinks() {
       >
         Workflows
       </Link>
-      <a
-        href="mailto:feedback@pharmacenterusa.com?subject=Quote%20Generator%20feedback"
-        className="app-nav__link"
+      <Link
+        href="/feedback"
+        className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}
       >
         Feedback
-      </a>
+      </Link>
       <Link
         href="/admin"
         className={`app-nav__link${isAdmin ? " app-nav__link--active" : ""}`}
