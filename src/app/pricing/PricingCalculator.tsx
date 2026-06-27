@@ -1459,6 +1459,24 @@ export default function PricingCalculator({
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
+  // Auto-trigger the Issue Quote flow when the page is loaded with
+  // ?issue=1 in the URL (the "Issue Quote" action on /workflow/[id]).
+  // Runs once on mount so we don't loop on every state change.
+  const autoIssuedRef = useRef(false);
+  useEffect(() => {
+    if (autoIssuedRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("issue") !== "1") return;
+    autoIssuedRef.current = true;
+    // Defer a tick so the tabs/initial state have a chance to hydrate.
+    const t = window.setTimeout(() => {
+      onIssueQuote();
+    }, 60);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onSave = async () => {
     if (!workflowId || !workflowState) return;
     setSaving(true);
