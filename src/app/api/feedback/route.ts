@@ -61,7 +61,24 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-  return NextResponse.json({ ok: true, feedback: data });
+
+  // Resolve the poster's display name server-side so the client can show
+  // it immediately on the optimistic insert (instead of falling back to a
+  // title-cased email local-part for the lifetime of this session).
+  let authorName: string | null = null;
+  try {
+    const { data: dirRow } = await supabase
+      .from("user_directory")
+      .select("display_name")
+      .eq("email", user.email)
+      .maybeSingle();
+    const name = (dirRow?.display_name as string | undefined) ?? null;
+    if (name && name.trim().length > 0) authorName = name.trim();
+  } catch {
+    // Non-fatal — client will fall back to its own local-part guess.
+  }
+
+  return NextResponse.json({ ok: true, feedback: data, authorName });
 }
 
 export async function DELETE(request: Request) {
