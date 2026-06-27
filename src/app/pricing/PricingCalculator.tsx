@@ -504,6 +504,14 @@ function buildQuoteHtml(args: {
     font-family: inherit;
   }
   .q-toolbar__btn:hover { background: var(--teal-900); }
+  .q-toolbar__toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--ink-2); cursor: pointer;
+    margin-right: 6px; user-select: none;
+  }
+  .q-toolbar__toggle input { margin: 0; cursor: pointer; }
+  /* Hide the total block when the toggle is off. Class lives on the block. */
+  .q-totals--hidden { display: none !important; }
 
   /* Print ---------------------------------------------------- */
   @page { margin: 0.4in; size: letter; }
@@ -524,6 +532,10 @@ function buildQuoteHtml(args: {
 <body>
   <div class="q-toolbar" aria-hidden="true">
     <span class="q-toolbar__hint">Editable — click any field to change.</span>
+    <label class="q-toolbar__toggle">
+      <input type="checkbox" id="q-show-total" checked />
+      <span>Show total</span>
+    </label>
     <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
   </div>
   <div class="q-stage">
@@ -573,7 +585,7 @@ Davie, FL 33331
         </tbody>
       </table>
 
-      <div class="q-totals">
+      <div class="q-totals" id="q-totals-block">
         <dl class="q-totals__inner q-totals__grand">
           <dt>Total</dt>
           <dd data-total>${htmlEscape(fmtMoney.format(total))}</dd>
@@ -695,6 +707,20 @@ Davie, FL 33331
         el.addEventListener("input", recompute);
         el.addEventListener("blur", function () { reformatCell(el, "price"); recompute(); });
       });
+
+      // "Show total" checkbox — flip the hidden class on the totals block.
+      // Defaults to checked, so the total is visible unless the user opts out.
+      var showTotalCb = document.getElementById("q-show-total");
+      var totalsBlock = document.getElementById("q-totals-block");
+      if (showTotalCb && totalsBlock) {
+        showTotalCb.addEventListener("change", function () {
+          if (showTotalCb.checked) {
+            totalsBlock.classList.remove("q-totals--hidden");
+          } else {
+            totalsBlock.classList.add("q-totals--hidden");
+          }
+        });
+      }
 
       // Print button.
       var btn = document.getElementById("q-print-btn");
