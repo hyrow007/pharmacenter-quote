@@ -658,21 +658,16 @@ export default function WorkflowActions({
           </span>
         </a>
 
-        {canDelete ? (
-          <button type="button" style={deleteAction} onClick={deleteWorkflow} disabled={deleting}>
-            <span>{deleting ? "Deleting…" : "Delete workflow"}</span>
-            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-              {isAdmin && !isOwner
-                ? "Admin override — created by someone else."
-                : "Owner-only action."}
-            </span>
-          </button>
-        ) : (
-          <button type="button" style={blankAction} disabled aria-label="Coming soon">
-            <span>—</span>
-            <span style={{ fontSize: 12, fontWeight: 400 }}>Coming soon</span>
-          </button>
-        )}
+        <a
+          href={`/pricing?from=${workflow.id}&issue=1`}
+          style={editAction}
+          aria-label="Open the pricing calculator and issue a quote"
+        >
+          <span>Issue Quote →</span>
+          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+            Generate a customer-facing quote PDF.
+          </span>
+        </a>
 
         <a
           href={`/pricing?from=${workflow.id}`}
@@ -685,6 +680,27 @@ export default function WorkflowActions({
           </span>
         </a>
       </div>
+
+      {/* Delete workflow lives on its own row, separated from the everyday
+          actions above so an accidental click is less likely. Only the
+          owner (or an admin) sees this button at all. */}
+      {canDelete ? (
+        <div style={{ marginBottom: 28 }}>
+          <button
+            type="button"
+            style={{ ...deleteAction, width: "100%" }}
+            onClick={deleteWorkflow}
+            disabled={deleting}
+          >
+            <span>{deleting ? "Deleting…" : "Delete workflow"}</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              {isAdmin && !isOwner
+                ? "Admin override — created by someone else."
+                : "Owner-only action."}
+            </span>
+          </button>
+        </div>
+      ) : null}
 
       {toast ? (
         <div
