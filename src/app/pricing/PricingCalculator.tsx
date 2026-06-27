@@ -506,10 +506,10 @@ function buildQuoteHtml(args: {
   }
   .q-toolbar__btn:hover { background: var(--teal-900); }
   /* Show-total checkbox lives next to the Total row, on its left. The
-     `print-hide` class on the label drops it from the printed PDF (and we
-     also bake that into @media print below). When the checkbox is
-     unchecked the inner dl gets `.q-totals--hidden`, which collapses the
-     number but leaves the toggle visible so the editor can flip it back. */
+     print-hide rule on .q-totals__toggle below removes it from the printed
+     PDF. When the checkbox is unchecked the inner dl gets
+     .q-totals--hidden, which collapses the number but leaves the toggle
+     visible so the editor can flip it back. */
   .q-totals__toggle {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; color: var(--ink-3);
