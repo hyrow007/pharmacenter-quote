@@ -539,23 +539,23 @@ function buildQuoteHtml(args: {
     font-family: inherit;
   }
   .q-toolbar__btn:hover { background: var(--teal-900); }
-  /* Back-to-workflow pill — sits opposite the toolbar in the top-left so
-     editors can hop back to the workflow hub. Mirrors the same pill used
-     on /pricing for visual consistency. Hidden in print. */
+  /* Back-to-workflow pill — sits as the first item in the Versions bar
+     so it doesn't overlap the + New version / Save controls. Mirrors
+     the same pill used on /pricing for visual consistency. Hidden in
+     print. */
   .q-back {
-    position: fixed; top: 16px; left: 16px; z-index: 100;
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 14px;
-    background: #fffdf8;
+    padding: 6px 12px;
+    background: #fff;
     border: 1px solid var(--line);
     border-radius: 999px;
-    font-size: 13px; font-weight: 700;
+    font-size: 12px; font-weight: 700;
     color: var(--teal-900);
     text-decoration: none;
-    box-shadow: 0 4px 16px rgba(15, 74, 86, 0.10);
     white-space: nowrap;
+    margin-right: 4px;
   }
-  .q-back:hover { background: #fff; }
+  .q-back:hover { background: #fffdf8; }
   /* Show-total checkbox lives next to the Total row, on its left. The
      print-hide rule on .q-totals__toggle below removes it from the printed
      PDF. When the checkbox is unchecked the inner dl gets
@@ -658,15 +658,17 @@ function buildQuoteHtml(args: {
 </style>
 </head>
 <body>
-  ${backPillHtml}
   <div class="q-toolbar" aria-hidden="true">
     <span class="q-toolbar__hint">Editable — click any field to change.</span>
     <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
   </div>
   <!-- Version tab bar. Rendered/maintained entirely client-side from
        the JSON payload injected just below; the server only emits the
-       container so the print stylesheet has something to hide. -->
+       container so the print stylesheet has something to hide. The
+       Back-to-workflow pill leads the row so it doesn't overlay the
+       + New version control. -->
   <div class="q-tabs" id="q-tabs" aria-hidden="true">
+    ${backPillHtml}
     <span class="q-tabs__label">Versions</span>
     <span id="q-tabs-chips" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></span>
     <button type="button" class="q-tabs__chip q-tabs__add" id="q-tabs-add">+ New version</button>
