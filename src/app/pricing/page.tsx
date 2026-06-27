@@ -184,6 +184,34 @@ export default async function PricingPage({ searchParams }: Ctx) {
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
         <div className="page__inner--narrow">
+          {/* Prominent back-to-workflow link — only when we're launched
+              from a workflow. Renders above the title so the user always
+              knows how to get back to the workflow detail page without
+              hunting for the link buried at the bottom of the calculator. */}
+          {from ? (
+            <a
+              href={backHref}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                background: "var(--paper, #fffdf8)",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--teal-900, #0f4a56)",
+                textDecoration: "none",
+                marginBottom: 12,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span aria-hidden="true">&larr;</span> {backLabel}
+              {workflowLabel ? ` (${workflowLabel})` : ""}
+            </a>
+          ) : null}
+
           <div style={{ marginBottom: 22 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
               PharmaCenter · Tools

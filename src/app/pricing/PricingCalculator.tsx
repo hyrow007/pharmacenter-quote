@@ -1250,6 +1250,32 @@ export default function PricingCalculator({
     }
   }
 
+  // Move the tab at `index` one slot to the left (-1) or right (+1). Keeps
+  // the in-memory `tabs` array in sync with the displayed order and updates
+  // `activeTabIndex` so the currently-selected tab stays selected after
+  // the swap. We snapshot the active tab's in-flight edits first so a tab
+  // the user was typing into doesn't lose data when its position changes.
+  function moveTab(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= tabs.length) return;
+    const snap = snapshotCurrentTab();
+    setTabs((prev) => {
+      // Apply the latest in-flight edits to the previously-active tab so
+      // its position-swap doesn't fork from what the user sees.
+      const withSnap = prev.map((t, i) => (i === activeTabIndex ? snap : t));
+      const next = withSnap.slice();
+      const [tab] = next.splice(index, 1);
+      next.splice(target, 0, tab);
+      return next;
+    });
+    // Track the active index across the swap.
+    if (activeTabIndex === index) {
+      setActiveTabIndex(target);
+    } else if (activeTabIndex === target) {
+      setActiveTabIndex(index);
+    }
+  }
+
   // Update just the active tab's label (used by the inline tab-rename UI).
   function setActiveTabLabel(next: string) {
     const trimmed = next.trim();
@@ -1599,6 +1625,55 @@ export default function PricingCalculator({
                 whiteSpace: "nowrap",
               }}
             >
+              {/* Reorder arrows. Hidden when there's only one tab. Each
+                  shifts this tab one slot left/right; arrows disable at
+                  the ends of the row so the user gets visual feedback. */}
+              {tabs.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    aria-label={`Move ${label} left`}
+                    disabled={i === 0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveTab(i, -1);
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: i === 0 ? "#cbd5e1" : "#475569",
+                      cursor: i === 0 ? "not-allowed" : "pointer",
+                      fontSize: 12,
+                      lineHeight: 1,
+                      padding: "0 2px",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move ${label} right`}
+                    disabled={i === tabs.length - 1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveTab(i, 1);
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: i === tabs.length - 1 ? "#cbd5e1" : "#475569",
+                      cursor: i === tabs.length - 1 ? "not-allowed" : "pointer",
+                      fontSize: 12,
+                      lineHeight: 1,
+                      padding: "0 2px",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    ▶
+                  </button>
+                </>
+              ) : null}
               <span>{label}</span>
               {tabs.length > 1 ? (
                 <button
