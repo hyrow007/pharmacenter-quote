@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
 import {
   formatQuoteNumber,
+  type IssuedQuoteTab,
   type PricingSnapshot,
   type WorkflowRow,
   type WorkflowState,
@@ -87,6 +88,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
   // Initial tab snapshots — normalised to an array even if an older row used
   // the keyed-by-product shape (Record<productUid, snapshot>).
   let initialPricingTabs: PricingSnapshot[] = [];
+  // Saved customer-facing quote document versions (one per "Issue a Quote"
+  // tab). Empty array = no saved versions yet.
+  let initialIssuedQuotes: IssuedQuoteTab[] = [];
   if (from) {
     const { data: workflowRow } = await supabase
       .from("workflows")
@@ -105,6 +109,19 @@ export default async function PricingPage({ searchParams }: Ctx) {
         | PricingSnapshot[]
         | Record<string, PricingSnapshot>
         | undefined;
+      // Hydrate saved issued-quote tabs straight off the workflow state.
+      // Filter to entries that look structurally valid so a malformed row
+      // doesn't blow up the popup hydration on the client.
+      const rawIssued = w.state.issuedQuotes;
+      if (Array.isArray(rawIssued)) {
+        initialIssuedQuotes = rawIssued.filter(
+          (t): t is IssuedQuoteTab =>
+            !!t &&
+            typeof t.id === "string" &&
+            typeof t.label === "string" &&
+            typeof t.sheetHtml === "string",
+        );
+      }
       if (Array.isArray(rawPricing)) {
         initialPricingTabs = rawPricing;
       } else if (rawPricing && typeof rawPricing === "object") {
@@ -232,6 +249,7 @@ export default async function PricingPage({ searchParams }: Ctx) {
             workflowId={from ?? null}
             workflowState={workflowState}
             initialPricingTabs={initialPricingTabs}
+            initialIssuedQuotes={initialIssuedQuotes}
             customerName={customerName}
             customerAddress={customerAddress}
             newCustomerContact={newCustomerContact}

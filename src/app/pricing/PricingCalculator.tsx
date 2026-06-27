@@ -4,7 +4,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
-import type { PricingSnapshot, WorkflowState } from "@/lib/workflows";
+import type {
+  IssuedQuoteTab,
+  PricingSnapshot,
+  WorkflowState,
+} from "@/lib/workflows";
 
 // Pricing calculator client component. All math is dollar-and-percent simple
 // arithmetic, derived from input strings live as the user types. Inputs are
@@ -202,6 +206,13 @@ function buildQuoteHtml(args: {
   // wasn't launched from a workflow).
   backUrl: string | null;
   backLabel: string | null;
+  // Previously-saved customer-facing quote versions for this workflow.
+  // Empty array means "fresh popup — synthesise a single Version 1 tab
+  // from lineItems above". Each tab carries a full sheet HTML snapshot.
+  initialTabs: IssuedQuoteTab[];
+  // Whether the popup's Save button should be active. False = no workflow
+  // context, so we render a disabled, explanatory pill instead.
+  saveEnabled: boolean;
 }): string {
   const today = new Date();
   const validUntil = new Date(today);
@@ -242,6 +253,15 @@ function buildQuoteHtml(args: {
     args.backUrl && args.backLabel
       ? `<a class="q-back" href="${htmlEscape(args.backUrl)}" target="_top" rel="noopener"><span aria-hidden="true">&larr;</span> ${htmlEscape(args.backLabel)}</a>`
       : "";
+
+  // Serialise the initial saved tabs as JSON for client-side hydration.
+  // We escape forward slash and ampersands so the script tag terminator
+  // (</script>) and < cannot appear inside the JSON payload. The popup's
+  // bootstrap script reads this from the inline JSON script tag.
+  const initialTabsJson = JSON.stringify(args.initialTabs)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
 
   const preparedForLines: string[] = [];
   if (args.customerName) preparedForLines.push(args.customerName);
@@ -551,6 +571,73 @@ function buildQuoteHtml(args: {
   .q-totals__toggle input { margin: 0; cursor: pointer; }
   .q-totals--hidden { visibility: hidden; }
 
+  /* Version tab bar -------------------------------------------------
+     Excel-style strip above the quote sheet. Each chip is one saved
+     version. The active chip is highlighted; the + chip adds a fresh
+     clone of the current tab; double-click a chip to rename; the small
+     x deletes (with confirm). Hidden in print. */
+  .q-tabs {
+    position: sticky; top: 0; z-index: 80;
+    background: var(--cream-soft);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 16px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+  .q-tabs__label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-3);
+    margin-right: 8px;
+  }
+  .q-tabs__chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    color: var(--ink-2, #415056);
+    cursor: pointer;
+    font-family: inherit;
+    user-select: none;
+  }
+  .q-tabs__chip:hover { background: var(--paper, #fffdf8); }
+  .q-tabs__chip--active {
+    background: var(--teal-700, #1d6c7b); color: #fff;
+    border-color: var(--teal-900, #0f4a56);
+  }
+  .q-tabs__chip--active:hover { background: var(--teal-900, #0f4a56); }
+  .q-tabs__chip .q-tabs__x {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    font-size: 13px; line-height: 1;
+    opacity: 0.55;
+  }
+  .q-tabs__chip .q-tabs__x:hover { opacity: 1; }
+  .q-tabs__add {
+    background: transparent; border: 1px dashed var(--line);
+    color: var(--teal-900, #0f4a56);
+  }
+  .q-tabs__save {
+    margin-left: auto;
+    background: var(--teal-700, #1d6c7b); color: #fff;
+    border: 1px solid var(--teal-900, #0f4a56);
+    padding: 6px 14px; border-radius: 7px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+  }
+  .q-tabs__save:hover { background: var(--teal-900, #0f4a56); }
+  .q-tabs__save:disabled {
+    background: #c7d2d6; border-color: #b6c1c5;
+    color: #fff; cursor: not-allowed;
+  }
+  .q-tabs__status {
+    font-size: 11px; color: var(--ink-3); margin-left: 6px;
+    min-width: 80px;
+  }
+  .q-tabs__status--ok { color: var(--teal-700, #1d6c7b); }
+  .q-tabs__status--err { color: #8b2f2f; }
+
   /* Print ---------------------------------------------------- */
   @page { margin: 0.4in; size: letter; }
   @media print {
@@ -560,6 +647,7 @@ function buildQuoteHtml(args: {
     /* Hide editing chrome on the printed copy. */
     .q-toolbar { display: none !important; }
     .q-back { display: none !important; }
+    .q-tabs { display: none !important; }
     .q-totals__toggle { display: none !important; }
     [contenteditable="true"]:hover,
     [contenteditable="true"]:focus {
@@ -575,6 +663,17 @@ function buildQuoteHtml(args: {
     <span class="q-toolbar__hint">Editable — click any field to change.</span>
     <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
   </div>
+  <!-- Version tab bar. Rendered/maintained entirely client-side from
+       the JSON payload injected just below; the server only emits the
+       container so the print stylesheet has something to hide. -->
+  <div class="q-tabs" id="q-tabs" aria-hidden="true">
+    <span class="q-tabs__label">Versions</span>
+    <span id="q-tabs-chips" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></span>
+    <button type="button" class="q-tabs__chip q-tabs__add" id="q-tabs-add">+ New version</button>
+    <span class="q-tabs__status" id="q-tabs-status"></span>
+    <button type="button" class="q-tabs__save" id="q-tabs-save"${args.saveEnabled ? "" : " disabled"} title="${args.saveEnabled ? "Save all versions to this workflow" : "Open from a workflow to save versions"}">Save versions</button>
+  </div>
+  <script type="application/json" id="q-initial-tabs-json">${initialTabsJson}</script>
   <div class="q-stage">
     <div class="q-sheet">
 
@@ -739,30 +838,37 @@ Davie, FL 33331
         }
       }
 
-      // Wire input + blur events on every Qty / Price cell.
-      document.querySelectorAll("[data-qty]").forEach(function (el) {
-        el.addEventListener("input", recompute);
-        el.addEventListener("blur", function () { reformatCell(el, "qty"); recompute(); });
-      });
-      document.querySelectorAll("[data-price]").forEach(function (el) {
-        el.addEventListener("input", recompute);
-        el.addEventListener("blur", function () { reformatCell(el, "price"); recompute(); });
-      });
-
-      // "Show total" checkbox — flip the hidden class on the totals dl.
-      // The toggle itself stays put so the user can re-show the value.
-      // Defaults to checked, so the total is visible unless the user opts out.
-      var showTotalCb = document.getElementById("q-show-total");
-      var totalsDl = document.getElementById("q-totals-dl");
-      if (showTotalCb && totalsDl) {
-        showTotalCb.addEventListener("change", function () {
-          if (showTotalCb.checked) {
-            totalsDl.classList.remove("q-totals--hidden");
-          } else {
-            totalsDl.classList.add("q-totals--hidden");
-          }
+      // Rebindable handlers: when a tab is switched the .q-sheet's
+      // innerHTML is replaced wholesale, so the old DOM nodes (and their
+      // event listeners) are gone. We extract the wiring into a function
+      // that runs both on initial load and after every tab swap.
+      function bindSheetHandlers() {
+        document.querySelectorAll("[data-qty]").forEach(function (el) {
+          el.addEventListener("input", recompute);
+          el.addEventListener("blur", function () { reformatCell(el, "qty"); recompute(); });
         });
+        document.querySelectorAll("[data-price]").forEach(function (el) {
+          el.addEventListener("input", recompute);
+          el.addEventListener("blur", function () { reformatCell(el, "price"); recompute(); });
+        });
+        var showTotalCb = document.getElementById("q-show-total");
+        var totalsDl = document.getElementById("q-totals-dl");
+        if (showTotalCb && totalsDl) {
+          // Restore the checkbox state from the dl: if data-total-hidden
+          // is "1" the dl should start hidden and the box unchecked.
+          var startHidden = totalsDl.classList.contains("q-totals--hidden");
+          showTotalCb.checked = !startHidden;
+          showTotalCb.addEventListener("change", function () {
+            if (showTotalCb.checked) {
+              totalsDl.classList.remove("q-totals--hidden");
+            } else {
+              totalsDl.classList.add("q-totals--hidden");
+            }
+          });
+        }
+        recompute();
       }
+      bindSheetHandlers();
 
       // Print button.
       var btn = document.getElementById("q-print-btn");
@@ -773,7 +879,210 @@ Davie, FL 33331
           if (document.activeElement && document.activeElement.blur) {
             document.activeElement.blur();
           }
+          // Snapshot the active tab's edits before printing so the printed
+          // copy matches what shows on screen and the saved state.
+          snapshotActiveTab();
           setTimeout(function () { window.print(); }, 50);
+        });
+      }
+
+      // ---- Version tabs -----------------------------------------------
+      // Hydrate the tabs array from the inline JSON. Empty array means
+      // we synthesise a Version 1 tab from the freshly-rendered sheet.
+      var sheetEl = document.querySelector(".q-sheet");
+      var tabsChipsEl = document.getElementById("q-tabs-chips");
+      var tabsAddBtn = document.getElementById("q-tabs-add");
+      var tabsSaveBtn = document.getElementById("q-tabs-save");
+      var tabsStatusEl = document.getElementById("q-tabs-status");
+
+      var versions = [];
+      var activeId = null;
+      var rawJson = document.getElementById("q-initial-tabs-json");
+      try {
+        var parsed = rawJson ? JSON.parse(rawJson.textContent || "[]") : [];
+        if (Array.isArray(parsed)) {
+          for (var i = 0; i < parsed.length; i++) {
+            var t = parsed[i];
+            if (t && typeof t.id === "string" && typeof t.label === "string" && typeof t.sheetHtml === "string") {
+              versions.push({ id: t.id, label: t.label, sheetHtml: t.sheetHtml, savedAt: t.savedAt || "" });
+            }
+          }
+        }
+      } catch (e) { /* ignore — start fresh */ }
+
+      function newId() {
+        // Cheap, collision-resistant enough for in-tab use.
+        return "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+      }
+
+      if (versions.length === 0 && sheetEl) {
+        // First time opening — capture the default sheet as Version 1.
+        versions.push({ id: newId(), label: "Version 1", sheetHtml: sheetEl.innerHTML, savedAt: "" });
+      }
+      activeId = versions[0] ? versions[0].id : null;
+      // If we hydrated from saved tabs, replace the default sheet with the
+      // first saved tab's content so what the user sees matches.
+      if (sheetEl && versions[0]) {
+        sheetEl.innerHTML = versions[0].sheetHtml;
+        bindSheetHandlers();
+      }
+
+      function activeIndex() {
+        for (var i = 0; i < versions.length; i++) {
+          if (versions[i].id === activeId) return i;
+        }
+        return -1;
+      }
+      function snapshotActiveTab() {
+        var idx = activeIndex();
+        if (idx < 0 || !sheetEl) return;
+        versions[idx].sheetHtml = sheetEl.innerHTML;
+      }
+      function switchTo(id) {
+        if (id === activeId) return;
+        snapshotActiveTab();
+        var next = null;
+        for (var i = 0; i < versions.length; i++) {
+          if (versions[i].id === id) { next = versions[i]; break; }
+        }
+        if (!next || !sheetEl) return;
+        activeId = id;
+        sheetEl.innerHTML = next.sheetHtml;
+        bindSheetHandlers();
+        renderChips();
+        // Scroll to top so the user sees the freshly-loaded version.
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      function addVersion() {
+        snapshotActiveTab();
+        var src = versions[activeIndex()];
+        var nextLabel = "Version " + (versions.length + 1);
+        var clone = { id: newId(), label: nextLabel, sheetHtml: src ? src.sheetHtml : (sheetEl ? sheetEl.innerHTML : ""), savedAt: "" };
+        versions.push(clone);
+        switchTo(clone.id);
+      }
+      function renameVersion(id) {
+        for (var i = 0; i < versions.length; i++) {
+          if (versions[i].id === id) {
+            var current = versions[i].label;
+            var next = window.prompt("Rename this version:", current);
+            if (next != null) {
+              var trimmed = String(next).trim();
+              if (trimmed.length > 0) {
+                versions[i].label = trimmed.slice(0, 40);
+                renderChips();
+              }
+            }
+            return;
+          }
+        }
+      }
+      function deleteVersion(id) {
+        if (versions.length <= 1) {
+          window.alert("There needs to be at least one version. Add another version before deleting this one.");
+          return;
+        }
+        var idx = -1;
+        for (var i = 0; i < versions.length; i++) {
+          if (versions[i].id === id) { idx = i; break; }
+        }
+        if (idx < 0) return;
+        if (!window.confirm("Delete \\"" + versions[idx].label + "\\"? This cannot be undone unless you re-save.")) return;
+        versions.splice(idx, 1);
+        if (activeId === id) {
+          var nextActive = versions[Math.max(0, idx - 1)];
+          activeId = nextActive.id;
+          if (sheetEl) {
+            sheetEl.innerHTML = nextActive.sheetHtml;
+            bindSheetHandlers();
+          }
+        }
+        renderChips();
+      }
+      function renderChips() {
+        if (!tabsChipsEl) return;
+        tabsChipsEl.innerHTML = "";
+        for (var i = 0; i < versions.length; i++) {
+          (function (v) {
+            var chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "q-tabs__chip" + (v.id === activeId ? " q-tabs__chip--active" : "");
+            chip.title = "Click to switch. Double-click to rename.";
+            chip.addEventListener("click", function () { switchTo(v.id); });
+            chip.addEventListener("dblclick", function (e) { e.preventDefault(); renameVersion(v.id); });
+            var label = document.createElement("span");
+            label.textContent = v.label;
+            chip.appendChild(label);
+            if (versions.length > 1) {
+              var x = document.createElement("span");
+              x.className = "q-tabs__x";
+              x.textContent = "×";
+              x.title = "Delete this version";
+              x.addEventListener("click", function (e) {
+                e.stopPropagation();
+                deleteVersion(v.id);
+              });
+              chip.appendChild(x);
+            }
+            tabsChipsEl.appendChild(chip);
+          })(versions[i]);
+        }
+      }
+      renderChips();
+
+      if (tabsAddBtn) tabsAddBtn.addEventListener("click", addVersion);
+
+      // Save → postMessage to the opener (the calculator window), which
+      // owns the API/cookie context and persists the array on the
+      // workflow. The opener replies with type:"issued-quotes-saved".
+      function setStatus(text, cls) {
+        if (!tabsStatusEl) return;
+        tabsStatusEl.textContent = text || "";
+        tabsStatusEl.className = "q-tabs__status" + (cls ? " " + cls : "");
+      }
+      window.addEventListener("message", function (event) {
+        if (!event || !event.data) return;
+        if (event.data.type === "issued-quotes-saved") {
+          if (event.data.ok) {
+            setStatus("Saved", "q-tabs__status--ok");
+            setTimeout(function () { setStatus("", ""); }, 2500);
+          } else {
+            var msg = event.data.error || "save_failed";
+            if (msg === "no_workflow") msg = "Open from a workflow to save versions.";
+            setStatus(msg, "q-tabs__status--err");
+          }
+          if (tabsSaveBtn) tabsSaveBtn.disabled = false;
+        }
+      });
+      if (tabsSaveBtn) {
+        tabsSaveBtn.addEventListener("click", function () {
+          if (!window.opener || window.opener.closed) {
+            setStatus("Calculator window is closed — re-open from there.", "q-tabs__status--err");
+            return;
+          }
+          if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
+          snapshotActiveTab();
+          var payloadTabs = versions.map(function (v) {
+            return {
+              id: v.id,
+              label: v.label,
+              sheetHtml: v.sheetHtml,
+              savedAt: new Date().toISOString(),
+            };
+          });
+          setStatus("Saving...", "");
+          tabsSaveBtn.disabled = true;
+          try {
+            window.opener.postMessage(
+              { type: "issued-quotes-save", tabs: payloadTabs },
+              "*"
+            );
+          } catch (err) {
+            setStatus("Send failed.", "q-tabs__status--err");
+            tabsSaveBtn.disabled = false;
+          }
         });
       }
     })();
@@ -794,6 +1103,10 @@ type Props = {
   workflowState: WorkflowState | null;
   // Saved tabs, in display order. Empty array = no saved tabs yet.
   initialPricingTabs: PricingSnapshot[];
+  // Saved customer-facing quote document versions ("Issue a Quote" tabs).
+  // Each entry is a serialised sheet snapshot. Empty array = no saved
+  // versions, the popup starts with a single freshly-generated tab.
+  initialIssuedQuotes: IssuedQuoteTab[];
   // Resolved customer name from the workflow (existing customer or
   // newly-entered name). Null when not in workflow context or unresolved.
   customerName: string | null;
@@ -970,6 +1283,7 @@ export default function PricingCalculator({
   workflowId,
   workflowState,
   initialPricingTabs,
+  initialIssuedQuotes,
   customerName,
   customerAddress,
   newCustomerContact,
@@ -987,6 +1301,32 @@ export default function PricingCalculator({
       : [blankTab()],
   );
   const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
+
+  // --- Issued quote versions (separate from calculator tabs) ---------
+  // The customer-facing quote document supports its own Excel-style tabs
+  // for multiple saved versions. We track them in calculator state because
+  // (a) saving them needs the workflowState/PUT plumbing that already
+  // lives here, and (b) the popup posts messages back to this window when
+  // the user clicks Save inside the quote. Refs let the postMessage
+  // handler read the latest value without re-binding.
+  const [issuedQuotes, setIssuedQuotes] = useState<IssuedQuoteTab[]>(
+    () => initialIssuedQuotes ?? [],
+  );
+  const issuedQuotesRef = useRef<IssuedQuoteTab[]>(issuedQuotes);
+  useEffect(() => {
+    issuedQuotesRef.current = issuedQuotes;
+  }, [issuedQuotes]);
+  // The popup window we last opened — used to validate inbound postMessage
+  // events (we only listen to events from THIS window reference).
+  const quotePopupRef = useRef<Window | null>(null);
+  const workflowIdRef = useRef<string | null>(workflowId);
+  useEffect(() => {
+    workflowIdRef.current = workflowId;
+  }, [workflowId]);
+  const workflowStateRef = useRef<WorkflowState | null>(workflowState);
+  useEffect(() => {
+    workflowStateRef.current = workflowState;
+  }, [workflowState]);
   // Auto-numbered fallback when a tab doesn't have a label / picked product.
   // We just use "Tab N" based on display position.
 
@@ -1470,6 +1810,16 @@ export default function PricingCalculator({
       ? `Back to workflow${workflowLabel ? ` (${workflowLabel})` : ""}`
       : null;
 
+    // Hydrate the popup with any previously-saved quote versions for this
+    // workflow. Empty array = the popup builds a single default Version 1
+    // tab from the current line items.
+    const initialTabsForPopup: IssuedQuoteTab[] =
+      issuedQuotesRef.current.length > 0 ? issuedQuotesRef.current : [];
+
+    // Only the opener can persist (it has the API access). We tell the
+    // popup whether saving is wired up at all by passing a flag.
+    const saveEnabled = !!workflowId;
+
     const html = buildQuoteHtml({
       customerName,
       customerAddress,
@@ -1481,6 +1831,8 @@ export default function PricingCalculator({
       lineItems,
       backUrl,
       backLabel,
+      initialTabs: initialTabsForPopup,
+      saveEnabled,
     });
 
     // Use a Blob URL instead of document.write. Two reasons:
@@ -1499,6 +1851,10 @@ export default function PricingCalculator({
       URL.revokeObjectURL(url);
       return;
     }
+    // Track the window so the postMessage listener can validate that
+    // inbound save/hydrate events came from this popup (and not some
+    // other origin trying to spoof a save).
+    quotePopupRef.current = w;
     // Revoke the URL after a delay so the browser has time to load it.
     // 30 seconds is generous; the blob is tiny so memory pressure isn't
     // a concern even if the user keeps the tab open.
@@ -1521,6 +1877,110 @@ export default function PricingCalculator({
     }, 60);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Listen for save / hydrate messages from the issued-quote popup.
+  // The popup is opened from a Blob URL so its origin is "null" — we
+  // validate by identity (event.source === the window we opened) instead
+  // of by origin string. Message envelope: { type, payload }.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onMessage(event: MessageEvent) {
+      const w = quotePopupRef.current;
+      if (!w || event.source !== w) return;
+      const data = event.data as
+        | { type: "issued-quotes-save"; tabs: IssuedQuoteTab[] }
+        | { type: "issued-quotes-hydrate-request" }
+        | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "issued-quotes-hydrate-request") {
+        // Replay current issued-quote tabs to the popup. Used when the
+        // popup wants to re-sync after a delayed open or a navigation.
+        try {
+          w.postMessage(
+            { type: "issued-quotes-hydrate", tabs: issuedQuotesRef.current },
+            "*",
+          );
+        } catch {
+          /* popup closed — ignore */
+        }
+        return;
+      }
+      if (data.type === "issued-quotes-save") {
+        if (!Array.isArray(data.tabs)) return;
+        const wfId = workflowIdRef.current;
+        const wfState = workflowStateRef.current;
+        if (!wfId || !wfState) {
+          // No workflow context — we can't persist. Tell the popup so it
+          // can show a hint to the user.
+          try {
+            w.postMessage(
+              { type: "issued-quotes-saved", ok: false, error: "no_workflow" },
+              "*",
+            );
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        const cleanTabs: IssuedQuoteTab[] = data.tabs
+          .filter(
+            (t): t is IssuedQuoteTab =>
+              !!t &&
+              typeof t === "object" &&
+              typeof t.id === "string" &&
+              typeof t.label === "string" &&
+              typeof t.sheetHtml === "string",
+          )
+          .map((t) => ({
+            id: t.id,
+            label: t.label,
+            sheetHtml: t.sheetHtml,
+            savedAt: t.savedAt || new Date().toISOString(),
+          }));
+        const nextState: WorkflowState = {
+          ...wfState,
+          issuedQuotes: cleanTabs,
+        };
+        // Persist on a detached task — postMessage handler doesn't await.
+        (async () => {
+          try {
+            const res = await fetch(`/api/workflows/${wfId}`, {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ state: nextState }),
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => null)) as
+                | { error?: string }
+                | null;
+              throw new Error(body?.error || `http_${res.status}`);
+            }
+            setIssuedQuotes(cleanTabs);
+            try {
+              w.postMessage({ type: "issued-quotes-saved", ok: true }, "*");
+            } catch {
+              /* ignore */
+            }
+          } catch (err) {
+            try {
+              w.postMessage(
+                {
+                  type: "issued-quotes-saved",
+                  ok: false,
+                  error: err instanceof Error ? err.message : "save_failed",
+                },
+                "*",
+              );
+            } catch {
+              /* ignore */
+            }
+          }
+        })();
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   const onSave = async () => {
