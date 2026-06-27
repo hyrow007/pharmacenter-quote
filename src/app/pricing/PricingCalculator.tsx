@@ -1702,6 +1702,9 @@ export default function PricingCalculator({
         </section>
       ) : null}
 
+      {/* Vendor block is informational only — hide it for existing-stock
+          products since the inventory has no vendor we need to record. */}
+      {isStockProduct ? null : (
       <section className="pricing__section">
         <h2 className="pricing__section-title">Vendor</h2>
         <div className="pricing__vendor-toggle" role="radiogroup" aria-label="Vendor mode">
@@ -1812,6 +1815,7 @@ export default function PricingCalculator({
           when you&rsquo;re comparing quotes from different suppliers.
         </p>
       </section>
+      )}
 
       <section className="pricing__section">
         <h2 className="pricing__section-title">Product cost</h2>
