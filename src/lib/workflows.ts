@@ -118,6 +118,23 @@ export type WorkflowState = {
   // Record<productUid, snapshot> shape. The hydration code accepts both
   // shapes so existing rows still load.
   pricing?: PricingSnapshot[];
+  // Saved customer-facing quote document versions ("Issue a Quote" tabs).
+  // Each entry is one tab in the quote popup — a full snapshot of the
+  // editable sheet HTML, so we round-trip every edit (line items, custom
+  // T&Cs, signature names) lossless. Optional for backward compatibility
+  // with workflows created before the multi-version quote feature.
+  issuedQuotes?: IssuedQuoteTab[];
+};
+
+// One tab in the customer-facing quote popup. We persist the full inner
+// HTML of the .q-sheet container rather than try to model each editable
+// field — that way any custom T&Cs / signature edits / line item tweaks
+// the user made survive a save/reload round-trip.
+export type IssuedQuoteTab = {
+  id: string;          // stable client-generated id
+  label: string;       // user-facing tab label e.g. "Version 1"
+  sheetHtml: string;   // innerHTML of .q-sheet at save time
+  savedAt: string;     // ISO timestamp
 };
 
 // Lifecycle of a workflow. "in_progress" is the default until the user
