@@ -400,7 +400,8 @@ function buildQuoteHtml(args: {
   .q-items__amount { width: 130px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
   .q-totals {
-    display: flex; justify-content: flex-end;
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: 14px;
     margin-top: 14px;
   }
   .q-totals__inner {
@@ -504,14 +505,20 @@ function buildQuoteHtml(args: {
     font-family: inherit;
   }
   .q-toolbar__btn:hover { background: var(--teal-900); }
-  .q-toolbar__toggle {
+  /* Show-total checkbox lives next to the Total row, on its left. The
+     `print-hide` class on the label drops it from the printed PDF (and we
+     also bake that into @media print below). When the checkbox is
+     unchecked the inner dl gets `.q-totals--hidden`, which collapses the
+     number but leaves the toggle visible so the editor can flip it back. */
+  .q-totals__toggle {
     display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--ink-2); cursor: pointer;
-    margin-right: 6px; user-select: none;
+    font-size: 11px; color: var(--ink-3);
+    background: var(--cream-soft); border: 1px dashed var(--line);
+    border-radius: 6px; padding: 4px 8px; cursor: pointer;
+    user-select: none;
   }
-  .q-toolbar__toggle input { margin: 0; cursor: pointer; }
-  /* Hide the total block when the toggle is off. Class lives on the block. */
-  .q-totals--hidden { display: none !important; }
+  .q-totals__toggle input { margin: 0; cursor: pointer; }
+  .q-totals--hidden { visibility: hidden; }
 
   /* Print ---------------------------------------------------- */
   @page { margin: 0.4in; size: letter; }
@@ -521,6 +528,7 @@ function buildQuoteHtml(args: {
     .q-sheet { box-shadow: none !important; }
     /* Hide editing chrome on the printed copy. */
     .q-toolbar { display: none !important; }
+    .q-totals__toggle { display: none !important; }
     [contenteditable="true"]:hover,
     [contenteditable="true"]:focus {
       background: transparent !important;
@@ -532,10 +540,6 @@ function buildQuoteHtml(args: {
 <body>
   <div class="q-toolbar" aria-hidden="true">
     <span class="q-toolbar__hint">Editable — click any field to change.</span>
-    <label class="q-toolbar__toggle">
-      <input type="checkbox" id="q-show-total" checked />
-      <span>Show total</span>
-    </label>
     <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
   </div>
   <div class="q-stage">
@@ -586,7 +590,11 @@ Davie, FL 33331
       </table>
 
       <div class="q-totals" id="q-totals-block">
-        <dl class="q-totals__inner q-totals__grand">
+        <label class="q-totals__toggle" aria-hidden="true">
+          <input type="checkbox" id="q-show-total" checked />
+          <span>Show total</span>
+        </label>
+        <dl class="q-totals__inner q-totals__grand" id="q-totals-dl">
           <dt>Total</dt>
           <dd data-total>${htmlEscape(fmtMoney.format(total))}</dd>
         </dl>
@@ -708,16 +716,17 @@ Davie, FL 33331
         el.addEventListener("blur", function () { reformatCell(el, "price"); recompute(); });
       });
 
-      // "Show total" checkbox — flip the hidden class on the totals block.
+      // "Show total" checkbox — flip the hidden class on the totals dl.
+      // The toggle itself stays put so the user can re-show the value.
       // Defaults to checked, so the total is visible unless the user opts out.
       var showTotalCb = document.getElementById("q-show-total");
-      var totalsBlock = document.getElementById("q-totals-block");
-      if (showTotalCb && totalsBlock) {
+      var totalsDl = document.getElementById("q-totals-dl");
+      if (showTotalCb && totalsDl) {
         showTotalCb.addEventListener("change", function () {
           if (showTotalCb.checked) {
-            totalsBlock.classList.remove("q-totals--hidden");
+            totalsDl.classList.remove("q-totals--hidden");
           } else {
-            totalsBlock.classList.add("q-totals--hidden");
+            totalsDl.classList.add("q-totals--hidden");
           }
         });
       }
