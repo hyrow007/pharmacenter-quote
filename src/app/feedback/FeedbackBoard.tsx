@@ -58,6 +58,10 @@ export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) 
           author_email: string;
           body: string;
         };
+        // Server-resolved display name from user_directory. Null when the
+        // directory has no entry, in which case we fall back to the local
+        // part of the email like the original behaviour.
+        authorName?: string | null;
       } | null;
       if (!res.ok || !data?.ok || !data.feedback) {
         throw new Error(data?.error || `post_failed_${res.status}`);
@@ -67,9 +71,11 @@ export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) 
         createdAt: data.feedback.created_at,
         body: data.feedback.body,
         authorEmail: data.feedback.author_email,
-        // We don't have the directory lookup client-side; the next reload
-        // will pick up the real display name. For now show the local-part.
-        authorName: localFallback(data.feedback.author_email),
+        // Prefer the server-resolved display name (Google SSO full_name)
+        // so the optimistic insert immediately renders "Jairo Osorno"
+        // instead of "Josorno". Fall back to local-part if the directory
+        // lookup came back empty.
+        authorName: data.authorName || localFallback(data.feedback.author_email),
         canDelete: true,
       };
       setRows((prev) => [fresh, ...prev]);
