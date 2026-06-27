@@ -52,6 +52,17 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// Reformat the quantity input as the user types: strip every non-digit
+// character (commas the user typed manually, currency signs, stray
+// letters) and re-insert thousands separators via toLocaleString. Empty
+// input passes through so the placeholder still shows.
+function formatQty(raw: string): string {
+  const digits = String(raw).replace(/[^0-9]/g, "");
+  if (digits.length === 0) return "";
+  const n = parseInt(digits, 10);
+  return Number.isFinite(n) ? n.toLocaleString("en-US") : digits;
+}
+
 function newProductEntry(): ProductEntry {
   return {
     uid: uid(),
@@ -878,9 +889,9 @@ function StartWorkflow() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
                     {p.quantities.map((tier, i) => (
                       <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input type="text" inputMode="numeric" placeholder={i === 0 ? "e.g. 500" : "additional tier"}
+                        <input type="text" inputMode="numeric" placeholder={i === 0 ? "e.g. 5,000" : "additional tier"}
                           value={tier}
-                          onChange={(e) => setProduct(p.uid, (cur) => ({ ...cur, quantities: cur.quantities.map((q, j) => (j === i ? e.target.value : q)) }))}
+                          onChange={(e) => setProduct(p.uid, (cur) => ({ ...cur, quantities: cur.quantities.map((q, j) => (j === i ? formatQty(e.target.value) : q)) }))}
                           style={inputStyle} />
                         <div style={{ padding: "10px 14px", background: "#fffdf8", border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13, color: "var(--ink-2)", fontWeight: 600, whiteSpace: "nowrap" }}>units</div>
                         {p.quantities.length > 1 ? (
