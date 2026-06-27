@@ -685,20 +685,33 @@ export default function WorkflowActions({
           actions above so an accidental click is less likely. Only the
           owner (or an admin) sees this button at all. */}
       {canDelete ? (
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 28, display: "flex", alignItems: "center", gap: 12 }}>
           <button
             type="button"
-            style={{ ...deleteAction, width: "100%" }}
             onClick={deleteWorkflow}
             disabled={deleting}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 14px",
+              borderRadius: 8,
+              border: "1px solid #d8b3b3",
+              background: "#fffdf8",
+              color: "#8b2f2f",
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: deleting ? "not-allowed" : "pointer",
+            }}
           >
-            <span>{deleting ? "Deleting…" : "Delete workflow"}</span>
-            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-              {isAdmin && !isOwner
-                ? "Admin override — created by someone else."
-                : "Owner-only action."}
-            </span>
+            {deleting ? "Deleting…" : "Delete workflow"}
           </button>
+          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+            {isAdmin && !isOwner
+              ? "Admin override — created by someone else."
+              : "Owner-only action."}
+          </span>
         </div>
       ) : null}
 
