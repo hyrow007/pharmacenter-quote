@@ -618,8 +618,19 @@ function buildQuoteHtml(args: {
     background: transparent; border: 1px dashed var(--line);
     color: var(--teal-900, #0f4a56);
   }
-  .q-tabs__save {
+  .q-tabs__hint {
     margin-left: auto;
+    font-size: 11px; color: var(--ink-3);
+  }
+  .q-tabs__print {
+    background: #fff; color: var(--teal-900, #0f4a56);
+    border: 1px solid var(--teal-700, #1d6c7b);
+    padding: 6px 14px; border-radius: 7px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+  }
+  .q-tabs__print:hover { background: var(--paper, #fffdf8); }
+  .q-tabs__save {
     background: var(--teal-700, #1d6c7b); color: #fff;
     border: 1px solid var(--teal-900, #0f4a56);
     padding: 6px 14px; border-radius: 7px;
@@ -632,8 +643,8 @@ function buildQuoteHtml(args: {
     color: #fff; cursor: not-allowed;
   }
   .q-tabs__status {
-    font-size: 11px; color: var(--ink-3); margin-left: 6px;
-    min-width: 80px;
+    font-size: 11px; color: var(--ink-3); margin: 0 6px;
+    min-width: 60px;
   }
   .q-tabs__status--ok { color: var(--teal-700, #1d6c7b); }
   .q-tabs__status--err { color: #8b2f2f; }
@@ -658,21 +669,18 @@ function buildQuoteHtml(args: {
 </style>
 </head>
 <body>
-  <div class="q-toolbar" aria-hidden="true">
-    <span class="q-toolbar__hint">Editable — click any field to change.</span>
-    <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
-  </div>
-  <!-- Version tab bar. Rendered/maintained entirely client-side from
-       the JSON payload injected just below; the server only emits the
-       container so the print stylesheet has something to hide. The
-       Back-to-workflow pill leads the row so it doesn't overlay the
-       + New version control. -->
+  <!-- Single editor strip. Holds the Back-to-workflow pill, the
+       Versions chips, and both action buttons (Print + Save versions)
+       so they can't overlap one another. The whole bar is hidden in
+       print. -->
   <div class="q-tabs" id="q-tabs" aria-hidden="true">
     ${backPillHtml}
     <span class="q-tabs__label">Versions</span>
     <span id="q-tabs-chips" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></span>
     <button type="button" class="q-tabs__chip q-tabs__add" id="q-tabs-add">+ New version</button>
+    <span class="q-tabs__hint">Editable — click any field</span>
     <span class="q-tabs__status" id="q-tabs-status"></span>
+    <button type="button" class="q-tabs__print" id="q-print-btn" title="Open the browser print dialog — choose Save as PDF to download.">Print / PDF</button>
     <button type="button" class="q-tabs__save" id="q-tabs-save"${args.saveEnabled ? "" : " disabled"} title="${args.saveEnabled ? "Save all versions to this workflow" : "Open from a workflow to save versions"}">Save versions</button>
   </div>
   <script type="application/json" id="q-initial-tabs-json">${initialTabsJson}</script>
