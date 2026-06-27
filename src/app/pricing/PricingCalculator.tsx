@@ -197,6 +197,11 @@ function buildQuoteHtml(args: {
   preparerName: string;
   preparerEmail: string;
   lineItems: QuoteLineItem[];
+  // Optional "Back to workflow" pill rendered in the quote tab's top-left.
+  // When backUrl is null we skip the pill entirely (e.g. the calculator
+  // wasn't launched from a workflow).
+  backUrl: string | null;
+  backLabel: string | null;
 }): string {
   const today = new Date();
   const validUntil = new Date(today);
@@ -228,6 +233,15 @@ function buildQuoteHtml(args: {
 
   // No padding rows — the table sits tight against the real line items so
   // a one-item quote doesn't look like it has half a page of empty rows.
+
+  // Optional "Back to workflow" pill in the top-left of the quote tab. Only
+  // rendered when we have an absolute URL to send the user to. Hidden in
+  // print via the .q-back rule above. target="_top" so it replaces the
+  // Blob-URL tab instead of opening yet another window.
+  const backPillHtml =
+    args.backUrl && args.backLabel
+      ? `<a class="q-back" href="${htmlEscape(args.backUrl)}" target="_top" rel="noopener"><span aria-hidden="true">&larr;</span> ${htmlEscape(args.backLabel)}</a>`
+      : "";
 
   const preparedForLines: string[] = [];
   if (args.customerName) preparedForLines.push(args.customerName);
@@ -505,6 +519,23 @@ function buildQuoteHtml(args: {
     font-family: inherit;
   }
   .q-toolbar__btn:hover { background: var(--teal-900); }
+  /* Back-to-workflow pill — sits opposite the toolbar in the top-left so
+     editors can hop back to the workflow hub. Mirrors the same pill used
+     on /pricing for visual consistency. Hidden in print. */
+  .q-back {
+    position: fixed; top: 16px; left: 16px; z-index: 100;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 13px; font-weight: 700;
+    color: var(--teal-900);
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(15, 74, 86, 0.10);
+    white-space: nowrap;
+  }
+  .q-back:hover { background: #fff; }
   /* Show-total checkbox lives next to the Total row, on its left. The
      print-hide rule on .q-totals__toggle below removes it from the printed
      PDF. When the checkbox is unchecked the inner dl gets
@@ -528,6 +559,7 @@ function buildQuoteHtml(args: {
     .q-sheet { box-shadow: none !important; }
     /* Hide editing chrome on the printed copy. */
     .q-toolbar { display: none !important; }
+    .q-back { display: none !important; }
     .q-totals__toggle { display: none !important; }
     [contenteditable="true"]:hover,
     [contenteditable="true"]:focus {
@@ -538,6 +570,7 @@ function buildQuoteHtml(args: {
 </style>
 </head>
 <body>
+  ${backPillHtml}
   <div class="q-toolbar" aria-hidden="true">
     <span class="q-toolbar__hint">Editable — click any field to change.</span>
     <button type="button" class="q-toolbar__btn" id="q-print-btn">Save / Print PDF</button>
@@ -1426,6 +1459,17 @@ export default function PricingCalculator({
       };
     });
 
+    // Build an absolute URL for the in-document Back-to-workflow pill.
+    // Blob-URL tabs have a blob: origin, so a relative href would 404 — we
+    // must point back to the app's origin explicitly.
+    const backUrl =
+      workflowId && typeof window !== "undefined"
+        ? `${window.location.origin}/workflow/${workflowId}`
+        : null;
+    const backLabel = workflowId
+      ? `Back to workflow${workflowLabel ? ` (${workflowLabel})` : ""}`
+      : null;
+
     const html = buildQuoteHtml({
       customerName,
       customerAddress,
@@ -1435,6 +1479,8 @@ export default function PricingCalculator({
       preparerName: preparerName ?? "",
       preparerEmail,
       lineItems,
+      backUrl,
+      backLabel,
     });
 
     // Use a Blob URL instead of document.write. Two reasons:
