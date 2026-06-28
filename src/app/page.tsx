@@ -23,16 +23,40 @@ export default async function Home({
   return (
     <main className="hero">
       <div className="card">
-        <p className="eyebrow">PharmaCenter</p>
-        <h1>Quote</h1>
-        <p className="lede">
-          Tool to internally manage quoting work flows and generate customer
-          facing quote documents.
+        {/* Wordmark first — the brand image carries "PharmaCenter" so we
+            don't repeat the company name in text above it. Matches the
+            Packing List sign-in layout exactly. */}
+        <img
+          src="/logo.png"
+          alt="PharmaCenter"
+          style={{
+            display: "block",
+            width: 180,
+            height: "auto",
+            marginBottom: 14,
+          }}
+        />
+        <h1 style={{ marginBottom: 0 }}>Quote</h1>
+        <p
+          style={{
+            fontFamily: "var(--font-serif, Georgia, serif)",
+            fontStyle: "italic",
+            fontSize: 24,
+            color: "var(--ink-3, #8a9498)",
+            margin: "0 0 18px",
+            fontWeight: 400,
+          }}
+        >
+          Work Flows
+        </p>
+        <p className="lede" style={{ marginBottom: 18 }}>
+          Internal tool for managing quoting work flows and generating
+          customer-facing quote documents. Sign in with your PharmaCenter
+          Google account to continue.
         </p>
         <SignInButton />
-        <p className="meta" style={{ marginTop: 18 }}>
-          Restricted to <strong>@pharmacenterusa.com</strong> accounts. Use the
-          same Google login as the Packing List tool.
+        <p className="meta" style={{ marginTop: 22 }}>
+          Restricted to <strong>@pharmacenterusa.com</strong> accounts.
         </p>
         {showError ? (
           <p style={{
