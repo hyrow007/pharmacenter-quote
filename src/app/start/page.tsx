@@ -45,9 +45,9 @@ const NEW_PRODUCT_PLACEHOLDER_DEFAULT = "e.g. Vitamin D3 5000 IU softgel";
 const NEW_PRODUCT_PLACEHOLDERS_PACKAGING: Record<string, string> = {
   bottles: "e.g. Omega 3 Fish Oil softgels 60 ct bottles",
   blisters: "e.g. Vitamin C 1000 mg tablets, 15 ct blister",
-  sachets: "e.g. Electrolyte powder 5 g sachets",
-  pouches: "e.g. Whey Protein 500 g pouches",
-  kitting: "e.g. 30-day starter kit (bottle + insert + label)",
+  sachets: "e.g. Electrolyte Capsules 2 ct sachets",
+  pouches: "e.g. Multivitamin Gummies 60 ct pouches",
+  kitting: "e.g. 90-day starter kit (bottles + Shrink Wrap + Tray)",
   other: "e.g. Custom format — describe the finished pack",
 };
 
