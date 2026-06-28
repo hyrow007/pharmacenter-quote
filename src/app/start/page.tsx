@@ -878,70 +878,76 @@ function StartWorkflow() {
                 {/* Source toggle — Purchase vs Existing stock. Stock items
                     skip the monday push (no need to source) and skip inbound
                     costs in the pricing calculator (landed cost already in
-                    Fishbowl). Default is Purchase. */}
-                <div style={{ marginBottom: 12 }}>
-                  <span style={labelText}>Source</span>
-                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                    {(["purchase", "stock"] as const).map((mode) => {
-                      const active = (p.sourceMode ?? "purchase") === mode;
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() =>
-                            setProduct(p.uid, (cur) => ({
-                              ...cur,
-                              sourceMode: mode,
-                              // Existing-stock products can't be "new" by
-                              // definition (we don't stock products that
-                              // don't exist yet) — force the entry back to
-                              // "existing" mode and wipe any in-progress
-                              // new-product fields so they don't bleed back
-                              // if the user flips Source again.
-                              ...(mode === "stock"
-                                ? {
-                                    mode: "existing" as const,
-                                    newProduct: { name_desc: "", notes: "" },
-                                  }
-                                : {}),
-                            }))
-                          }
-                          style={{
-                            flex: 1,
-                            padding: "10px 12px",
-                            borderRadius: 8,
-                            border: active
-                              ? "2px solid var(--teal-700)"
-                              : "1.5px solid #e3dcc9",
-                            background: active ? "#f0fdfa" : "#fffdf8",
-                            color: active ? "var(--teal-700)" : "var(--ink-2)",
-                            fontWeight: active ? 700 : 600,
-                            fontSize: 13,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                            textAlign: "left",
-                          }}
-                        >
-                          <div>
-                            {mode === "purchase" ? "Purchase needed" : "Existing stock"}
-                          </div>
-                          <div
+                    Fishbowl). Default is Purchase.
+                    Hidden for Contract Packaging — the customer brings the
+                    bulk to PharmaCenter, so there's no sourcing decision
+                    on our end. The underlying sourceMode stays at its
+                    "purchase" default so downstream logic doesn't break. */}
+                {!isContractPackaging ? (
+                  <div style={{ marginBottom: 12 }}>
+                    <span style={labelText}>Source</span>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      {(["purchase", "stock"] as const).map((mode) => {
+                        const active = (p.sourceMode ?? "purchase") === mode;
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() =>
+                              setProduct(p.uid, (cur) => ({
+                                ...cur,
+                                sourceMode: mode,
+                                // Existing-stock products can't be "new" by
+                                // definition (we don't stock products that
+                                // don't exist yet) — force the entry back to
+                                // "existing" mode and wipe any in-progress
+                                // new-product fields so they don't bleed back
+                                // if the user flips Source again.
+                                ...(mode === "stock"
+                                  ? {
+                                      mode: "existing" as const,
+                                      newProduct: { name_desc: "", notes: "" },
+                                    }
+                                  : {}),
+                              }))
+                            }
                             style={{
-                              fontSize: 11,
-                              fontWeight: 500,
-                              color: "var(--ink-3)",
-                              marginTop: 2,
+                              flex: 1,
+                              padding: "10px 12px",
+                              borderRadius: 8,
+                              border: active
+                                ? "2px solid var(--teal-700)"
+                                : "1.5px solid #e3dcc9",
+                              background: active ? "#f0fdfa" : "#fffdf8",
+                              color: active ? "var(--teal-700)" : "var(--ink-2)",
+                              fontWeight: active ? 700 : 600,
+                              fontSize: 13,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                              textAlign: "left",
                             }}
                           >
-                            {mode === "purchase"
-                              ? "Source via monday + add inbound costs"
-                              : "We have it — skip sourcing + inbound costs"}
-                          </div>
-                        </button>
-                      );
-                    })}
+                            <div>
+                              {mode === "purchase" ? "Purchase needed" : "Existing stock"}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 500,
+                                color: "var(--ink-3)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {mode === "purchase"
+                                ? "Source via monday + add inbound costs"
+                                : "We have it — skip sourcing + inbound costs"}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 <ProductPicker
                   entry={p}
