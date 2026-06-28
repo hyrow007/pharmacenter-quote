@@ -21,11 +21,32 @@ export default async function Home({
   const showError = params?.auth_error === "1";
 
   return (
-    <main className="hero">
-      <div className="card">
+    // Match the Packing List sign-in layout exactly: card sits on the
+    // LEFT, decorative pills image fills the RIGHT half of the viewport.
+    // On narrow screens the image hides and the card centers itself. We
+    // override the default centered .hero behavior with an inline grid.
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        gridTemplateColumns: "minmax(420px, 1fr) 1fr",
+        alignItems: "center",
+        padding: "32px clamp(24px, 6vw, 120px)",
+        gap: "clamp(24px, 4vw, 64px)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          maxWidth: 480,
+          padding: "44px 52px",
+          justifySelf: "start",
+          width: "100%",
+        }}
+      >
         {/* Wordmark first — the brand image carries "PharmaCenter" so we
-            don't repeat the company name in text above it. Matches the
-            Packing List sign-in layout exactly. */}
+            don't repeat the company name in text above it. */}
         <img
           src="/logo.png"
           alt="PharmaCenter"
@@ -69,6 +90,23 @@ export default async function Home({
           </p>
         ) : null}
       </div>
+
+      {/* Decorative pills/capsules/gummies image on the right.
+          Hotlinked from the Packing List app's /public folder so both
+          sign-ins share the same asset. Hidden on narrow screens via
+          a media query in globals.css (.signin-art class). */}
+      <div
+        className="signin-art"
+        aria-hidden="true"
+        style={{
+          height: "100%",
+          minHeight: 480,
+          backgroundImage: "url('https://packing.pharmacenter.app/PILLS.png')",
+          backgroundSize: "contain",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "right center",
+        }}
+      />
     </main>
   );
 }
