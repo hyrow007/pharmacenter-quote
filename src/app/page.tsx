@@ -29,18 +29,24 @@ export default async function Home({
       style={{
         minHeight: "100vh",
         display: "grid",
-        gridTemplateColumns: "minmax(420px, 1fr) 1fr",
+        // Card column gets a fixed size so the card itself stays at the
+        // same comfortable width regardless of viewport. The image column
+        // takes whatever is left. Generous left padding pushes the whole
+        // composition rightward to match the Packing List sign-in.
+        gridTemplateColumns: "minmax(480px, 540px) 1fr",
         alignItems: "center",
-        padding: "32px clamp(24px, 6vw, 120px)",
-        gap: "clamp(24px, 4vw, 64px)",
+        padding: "32px 0 32px clamp(80px, 14vw, 240px)",
+        gap: "clamp(32px, 5vw, 80px)",
         overflow: "hidden",
       }}
     >
       <div
         className="card"
         style={{
-          maxWidth: 480,
-          padding: "44px 52px",
+          // Match the .card defaults from globals.css exactly so the
+          // sign-in card sits at the same size the PL sign-in uses.
+          maxWidth: 540,
+          padding: "56px 64px",
           justifySelf: "start",
           width: "100%",
         }}
@@ -100,11 +106,14 @@ export default async function Home({
         aria-hidden="true"
         style={{
           height: "100%",
-          minHeight: 480,
+          minHeight: 640,
+          // cover + left-anchored so the foreground pills cluster sits
+          // near the card and the rest of the image bleeds off-screen on
+          // the right (mirrors the PL composition).
           backgroundImage: "url('https://packing.pharmacenter.app/PILLS.png')",
-          backgroundSize: "contain",
+          backgroundSize: "cover",
           backgroundRepeat: "no-repeat",
-          backgroundPosition: "right center",
+          backgroundPosition: "left center",
         }}
       />
     </main>
