@@ -23,6 +23,18 @@ const TYPE_LABELS: Record<string, string> = {
 const FORM_LABELS: Record<string, string> = {
   softgel: "Softgels", gummy: "Gummies", tablet: "Tablets", capsule: "Capsules", other: "Other",
 };
+// Contract Packaging reuses state.form to store the chosen packaging
+// type. We render a different row label / value set in that case so the
+// snapshot reads naturally ("Packaging type: Bottles", not "Dosage form:
+// Bottles").
+const PACKAGING_LABELS: Record<string, string> = {
+  bottles: "Bottles",
+  blisters: "Blisters",
+  sachets: "Sachets",
+  pouches: "Pouches",
+  kitting: "Kitting",
+  other: "Other",
+};
 const SOURCE_LABELS: Record<string, string> = {
   "third-party": "Third party",
   "pharmacenter": "Manufactured at PharmaCenter",
@@ -291,8 +303,14 @@ export default async function WorkflowPage({ params }: Ctx) {
           </div>
           {state.form ? (
             <div style={sectionStyle}>
-              <span style={labelStyle}>Dosage form</span>
-              <div style={valueStyle}>{FORM_LABELS[state.form] || state.form}</div>
+              <span style={labelStyle}>
+                {state.type === "contract-packaging" ? "Packaging type" : "Dosage form"}
+              </span>
+              <div style={valueStyle}>
+                {state.type === "contract-packaging"
+                  ? PACKAGING_LABELS[state.form] || state.form
+                  : FORM_LABELS[state.form] || state.form}
+              </div>
             </div>
           ) : null}
           {state.source ? (
