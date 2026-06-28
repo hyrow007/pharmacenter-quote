@@ -108,6 +108,11 @@ export type WorkflowState = {
   type: string | null;
   form: string | null;
   source: string | null;
+  // For Contract Packaging workflows only: the dosage form of whatever is
+  // being packaged (Softgels / Gummies / Tablets / Capsules / Other).
+  // Bulk uses state.form for its dosage form already, so this field is
+  // null on Bulk workflows. Optional so historical rows still parse.
+  dosage?: string | null;
   products: ProductEntry[];
   // Pricing tabs in order. Each entry is the saved state of one calculator
   // tab. Order is meaningful (it matches the order shown in the calculator
@@ -228,14 +233,20 @@ export function buildAutoDescription(
   const joined = names.join(" + ");
   // Append the right second-step label depending on quote type:
   // Bulk → dosage form (Softgels / Gummies / ...), Contract Packaging →
-  // packaging type (Bottles / Blisters / ...). All other types skip it.
+  // dosage form + packaging type ("Softgels in Bottles"). All other
+  // types skip it.
   let formLabel = "";
-  if (state.form) {
-    if (state.type === "bulk") {
-      formLabel = DESCRIPTION_FORM_LABELS[state.form] || state.form;
-    } else if (state.type === "contract-packaging") {
-      formLabel = DESCRIPTION_PACKAGING_LABELS[state.form] || state.form;
-    }
+  if (state.type === "bulk" && state.form) {
+    formLabel = DESCRIPTION_FORM_LABELS[state.form] || state.form;
+  } else if (state.type === "contract-packaging") {
+    const dosage = state.dosage
+      ? DESCRIPTION_FORM_LABELS[state.dosage] || state.dosage
+      : "";
+    const pack = state.form
+      ? DESCRIPTION_PACKAGING_LABELS[state.form] || state.form
+      : "";
+    if (dosage && pack) formLabel = `${dosage} in ${pack}`;
+    else formLabel = dosage || pack;
   }
   return formLabel ? `${joined} ${formLabel}` : joined;
 }
