@@ -38,6 +38,19 @@ const PACKAGING_TYPES = [
   { id: "other", name: "Other" },
 ];
 
+// Placeholder examples for the "Product name / description" input. The
+// example shifts with quote type + form so the user gets a realistic
+// pattern to copy. Falls back to a Bulk softgel example.
+const NEW_PRODUCT_PLACEHOLDER_DEFAULT = "e.g. Vitamin D3 5000 IU softgel";
+const NEW_PRODUCT_PLACEHOLDERS_PACKAGING: Record<string, string> = {
+  bottles: "e.g. Omega 3 Fish Oil softgels 60 ct bottles",
+  blisters: "e.g. Vitamin C 1000 mg tablets, 30 ct blister",
+  sachets: "e.g. Electrolyte powder 5 g sachets",
+  pouches: "e.g. Whey Protein 500 g pouches",
+  kitting: "e.g. 30-day starter kit (bottle + insert + label)",
+  other: "e.g. Custom format — describe the finished pack",
+};
+
 // Gummies are only sourced as Third party or Manufactured at PharmaCenter.
 // We don't have an "Other" source for gummies — keeping the list tight
 // avoids the UX of presenting a pointless option.
@@ -452,6 +465,13 @@ function StartWorkflow() {
   // Pick which option set + section heading goes in the form-section UI.
   const formOptions = isContractPackaging ? PACKAGING_TYPES : FORMS;
   const formLabel = isContractPackaging ? "Packaging type" : "Dosage form";
+  // Packaging-aware placeholder for the "Product name / description"
+  // input on the New product tab. For Contract Packaging we shift the
+  // example to match the chosen packaging type so users get a realistic
+  // pattern (Bottles → "Omega 3 softgels 60 ct bottles" etc).
+  const newProductPlaceholder = isContractPackaging && state.form
+    ? NEW_PRODUCT_PLACEHOLDERS_PACKAGING[state.form] ?? NEW_PRODUCT_PLACEHOLDER_DEFAULT
+    : NEW_PRODUCT_PLACEHOLDER_DEFAULT;
 
   const customerOk = state.customerMode === "existing"
     ? !!state.customerId
@@ -959,6 +979,7 @@ function StartWorkflow() {
                   onChangeProduct={() => setProduct(p.uid, (cur) => ({ ...cur, productId: null, _name: null, _code: null }))}
                   onNewNameChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, name_desc: v } }))}
                   onNewNotesChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, notes: v } }))}
+                  newProductPlaceholder={newProductPlaceholder}
                 />
 
                 {/* Quantities */}
@@ -1062,8 +1083,24 @@ function ProductPicker(props: {
   onChangeProduct: () => void;
   onNewNameChange: (v: string) => void;
   onNewNotesChange: (v: string) => void;
+  // Placeholder for the "Product name / description" input, computed by
+  // the parent so it can reflect the current quote type + form (e.g.
+  // "Omega 3 Fish Oil softgels 60 ct bottles" for Contract Packaging →
+  // Bottles vs the default Bulk example).
+  newProductPlaceholder: string;
 }) {
-  const { entry: p, results, search, onSearch, onPick, onSetMode, onChangeProduct, onNewNameChange, onNewNotesChange } = props;
+  const {
+    entry: p,
+    results,
+    search,
+    onSearch,
+    onPick,
+    onSetMode,
+    onChangeProduct,
+    onNewNameChange,
+    onNewNotesChange,
+    newProductPlaceholder,
+  } = props;
   const showSelected = p.mode === "existing" && p.productId && p._name;
 
   return (
@@ -1114,7 +1151,7 @@ function ProductPicker(props: {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={labelText}>Product name / description *</span>
-                <input type="text" required placeholder="e.g. Vitamin D3 5000 IU softgel"
+                <input type="text" required placeholder={newProductPlaceholder}
                   value={p.newProduct.name_desc}
                   onChange={(e) => onNewNameChange(e.target.value)} style={inputStyle} />
               </label>
