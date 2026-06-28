@@ -181,13 +181,26 @@ export function formatQuoteNumber(n: number): string {
   return `Q${String(n).padStart(4, "0")}`;
 }
 
-// Dosage form labels — kept here (not in the page) so the auto-description
-// helper can share them with the listing/management pages.
+// Dosage form labels (Bulk) — kept here (not in the page) so the
+// auto-description helper can share them with the listing/management
+// pages.
 const DESCRIPTION_FORM_LABELS: Record<string, string> = {
   softgel: "Softgels",
   gummy: "Gummies",
   tablet: "Tablets",
   capsule: "Capsules",
+  other: "Other",
+};
+
+// Packaging-type labels (Contract Packaging). Same idea as the dosage
+// form map — the start page reuses state.form to store this value, but
+// the id namespace is its own (bottles/blisters/sachets/pouches/kitting).
+const DESCRIPTION_PACKAGING_LABELS: Record<string, string> = {
+  bottles: "Bottles",
+  blisters: "Blisters",
+  sachets: "Sachets",
+  pouches: "Pouches",
+  kitting: "Kitting",
   other: "Other",
 };
 
@@ -213,10 +226,17 @@ export function buildAutoDescription(
   });
   if (names.length === 0) return "";
   const joined = names.join(" + ");
-  const formLabel =
-    state.type === "bulk" && state.form
-      ? DESCRIPTION_FORM_LABELS[state.form] || state.form
-      : "";
+  // Append the right second-step label depending on quote type:
+  // Bulk → dosage form (Softgels / Gummies / ...), Contract Packaging →
+  // packaging type (Bottles / Blisters / ...). All other types skip it.
+  let formLabel = "";
+  if (state.form) {
+    if (state.type === "bulk") {
+      formLabel = DESCRIPTION_FORM_LABELS[state.form] || state.form;
+    } else if (state.type === "contract-packaging") {
+      formLabel = DESCRIPTION_PACKAGING_LABELS[state.form] || state.form;
+    }
+  }
   return formLabel ? `${joined} ${formLabel}` : joined;
 }
 
