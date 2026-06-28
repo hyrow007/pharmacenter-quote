@@ -578,6 +578,29 @@ function StartWorkflow() {
   return (
     <main className="hero">
       <div className="card card--wide">
+        {/* Prominent "Back to workflows" pill — gives users an easy exit
+            from a half-finished new-workflow draft without the browser
+            back button. Same look as the pill on /pricing. */}
+        <a
+          href="/workflows"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            background: "var(--paper, #fffdf8)",
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--teal-900, #0f4a56)",
+            textDecoration: "none",
+            marginBottom: 16,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span aria-hidden="true">&larr;</span> Back to workflows
+        </a>
         <p className="eyebrow">PharmaCenter · Workflow</p>
         <h1>{workflowId ? "Editing workflow" : "Start a quote workflow"}</h1>
         <p className="lede">Pull together everything we need to quote this, then send it where it needs to go.</p>
