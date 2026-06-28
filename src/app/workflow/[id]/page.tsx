@@ -363,7 +363,8 @@ export default async function WorkflowPage({ params }: Ctx) {
                         {cleanQs.map((q, i) => (
                           <span key={i}>
                             {i > 0 ? <span style={{ color: "var(--ink-3)", margin: "0 6px" }}>·</span> : null}
-                            {Number(q).toLocaleString()} units
+                            {Number(q).toLocaleString()}{" "}
+                            {state.type === "contract-packaging" ? "eaches" : "units"}
                           </span>
                         ))}
                       </div>
