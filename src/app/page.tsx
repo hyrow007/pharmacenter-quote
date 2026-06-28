@@ -105,13 +105,13 @@ export default async function Home({
         className="signin-art"
         aria-hidden="true"
         style={{
-          height: "100%",
-          minHeight: 640,
-          // cover + left-anchored so the foreground pills cluster sits
-          // near the card and the rest of the image bleeds off-screen on
-          // the right (mirrors the PL composition).
+          // Stretch the image to viewport height and let width auto-size
+          // (auto 100%) so pills stay at the same natural scale they have
+          // on the Packing List page — no upscaling, no crop. The image
+          // bleeds off the right edge of the viewport, which is fine.
+          height: "100vh",
           backgroundImage: "url('https://packing.pharmacenter.app/PILLS.png')",
-          backgroundSize: "cover",
+          backgroundSize: "auto 100%",
           backgroundRepeat: "no-repeat",
           backgroundPosition: "left center",
         }}
