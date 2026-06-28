@@ -48,31 +48,43 @@ export default async function Home({
         }}
       >
         <div className="card" style={{ maxWidth: 520, width: "100%" }}>
-          {/* Wordmark first — the brand image carries "PharmaCenter" so
-              we don't repeat the company name in text above it. */}
+          {/* Logo: 189x48 — exact PL dimensions. */}
           <img
             src="/logo.png"
             alt="PharmaCenter"
             style={{
               display: "block",
-              width: 180,
-              height: "auto",
-              marginBottom: 14,
+              width: 189,
+              height: 48,
+              margin: "0 0 18px",
             }}
           />
-          <h1 style={{ marginBottom: 0 }}>Quote</h1>
-          <p
+          {/* H1 + subtitle structured as a single heading block, matching
+              PL's <h1>Packing List <span>Generator</span></h1> exactly so
+              the two pages share identical typographic rhythm. */}
+          <h1
             style={{
-              fontFamily: "var(--font-serif, Georgia, serif)",
-              fontStyle: "italic",
-              fontSize: 24,
-              color: "var(--ink-3, #8a9498)",
-              margin: "0 0 18px",
-              fontWeight: 400,
+              fontSize: 56,
+              lineHeight: "56px",
+              fontWeight: 500,
+              margin: "0 0 20px",
             }}
           >
-            Work Flows
-          </p>
+            Quote
+            <span
+              style={{
+                display: "block",
+                fontSize: 25.76,
+                fontStyle: "italic",
+                fontWeight: 400,
+                lineHeight: "28.336px",
+                margin: "6px 0 0 2px",
+                color: "rgb(110, 124, 128)",
+              }}
+            >
+              Work Flows
+            </span>
+          </h1>
           <p className="lede" style={{ marginBottom: 18 }}>
             Internal tool for managing quoting work flows and generating
             customer-facing quote documents. Sign in with your PharmaCenter
