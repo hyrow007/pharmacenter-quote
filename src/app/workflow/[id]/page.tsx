@@ -426,7 +426,6 @@ export default async function WorkflowPage({ params }: Ctx) {
           autoDescription={autoDescription}
         />
 
-        <a href="/workflows" className="backlink">&larr; Back to all workflows</a>
         </div>
       </main>
     </div>
