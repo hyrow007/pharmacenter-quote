@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
+import { formatQuoteNumber } from "@/lib/workflows";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
@@ -260,6 +261,10 @@ function StartWorkflow() {
   const [hydrated, setHydrated] = useState(false);
   // Tracks the DB id when we're editing — null for a fresh workflow.
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  // Sequential quote number for the workflow we're editing — used by the
+  // top-of-page Back-to-workflow pill so it can show "(Q0004)". Null when
+  // we haven't hydrated yet or aren't editing.
+  const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -276,6 +281,7 @@ function StartWorkflow() {
           if (!cancelled && res.ok && data?.ok && data.workflow) {
             const row = data.workflow as WorkflowRow;
             setWorkflowId(row.id);
+            setQuoteNumber(row.quote_number);
             setState(row.state);
             setHydrated(true);
             return;
@@ -578,29 +584,41 @@ function StartWorkflow() {
   return (
     <main className="hero">
       <div className="card card--wide">
-        {/* Prominent "Back to workflows" pill — gives users an easy exit
-            from a half-finished new-workflow draft without the browser
-            back button. Same look as the pill on /pricing. */}
-        <a
-          href="/workflows"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 14px",
-            background: "var(--paper, #fffdf8)",
-            border: "1px solid var(--line, #e3dcc9)",
-            borderRadius: 999,
-            fontSize: 13,
-            fontWeight: 700,
-            color: "var(--teal-900, #0f4a56)",
-            textDecoration: "none",
-            marginBottom: 16,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span aria-hidden="true">&larr;</span> Back to workflows
-        </a>
+        {/* Prominent Back pill at the top of the card. When we're
+            editing an existing workflow (workflowId set) it points back
+            to that workflow's hub at /workflow/[id] so the user can
+            return to the snapshot view in one click. When we're starting
+            a brand-new workflow it points to the /workflows list so the
+            user can bail out of a half-finished draft. Same teal pill
+            look as the matching control on /pricing. */}
+        {(() => {
+          const backHref = workflowId ? `/workflow/${workflowId}` : "/workflows";
+          const backLabel = workflowId
+            ? `Back to workflow${quoteNumber != null ? ` (${formatQuoteNumber(quoteNumber)})` : ""}`
+            : "Back to workflows";
+          return (
+            <a
+              href={backHref}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                background: "var(--paper, #fffdf8)",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--teal-900, #0f4a56)",
+                textDecoration: "none",
+                marginBottom: 16,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span aria-hidden="true">&larr;</span> {backLabel}
+            </a>
+          );
+        })()}
         <p className="eyebrow">PharmaCenter · Workflow</p>
         <h1>{workflowId ? "Editing workflow" : "Start a quote workflow"}</h1>
         <p className="lede">Pull together everything we need to quote this, then send it where it needs to go.</p>
