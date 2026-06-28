@@ -313,6 +313,12 @@ export default async function WorkflowPage({ params }: Ctx) {
               </div>
             </div>
           ) : null}
+          {state.type === "contract-packaging" && state.dosage ? (
+            <div style={sectionStyle}>
+              <span style={labelStyle}>Dosage form</span>
+              <div style={valueStyle}>{FORM_LABELS[state.dosage] || state.dosage}</div>
+            </div>
+          ) : null}
           {state.source ? (
             <div style={sectionStyle}>
               <span style={labelStyle}>Source</span>
