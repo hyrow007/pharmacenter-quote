@@ -257,10 +257,6 @@ export default async function PricingPage({ searchParams }: Ctx) {
             preparerEmail={user.email ?? ""}
             preparerName={await resolvePreparerName(supabase, user.email)}
           />
-
-          <a href={backHref} className="backlink">
-            &larr; {backLabel}
-          </a>
         </div>
       </main>
     </div>
