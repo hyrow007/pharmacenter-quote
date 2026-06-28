@@ -28,15 +28,10 @@ export default async function Home({
     <main
       style={{
         minHeight: "100vh",
-        display: "grid",
-        // Card column gets a fixed size so the card itself stays at the
-        // same comfortable width regardless of viewport. The image column
-        // takes whatever is left. Generous left padding pushes the whole
-        // composition rightward to match the Packing List sign-in.
-        gridTemplateColumns: "minmax(480px, 540px) 1fr",
+        position: "relative",
+        display: "flex",
         alignItems: "center",
-        padding: "32px 0 32px clamp(80px, 14vw, 240px)",
-        gap: "clamp(32px, 5vw, 80px)",
+        padding: "32px clamp(80px, 14vw, 240px)",
         overflow: "hidden",
       }}
     >
@@ -47,8 +42,9 @@ export default async function Home({
           // sign-in card sits at the same size the PL sign-in uses.
           maxWidth: 540,
           padding: "56px 64px",
-          justifySelf: "start",
           width: "100%",
+          position: "relative",
+          zIndex: 1,
         }}
       >
         {/* Wordmark first — the brand image carries "PharmaCenter" so we
@@ -105,15 +101,20 @@ export default async function Home({
         className="signin-art"
         aria-hidden="true"
         style={{
-          // Stretch the image to viewport height and let width auto-size
-          // (auto 100%) so pills stay at the same natural scale they have
-          // on the Packing List page — no upscaling, no crop. The image
-          // bleeds off the right edge of the viewport, which is fine.
-          height: "100vh",
+          // Pinned to the right half of the viewport with cover sizing
+          // so the pills composition fills the area edge-to-edge — same
+          // visual weight as the Packing List sign-in. zIndex 0 keeps
+          // the card (no explicit zIndex) on top by default.
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: "55%",
+          height: "100%",
           backgroundImage: "url('https://packing.pharmacenter.app/PILLS.png')",
-          backgroundSize: "auto 100%",
+          backgroundSize: "cover",
           backgroundRepeat: "no-repeat",
-          backgroundPosition: "left center",
+          backgroundPosition: "center center",
+          zIndex: 0,
         }}
       />
     </main>
