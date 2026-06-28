@@ -25,6 +25,19 @@ const FORMS = [
   { id: "other", name: "Other" },
 ];
 
+// Packaging-type picker shown only when Quote type = Contract Packaging.
+// Reuses state.form to store the selection — the id space doesn't overlap
+// with FORMS (apart from the catch-all "other", which is fine because the
+// type field disambiguates it). Order matches the common ask volume.
+const PACKAGING_TYPES = [
+  { id: "bottles", name: "Bottles" },
+  { id: "blisters", name: "Blisters" },
+  { id: "sachets", name: "Sachets" },
+  { id: "pouches", name: "Pouches" },
+  { id: "kitting", name: "Kitting" },
+  { id: "other", name: "Other" },
+];
+
 // Gummies are only sourced as Third party or Manufactured at PharmaCenter.
 // We don't have an "Other" source for gummies — keeping the list tight
 // avoids the UX of presenting a pointless option.
@@ -431,8 +444,14 @@ function StartWorkflow() {
 
   // ----- derived flags -------------------------------------------------
   const isBulk = state.type === "bulk";
-  const showFormSection = isBulk;
+  const isContractPackaging = state.type === "contract-packaging";
+  // Both Bulk and Contract Packaging show a second-step picker reusing
+  // state.form — Bulk picks a dosage form, CP picks a packaging type.
+  const showFormSection = isBulk || isContractPackaging;
   const showSourceSection = isBulk && state.form === "gummy";
+  // Pick which option set + section heading goes in the form-section UI.
+  const formOptions = isContractPackaging ? PACKAGING_TYPES : FORMS;
+  const formLabel = isContractPackaging ? "Packaging type" : "Dosage form";
 
   const customerOk = state.customerMode === "existing"
     ? !!state.customerId
@@ -449,7 +468,7 @@ function StartWorkflow() {
   const missing: string[] = [];
   if (!customerOk) missing.push("Customer");
   if (!state.type) missing.push("Quote type");
-  if (!formOk) missing.push("Dosage form");
+  if (!formOk) missing.push(formLabel);
   if (!sourceOk) missing.push("Source");
   if (!productsOk) missing.push("Each product needs a name and at least one quantity");
 
@@ -532,13 +551,22 @@ function StartWorkflow() {
 
   // ----- pickers -------------------------------------------------------
   const pickType = (id: string) => {
-    setState((s) => ({
-      ...s,
-      type: id,
-      // Clear downstream state when leaving bulk.
-      form: id === "bulk" ? s.form : null,
-      source: id === "bulk" ? s.source : null,
-    }));
+    setState((s) => {
+      // Bulk and Contract Packaging both store their second-step picker
+      // value in state.form, but the id spaces are different. Whenever
+      // the user switches between type "families" we wipe the form (and
+      // source) so the old selection doesn't carry over.
+      const sameFamily =
+        s.type === id ||
+        (s.type === "bulk" && id === "bulk") ||
+        (s.type === "contract-packaging" && id === "contract-packaging");
+      return {
+        ...s,
+        type: id,
+        form: sameFamily ? s.form : null,
+        source: sameFamily ? s.source : null,
+      };
+    });
   };
 
   const pickCustomer = (c: CustomerRow) => {
@@ -753,12 +781,15 @@ function StartWorkflow() {
             </div>
           </div>
 
-          {/* ----- Dosage form (bulk only) ----- */}
+          {/* ----- Form / packaging-type picker -----
+              Shared section used by Bulk (dosage form) and Contract
+              Packaging (packaging type). Options + label come from the
+              type-aware derived constants above. */}
           {showFormSection ? (
             <div style={sectionStyle}>
-              <p style={sectionLabelStyle}>Dosage form</p>
+              <p style={sectionLabelStyle}>{formLabel}</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {FORMS.map((f) => {
+                {formOptions.map((f) => {
                   const allowed = isFormAllowed(f.id);
                   const active = state.form === f.id;
                   return (
