@@ -113,6 +113,9 @@ function blankState(): WorkflowState {
     type: null,
     form: null,
     source: null,
+    // Contract Packaging dosage (Softgels / Gummies / ...). Null when not
+    // in a CP workflow.
+    dosage: null,
     products: [newProductEntry()],
   };
 }
@@ -462,6 +465,9 @@ function StartWorkflow() {
   // state.form — Bulk picks a dosage form, CP picks a packaging type.
   const showFormSection = isBulk || isContractPackaging;
   const showSourceSection = isBulk && state.form === "gummy";
+  // Contract Packaging adds a THIRD pill row — what dosage form is being
+  // packaged — which only opens once the packaging type is locked in.
+  const showDosageSection = isContractPackaging && !!state.form;
   // Pick which option set + section heading goes in the form-section UI.
   const formOptions = isContractPackaging ? PACKAGING_TYPES : FORMS;
   const formLabel = isContractPackaging ? "Packaging type" : "Dosage form";
@@ -477,6 +483,7 @@ function StartWorkflow() {
     ? !!state.customerId
     : !!state.newCustomer.name.trim();
   const formOk = !showFormSection || !!state.form;
+  const dosageOk = !showDosageSection || !!state.dosage;
   const sourceOk = !showSourceSection || !!state.source;
 
   const productsOk = state.products.every((p) => {
@@ -489,6 +496,7 @@ function StartWorkflow() {
   if (!customerOk) missing.push("Customer");
   if (!state.type) missing.push("Quote type");
   if (!formOk) missing.push(formLabel);
+  if (!dosageOk) missing.push("Dosage form");
   if (!sourceOk) missing.push("Source");
   if (!productsOk) missing.push("Each product needs a name and at least one quantity");
 
@@ -585,6 +593,12 @@ function StartWorkflow() {
         type: id,
         form: sameFamily ? s.form : null,
         source: sameFamily ? s.source : null,
+        // dosage only ever lives on Contract Packaging — wipe it when
+        // switching out of that family.
+        dosage:
+          id === "contract-packaging" && s.type === "contract-packaging"
+            ? s.dosage
+            : null,
       };
     });
   };
@@ -836,6 +850,31 @@ function StartWorkflow() {
                     >
                       {f.name}
                       {!allowed ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* ----- Dosage form (Contract Packaging only) -----
+              Shown after a packaging type is picked. Reuses the same FORMS
+              catalogue Bulk uses so users see the familiar Softgels /
+              Gummies / Tablets / Capsules / Other pills. */}
+          {showDosageSection ? (
+            <div style={sectionStyle}>
+              <p style={sectionLabelStyle}>Dosage form</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {FORMS.map((f) => {
+                  const active = state.dosage === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setField("dosage", f.id)}
+                      style={active ? pillActive : pillBase}
+                    >
+                      {f.name}
                     </button>
                   );
                 })}
