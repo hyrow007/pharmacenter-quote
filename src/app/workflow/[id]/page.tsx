@@ -180,6 +180,30 @@ export default async function WorkflowPage({ params }: Ctx) {
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
         <div className="page__inner--narrow" style={{ position: "relative" }}>
+        {/* Top-left Back to workflows pill — kept consistent with the
+            same pill on /pricing and /start so navigation feels uniform
+            across the app. Sits above the eyebrow so it's the first
+            thing the eye lands on when the page loads. */}
+        <a
+          href="/workflows"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            background: "var(--paper, #fffdf8)",
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--teal-900, #0f4a56)",
+            textDecoration: "none",
+            marginBottom: 16,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span aria-hidden="true">&larr;</span> Back to workflows
+        </a>
         <div style={{ marginBottom: 22 }}>
           <p className="eyebrow" style={{ marginBottom: 6 }}>
             PharmaCenter · Workflow ·{" "}
