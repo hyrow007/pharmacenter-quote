@@ -103,6 +103,37 @@ export default async function AdminPage() {
             </p>
           </div>
 
+          {/* Catalogue management links — point to deeper admin pages so
+              the main panel below stays focused on user management. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 10,
+              marginBottom: 20,
+            }}
+          >
+            <a
+              href="/admin/raw-materials"
+              style={{
+                display: "block",
+                padding: "14px 16px",
+                background: "var(--paper, #fffdf8)",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 10,
+                textDecoration: "none",
+                color: "var(--teal-900, #0f4a56)",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                Raw materials &rarr;
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
+                The ingredient catalogue used by the gummy formula calculator.
+              </div>
+            </a>
+          </div>
+
           <AdminPanel
             currentUserEmail={user.email!}
             initialUsers={users}
