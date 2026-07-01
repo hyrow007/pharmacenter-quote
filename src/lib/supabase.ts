@@ -33,4 +33,19 @@ export type Customer = {
   email?: string | null;
   phone?: string | null;
   fishbowl_id?: string | null;
+  default_ship_to?: string | null;
+};
+
+// Convenience type matching the shared "products" table schema — the same
+// row shape /start/page.tsx and PricingCalculator both consume when the
+// existing-products dropdown is hydrated. `fp_code` is the Fishbowl part
+// number ("PC-BK-1234" and friends); `default_unit` is the UoM label
+// synced from Fishbowl's `uom` table (e.g. "kg", "ea", "L").
+export type Product = {
+  id: string;
+  name: string;
+  fp_code: string | null;
+  default_unit?: string | null;
+  active?: boolean;
+  external_id?: string | null;
 };
