@@ -688,7 +688,7 @@ export default function WorkflowActions({
           const s = workflow.state;
           const dosageOrForm = (s.form ?? "") || (s.dosage ?? "");
           const isGummy = dosageOrForm === "gummy" || dosageOrForm === "gummies";
-          const isPcMade = (s.source ?? "") === "pc";
+          const isPcMade = (s.source ?? "") === "pharmacenter";
           if (!isGummy || !isPcMade) return null;
           return (
             <a
