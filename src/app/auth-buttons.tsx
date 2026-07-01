@@ -29,6 +29,7 @@ export function SignInButton() {
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
         queryParams: {
+          // Hint Google to scope to the PharmaCenter Workspace.
           hd: "pharmacenterusa.com",
           access_type: "offline",
           prompt: "consent",
@@ -39,6 +40,7 @@ export function SignInButton() {
       console.error("Sign-in error:", error.message);
       setLoading(false);
     }
+    // Otherwise the browser is being redirected to Google.
   }
 
   return (
@@ -64,4 +66,3 @@ export function SignOutButton({ label = "Sign out" }: { label?: string }) {
     </button>
   );
 }
-

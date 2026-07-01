@@ -679,6 +679,30 @@ export default function WorkflowActions({
             Landed cost + margin → sale price.
           </span>
         </a>
+
+        {/* Gummy-formula calculator — only for workflows where we're actually
+            manufacturing gummies at PharmaCenter (Bulk → Gummy → PC, or the
+            equivalent Contract-Packaging path via state.dosage). Everything
+            else has no formula to build so the button stays hidden. */}
+        {(() => {
+          const s = workflow.state;
+          const dosageOrForm = (s.form ?? "") || (s.dosage ?? "");
+          const isGummy = dosageOrForm === "gummy" || dosageOrForm === "gummies";
+          const isPcMade = (s.source ?? "") === "pc";
+          if (!isGummy || !isPcMade) return null;
+          return (
+            <a
+              href={`/workflow/${workflow.id}/gummy-formula`}
+              style={editAction}
+              aria-label="Open the gummy formula calculator"
+            >
+              <span>Gummy Formula →</span>
+              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+                Per-gummy COGS after 20 kg/day loss.
+              </span>
+            </a>
+          );
+        })()}
       </div>
 
       {/* Delete workflow lives on its own row, separated from the everyday

@@ -1031,7 +1031,9 @@ function StartWorkflow() {
                           value={tier}
                           onChange={(e) => setProduct(p.uid, (cur) => ({ ...cur, quantities: cur.quantities.map((q, j) => (j === i ? formatQty(e.target.value) : q)) }))}
                           style={inputStyle} />
-                        <div style={{ padding: "10px 14px", background: "#fffdf8", border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13, color: "var(--ink-2)", fontWeight: 600, whiteSpace: "nowrap" }}>units</div>
+                        <div style={{ padding: "10px 14px", background: "#fffdf8", border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13, color: "var(--ink-2)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                          {isContractPackaging ? "eaches" : "units"}
+                        </div>
                         {p.quantities.length > 1 ? (
                           <button type="button"
                             onClick={() => setProduct(p.uid, (cur) => ({ ...cur, quantities: cur.quantities.filter((_, j) => j !== i) }))}

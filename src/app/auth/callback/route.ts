@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
 
+/**
+ * OAuth callback — Supabase redirects here after a successful Google sign-in.
+ * We exchange the code for a session and bounce the user to their destination.
+ */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -11,6 +15,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      // For preview/prod the host is set by the load balancer; use forwarded host when present.
       const forwardedHost = request.headers.get("x-forwarded-host");
       const isLocalEnv = process.env.NODE_ENV === "development";
       if (isLocalEnv) {

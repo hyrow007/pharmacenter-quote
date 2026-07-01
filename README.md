@@ -5,17 +5,18 @@ Packing List generator — same stack, same brand, same dispatch pipeline.
 
 ## Stack
 
-- **Next.js 14** (App Router, TypeScript) — frontend
-- **Supabase** (Postgres + Auth + RLS) — database; shared with the other PharmaCenter apps
+- **Next.js 14** (App Router, TypeScript) — frontend + server-rendered PDF generation
+- **Supabase** (Postgres + Auth + RLS) — database, Google SSO restricted to the workspace
 - **Vercel** — hosting at `quote.pharmacenter.app`
+- **Google Drive API** — finalized PDFs land in a shared `Quotes/` folder organized by customer and quote number
 
 ## Environments
 
 | Env       | URL                              | Notes                            |
 | --------- | -------------------------------- | -------------------------------- |
-| Local dev | `http://localhost:3000`        | `npm run dev`                    |
-| Preview   | `*.vercel.app`                 | auto-deployed per PR             |
-| Prod      | `quote.pharmacenter.app`       | auto-deployed on push to `main`  |
+| Local dev | `http://localhost:3000`          | `npm run dev`                    |
+| Preview   | `*.vercel.app`                   | auto-deployed per PR             |
+| Prod      | `quote.pharmacenter.app`         | auto-deployed on push to `main`  |
 
 ## Configuration
 
@@ -30,56 +31,31 @@ GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_DRIVE_FOLDER_ID=...
 ```
 
-The Supabase URL/anon key are **the same values used by `pharmacenter-packing-list`**.
-This is intentional — both apps point at the same Supabase project so they share
-customer, product, and reference data.
+Same values as `pharmacenter-packing-list` except `GOOGLE_DRIVE_FOLDER_ID`,
+which should point to a new shared `Quotes/` folder in Drive.
 
-## Shared customer data (Fishbowl source-of-truth)
+## First-time deploy (mirrors packing-list)
 
-```
-   Fishbowl (on-prem)
-         │
-         ▼ nightly sync
-   Supabase customers table  ◀── single source of truth for all apps
-         │
-   ┌─────┼─────┐
-   ▼     ▼     ▼
-quote  packing-list  (future apps)
-```
-
-`src/lib/supabase.ts` exports a shared client. `src/app/customer/page.tsx`
-queries `from("customers").select("id, name, location")`. If env vars aren't
-set or the table is empty, the page falls back to a built-in mock list so dev
-and previews still render.
-
-**Customers table schema (Supabase):**
-
-| Column         | Type      | Notes                                          |
-| -------------- | --------- | ---------------------------------------------- |
-| id             | text PK   | Use Fishbowl customer ID, or generated UUID    |
-| name           | text      | Display name                                   |
-| location       | text      | "Frederick, MD" — city/state, optional         |
-| contact_name   | text      | Optional                                       |
-| email          | text      | Optional                                       |
-| phone          | text      | Optional                                       |
-| fishbowl_id    | text      | Original Fishbowl ID for sync reconciliation   |
-| created_at     | timestamp | `default now()`                              |
-| updated_at     | timestamp | Updated by sync job                            |
-
-**Fishbowl → Supabase sync** is a separate piece of work. Recommended: a small
-Node script running wherever has LAN access to the Fishbowl Server, queried
-nightly, upserting to Supabase via the service-role key.
+1. Create an empty repo: `https://github.com/hyrow007/pharmacenter-quote`
+2. Create a Vercel project linked to that repo. Copy env vars from the
+   `pharmacenter-packing-list` project; override `GOOGLE_DRIVE_FOLDER_ID`.
+3. In the Vercel project's domain settings, add `quote.pharmacenter.app` and
+   set the CNAME at your registrar.
+4. Make a `C:\q` junction pointing at this folder, then run `init-git.ps1`.
+   It clones the repo to `C:\code\pharmacenter-quote`, copies the scaffold,
+   archives the v0 bundle into `legacy/`, and pushes — Vercel auto-deploys.
 
 ## Legacy artifacts
 
 The `legacy/` folder holds the pre-Next.js standalone HTML bundle and its source
 JSX (the v0 customer-facing quote generator). Kept for reference and immediate
-visual iteration while the Next.js app reaches feature parity. The standalone
-`PharmaCenter Quote Generator.html` in `legacy/` can be opened directly in any
-browser — no build step.
+visual iteration while the Next.js app reaches feature parity.
+
+The standalone `PharmaCenter Quote Generator.html` in `legacy/` can be opened
+directly in any browser — no build step.
 
 ## Storage (v0 bundle only)
 
 The legacy/standalone bundle autosaves to `localStorage` under the separate
 `pharmacenter-quote` key. The Packing List's data at `pharmacenter-packing-list`
-is never touched.
+is never touched. See `CLAUDE.md` for the full key table.
