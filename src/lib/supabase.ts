@@ -1,10 +1,17 @@
-// Shared Supabase client. Both quote and packing-list apps point at the same
-// Supabase project. Env vars are Team-level Shared variables in Vercel:
+// Shared Supabase client. Used by all PharmaCenter quote/packing/etc. apps that
+// point at the same Supabase project. Set the env vars in Vercel as Team-level
+// Shared variables so a single rotation flows to all linked projects:
 //
 //   NEXT_PUBLIC_SUPABASE_URL              project URL (https://<id>.supabase.co)
 //   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  publishable key (sb_publishable_*)
 //
-// Fallback to legacy NEXT_PUBLIC_SUPABASE_ANON_KEY for transitional projects.
+// The publishable key is the new Supabase name for what was historically
+// called "anon key". If you still have the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY
+// set, we fall back to it so the migration can happen one project at a time.
+// New deployments should prefer PUBLISHABLE_KEY.
+//
+// If both are missing the client is null and the calling code should fall
+// back to mock data (so local dev / previews without env vars still render).
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -16,27 +23,14 @@ const key =
 export const supabase: SupabaseClient | null =
   url && key ? createClient(url, key) : null;
 
-// Customer schema — matches the shared "customers" table maintained by the
-// packing-list project (populated via Fishbowl sync).
+// Convenience type matching the shared "customers" table schema.
+// Add columns as the table grows — keep this in sync with the Supabase project.
 export type Customer = {
-  id: string;
+  id: string;            // Fishbowl customer ID or generated UUID for new entries
   name: string;
-  default_ship_to: string | null;
-  active?: boolean;
-  source?: string | null;
-  external_id?: string | null;
-};
-
-// Product schema — matches the shared "products" table maintained by the
-// packing-list project (populated via Fishbowl sync). fp_code is the Fishbowl
-// product code; name is the descriptive label.
-export type Product = {
-  id: string;
-  fp_code: string;
-  name: string;
-  default_unit: string | null;
-  active?: boolean;
-  source?: string | null;
-  external_id?: string | null;
-  notes?: string | null;
+  location: string | null;
+  contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  fishbowl_id?: string | null;
 };

@@ -129,6 +129,47 @@ export type WorkflowState = {
   // T&Cs, signature names) lossless. Optional for backward compatibility
   // with workflows created before the multi-version quote feature.
   issuedQuotes?: IssuedQuoteTab[];
+  // Saved gummy-formula calculator state for CP → Gummies → Manufactured at
+  // PharmaCenter workflows. Optional; only present after the user visits
+  // /workflow/[id]/gummy-formula and hits Save. See GummyFormula below.
+  gummyFormula?: GummyFormula;
+};
+
+// -----------------------------------------------------------------------------
+// Gummy-formula calculator persistence
+// -----------------------------------------------------------------------------
+
+// One row on the gummy-formula sheet — an ingredient line.
+// rawMaterialId is a FK into public.raw_materials (nullable so users can add
+// custom one-off lines). costPerKgOverride/solidsOverride let a line stray
+// from the raw_materials defaults for THIS formula without disturbing the
+// catalogue. pctInFinished is the % of the finished, post-cook blend the
+// ingredient contributes.
+export type GummyFormulaRow = {
+  id: string;
+  rawMaterialId: string | null;
+  customName: string | null;
+  pctInFinished: number;               // 0..100
+  costPerKgOverride: number | null;    // dollars/kg; null = use raw material default
+  solidsOverride: number | null;       // 0..1; null = use raw material default
+  notes: string | null;
+};
+
+// Batch-level params for the gummy-formula calculator.
+//   fixedLossKgPerDay:  ~20 kg/day is lost regardless of how many 100kg batches
+//                       we run. 1 batch/day → 20% loss; 6 batches/day → 3.33%.
+//                       Applied as: effective_yield = (batches*kg − fixed_loss)/(batches*kg).
+//   yieldPct:           process yield BEFORE the daily fixed loss (100% = perfect).
+//   gummyPieceWeightG:  finished gummy weight, e.g. 3.0g for a bear gummy.
+export type GummyFormula = {
+  batchKg: number;                     // e.g. 100
+  batchesPerDay: number;               // e.g. 6
+  fixedLossKgPerDay: number;           // e.g. 20
+  gummyPieceWeightG: number;           // e.g. 3.0
+  yieldPct: number;                    // e.g. 100 (before daily loss)
+  rows: GummyFormulaRow[];
+  savedAt: string;                     // ISO
+  savedByEmail: string;
 };
 
 // One tab in the customer-facing quote popup. We persist the full inner

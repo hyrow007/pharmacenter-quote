@@ -32,6 +32,8 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Refresh the Auth token on every request so cookies stay live.
+  // Don't run code between createServerClient and getUser; it can cause
+  // hard-to-debug session bugs.
   await supabase.auth.getUser();
 
   return supabaseResponse;
