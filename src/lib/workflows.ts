@@ -81,6 +81,20 @@ export type PricingSnapshot = {
   margin: string;
   marginMode: "markup" | "gross-margin";
 
+  // v2 landed-cost model (Jul 2026 rebuild — see task #155).
+  // Optional so pre-v2 snapshots still parse; defaults get applied on hydrate.
+  //   shippingMode: only meaningful when shippingOrigin === "international".
+  //                 Air adds a $200 airline terminal-handling fee to the broker
+  //                 baseline and skips HMF (HMF is ocean-only per CBP).
+  //   otherCosts:   catch-all buffer for CBP hold-and-exam fees, misc inspection
+  //                 charges, etc. Default $200 seeded on new tabs.
+  //   deliveryOverride: only used when shipment kg > 500. Under 500 kg we auto-
+  //                     apply the $230 LCL minimum. Above that the rep types a
+  //                     value here (we haven't calibrated the >500kg curve yet).
+  shippingMode?: "ocean" | "air";
+  otherCosts?: string;
+  deliveryOverride?: string;
+
   // Snapshot of computed results at the moment of save. Stored as plain
   // numbers in dollars — useful for the workflow listing summary so it
   // doesn't have to redo arithmetic.

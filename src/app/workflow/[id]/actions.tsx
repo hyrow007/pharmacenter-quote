@@ -681,9 +681,10 @@ export default function WorkflowActions({
         </a>
 
         {/* Gummy-formula calculator — only for workflows where we're actually
-            manufacturing gummies at PharmaCenter (Bulk → Gummy → PC, or the
-            equivalent Contract-Packaging path via state.dosage). Everything
-            else has no formula to build so the button stays hidden. */}
+            manufacturing gummies at PharmaCenter (Bulk → Gummy → PharmaCenter,
+            or the equivalent Contract-Packaging path via state.dosage). The
+            source id in /start is "pharmacenter" (matches the picker label),
+            NOT "pc" — this was the bug that hid the button on real workflows. */}
         {(() => {
           const s = workflow.state;
           const dosageOrForm = (s.form ?? "") || (s.dosage ?? "");

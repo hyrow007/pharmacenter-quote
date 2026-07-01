@@ -9,6 +9,21 @@ import type {
   PricingSnapshot,
   WorkflowState,
 } from "@/lib/workflows";
+import {
+  AIR_TERMINAL_HANDLING_FEE,
+  BROKER_BASELINE_LINES,
+  BROKER_BASELINE_TOTAL,
+  DEFAULT_DUTY_PCT,
+  DEFAULT_LAB_TESTING,
+  DEFAULT_OTHER_COSTS,
+  DEFAULT_SHIPPING_MODE,
+  DELIVERY_FLAT_AMOUNT,
+  DELIVERY_FLAT_KG_THRESHOLD,
+  HMF_RATE,
+  MPF_MAX,
+  MPF_RATE,
+  unitWeightForForm,
+} from "@/lib/pricing-defaults";
 
 // Pricing calculator client component. All math is dollar-and-percent simple
 // arithmetic, derived from input strings live as the user types. Inputs are
@@ -1158,6 +1173,10 @@ type TabState = {
   margin: string;
   marginMode: Mode;
   savedAt: string | null;
+  // v2 landed-cost model (see task #155).
+  shippingMode: "ocean" | "air";
+  otherCosts: string;
+  deliveryOverride: string;
 };
 
 function newTabId(): string {
@@ -1186,12 +1205,17 @@ function blankTab(): TabState {
     freight: "",
     insurance: "",
     customsBroker: "",
-    dutiesPct: "",
+    // v2 default duty: 25% covers the observed 23.9% China stack (base HTSUS
+    // 6.4% + Section 301 7.5% + IEEPA 10%) with a small buffer.
+    dutiesPct: String(DEFAULT_DUTY_PCT),
     handling: "",
-    testing: "",
+    testing: String(DEFAULT_LAB_TESTING),
     margin: "30",
     marginMode: "gross-margin",
     savedAt: null,
+    shippingMode: DEFAULT_SHIPPING_MODE,
+    otherCosts: String(DEFAULT_OTHER_COSTS),
+    deliveryOverride: "",
   };
 }
 
@@ -1217,17 +1241,50 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
     freight: snap.freight,
     insurance: snap.insurance,
     customsBroker: snap.customsBroker,
+    // Legacy snapshots may have empty duty/testing; leave what the user typed
+    // if present so we don't retroactively bump a saved 20% quote to 25%. New
+    // tabs get the v2 defaults through blankTab().
     dutiesPct: snap.dutiesPct,
     handling: snap.handling,
     testing: snap.testing,
     margin: snap.margin,
     marginMode: snap.marginMode,
     savedAt: snap.savedAt,
+    // v2 fields — default when the snapshot predates the model change.
+    shippingMode: snap.shippingMode ?? DEFAULT_SHIPPING_MODE,
+    otherCosts: snap.otherCosts ?? String(DEFAULT_OTHER_COSTS),
+    deliveryOverride: snap.deliveryOverride ?? "",
   };
 }
 
-// Extracted math — used by both the live useMemo for the active tab and the
-// save handler when it needs to snapshot results for inactive tabs.
+// v2 landed-cost model — see /lib/pricing-defaults.ts for the constants and
+// task #155 for the rationale. Summary:
+//
+//   USA / domestic mode: unchanged from v1 — freight + insurance + testing +
+//     "other costs" are the only additions to product cost. No duty, no CBP
+//     fees, no broker baseline.
+//
+//   International mode (default: CIF):
+//     productCost = unitCost × qty          (already the CIF value when
+//                                             Incoterm == CIF; when the rep
+//                                             uses FOB/EXW they type freight
+//                                             + insurance which get added
+//                                             into the CIF-equivalent below)
+//     CIF         = productCost + freight_if_visible + insurance_if_visible
+//     brokerBase  = $450 baseline
+//                 + $200 IF shippingMode == "air"
+//     delivery    = $230 (LCL flat) IF shipmentKg ≤ 500
+//                 = deliveryOverride if the rep typed one (used > 500 kg)
+//     duty        = CIF × dutiesPct
+//     MPF         = min(CIF × 0.003464, $634.62)
+//     HMF         = CIF × 0.00125  (ocean only, zero on air)
+//     lab         = testing
+//     other       = otherCosts (buffer for hold/exam fees etc.)
+//     landed      = CIF + brokerBase + delivery + duty + MPF + HMF + lab + other
+//
+// The saved PricingSnapshot's `result` object only carries the top-level
+// totals — this function also returns the auto-computed sub-items so the
+// live UI can render the audit breakdown without re-doing the math.
 function computeResults(input: {
   unitCost: string;
   quantity: string;
@@ -1241,24 +1298,111 @@ function computeResults(input: {
   marginMode: Mode;
   shippingOrigin: ShippingOrigin;
   incoterm: Incoterm;
+  // v2 fields — optional so pre-v2 saved snapshots (which don't carry them)
+  // still evaluate cleanly with the international auto-costs zeroed out. In
+  // practice the calculator UI always passes them.
+  shippingMode?: "ocean" | "air";
+  otherCosts?: string;
+  deliveryOverride?: string;
+  // Per-unit weight in grams, sourced from the workflow's dosage form. Used
+  // to auto-compute shipment weight for the delivery tier lookup. When the
+  // form is unknown, we fall back to 1 g/unit (see unitWeightForForm).
+  unitWeightG?: number;
 }) {
   const u = num(input.unitCost);
   const q = num(input.quantity);
-  const visibility = input.shippingOrigin === "usa"
+  const mPct = num(input.margin) / 100;
+  const isUsa = input.shippingOrigin === "usa";
+  const visibility = isUsa
     ? { freight: true, insurance: false, duties: false, customs: false }
     : INCOTERM_FIELDS[input.incoterm];
+
+  // Reader-friendly rep inputs — parsed once, referenced below.
   const fr = visibility.freight ? num(input.freight) : 0;
   const ins = visibility.insurance ? num(input.insurance) : 0;
-  const cb = visibility.customs ? num(input.customsBroker) : 0;
-  const dp = visibility.duties ? num(input.dutiesPct) / 100 : 0;
-  const hd = num(input.handling);
   const ts = num(input.testing);
-  const mPct = num(input.margin) / 100;
+  const otherCosts = num(input.otherCosts ?? "");
 
   const productCost = u * q;
-  const dutiesAmount = productCost * dp;
-  const landedTotal = productCost + fr + ins + cb + dutiesAmount + hd + ts;
+
+  // ---------- USA / domestic: minimal old-model math ----------
+  if (isUsa) {
+    const landedTotal = productCost + fr + ts + otherCosts;
+    const landedPerUnit = q > 0 ? landedTotal / q : 0;
+    let salePerUnit = 0;
+    if (landedPerUnit > 0) {
+      if (input.marginMode === "markup") {
+        salePerUnit = landedPerUnit * (1 + mPct);
+      } else {
+        const capped = Math.min(mPct, 0.9999);
+        salePerUnit = landedPerUnit / (1 - capped);
+      }
+    }
+    const totalRevenue = salePerUnit * q;
+    const grossProfit = totalRevenue - landedTotal;
+    const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
+    const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
+    return {
+      productCost,
+      dutiesAmount: 0,
+      landedTotal,
+      landedPerUnit,
+      salePerUnit,
+      totalRevenue,
+      grossProfit,
+      effectiveMargin,
+      effectiveMarkup,
+      hasInputs: u > 0 && q > 0,
+      // v2 breakdown fields (zero for USA — no CBP / broker involvement).
+      cifValue: productCost,
+      brokerBaseline: 0,
+      airTerminalFee: 0,
+      delivery: 0,
+      mpf: 0,
+      hmf: 0,
+      other: otherCosts,
+      shipmentKg: 0,
+      cifLandedUpliftPct: productCost > 0 ? (landedTotal - productCost) / productCost : 0,
+    };
+  }
+
+  // ---------- International (v2 model) ----------
+  const cif = productCost + fr + ins;
+  const dutiesRate = visibility.duties ? num(input.dutiesPct) / 100 : 0;
+  const dutiesAmount = cif * dutiesRate;
+
+  const shippingMode = input.shippingMode ?? "ocean";
+  const brokerBaseline = BROKER_BASELINE_TOTAL;
+  const airTerminalFee = shippingMode === "air" ? AIR_TERMINAL_HANDLING_FEE : 0;
+
+  // Delivery: flat under threshold, rep-typed override above it. The override
+  // wins whenever it's non-empty so the rep can also nudge small shipments
+  // (e.g. a rush surcharge) without us fighting them.
+  const overrideNum = num(input.deliveryOverride ?? "");
+  const unitWeightG = input.unitWeightG ?? 1;
+  const shipmentKg = q * unitWeightG;
+  const delivery =
+    overrideNum > 0
+      ? overrideNum
+      : shipmentKg <= DELIVERY_FLAT_KG_THRESHOLD
+        ? DELIVERY_FLAT_AMOUNT
+        : DELIVERY_FLAT_AMOUNT; // fallback: keep the flat rate; rep should override.
+
+  const mpf = Math.min(cif * MPF_RATE, MPF_MAX);
+  const hmf = shippingMode === "ocean" ? cif * HMF_RATE : 0;
+
+  const landedTotal =
+    cif +
+    brokerBaseline +
+    airTerminalFee +
+    delivery +
+    dutiesAmount +
+    mpf +
+    hmf +
+    ts +
+    otherCosts;
   const landedPerUnit = q > 0 ? landedTotal / q : 0;
+
   let salePerUnit = 0;
   if (landedPerUnit > 0) {
     if (input.marginMode === "markup") {
@@ -1273,6 +1417,11 @@ function computeResults(input: {
   const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
   const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
 
+  // CIF → landed uplift %: how much friction is added by importing (broker,
+  // delivery, duty, CBP fees, lab, other). Shown as a sanity gauge — typical
+  // China softgel imports land around 30–40 %.
+  const cifLandedUpliftPct = cif > 0 ? (landedTotal - cif) / cif : 0;
+
   return {
     productCost,
     dutiesAmount,
@@ -1284,6 +1433,16 @@ function computeResults(input: {
     effectiveMargin,
     effectiveMarkup,
     hasInputs: u > 0 && q > 0,
+    // v2 breakdown for the audit-trail UI.
+    cifValue: cif,
+    brokerBaseline,
+    airTerminalFee,
+    delivery,
+    mpf,
+    hmf,
+    other: otherCosts,
+    shipmentKg,
+    cifLandedUpliftPct,
   };
 }
 
@@ -1507,10 +1666,40 @@ export default function PricingCalculator({
   const [dutiesPct, setDutiesPct] = useState<string>(() => tabs[0]?.dutiesPct ?? "");
   const [handling, setHandling] = useState<string>(() => tabs[0]?.handling ?? "");
   // Lab / analytical testing fee. Constant on all terms — always shown.
-  const [testing, setTesting] = useState<string>(() => tabs[0]?.testing ?? "");
+  const [testing, setTesting] = useState<string>(
+    () => tabs[0]?.testing ?? String(DEFAULT_LAB_TESTING),
+  );
   const [margin, setMargin] = useState<string>(() => tabs[0]?.margin ?? "30");
   const [marginMode, setMarginMode] = useState<Mode>(
     () => tabs[0]?.marginMode ?? "gross-margin",
+  );
+
+  // v2 landed-cost model state (task #155). shippingMode toggles Air/Ocean
+  // for international shipments; otherCosts is the catch-all buffer for
+  // hold/exam fees; deliveryOverride only kicks in when the rep decides the
+  // shipment is heavy enough that the $230 LCL flat rate no longer applies.
+  const [shippingMode, setShippingMode] = useState<"ocean" | "air">(
+    () => tabs[0]?.shippingMode ?? DEFAULT_SHIPPING_MODE,
+  );
+  const [otherCosts, setOtherCosts] = useState<string>(
+    () => tabs[0]?.otherCosts ?? String(DEFAULT_OTHER_COSTS),
+  );
+  const [deliveryOverride, setDeliveryOverride] = useState<string>(
+    () => tabs[0]?.deliveryOverride ?? "",
+  );
+
+  // Per-unit weight in grams — driven by the workflow's dosage form (bulk
+  // uses state.form, contract-packaging uses state.dosage). Falls back to a
+  // conservative 1 g when the form isn't set yet so the delivery tier check
+  // still evaluates. See DEFAULT_UNIT_WEIGHT_G in /lib/pricing-defaults.ts
+  // for the source-of-truth values and how they were derived.
+  const workflowDosageForm = useMemo(() => {
+    if (!workflowState) return null;
+    return workflowState.form ?? workflowState.dosage ?? null;
+  }, [workflowState]);
+  const unitWeightG = useMemo(
+    () => unitWeightForForm(workflowDosageForm),
+    [workflowDosageForm],
   );
 
   // Which buyer-side cost inputs to show for the current shipping mode.
@@ -1562,12 +1751,19 @@ export default function PricingCalculator({
         marginMode,
         shippingOrigin,
         incoterm,
+        // v2 fields — passed even for stock products so USA/mixed cases stay
+        // consistent. The math function itself zeros them out where appropriate.
+        shippingMode,
+        otherCosts: isStockProduct ? "" : otherCosts,
+        deliveryOverride: isStockProduct ? "" : deliveryOverride,
+        unitWeightG,
       }),
     [
       unitCost, quantity,
       freight, insurance, customsBroker, dutiesPct, handling, testing,
       margin, marginMode,
       shippingOrigin, incoterm,
+      shippingMode, otherCosts, deliveryOverride, unitWeightG,
       isStockProduct,
     ],
   );
@@ -1600,6 +1796,10 @@ export default function PricingCalculator({
       margin,
       marginMode,
       savedAt: lastSavedAt,
+      // v2 fields
+      shippingMode,
+      otherCosts,
+      deliveryOverride,
     };
   }
 
@@ -1628,6 +1828,10 @@ export default function PricingCalculator({
     setMarginMode(t.marginMode);
     setLastSavedAt(t.savedAt);
     setSaveError(null);
+    // v2 fields
+    setShippingMode(t.shippingMode);
+    setOtherCosts(t.otherCosts);
+    setDeliveryOverride(t.deliveryOverride);
   }
 
   function switchTab(newIndex: number) {
@@ -1732,6 +1936,12 @@ export default function PricingCalculator({
       marginMode: t.marginMode,
       shippingOrigin: t.shippingOrigin,
       incoterm: t.incoterm,
+      // v2 fields — the workflow-level dosage form is a constant per
+      // calculator instance, so all tabs share the same unitWeightG.
+      shippingMode: t.shippingMode,
+      otherCosts: t.otherCosts,
+      deliveryOverride: t.deliveryOverride,
+      unitWeightG,
     });
     const vendorLabel =
       t.vendorMode === "existing" ? t.vendorName : t.newVendorName.trim() || null;
@@ -1755,6 +1965,10 @@ export default function PricingCalculator({
       testing: t.testing,
       margin: t.margin,
       marginMode: t.marginMode,
+      // v2 fields — persist so the tab hydrates exactly as saved.
+      shippingMode: t.shippingMode,
+      otherCosts: t.otherCosts,
+      deliveryOverride: t.deliveryOverride,
       result: {
         landedTotal: r.landedTotal,
         landedPerUnit: r.landedPerUnit,
@@ -2040,11 +2254,15 @@ export default function PricingCalculator({
     setFreight("");
     setInsurance("");
     setCustomsBroker("");
-    setDutiesPct("");
+    setDutiesPct(String(DEFAULT_DUTY_PCT));
     setHandling("");
-    setTesting("");
+    setTesting(String(DEFAULT_LAB_TESTING));
     setMargin("30");
     setMarginMode("gross-margin");
+    // v2 fields — seed with the same defaults blankTab() uses.
+    setShippingMode(DEFAULT_SHIPPING_MODE);
+    setOtherCosts(String(DEFAULT_OTHER_COSTS));
+    setDeliveryOverride("");
     resetVendor();
     setNewVendorName("");
     setVendorMode("existing");
@@ -2545,10 +2763,43 @@ export default function PricingCalculator({
             </div>
           </div>
           {shippingOrigin === "international" ? (
-            <div className="pricing__field">
-              <span className="pricing__label">Shipping terms (Incoterm)</span>
-              <IncotermSelect value={incoterm} onChange={setIncoterm} />
-            </div>
+            <>
+              <div className="pricing__field">
+                <span className="pricing__label">Shipping terms (Incoterm)</span>
+                <IncotermSelect value={incoterm} onChange={setIncoterm} />
+              </div>
+              {/* Ocean vs Air — Ocean is default. Air adds a ~$200 airline
+                  terminal handling fee to the broker baseline and skips HMF
+                  (Harbor Maintenance Fee is ocean-only per CBP). */}
+              <div className="pricing__field">
+                <span className="pricing__label">Shipping mode</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Shipping mode"
+                  className="pricing__mode-group"
+                  style={{ display: "flex", gap: 6 }}
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={shippingMode === "ocean"}
+                    className={`pricing__mode ${shippingMode === "ocean" ? "pricing__mode--active" : ""}`}
+                    onClick={() => setShippingMode("ocean")}
+                  >
+                    Ocean
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={shippingMode === "air"}
+                    className={`pricing__mode ${shippingMode === "air" ? "pricing__mode--active" : ""}`}
+                    onClick={() => setShippingMode("air")}
+                  >
+                    Air
+                  </button>
+                </div>
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -2606,7 +2857,12 @@ export default function PricingCalculator({
               </div>
             </label>
           ) : null}
-          {visibility.customs ? (
+          {/* v2 landed-cost model — the manual "Customs broker" input is
+              retired for international shipments. Broker + delivery + MPF +
+              HMF are all auto-computed from CIF and shown in the audit
+              breakdown below. For USA/domestic mode we still expose the old
+              manual field until we build out the domestic model (task #157). */}
+          {shippingOrigin === "usa" && visibility.customs ? (
             <label className="pricing__field">
               <span className="pricing__label">Customs broker</span>
               <div className="pricing__input-wrap">
@@ -2638,21 +2894,69 @@ export default function PricingCalculator({
               />
             </div>
           </label>
+          {/* Other costs — the v2 catch-all buffer for CBP hold/exam fees,
+              airline CBP exam surcharges, and misc line items we haven't
+              itemised. Under international, replaces the old "Other fees"
+              input (which was bound to `handling`). Under USA we keep both
+              handling and otherCosts separate for now. */}
           <label className="pricing__field">
-            <span className="pricing__label">Other fees</span>
+            <span className="pricing__label">Other costs</span>
             <div className="pricing__input-wrap">
               <span className="pricing__input-prefix">$</span>
               <input
                 type="text"
                 inputMode="decimal"
                 className="pricing__input pricing__input--money"
-                value={handling}
-                onChange={(e) => setHandling(formatValueInput(e.target.value))}
+                value={otherCosts}
+                onChange={(e) => setOtherCosts(formatValueInput(e.target.value))}
                 placeholder="0.00"
                 autoComplete="off"
               />
             </div>
           </label>
+          {shippingOrigin === "usa" ? (
+            <label className="pricing__field">
+              <span className="pricing__label">Handling (domestic)</span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={handling}
+                  onChange={(e) => setHandling(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
+              </div>
+            </label>
+          ) : null}
+          {/* Delivery override — only useful when the auto-calibrated $230
+              LCL flat rate no longer applies (shipment kg > 500). We show
+              the field always so a rep can nudge for rush surcharges too,
+              but the label reminds them it's optional. */}
+          {shippingOrigin === "international" && !isStockProduct ? (
+            <label className="pricing__field">
+              <span className="pricing__label">
+                Delivery override{" "}
+                <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>
+                  (auto ${DELIVERY_FLAT_AMOUNT.toFixed(0)} under {DELIVERY_FLAT_KG_THRESHOLD} kg)
+                </span>
+              </span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={deliveryOverride}
+                  onChange={(e) => setDeliveryOverride(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
+              </div>
+            </label>
+          ) : null}
         </div>
         <p className="pricing__hint">
           {visibility.duties
@@ -2749,20 +3053,61 @@ export default function PricingCalculator({
           <>
             <div className="pricing__breakdown">
               <Row label="Product cost subtotal" value={usd.format(results.productCost)} />
-              {visibility.duties ? (
-                <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
-              ) : null}
               {visibility.freight ? (
                 <Row label="Freight" value={usd.format(num(freight))} muted />
               ) : null}
               {visibility.insurance ? (
                 <Row label="Insurance" value={usd.format(num(insurance))} muted />
               ) : null}
-              {visibility.customs ? (
+              {/* v2 international breakdown — everything the broker + CBP
+                  charges, itemised so the rep can see where the friction is. */}
+              {shippingOrigin === "international" && !isStockProduct ? (
+                <>
+                  <Row
+                    label={`CIF value${shippingMode === "air" ? " (air)" : " (ocean)"}`}
+                    value={usd.format(results.cifValue)}
+                    muted
+                  />
+                  {visibility.duties ? (
+                    <Row
+                      label={`Duties (${dutiesPct || "0"}%)`}
+                      value={usd.format(results.dutiesAmount)}
+                      muted
+                    />
+                  ) : null}
+                  <Row
+                    label={`Broker baseline${shippingMode === "air" ? " + air terminal handling" : ""}`}
+                    value={usd.format(results.brokerBaseline + results.airTerminalFee)}
+                    muted
+                  />
+                  <Row
+                    label={
+                      results.shipmentKg > 0
+                        ? `Delivery (est. ${results.shipmentKg.toFixed(0)} kg)`
+                        : "Delivery"
+                    }
+                    value={usd.format(results.delivery)}
+                    muted
+                  />
+                  <Row label="MPF" value={usd.format(results.mpf)} muted />
+                  {shippingMode === "ocean" ? (
+                    <Row label="HMF" value={usd.format(results.hmf)} muted />
+                  ) : null}
+                </>
+              ) : null}
+              {/* USA / stock — keep the older single-line duties + broker
+                  display. Those cases don't have the v2 auto-cost stack. */}
+              {(shippingOrigin === "usa" || isStockProduct) && visibility.duties ? (
+                <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
+              ) : null}
+              {(shippingOrigin === "usa" || isStockProduct) && visibility.customs ? (
                 <Row label="Customs broker" value={usd.format(num(customsBroker))} muted />
               ) : null}
               <Row label="Lab testing" value={usd.format(num(testing))} muted />
-              <Row label="Other fees" value={usd.format(num(handling))} muted />
+              <Row label="Other costs" value={usd.format(num(otherCosts))} muted />
+              {shippingOrigin === "usa" ? (
+                <Row label="Handling (domestic)" value={usd.format(num(handling))} muted />
+              ) : null}
               <Row
                 label="Landed cost (in warehouse)"
                 value={usd.format(results.landedTotal)}
@@ -2773,6 +3118,16 @@ export default function PricingCalculator({
                 value={usdFine.format(results.landedPerUnit)}
                 muted
               />
+              {/* CIF → landed uplift %: sanity gauge for international. Typical
+                  China softgel imports land around +30–40%. Anything wildly
+                  outside that range is worth a second look. */}
+              {shippingOrigin === "international" && !isStockProduct && results.cifValue > 0 ? (
+                <Row
+                  label="CIF → landed uplift"
+                  value={pct.format(results.cifLandedUpliftPct)}
+                  muted
+                />
+              ) : null}
             </div>
 
             <div className="pricing__highlight">
@@ -2873,10 +3228,16 @@ export default function PricingCalculator({
               </tr>
             )}
             {!isStockProduct && shippingOrigin === "international" ? (
-              <tr>
-                <td>Shipping terms</td>
-                <td>{INCOTERM_LABELS[incoterm]}</td>
-              </tr>
+              <>
+                <tr>
+                  <td>Shipping terms</td>
+                  <td>{INCOTERM_LABELS[incoterm]}</td>
+                </tr>
+                <tr>
+                  <td>Shipping mode</td>
+                  <td>{shippingMode === "ocean" ? "Ocean (LCL)" : "Air"}</td>
+                </tr>
+              </>
             ) : null}
           </tbody>
         </table>
@@ -2938,12 +3299,76 @@ export default function PricingCalculator({
               <td>Product cost subtotal</td>
               <td>{usd.format(results.productCost)}</td>
             </tr>
-            {visibility.duties ? (
-              <tr>
-                <td>Duties</td>
-                <td>{usd.format(results.dutiesAmount)}</td>
-              </tr>
-            ) : null}
+            {/* v2 international audit trail: broker baseline expanded into
+                all 7 fixed sub-lines so an auditor can see exactly what
+                every dollar of the baseline pays for. Only rendered for
+                international purchase products; USA and stock cases fall
+                through to the older single-line duty/broker layout below. */}
+            {shippingOrigin === "international" && !isStockProduct ? (
+              <>
+                <tr>
+                  <td>CIF value {shippingMode === "air" ? "(air)" : "(ocean)"}</td>
+                  <td>{usd.format(results.cifValue)}</td>
+                </tr>
+                {visibility.duties ? (
+                  <tr>
+                    <td>Duties ({dutiesPct || "0"}%)</td>
+                    <td>{usd.format(results.dutiesAmount)}</td>
+                  </tr>
+                ) : null}
+                <tr>
+                  <td>Broker baseline (7 lines)</td>
+                  <td>{usd.format(results.brokerBaseline)}</td>
+                </tr>
+                {BROKER_BASELINE_LINES.map((line) => (
+                  <tr key={line.label} className="pricing-print__row--muted">
+                    <td style={{ paddingLeft: 18 }}>· {line.label}</td>
+                    <td>{usd.format(line.amount)}</td>
+                  </tr>
+                ))}
+                {shippingMode === "air" ? (
+                  <tr>
+                    <td>Airline terminal handling</td>
+                    <td>{usd.format(results.airTerminalFee)}</td>
+                  </tr>
+                ) : null}
+                <tr>
+                  <td>
+                    Delivery{" "}
+                    {results.shipmentKg > 0
+                      ? `(~${results.shipmentKg.toFixed(0)} kg)`
+                      : ""}
+                  </td>
+                  <td>{usd.format(results.delivery)}</td>
+                </tr>
+                <tr>
+                  <td>MPF (0.3464%)</td>
+                  <td>{usd.format(results.mpf)}</td>
+                </tr>
+                {shippingMode === "ocean" ? (
+                  <tr>
+                    <td>HMF (0.125%)</td>
+                    <td>{usd.format(results.hmf)}</td>
+                  </tr>
+                ) : null}
+                <tr>
+                  <td>Lab testing</td>
+                  <td>{usd.format(num(testing))}</td>
+                </tr>
+                <tr>
+                  <td>Other costs</td>
+                  <td>{usd.format(num(otherCosts))}</td>
+                </tr>
+              </>
+            ) : (
+              // USA / stock — keep the older single-line duty display.
+              visibility.duties ? (
+                <tr>
+                  <td>Duties</td>
+                  <td>{usd.format(results.dutiesAmount)}</td>
+                </tr>
+              ) : null
+            )}
             <tr className="pricing-print__row--emphasis">
               <td>Landed cost (in warehouse)</td>
               <td>{usd.format(results.landedTotal)}</td>
@@ -2952,6 +3377,12 @@ export default function PricingCalculator({
               <td>Landed cost per unit</td>
               <td>{usd.format(results.landedPerUnit)}</td>
             </tr>
+            {shippingOrigin === "international" && !isStockProduct && results.cifValue > 0 ? (
+              <tr>
+                <td>CIF → landed uplift</td>
+                <td>{pct.format(results.cifLandedUpliftPct)}</td>
+              </tr>
+            ) : null}
             <tr className="pricing-print__row--emphasis">
               <td>Sale price per unit</td>
               <td>{usd.format(results.salePerUnit)}</td>
