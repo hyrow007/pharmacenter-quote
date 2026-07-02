@@ -2340,6 +2340,36 @@ export default function PricingCalculator({
           </button>
           <button
             type="button"
+            onClick={() => {
+              // Reset is destructive — clear the active tab back to blank
+              // v2 defaults. Confirm first so a stray click doesn't nuke a
+              // half-typed quote. Only wipes the ACTIVE tab (matches the
+              // Reset button already present in the Results section — this
+              // one just makes it findable from the top action bar).
+              if (
+                window.confirm(
+                  "Reset this tab to defaults? All typed inputs on the active tab will be cleared.",
+                )
+              ) {
+                reset();
+              }
+            }}
+            title="Clear this tab and restore default values (duty 25%, lab $500, other $200, mode Ocean)."
+            style={{
+              background: "#fffdf8",
+              color: "#8b2f2f",
+              border: "1px solid #d8b3b3",
+              padding: "8px 14px",
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
             onClick={onIssueQuote}
             title="Generate a customer-facing quote (PDF) with every tab as a line item."
             style={{
