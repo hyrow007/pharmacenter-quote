@@ -1,11 +1,11 @@
-# install-auto-push.ps1  —  one-shot installer for the pharmacenter-quote
+﻿# install-auto-push.ps1  --  one-shot installer for the pharmacenter-quote
 # auto-push watcher. Run this ONCE from an elevated PowerShell (Run as
 # Administrator not required for scheduled task creation targeting your own
 # user, but the script needs write access to C:\ for the junction).
 #
 # What it does:
 #   1. Deletes any stale C:\q junction (points at a previous Cowork session).
-#   2. Recreates C:\q → the current Cowork quote/ mount folder passed in via
+#   2. Recreates C:\q -> the current Cowork quote/ mount folder passed in via
 #      -MountPath, which becomes the source Truth for Claude's edits.
 #   3. Copies auto-push.ps1 into C:\pharmacenter-quote-scripts\ so it's
 #      independent of the Cowork mount (which changes between sessions).
@@ -28,7 +28,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$MountPath,
 
-    # These are stable — override only if your setup diverges.
+    # These are stable -- override only if your setup diverges.
     [string]$JunctionPath  = 'C:\q',
     [string]$RepoPath      = 'C:\code\pharmacenter-quote',
     [string]$ScriptsDir    = 'C:\pharmacenter-quote-scripts',
@@ -73,7 +73,7 @@ Say "Staging watcher at $ScriptsDir\auto-push.ps1"
 New-Item -ItemType Directory -Force -Path $ScriptsDir | Out-Null
 $srcWatcher = Join-Path $PSScriptRoot 'auto-push.ps1'
 if (-not (Test-Path $srcWatcher)) {
-    throw "Can't find $srcWatcher — run this installer from the scripts/ folder next to auto-push.ps1"
+    throw "Can't find $srcWatcher -- run this installer from the scripts/ folder next to auto-push.ps1"
 }
 Copy-Item -Force $srcWatcher (Join-Path $ScriptsDir 'auto-push.ps1')
 Ok "watcher staged"

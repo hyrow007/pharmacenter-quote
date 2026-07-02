@@ -1,25 +1,25 @@
-# auto-push.ps1  —  pharmacenter-quote auto-push watcher
+﻿# auto-push.ps1  --  pharmacenter-quote auto-push watcher
 # -----------------------------------------------------------------------------
 # Polls C:\q every 4 seconds; when files under it change relative to the git
 # checkout at C:\code\pharmacenter-quote, waits for a 12-second quiet period
 # (so we don't commit mid-save), then robocopies the mount into the checkout,
 # commits, and pushes to origin/main.
 #
-# Designed to run in the background — install via install-auto-push.ps1 which
+# Designed to run in the background -- install via install-auto-push.ps1 which
 # registers it as a scheduled task that fires at logon.
 #
 # Behavior:
 #   * Every 4 s: quick check for changes (git status inside the repo after a
-#     lazy robocopy /L — dry-run mirror — so we don't touch the repo until we
+#     lazy robocopy /L -- dry-run mirror -- so we don't touch the repo until we
 #     know something moved).
 #   * When changes appear, start a 12-second debounce window.
 #   * If more changes arrive during the window, extend it (typical editor save
-#     patterns write partial files then finalize — we want the finalized state).
+#     patterns write partial files then finalize -- we want the finalized state).
 #   * Once 12 s of quiet, do the real robocopy + git add/commit/pull --rebase
 #     /push cycle.
 #
 # Log:   %USERPROFILE%\.pharmacenter-quote-auto-push.log
-# Config below — tweak SRC, REPO, or the timings without redeploying.
+# Config below -- tweak SRC, REPO, or the timings without redeploying.
 # -----------------------------------------------------------------------------
 
 $ErrorActionPreference = 'Continue'   # Never let a transient hiccup kill the watcher.
@@ -30,7 +30,7 @@ $LOG       = Join-Path $env:USERPROFILE '.pharmacenter-quote-auto-push.log'
 $POLL_SEC  = 4
 $QUIET_SEC = 12
 
-# robocopy exclusions — everything we DON'T want mirrored into the git repo.
+# robocopy exclusions -- everything we DON'T want mirrored into the git repo.
 # Kept in sync with push-quote.bat so the two are interchangeable.
 $XD = @('.git', 'node_modules', '.next', 'assets', 'push-to-github')
 $XF = @(
@@ -56,7 +56,7 @@ function Test-SourceHasChanges {
     $out = & robocopy @robocopyArgs 2>&1 | Out-String
     $rc = $LASTEXITCODE
     if ($rc -ge 8) {
-        Write-Log "robocopy dry-run failed with $rc — assuming no changes"
+        Write-Log "robocopy dry-run failed with $rc -- assuming no changes"
         return $false
     }
     # Look for any non-zero "Copied", "Mismatch", or "Extras" counts.
@@ -68,13 +68,13 @@ function Test-SourceHasChanges {
 function Invoke-SyncAndPush {
     Write-Log "starting sync"
 
-    # Real mirror. Exit codes 0–7 are success; 8+ is failure.
+    # Real mirror. Exit codes 0-7 are success; 8+ is failure.
     $robocopyArgs = @($SRC, $REPO, '/E', '/NFL', '/NDL', '/NP')
     foreach ($d in $XD) { $robocopyArgs += @('/XD', $d) }
     foreach ($f in $XF) { $robocopyArgs += @('/XF', $f) }
     & robocopy @robocopyArgs *> $null
     if ($LASTEXITCODE -ge 8) {
-        Write-Log "robocopy failed with $LASTEXITCODE — skipping git"
+        Write-Log "robocopy failed with $LASTEXITCODE -- skipping git"
         return
     }
 
@@ -83,7 +83,7 @@ function Invoke-SyncAndPush {
         # Nothing to commit? Bail early.
         $status = & git status --porcelain 2>&1
         if (-not $status) {
-            Write-Log "no diff after mirror — noop"
+            Write-Log "no diff after mirror -- noop"
             return
         }
 
@@ -99,12 +99,12 @@ function Invoke-SyncAndPush {
         # Rebase over any hand-pushed commits (e.g. someone edited via GitHub UI).
         & git pull --rebase origin main 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Log "pull --rebase failed — leaving commit local"
+            Write-Log "pull --rebase failed -- leaving commit local"
             return
         }
         & git push 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Log "push failed — will retry on next cycle"
+            Write-Log "push failed -- will retry on next cycle"
             return
         }
         Write-Log "pushed: $msg"
@@ -118,11 +118,11 @@ function Invoke-SyncAndPush {
 Write-Log "watcher started (SRC=$SRC, REPO=$REPO, POLL=${POLL_SEC}s, QUIET=${QUIET_SEC}s)"
 
 if (-not (Test-Path $SRC)) {
-    Write-Log "FATAL: source path $SRC does not exist — is the C:\q junction present?"
+    Write-Log "FATAL: source path $SRC does not exist -- is the C:\q junction present?"
     exit 1
 }
 if (-not (Test-Path (Join-Path $REPO '.git'))) {
-    Write-Log "FATAL: $REPO is not a git checkout — clone the repo first"
+    Write-Log "FATAL: $REPO is not a git checkout -- clone the repo first"
     exit 1
 }
 
