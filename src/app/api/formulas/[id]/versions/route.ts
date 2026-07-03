@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import {
   FORMULA_VERSION_DEFAULTS,
+  diffVersion,
   versionFromRow,
   type GummyFormulaIngredient,
   type GummyFormulaVersion,
@@ -204,8 +205,38 @@ export async function POST(
     );
   }
 
+  const newVersion = versionFromRow(data);
+
+  // Audit-log the version cut with a per-field diff vs. the previous
+  // version. Previous is null iff this is v1 (created via POST /formulas,
+  // which already writes its own 'created' audit row).
+  const prevForDiff =
+    formulaRow.latest_version_num > 0
+      ? {
+          benchBatchG: currentParams.benchBatchG,
+          batchKg: currentParams.batchKg,
+          batchesPerDay: currentParams.batchesPerDay,
+          fixedLossKgPerDay: currentParams.fixedLossKgPerDay,
+          gummyPieceWeightG: currentParams.gummyPieceWeightG,
+          yieldPct: currentParams.yieldPct,
+          ingredients: currentIngredients,
+        }
+      : null;
+  if (prevForDiff) {
+    const { diff, summary } = diffVersion(prevForDiff, newVersion);
+    const baseSummary = `Cut v${newVersion.versionNum} — ${summary.replace(/^New version — |^New version /, "")}`;
+    await supabase.from("gummy_formula_audit").insert({
+      formula_id: id,
+      by_email: user.email,
+      kind: "version",
+      version_num: newVersion.versionNum,
+      summary: baseSummary,
+      diff,
+    });
+  }
+
   return NextResponse.json(
-    { ok: true, version: versionFromRow(data) },
+    { ok: true, version: newVersion },
     { status: 201 },
   );
 }

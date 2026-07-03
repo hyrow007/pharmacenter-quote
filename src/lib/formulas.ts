@@ -305,6 +305,245 @@ export function recordFromRow(row: {
   };
 }
 
+// -----------------------------------------------------------------------------
+// Audit log types + diff helpers.
+//
+// One audit row per save event. Kinds:
+//   'created'  — formula's initial row + v1 written
+//   'identity' — name / pc_bk_code / shape / flavor edit (no version cut)
+//   'version'  — new gummy_formula_versions row cut
+// -----------------------------------------------------------------------------
+export type GummyFormulaAuditKind = "created" | "identity" | "version";
+
+export type GummyFormulaAuditRecord = {
+  id: string;
+  formulaId: string;
+  at: string;              // ISO
+  byEmail: string | null;
+  byDisplay: string | null; // resolved from user_directory on read
+  kind: GummyFormulaAuditKind;
+  versionNum: number | null;
+  summary: string;
+  diff: unknown;           // shape varies by kind — see notes below
+};
+
+// Structured diff shapes. `unknown` on the record so the timeline UI can
+// coerce per kind.
+export type IdentityDiff = {
+  changes: Array<{
+    field: "name" | "pcBkCode" | "shape" | "flavor" | "active";
+    from: string | boolean | null;
+    to: string | boolean | null;
+  }>;
+};
+
+export type VersionDiff = {
+  paramChanges: Array<{
+    field:
+      | "benchBatchG"
+      | "batchKg"
+      | "batchesPerDay"
+      | "fixedLossKgPerDay"
+      | "gummyPieceWeightG"
+      | "yieldPct";
+    from: number;
+    to: number;
+  }>;
+  added: Array<{
+    id: string;
+    rawMaterialId: string | null;
+    pctInFinished: number;
+  }>;
+  removed: Array<{
+    id: string;
+    rawMaterialId: string | null;
+    pctInFinished: number;
+  }>;
+  modified: Array<{
+    id: string;
+    rawMaterialId: string | null;
+    changes: Array<{
+      field: keyof GummyFormulaIngredient;
+      from: unknown;
+      to: unknown;
+    }>;
+  }>;
+};
+
+// Row shape for a "created" event — the seed identity.
+export type CreatedDiff = {
+  seed: {
+    name: string;
+    shape: string;
+    pcBkCode: string | null;
+    flavor: string | null;
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Diff computation. Callers on the API boundary use these to build the
+// summary + diff before inserting an audit row.
+// -----------------------------------------------------------------------------
+
+// Field-label lookup used in identity summaries.
+const IDENTITY_FIELD_LABELS: Record<
+  keyof Omit<GummyFormulaRecord, "id" | "latestVersionNum" | "createdAt" | "updatedAt" | "createdByEmail" | "updatedByEmail">,
+  string
+> = {
+  name: "name",
+  pcBkCode: "PC-BK code",
+  shape: "shape",
+  flavor: "flavor",
+  active: "active status",
+};
+
+export function diffIdentity(
+  before: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "active">,
+  after: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "active">,
+): { diff: IdentityDiff; summary: string } {
+  const changes: IdentityDiff["changes"] = [];
+  (Object.keys(IDENTITY_FIELD_LABELS) as Array<keyof typeof IDENTITY_FIELD_LABELS>).forEach(
+    (field) => {
+      const b = before[field] as string | boolean | null;
+      const a = after[field] as string | boolean | null;
+      if (b !== a) {
+        changes.push({ field, from: b, to: a });
+      }
+    },
+  );
+  if (changes.length === 0) {
+    return { diff: { changes }, summary: "No changes" };
+  }
+  const parts = changes.map((c) => {
+    const label = IDENTITY_FIELD_LABELS[c.field];
+    const fmt = (v: string | boolean | null) =>
+      v === null || v === undefined || v === "" ? "(empty)" : String(v);
+    return `${label}: "${fmt(c.from)}" → "${fmt(c.to)}"`;
+  });
+  return {
+    diff: { changes },
+    summary: `Updated ${changes.length === 1 ? "identity" : `${changes.length} identity fields`} — ${parts.join(", ")}`,
+  };
+}
+
+// Version diff — expects two full version blobs (previous + next). For a
+// brand-new formula pass previous=null and it treats every ingredient as
+// added and skips param comparisons.
+export function diffVersion(
+  previous: Pick<
+    GummyFormulaVersion,
+    | "benchBatchG"
+    | "batchKg"
+    | "batchesPerDay"
+    | "fixedLossKgPerDay"
+    | "gummyPieceWeightG"
+    | "yieldPct"
+    | "ingredients"
+  > | null,
+  next: Pick<
+    GummyFormulaVersion,
+    | "benchBatchG"
+    | "batchKg"
+    | "batchesPerDay"
+    | "fixedLossKgPerDay"
+    | "gummyPieceWeightG"
+    | "yieldPct"
+    | "ingredients"
+  >,
+): { diff: VersionDiff; summary: string } {
+  const paramChanges: VersionDiff["paramChanges"] = [];
+  if (previous) {
+    const paramFields: VersionDiff["paramChanges"][number]["field"][] = [
+      "benchBatchG",
+      "batchKg",
+      "batchesPerDay",
+      "fixedLossKgPerDay",
+      "gummyPieceWeightG",
+      "yieldPct",
+    ];
+    for (const f of paramFields) {
+      if (Number(previous[f]) !== Number(next[f])) {
+        paramChanges.push({ field: f, from: Number(previous[f]), to: Number(next[f]) });
+      }
+    }
+  }
+
+  const prevById = new Map<string, GummyFormulaIngredient>();
+  const nextById = new Map<string, GummyFormulaIngredient>();
+  (previous?.ingredients ?? []).forEach((r) => prevById.set(r.id, r));
+  next.ingredients.forEach((r) => nextById.set(r.id, r));
+
+  const added: VersionDiff["added"] = [];
+  const removed: VersionDiff["removed"] = [];
+  const modified: VersionDiff["modified"] = [];
+
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      added.push({ id, rawMaterialId: n.rawMaterialId, pctInFinished: n.pctInFinished });
+    } else {
+      const rowChanges: VersionDiff["modified"][number]["changes"] = [];
+      (Object.keys(n) as Array<keyof GummyFormulaIngredient>).forEach((k) => {
+        if (k === "id") return;
+        if (JSON.stringify(p[k]) !== JSON.stringify(n[k])) {
+          rowChanges.push({ field: k, from: p[k], to: n[k] });
+        }
+      });
+      if (rowChanges.length > 0) {
+        modified.push({ id, rawMaterialId: n.rawMaterialId, changes: rowChanges });
+      }
+    }
+  }
+  for (const [id, p] of prevById) {
+    if (!nextById.has(id)) {
+      removed.push({ id, rawMaterialId: p.rawMaterialId, pctInFinished: p.pctInFinished });
+    }
+  }
+
+  const parts: string[] = [];
+  if (paramChanges.length > 0)
+    parts.push(`${paramChanges.length} batch param${paramChanges.length === 1 ? "" : "s"}`);
+  if (added.length > 0) parts.push(`${added.length} ingredient${added.length === 1 ? "" : "s"} added`);
+  if (removed.length > 0)
+    parts.push(`${removed.length} ingredient${removed.length === 1 ? "" : "s"} removed`);
+  if (modified.length > 0)
+    parts.push(`${modified.length} ingredient${modified.length === 1 ? "" : "s"} modified`);
+  const summary =
+    parts.length === 0 ? "New version (no delta)" : `New version — ${parts.join(", ")}`;
+
+  return {
+    diff: { paramChanges, added, removed, modified },
+    summary,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Snake-case row → camel-case record for audit rows. Callers on the API
+// boundary use this to shape the response.
+// -----------------------------------------------------------------------------
+export function auditFromRow(row: {
+  id: string;
+  formula_id: string;
+  at: string;
+  by_email: string | null;
+  kind: GummyFormulaAuditKind;
+  version_num: number | null;
+  summary: string;
+  diff: unknown;
+}, byDisplay: string | null = null): GummyFormulaAuditRecord {
+  return {
+    id: row.id,
+    formulaId: row.formula_id,
+    at: row.at,
+    byEmail: row.by_email,
+    byDisplay,
+    kind: row.kind,
+    versionNum: row.version_num,
+    summary: row.summary,
+    diff: row.diff,
+  };
+}
+
 export function versionFromRow(row: {
   id: string;
   formula_id: string;

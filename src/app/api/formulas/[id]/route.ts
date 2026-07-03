@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
 import {
+  diffIdentity,
   recordFromRow,
   versionFromRow,
   type GummyFormulaRecord,
@@ -125,6 +126,23 @@ export async function PUT(
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
 
+  // Fetch the current row first so we can diff before/after for the audit
+  // log. If the row doesn't exist, bail with 404.
+  const { data: beforeRow, error: beforeErr } = await supabase
+    .from("gummy_formulas")
+    .select(
+      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (beforeErr) {
+    return NextResponse.json({ ok: false, error: beforeErr.message }, { status: 500 });
+  }
+  if (!beforeRow) {
+    return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+  const before = recordFromRow(beforeRow);
+
   const patch: Record<string, unknown> = {
     updated_by_email: user.email,
   };
@@ -158,5 +176,21 @@ export async function PUT(
   if (!data) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
-  return NextResponse.json({ ok: true, formula: recordFromRow(data) });
+  const after = recordFromRow(data);
+
+  // Audit-log the identity change. Skip when the effective diff is empty
+  // (e.g. the caller PUT the same values back — no user-visible change).
+  const { diff, summary } = diffIdentity(before, after);
+  if (diff.changes.length > 0) {
+    await supabase.from("gummy_formula_audit").insert({
+      formula_id: after.id,
+      by_email: user.email,
+      kind: "identity",
+      version_num: null,
+      summary,
+      diff,
+    });
+  }
+
+  return NextResponse.json({ ok: true, formula: after });
 }

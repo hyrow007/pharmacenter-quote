@@ -30,9 +30,12 @@ import {
   emptyIngredient,
   ingredientGramsForBench,
   ingredientKgForScaleUp,
+  type GummyFormulaAuditRecord,
   type GummyFormulaIngredient,
   type GummyFormulaRecord,
   type GummyFormulaVersion,
+  type IdentityDiff,
+  type VersionDiff,
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
 
@@ -256,6 +259,33 @@ export default function FormulaEditor({
     ],
   );
 
+  // -- Audit timeline --------------------------------------------------------
+  const [auditEvents, setAuditEvents] = useState<GummyFormulaAuditRecord[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+
+  async function refetchAudit() {
+    setAuditLoading(true);
+    try {
+      const res = await fetch(`/api/formulas/${initialFormula.id}/audit`, {
+        headers: { accept: "application/json" },
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setAuditEvents(Array.isArray(json.events) ? json.events : []);
+      }
+    } catch {
+      // Silent — timeline is auxiliary; a failure shouldn't disrupt the editor.
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  // Fetch once on mount.
+  useEffect(() => {
+    refetchAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // -- Save -------------------------------------------------------------------
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<
@@ -321,8 +351,10 @@ export default function FormulaEditor({
       }
       setSaveStatus({ kind: "ok", text: "Saved" });
       // Server-render is now stale — refresh so the loaded snapshot
-      // resets and dirty flags clear.
+      // resets and dirty flags clear. Also refetch the audit log so the
+      // new event appears at the top of the timeline immediately.
       router.refresh();
+      refetchAudit();
     } catch (err) {
       setSaveStatus({
         kind: "err",
@@ -555,6 +587,11 @@ export default function FormulaEditor({
         yieldPct={yieldPct}
         gummyPieceWeightG={gummyPieceWeightG}
       />
+
+      {/* Activity timeline (audit log). Renders below the ingredient
+          table on every tab so users can always see history without
+          leaving what they were editing. */}
+      <AuditTimeline events={auditEvents} loading={auditLoading} />
 
       {/* Version notes (only relevant when writing a new version) */}
       {versionDirty ? (
@@ -1197,4 +1234,365 @@ function ITd({ children, style }: { children: React.ReactNode; style?: React.CSS
       {children}
     </td>
   );
+}
+
+// -----------------------------------------------------------------------------
+// AuditTimeline — chronological log of every save event for this formula.
+// One row per audit entry with author, time, one-line summary, and an
+// expandable "what changed" panel with the structured diff.
+// -----------------------------------------------------------------------------
+
+function AuditTimeline({
+  events,
+  loading,
+}: {
+  events: GummyFormulaAuditRecord[];
+  loading: boolean;
+}) {
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          padding: "10px 14px",
+          background: "var(--cream, #f6efe3)",
+          borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+          }}
+        >
+          Activity
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--ink-3, #8a9498)",
+          }}
+        >
+          {loading
+            ? "loading…"
+            : events.length === 0
+              ? "no events yet"
+              : `${events.length} event${events.length === 1 ? "" : "s"}`}
+        </span>
+      </header>
+      {events.length === 0 && !loading ? (
+        <div
+          style={{
+            padding: 18,
+            fontSize: 12,
+            color: "var(--ink-3, #8a9498)",
+            textAlign: "center",
+          }}
+        >
+          No changes recorded yet.
+        </div>
+      ) : (
+        <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
+          {events.map((ev) => (
+            <AuditRow key={ev.id} event={ev} />
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function AuditRow({ event }: { event: GummyFormulaAuditRecord }) {
+  const [expanded, setExpanded] = useState(false);
+  const at = new Date(event.at);
+  const when = at.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const who = event.byDisplay || event.byEmail || "Unknown";
+  const kindLabel = {
+    created: "Created",
+    identity: "Identity edit",
+    version: `Version v${event.versionNum ?? "?"}`,
+  }[event.kind];
+  const kindColor = {
+    created: "var(--sage-700, #5f8e3a)",
+    identity: "var(--teal-500, #3a8d9c)",
+    version: "var(--teal-900, #0f4a56)",
+  }[event.kind];
+
+  const hasDiff = event.kind !== "created";
+
+  return (
+    <li
+      style={{
+        padding: "10px 14px",
+        borderTop: "1px solid var(--line-2, #efe9da)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-block",
+            padding: "1px 8px",
+            background: "#fff",
+            border: `1px solid ${kindColor}`,
+            borderRadius: 999,
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: kindColor,
+            flexShrink: 0,
+          }}
+        >
+          {kindLabel}
+        </span>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 12.5, color: "var(--ink, #1f2a2d)" }}>
+            {event.summary}
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 11,
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            {when} · by <strong>{who}</strong>
+          </div>
+        </div>
+        {hasDiff ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((s) => !s)}
+            style={{
+              padding: "4px 10px",
+              background: "transparent",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {expanded ? "Hide details" : "Details"}
+          </button>
+        ) : null}
+      </div>
+      {expanded && hasDiff ? <AuditDiffPanel event={event} /> : null}
+    </li>
+  );
+}
+
+function AuditDiffPanel({ event }: { event: GummyFormulaAuditRecord }) {
+  if (event.kind === "identity") {
+    const d = event.diff as IdentityDiff;
+    if (!d?.changes || d.changes.length === 0) return null;
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          padding: "8px 12px",
+          background: "var(--cream-soft, #fbf6ec)",
+          borderRadius: 6,
+          fontSize: 12,
+        }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            {d.changes.map((c, i) => (
+              <tr key={i}>
+                <td
+                  style={{
+                    padding: "3px 8px",
+                    fontWeight: 700,
+                    color: "var(--ink-3, #8a9498)",
+                    textTransform: "capitalize",
+                    width: 120,
+                  }}
+                >
+                  {c.field}
+                </td>
+                <td style={{ padding: "3px 8px", color: "var(--ink-2, #415056)" }}>
+                  <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                    {formatDiffValue(c.from)}
+                  </code>{" "}
+                  →{" "}
+                  <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                    {formatDiffValue(c.to)}
+                  </code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (event.kind === "version") {
+    const d = event.diff as VersionDiff;
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          padding: "8px 12px",
+          background: "var(--cream-soft, #fbf6ec)",
+          borderRadius: 6,
+          fontSize: 12,
+        }}
+      >
+        {d.paramChanges?.length > 0 ? (
+          <>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--ink-3, #8a9498)",
+                marginBottom: 4,
+              }}
+            >
+              Batch parameters
+            </div>
+            <ul style={{ margin: "0 0 8px 20px", padding: 0 }}>
+              {d.paramChanges.map((c, i) => (
+                <li key={i} style={{ marginBottom: 2 }}>
+                  <strong style={{ color: "var(--teal-900, #0f4a56)" }}>{c.field}</strong>:{" "}
+                  <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                    {c.from}
+                  </code>{" "}
+                  →{" "}
+                  <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                    {c.to}
+                  </code>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {d.added?.length > 0 ? (
+          <>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--sage-700, #5f8e3a)",
+                marginBottom: 4,
+              }}
+            >
+              Added ({d.added.length})
+            </div>
+            <ul style={{ margin: "0 0 8px 20px", padding: 0 }}>
+              {d.added.map((r, i) => (
+                <li key={i}>
+                  {r.rawMaterialId ? r.rawMaterialId.slice(0, 8) + "…" : "(custom)"} @{" "}
+                  {r.pctInFinished}%
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {d.removed?.length > 0 ? (
+          <>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "#8b2f2f",
+                marginBottom: 4,
+              }}
+            >
+              Removed ({d.removed.length})
+            </div>
+            <ul style={{ margin: "0 0 8px 20px", padding: 0 }}>
+              {d.removed.map((r, i) => (
+                <li key={i}>
+                  {r.rawMaterialId ? r.rawMaterialId.slice(0, 8) + "…" : "(custom)"} @{" "}
+                  {r.pctInFinished}%
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {d.modified?.length > 0 ? (
+          <>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--teal-500, #3a8d9c)",
+                marginBottom: 4,
+              }}
+            >
+              Modified ({d.modified.length})
+            </div>
+            <ul style={{ margin: "0 0 8px 20px", padding: 0 }}>
+              {d.modified.map((r, i) => (
+                <li key={i} style={{ marginBottom: 4 }}>
+                  <strong>
+                    {r.rawMaterialId ? r.rawMaterialId.slice(0, 8) + "…" : "(custom)"}
+                  </strong>
+                  <ul style={{ margin: "2px 0 0 16px", padding: 0 }}>
+                    {r.changes.map((c, j) => (
+                      <li key={j} style={{ fontSize: 11 }}>
+                        {String(c.field)}:{" "}
+                        <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                          {formatDiffValue(c.from)}
+                        </code>{" "}
+                        →{" "}
+                        <code style={{ background: "#fff", padding: "1px 6px", borderRadius: 4 }}>
+                          {formatDiffValue(c.to)}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
+}
+
+function formatDiffValue(v: unknown): string {
+  if (v === null || v === undefined) return "∅";
+  if (v === "") return "(empty)";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  return String(v);
 }

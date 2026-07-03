@@ -202,5 +202,25 @@ export async function POST(request: Request) {
   });
   const version: GummyFormulaVersion = versionFromRow(versionRow);
 
+  // Audit-log the creation. Best-effort — a failure here shouldn't fail
+  // the POST since the formula + v1 are already committed. The audit
+  // route is read-only and the client can still write more entries on
+  // subsequent saves.
+  await supabase.from("gummy_formula_audit").insert({
+    formula_id: formula.id,
+    by_email: user.email,
+    kind: "created",
+    version_num: 1,
+    summary: `Formula created — ${formula.pcBkCode ?? "TBD"} "${formula.name}"`,
+    diff: {
+      seed: {
+        name: formula.name,
+        shape: formula.shape,
+        pcBkCode: formula.pcBkCode,
+        flavor: formula.flavor,
+      },
+    },
+  });
+
   return NextResponse.json({ ok: true, formula, version }, { status: 201 });
 }
