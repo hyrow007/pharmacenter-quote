@@ -1866,10 +1866,20 @@ function BlendSectionCard({
                           });
                         }
                       }}
+                      onPickCustom={(name) =>
+                        onUpdate(row.id, {
+                          rawMaterialId: null,
+                          rawMaterialFpCode: null,
+                          customName: name,
+                          costPerKgOverride: null,
+                          solidsOverride: null,
+                        })
+                      }
                       onClear={() =>
                         onUpdate(row.id, {
                           rawMaterialId: null,
                           rawMaterialFpCode: null,
+                          customName: null,
                         })
                       }
                     />
@@ -2307,6 +2317,7 @@ function LabelClaimsSection({
                   row={{
                     rawMaterialId: c.rawMaterialId,
                     rawMaterialFpCode: c.rawMaterialFpCode ?? null,
+                    customName: c.customName ?? null,
                   }}
                   resolved={resolved}
                   rawMaterials={rawMaterials}
@@ -2316,12 +2327,21 @@ function LabelClaimsSection({
                         opt.source === "fishbowl" ? null : opt.id,
                       rawMaterialFpCode:
                         opt.source === "fishbowl" ? opt.fpCode : null,
+                      customName: null,
+                    })
+                  }
+                  onPickCustom={(name) =>
+                    onUpdate(c.id, {
+                      rawMaterialId: null,
+                      rawMaterialFpCode: null,
+                      customName: name,
                     })
                   }
                   onClear={() =>
                     onUpdate(c.id, {
                       rawMaterialId: null,
                       rawMaterialFpCode: null,
+                      customName: null,
                     })
                   }
                 />
@@ -2395,19 +2415,31 @@ function IngredientPicker({
   resolved,
   rawMaterials,
   onPick,
+  onPickCustom,
   onClear,
 }: {
   // Minimal shape so both GummyFormulaIngredient and LabelClaim rows can
   // share this picker — both carry the same rawMaterialId /
-  // rawMaterialFpCode fields.
-  row: { rawMaterialId: string | null; rawMaterialFpCode?: string | null };
+  // rawMaterialFpCode / customName fields.
+  row: {
+    rawMaterialId: string | null;
+    rawMaterialFpCode?: string | null;
+    customName?: string | null;
+  };
   resolved: RawMaterialOption | null;
   rawMaterials: RawMaterialOption[];
   onPick: (opt: RawMaterialOption) => void;
+  // Called when the rep chooses to add whatever they've typed as a custom
+  // (not-in-Fishbowl, not-in-raw_materials) ingredient. Parent stores the
+  // name on the row and clears rawMaterialId / rawMaterialFpCode.
+  onPickCustom: (name: string) => void;
   onClear: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<boolean>(!resolved);
+  // Consider the row "picked" (collapsed pill state) whenever it resolves
+  // to a raw material OR carries a custom name.
+  const hasCustom = !resolved && !!row.customName && row.customName.trim() !== "";
+  const [editing, setEditing] = useState<boolean>(!resolved && !hasCustom);
 
   // Auto-collapse to picked state if the row already carries a resolved
   // raw material AND we're not mid-edit.
@@ -2429,7 +2461,8 @@ function IngredientPicker({
       .slice(0, 10);
   }, [search, rawMaterials]);
 
-  if (resolved && !editing) {
+  if ((resolved || hasCustom) && !editing) {
+    const customLabel = row.customName ?? "";
     return (
       <div
         role="button"
@@ -2452,7 +2485,7 @@ function IngredientPicker({
           gap: 6,
           cursor: "pointer",
         }}
-        title={resolved.name}
+        title={resolved?.name ?? customLabel}
       >
         <span
           style={{
@@ -2463,17 +2496,38 @@ function IngredientPicker({
             textOverflow: "ellipsis",
           }}
         >
-          {resolved.fpCode ? (
-            <>
-              <code style={{ fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
-                {resolved.fpCode}
-              </code>{" "}
-              <span style={{ color: "var(--ink-2, #415056)" }}>· {resolved.name}</span>
-            </>
+          {resolved ? (
+            resolved.fpCode ? (
+              <>
+                <code style={{ fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                  {resolved.fpCode}
+                </code>{" "}
+                <span style={{ color: "var(--ink-2, #415056)" }}>· {resolved.name}</span>
+              </>
+            ) : (
+              resolved.name
+            )
           ) : (
-            resolved.name
+            <span style={{ color: "var(--ink-2, #415056)" }}>{customLabel}</span>
           )}
         </span>
+        {!resolved && hasCustom ? (
+          <span
+            title="Not in Fishbowl or raw_materials — added as a custom ingredient"
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              border: "1px dashed var(--line, #e3dcc9)",
+              borderRadius: 999,
+              padding: "1px 6px",
+            }}
+          >
+            Custom
+          </span>
+        ) : null}
         <span
           style={{
             fontSize: 10.5,
@@ -2520,6 +2574,35 @@ function IngredientPicker({
             overflow: "auto",
           }}
         >
+          {/* Custom-add option — always available at the top of the
+              results list so the rep can skip the picklist entirely for
+              ingredients that aren't in Fishbowl yet. */}
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                onPickCustom(search.trim());
+                setEditing(false);
+                setSearch("");
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "8px 10px",
+                background: "var(--cream-soft, #fbf6ec)",
+                border: "none",
+                borderBottom: "1px solid var(--line-2, #efe9da)",
+                cursor: "pointer",
+                fontSize: 12,
+                color: "var(--teal-900, #0f4a56)",
+                fontWeight: 700,
+              }}
+              title="Add this text as a custom ingredient (not tied to Fishbowl or raw_materials)"
+            >
+              + Add &ldquo;{search.trim()}&rdquo; as custom ingredient
+            </button>
+          </li>
           {results.map((r) => (
             <li key={r.id}>
               <button
@@ -2600,18 +2683,48 @@ function IngredientPicker({
             left: 0,
             right: 0,
             zIndex: 20,
-            padding: "8px 10px",
             background: "#fff",
             border: "1px solid var(--line, #e3dcc9)",
             borderRadius: 6,
-            fontSize: 11,
-            color: "var(--ink-3, #8a9498)",
+            boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
+            overflow: "hidden",
           }}
         >
-          No raw materials matched &ldquo;{search.trim()}&rdquo;.
+          <div
+            style={{
+              padding: "8px 10px",
+              fontSize: 11,
+              color: "var(--ink-3, #8a9498)",
+              borderBottom: "1px solid var(--line-2, #efe9da)",
+            }}
+          >
+            No raw materials matched &ldquo;{search.trim()}&rdquo;.
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onPickCustom(search.trim());
+              setEditing(false);
+              setSearch("");
+            }}
+            style={{
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 10px",
+              background: "var(--cream-soft, #fbf6ec)",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 12,
+              color: "var(--teal-900, #0f4a56)",
+              fontWeight: 700,
+            }}
+          >
+            + Add &ldquo;{search.trim()}&rdquo; as custom ingredient
+          </button>
         </div>
       ) : null}
-      {row.rawMaterialId || row.rawMaterialFpCode ? (
+      {row.rawMaterialId || row.rawMaterialFpCode || row.customName ? (
         <button
           type="button"
           onClick={() => {

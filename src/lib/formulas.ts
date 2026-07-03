@@ -70,6 +70,7 @@ export type LabelClaim = {
   id: string;                            // stable client-generated row id
   rawMaterialId: string | null;          // curated raw_materials row uuid, when picked
   rawMaterialFpCode?: string | null;     // fp_code fallback for Fishbowl-only picks
+  customName?: string | null;            // display name when the claim ingredient isn't in Fishbowl or raw_materials
   amount: number;                        // numeric label-claim quantity
   unit: LabelClaimUnit;                  // mcg / mg / g
 };
@@ -83,6 +84,7 @@ export function emptyLabelClaim(): LabelClaim {
     id: newLabelClaimId(),
     rawMaterialId: null,
     rawMaterialFpCode: null,
+    customName: null,
     amount: 0,
     unit: DEFAULT_LABEL_CLAIM_UNIT,
   };
