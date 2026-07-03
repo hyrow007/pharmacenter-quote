@@ -102,6 +102,15 @@ export default function FormulaEditor({
   const [shape, setShape] = useState(initialFormula.shape);
   const [flavor, setFlavor] = useState(initialFormula.flavor ?? "");
 
+  // Product Code search state — mirrors the "search vendors" pattern on
+  // PricingCalculator. pcBkSearch is the query string; pcBkEditing is the
+  // "am I currently searching?" flag which collapses the input into a
+  // picked-pill once a product has been chosen.
+  const [pcBkSearch, setPcBkSearch] = useState("");
+  const [pcBkEditing, setPcBkEditing] = useState<boolean>(
+    initialFormula.pcBkCode == null,
+  );
+
   // -- Version state ----------------------------------------------------------
   // Fall back to defaults if the formula somehow has no version yet
   // (shouldn't happen — POST /formulas creates v1 atomically).
@@ -276,6 +285,39 @@ export default function FormulaEditor({
       costLookup,
     ],
   );
+
+  // -- Product Code typeahead ------------------------------------------------
+  // Filter is case-insensitive across fpCode + name. Empty query returns [].
+  // Capped at 8 results to keep the dropdown compact.
+  const pcBkResults = useMemo(() => {
+    const q = pcBkSearch.trim().toLowerCase();
+    if (!q) return [];
+    return pcBkProducts
+      .filter(
+        (p) =>
+          p.fpCode.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q),
+      )
+      .slice(0, 8);
+  }, [pcBkSearch, pcBkProducts]);
+
+  // Resolve the currently-picked product record (if any) so the collapsed
+  // pill can render "PC-BK-247 · Product Name".
+  const pickedPcBkProduct = useMemo(
+    () => pcBkProducts.find((p) => p.fpCode === pcBkCode) ?? null,
+    [pcBkCode, pcBkProducts],
+  );
+
+  function pickPcBkProduct(p: PcBkProductOption) {
+    setPcBkCode(p.fpCode);
+    setPcBkEditing(false);
+    setPcBkSearch("");
+    // Auto-fill Name if it's blank or still the default. Don't clobber a
+    // rep-typed override.
+    if (!name.trim() || name === "Untitled gummy") {
+      setName(p.name);
+    }
+  }
 
   // -- Audit timeline --------------------------------------------------------
   const [auditEvents, setAuditEvents] = useState<GummyFormulaAuditRecord[]>([]);
@@ -452,6 +494,8 @@ export default function FormulaEditor({
                     onChange={() => {
                       setPcBkMode("tbd");
                       setPcBkCode("");
+                      setPcBkSearch("");
+                      setPcBkEditing(true);
                     }}
                     style={{ margin: 0 }}
                   />
@@ -473,43 +517,174 @@ export default function FormulaEditor({
                     type="radio"
                     name="pc-bk-mode"
                     checked={pcBkMode === "existing"}
-                    onChange={() => setPcBkMode("existing")}
+                    onChange={() => {
+                      setPcBkMode("existing");
+                      // Start in search mode unless a code is already
+                      // pinned from a previous save.
+                      setPcBkEditing(pcBkCode === "");
+                    }}
                     style={{ margin: 0 }}
                   />
                   Existing
                 </label>
               </div>
               {pcBkMode === "existing" ? (
-                <>
-                  {/* Typeahead: <input list=…> against a native <datalist>.
-                      As the rep types, the browser filters options
-                      matching either the FP code (e.g. "PC-BK-24") or the
-                      product name. When they select a full match, we
-                      auto-fill Name from the picked product's name. */}
-                  <input
-                    type="text"
-                    list="pc-bk-typeahead"
-                    value={pcBkCode}
-                    onChange={(e) => {
-                      const code = e.target.value;
-                      setPcBkCode(code);
-                      const picked = pcBkProducts.find((p) => p.fpCode === code);
-                      if (picked && (!name.trim() || name === "Untitled gummy")) {
-                        setName(picked.name);
-                      }
+                pickedPcBkProduct && !pcBkEditing ? (
+                  // Picked: show a compact pill with fpCode · name and a
+                  // Change button that reopens the search input.
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "6px 10px",
+                      background: "#fff",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 6,
                     }}
-                    placeholder="Type to search…"
-                    className="pricing__input"
-                    autoComplete="off"
-                  />
-                  <datalist id="pc-bk-typeahead">
-                    {pcBkProducts.map((p) => (
-                      <option key={p.id} value={p.fpCode}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </datalist>
-                </>
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "var(--teal-900, #0f4a56)",
+                          fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                        }}
+                      >
+                        {pickedPcBkProduct.fpCode}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--ink-3, #8a9498)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {pickedPcBkProduct.name}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPcBkEditing(true);
+                        setPcBkSearch("");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--line, #e3dcc9)",
+                        borderRadius: 4,
+                        padding: "3px 8px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  // Searching: text input + dropdown of filtered results
+                  // that only appears when the query is non-empty. Mirrors
+                  // the pricing calc's vendor search pattern.
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="text"
+                      value={pcBkSearch}
+                      onChange={(e) => {
+                        setPcBkSearch(e.target.value);
+                        // Any change to the search field means the
+                        // previously picked value is no longer active
+                        // until a fresh pick happens.
+                        if (pcBkCode) setPcBkCode("");
+                      }}
+                      placeholder="Type to search…"
+                      className="pricing__input"
+                      autoComplete="off"
+                      autoFocus
+                    />
+                    {pcBkSearch.trim().length > 0 && pcBkResults.length > 0 ? (
+                      <ul
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 2px)",
+                          left: 0,
+                          right: 0,
+                          zIndex: 20,
+                          margin: 0,
+                          padding: 0,
+                          listStyle: "none",
+                          background: "#fff",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 6,
+                          boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
+                          maxHeight: 240,
+                          overflow: "auto",
+                        }}
+                      >
+                        {pcBkResults.map((p) => (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => pickPcBkProduct(p)}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                background: "transparent",
+                                border: "none",
+                                borderBottom: "1px solid var(--line-2, #efe9da)",
+                                cursor: "pointer",
+                                fontSize: 12,
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background = "transparent")
+                              }
+                            >
+                              <div
+                                style={{
+                                  fontWeight: 700,
+                                  color: "var(--teal-900, #0f4a56)",
+                                  fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                                }}
+                              >
+                                {p.fpCode}
+                              </div>
+                              <div style={{ color: "var(--ink-2, #415056)" }}>
+                                {p.name}
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : pcBkSearch.trim().length > 0 ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 2px)",
+                          left: 0,
+                          right: 0,
+                          zIndex: 20,
+                          padding: "8px 10px",
+                          background: "#fff",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          color: "var(--ink-3, #8a9498)",
+                        }}
+                      >
+                        No PC-BK products matched &ldquo;{pcBkSearch.trim()}&rdquo;.
+                      </div>
+                    ) : null}
+                  </div>
+                )
               ) : (
                 <input
                   type="text"
