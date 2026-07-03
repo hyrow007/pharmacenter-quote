@@ -2475,6 +2475,19 @@ function SolutionRow({
   const [hover, setHover] = useState(false);
   const components: SolutionComponent[] = row.solutionComponents ?? [];
   const totalPct = components.reduce((s, c) => s + (Number(c.pct) || 0), 0);
+  // Composition collapses by default so the pre-cook table stays scannable.
+  // Auto-expand new solutions (no components filled in yet) so the rep isn't
+  // confused about where to add them.
+  const isFresh =
+    components.length === 0 ||
+    components.every(
+      (c) =>
+        !c.rawMaterialId &&
+        !c.rawMaterialFpCode &&
+        !c.customName &&
+        (Number(c.pct) || 0) === 0,
+    );
+  const [expanded, setExpanded] = useState<boolean>(isFresh);
 
   function updateComponent(id: string, patch: Partial<SolutionComponent>) {
     onUpdate({
@@ -2592,38 +2605,64 @@ function SolutionRow({
             </button>
           </div>
 
-          {/* Component list — each ingredient in the solution with its %.
-              Kept visually quiet: no background, no full border, just a
-              thin left rule so the composition reads as a sub-section
-              belonging to the solution row above. */}
-          <div
-            style={{
-              padding: "4px 0 4px 12px",
-              marginLeft: 2,
-              borderLeft: "2px solid var(--line-2, #efe9da)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            <div
+          {/* Composition — collapsible sub-section. Header (Composition
+              label + running total + chevron) is always visible; the
+              component list only renders when expanded. Kept visually
+              quiet with just a thin left rule when open. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setExpanded((s) => !s)}
+              aria-expanded={expanded}
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: 2,
+                gap: 8,
+                width: "100%",
+                padding: "4px 6px",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "var(--teal-900, #0f4a56)",
               }}
             >
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "var(--ink-3, #8a9498)",
-                }}
-              >
-                Composition
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 9,
+                    color: "var(--ink-3, #8a9498)",
+                    transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+                    transition: "transform 120ms ease",
+                    display: "inline-block",
+                    width: 9,
+                  }}
+                >
+                  ▶
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--ink-3, #8a9498)",
+                  }}
+                >
+                  Composition
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--ink-3, #8a9498)",
+                  }}
+                >
+                  {components.length === 0
+                    ? "empty"
+                    : `${components.length} component${components.length === 1 ? "" : "s"}`}
+                </span>
               </span>
               <span
                 style={{
@@ -2639,46 +2678,59 @@ function SolutionRow({
               >
                 Total: {totalPct.toFixed(2)}%
               </span>
-            </div>
-            {components.length === 0 ? (
+            </button>
+            {expanded ? (
               <div
                 style={{
-                  padding: "6px 8px",
-                  fontSize: 11.5,
-                  color: "var(--ink-3, #8a9498)",
+                  padding: "4px 0 4px 12px",
+                  marginLeft: 8,
+                  borderLeft: "2px solid var(--line-2, #efe9da)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
                 }}
               >
-                No components. Add at least two ingredients.
+                {components.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "6px 0",
+                      fontSize: 11.5,
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    No components. Add at least two ingredients.
+                  </div>
+                ) : (
+                  components.map((c) => (
+                    <SolutionComponentRow
+                      key={c.id}
+                      component={c}
+                      rawMaterials={rawMaterials}
+                      onUpdate={(patch) => updateComponent(c.id, patch)}
+                      onRemove={() => removeComponent(c.id)}
+                    />
+                  ))
+                )}
+                <button
+                  type="button"
+                  onClick={addComponent}
+                  style={{
+                    alignSelf: "flex-start",
+                    marginTop: 2,
+                    padding: "4px 10px",
+                    background: "transparent",
+                    color: "var(--teal-900, #0f4a56)",
+                    border: "1px dashed var(--line, #e3dcc9)",
+                    borderRadius: 6,
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  + Add component
+                </button>
               </div>
-            ) : (
-              components.map((c) => (
-                <SolutionComponentRow
-                  key={c.id}
-                  component={c}
-                  rawMaterials={rawMaterials}
-                  onUpdate={(patch) => updateComponent(c.id, patch)}
-                  onRemove={() => removeComponent(c.id)}
-                />
-              ))
-            )}
-            <button
-              type="button"
-              onClick={addComponent}
-              style={{
-                alignSelf: "flex-start",
-                marginTop: 2,
-                padding: "4px 10px",
-                background: "transparent",
-                color: "var(--teal-900, #0f4a56)",
-                border: "1px dashed var(--line, #e3dcc9)",
-                borderRadius: 6,
-                fontSize: 11.5,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              + Add component
-            </button>
+            ) : null}
           </div>
         </div>
       </td>
