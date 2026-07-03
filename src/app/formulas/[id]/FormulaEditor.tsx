@@ -2521,25 +2521,11 @@ function IngredientPicker({
     const customLabel = row.customName ?? "";
     return (
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          setEditing(true);
-          setSearch("");
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setEditing(true);
-            setSearch("");
-          }
-        }}
         className="pricing__input"
         style={{
           display: "flex",
           alignItems: "center",
           gap: 6,
-          cursor: "pointer",
         }}
         title={resolved?.name ?? customLabel}
       >
@@ -2585,17 +2571,33 @@ function IngredientPicker({
             Not in FB
           </span>
         ) : null}
-        <span
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(true);
+            setSearch("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setEditing(true);
+              setSearch("");
+            }
+          }}
           style={{
             fontSize: 10.5,
             fontWeight: 700,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
             color: "var(--teal-700, #1d6c7b)",
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
           }}
         >
           Change
-        </span>
+        </button>
       </div>
     );
   }
