@@ -156,7 +156,7 @@ export async function PUT(
   if (body.pcBkCode !== undefined) {
     patch.pc_bk_code = body.pcBkCode?.trim() || null;
   }
-  if (body.shape !== undefined) patch.shape = body.shape.trim() || "Custom";
+  if (body.shape !== undefined) patch.shape = body.shape.trim() || "TBD";
   if (body.flavor !== undefined) patch.flavor = body.flavor?.trim() || null;
   if (body.active !== undefined) patch.active = !!body.active;
 

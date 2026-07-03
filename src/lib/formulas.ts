@@ -35,6 +35,7 @@ export type GummyFormulaIngredient = {
 // grow this list without a DB migration. UI enforces the picklist client-side.
 // -----------------------------------------------------------------------------
 export const FORMULA_SHAPES = [
+  "TBD",
   "Bear",
   "Worm",
   "Ring",

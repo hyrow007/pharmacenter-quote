@@ -1,7 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../_components/AppHeader";
-import FormulaEditor, { type RawMaterialOption } from "./FormulaEditor";
+import FormulaEditor, {
+  type PcBkProductOption,
+  type RawMaterialOption,
+} from "./FormulaEditor";
 import {
   recordFromRow,
   versionFromRow,
@@ -30,8 +33,11 @@ export default async function FormulaEditorPage({
     redirect("/");
   }
 
-  // Fetch formula + latest version + raw materials in parallel.
-  const [formulaRes, versionRes, rmRes] = await Promise.all([
+  // Fetch formula + latest version + raw materials + PC-BK Fishbowl
+  // products in parallel. PC-BK products power the "Existing" branch of
+  // the identity header's PC-BK code picker (all PharmaCenter gummy FP
+  // codes are prefixed 'PC-BK-').
+  const [formulaRes, versionRes, rmRes, pcBkRes] = await Promise.all([
     supabase
       .from("gummy_formulas")
       .select(
@@ -39,8 +45,6 @@ export default async function FormulaEditorPage({
       )
       .eq("id", id)
       .maybeSingle(),
-    // Latest version — we don't yet know the version_num, so we ask
-    // ordered by version_num desc and take one.
     supabase
       .from("gummy_formula_versions")
       .select(
@@ -56,6 +60,12 @@ export default async function FormulaEditorPage({
       .eq("active", true)
       .order("category", { ascending: true, nullsFirst: false })
       .order("name", { ascending: true }),
+    supabase
+      .from("products")
+      .select("id, fp_code, name")
+      .eq("active", true)
+      .ilike("fp_code", "PC-BK-%")
+      .order("fp_code", { ascending: true }),
   ]);
 
   if (formulaRes.error || !formulaRes.data) {
@@ -76,6 +86,14 @@ export default async function FormulaEditorPage({
     defaultSolids: Number(r.default_solids),
     category: r.category,
   }));
+
+  const pcBkProducts: PcBkProductOption[] = (pcBkRes.data ?? [])
+    .filter((p) => p.fp_code && p.name)
+    .map((p) => ({
+      id: p.id,
+      fpCode: p.fp_code as string,
+      name: p.name as string,
+    }));
 
   // Resolve the "updated by" email to a display name so the meta strip
   // reads "by Jairo Osorno" instead of "by josorno@pharmacenterusa.com".
@@ -160,6 +178,7 @@ export default async function FormulaEditorPage({
             initialFormula={formula}
             initialVersion={latestVersion}
             rawMaterials={rawMaterials}
+            pcBkProducts={pcBkProducts}
           />
         </div>
       </main>

@@ -130,7 +130,9 @@ export async function POST(request: Request) {
   if (!name) {
     return NextResponse.json({ ok: false, error: "missing_name" }, { status: 400 });
   }
-  const shape = body.shape?.trim() || "Custom";
+  // Default to TBD so R&D can spin up a new formula without pre-committing
+  // to a shape — the shape is often decided after benchtop trials.
+  const shape = body.shape?.trim() || "TBD";
   const pcBkCode = body.pcBkCode?.trim() || null;
   const flavor = body.flavor?.trim() || null;
 

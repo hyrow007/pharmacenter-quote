@@ -51,10 +51,19 @@ export type RawMaterialOption = {
   category: "primary" | "secondary" | "final" | "other" | null;
 };
 
+// PC-BK Fishbowl product option, powering the "Existing" branch of the
+// identity header's PC-BK code picker. Selecting one auto-fills Name.
+export type PcBkProductOption = {
+  id: string;
+  fpCode: string;   // always "PC-BK-{n}" — filtered server-side
+  name: string;
+};
+
 type Props = {
   initialFormula: GummyFormulaRecord;
   initialVersion: GummyFormulaVersion | null;
   rawMaterials: RawMaterialOption[];
+  pcBkProducts: PcBkProductOption[];
 };
 
 type Tab = "bench" | "scale" | "cost";
@@ -76,13 +85,20 @@ export default function FormulaEditor({
   initialFormula,
   initialVersion,
   rawMaterials,
+  pcBkProducts,
 }: Props) {
   const router = useRouter();
 
   // -- Identity state ---------------------------------------------------------
   const [name, setName] = useState(initialFormula.name);
   const [pcBkCode, setPcBkCode] = useState<string>(initialFormula.pcBkCode ?? "");
-  const [pcBkTbd, setPcBkTbd] = useState<boolean>(initialFormula.pcBkCode == null);
+  // PC-BK mode: 'tbd' means the code isn't known yet (R&D-stage formula);
+  // 'existing' means it maps to a Fishbowl product (fp_code starting with
+  // 'PC-BK-'). When mode is 'existing', pcBkCode holds the fp_code and the
+  // Name field auto-fills from the picked product on selection.
+  const [pcBkMode, setPcBkMode] = useState<"tbd" | "existing">(
+    initialFormula.pcBkCode == null ? "tbd" : "existing",
+  );
   const [shape, setShape] = useState(initialFormula.shape);
   const [flavor, setFlavor] = useState(initialFormula.flavor ?? "");
 
@@ -135,7 +151,9 @@ export default function FormulaEditor({
   // Dirty flags derived from state.
   const identityDirty =
     name.trim() !== initialFormula.name ||
-    (pcBkTbd ? initialFormula.pcBkCode !== null : pcBkCode.trim() !== (initialFormula.pcBkCode ?? "")) ||
+    (pcBkMode === "tbd"
+      ? initialFormula.pcBkCode !== null
+      : pcBkCode.trim() !== (initialFormula.pcBkCode ?? "")) ||
     shape !== initialFormula.shape ||
     (flavor.trim() || null) !== (initialFormula.flavor ?? null);
 
@@ -305,7 +323,7 @@ export default function FormulaEditor({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
-            pcBkCode: pcBkTbd ? null : pcBkCode.trim() || null,
+            pcBkCode: pcBkMode === "tbd" ? null : pcBkCode.trim() || null,
             shape,
             flavor: flavor.trim() || null,
           }),
@@ -397,12 +415,103 @@ export default function FormulaEditor({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1.4fr 1fr 1.4fr auto",
+            gridTemplateColumns: "1.5fr 2fr 0.9fr 1fr 1.4fr auto",
             gap: 12,
             alignItems: "end",
           }}
         >
-          <Field label="Name">
+          {/* PC-BK code — leftmost column. TBD/Existing radio buttons on
+              top, either the Existing-product picker or a disabled
+              placeholder below. Selecting an Existing product auto-fills
+              the Name field to the right. */}
+          <Field label="PC-BK code">
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", gap: 10, fontSize: 11, fontWeight: 700 }}>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    color:
+                      pcBkMode === "tbd"
+                        ? "var(--teal-900, #0f4a56)"
+                        : "var(--ink-3, #8a9498)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="pc-bk-mode"
+                    checked={pcBkMode === "tbd"}
+                    onChange={() => {
+                      setPcBkMode("tbd");
+                      setPcBkCode("");
+                    }}
+                    style={{ margin: 0 }}
+                  />
+                  TBD
+                </label>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    color:
+                      pcBkMode === "existing"
+                        ? "var(--teal-900, #0f4a56)"
+                        : "var(--ink-3, #8a9498)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="pc-bk-mode"
+                    checked={pcBkMode === "existing"}
+                    onChange={() => setPcBkMode("existing")}
+                    style={{ margin: 0 }}
+                  />
+                  Existing
+                </label>
+              </div>
+              {pcBkMode === "existing" ? (
+                <select
+                  value={pcBkCode}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setPcBkCode(code);
+                    // Auto-fill the Name from the picked Fishbowl product,
+                    // but only if the name field is empty or still holds
+                    // the placeholder-y default so we don't clobber a
+                    // rep-typed override.
+                    const picked = pcBkProducts.find((p) => p.fpCode === code);
+                    if (picked && (!name.trim() || name === "Untitled gummy")) {
+                      setName(picked.name);
+                    }
+                  }}
+                  className="pricing__input"
+                >
+                  <option value="">— pick a PC-BK product —</option>
+                  {pcBkProducts.map((p) => (
+                    <option key={p.id} value={p.fpCode}>
+                      {p.fpCode} · {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value=""
+                  disabled
+                  placeholder="Assigned later"
+                  className="pricing__input"
+                />
+              )}
+            </div>
+          </Field>
+
+          {/* Name — second column. Auto-fills from PC-BK picker when
+              Existing mode is active, but always remains editable. */}
+          <Field label="Name / description">
             <input
               type="text"
               value={name}
@@ -413,40 +522,26 @@ export default function FormulaEditor({
             />
           </Field>
 
-          <Field label="PC-BK code">
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {/* Piece weight (g). Belongs to the version snapshot (edits
+              trigger a version bump because cost math depends on it),
+              but visually it lives with the identity because it's a
+              physical property of the finished gummy the rep expects
+              to see up top alongside PC-BK / shape / flavor. */}
+          <Field label="Piece weight">
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
-                type="text"
-                value={pcBkTbd ? "" : pcBkCode}
-                onChange={(e) => setPcBkCode(e.target.value)}
-                disabled={pcBkTbd}
-                className="pricing__input"
-                placeholder="PC-BK-247"
-                autoComplete="off"
-                style={{ flex: 1 }}
-              />
-              <label
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--ink-3, #8a9498)",
-                  whiteSpace: "nowrap",
+                type="number"
+                value={Number.isFinite(gummyPieceWeightG) ? gummyPieceWeightG : 0}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setGummyPieceWeightG(Number.isFinite(n) ? n : 0);
                 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={pcBkTbd}
-                  onChange={(e) => {
-                    setPcBkTbd(e.target.checked);
-                    if (e.target.checked) setPcBkCode("");
-                  }}
-                  style={{ margin: 0 }}
-                />
-                TBD
-              </label>
+                step="0.1"
+                min={0.1}
+                className="pricing__input"
+                style={{ width: "100%", textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+              />
+              <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
             </div>
           </Field>
 

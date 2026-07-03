@@ -51,7 +51,7 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: "Untitled gummy",
-          shape: "Custom",
+          shape: "TBD",
           // pcBkCode omitted → TBD
         }),
       });
