@@ -275,11 +275,13 @@ export default function FormulaEditor({
           batchKg,
           batchesPerDay,
           fixedLossKgPerDay,
+          benchBatchG,
         },
         costLookup,
       ),
     [
       ingredients,
+      benchBatchG,
       gummyPieceWeightG,
       yieldPct,
       batchKg,
