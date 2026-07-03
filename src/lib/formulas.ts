@@ -116,7 +116,63 @@ export type GummyFormulaIngredient = {
   costPerKgOverride: number | null;        // dollars/kg; null = use raw material default
   solidsOverride: number | null;           // 0..1; null = use raw material default
   notes: string | null;
+  // -- Solution rows ---------------------------------------------------------
+  // A "solution" is a pre-mixed compound that shows up in the blend as one
+  // line but is really a blend of two or more raw materials at fixed
+  // percentages (e.g. "Citric Acid 50% sol" = 50% citric acid + 50% water).
+  //
+  // When `solutionComponents` has one or more entries the row is treated as
+  // a solution: `customName` holds the solution's display name (e.g.
+  // "Sodium Citrate 25% sol") and `grams` is the total weight of the
+  // solution being weighed in. The picker is hidden for solution rows —
+  // the individual ingredient picks live inside `solutionComponents`.
+  solutionComponents?: SolutionComponent[] | null;
 };
+
+export type SolutionComponent = {
+  id: string;                              // stable client-generated row id
+  rawMaterialId: string | null;            // curated raw_materials row uuid, when picked
+  rawMaterialFpCode?: string | null;       // fp_code fallback for Fishbowl-only picks
+  customName?: string | null;              // free-text name when the ingredient isn't in Fishbowl/raw_materials
+  pct: number;                             // 0..100 — share of the solution's total weight
+};
+
+export function newSolutionComponentId(): string {
+  return `sc_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function emptySolutionComponent(): SolutionComponent {
+  return {
+    id: newSolutionComponentId(),
+    rawMaterialId: null,
+    rawMaterialFpCode: null,
+    customName: null,
+    pct: 0,
+  };
+}
+
+/** Build an empty solution row (no picker; two blank component slots so
+ *  the rep has something to fill in from the start). */
+export function emptySolutionIngredient(): GummyFormulaIngredient {
+  return {
+    id: `ing_${Math.random().toString(36).slice(2, 10)}`,
+    rawMaterialId: null,
+    rawMaterialFpCode: null,
+    customName: "",
+    pctInFinished: 0,
+    grams: 0,
+    blendPhase: null,
+    costPerKgOverride: null,
+    solidsOverride: null,
+    notes: null,
+    solutionComponents: [emptySolutionComponent(), emptySolutionComponent()],
+  };
+}
+
+/** Type-narrowing predicate. */
+export function isSolutionRow(row: GummyFormulaIngredient): boolean {
+  return Array.isArray(row.solutionComponents) && row.solutionComponents.length > 0;
+}
 
 // -----------------------------------------------------------------------------
 // Canonical shape picklist. Kept as a widened string on the record so we can

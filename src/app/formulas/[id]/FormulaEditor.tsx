@@ -34,8 +34,11 @@ import {
   computeMaterialCostPerGummy,
   emptyIngredient,
   emptyLabelClaim,
+  emptySolutionComponent,
+  emptySolutionIngredient,
   ingredientGramsForBench,
   ingredientKgForScaleUp,
+  isSolutionRow,
   type BlendPhase,
   type GummyFormulaAuditRecord,
   type GummyFormulaIngredient,
@@ -44,6 +47,7 @@ import {
   type IdentityDiff,
   type LabelClaim,
   type LabelClaimUnit,
+  type SolutionComponent,
   type VersionDiff,
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
@@ -527,6 +531,12 @@ export default function FormulaEditor({
       { ...emptyIngredient(), blendPhase: phase, grams: 0 },
     ]);
   }
+  function addSolutionForPhase(phase: BlendPhase) {
+    setIngredients((prev) => [
+      ...prev,
+      { ...emptySolutionIngredient(), blendPhase: phase },
+    ]);
+  }
   function removeRow(id: string) {
     // Removing the last-ever ingredient row would leave the shared table
     // stuck, so keep at least one row unless there are phase-scoped rows
@@ -984,6 +994,7 @@ export default function FormulaEditor({
             rmById={rmById}
             onUpdate={updateRow}
             onAddRow={() => addRowForPhase("pre-cook")}
+            onAddSolution={() => addSolutionForPhase("pre-cook")}
             onRemoveRow={removeRow}
             processNote={processNotes["pre-cook"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
@@ -1722,6 +1733,7 @@ function BlendSectionCard({
   rmById,
   onUpdate,
   onAddRow,
+  onAddSolution,
   onRemoveRow,
   processNote,
   defaultProcessNote,
@@ -1733,6 +1745,7 @@ function BlendSectionCard({
   rmById: Map<string, RawMaterialOption>;
   onUpdate: (id: string, patch: Partial<GummyFormulaIngredient>) => void;
   onAddRow: () => void;
+  onAddSolution: () => void;
   onRemoveRow: (id: string) => void;
   processNote: string;
   /** Canonical default text for this phase. Used to detect whether the
@@ -1822,6 +1835,20 @@ function BlendSectionCard({
           </thead>
           <tbody>
             {rows.map((row) => {
+              // Solution rows have their own layout — a name field, a
+              // total-weight input, and an inline list of component
+              // ingredients with %s that sum to 100.
+              if (isSolutionRow(row)) {
+                return (
+                  <SolutionRow
+                    key={row.id}
+                    row={row}
+                    rawMaterials={rawMaterials}
+                    onUpdate={(patch) => onUpdate(row.id, patch)}
+                    onRemove={() => onRemoveRow(row.id)}
+                  />
+                );
+              }
               // Resolve the row to a picker option: try rawMaterialId
               // first (curated), then fp_code (Fishbowl-only rows use
               // "fb:CODE" as their id).
@@ -1973,22 +2000,41 @@ function BlendSectionCard({
           borderTop: "1px solid var(--line-2, #efe9da)",
         }}
       >
-        <button
-          type="button"
-          onClick={onAddRow}
-          style={{
-            padding: "6px 12px",
-            background: "transparent",
-            color: "var(--teal-900, #0f4a56)",
-            border: "1px dashed var(--line, #e3dcc9)",
-            borderRadius: 6,
-            fontSize: 12.5,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          + Add ingredient
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={onAddRow}
+            style={{
+              padding: "6px 12px",
+              background: "transparent",
+              color: "var(--teal-900, #0f4a56)",
+              border: "1px dashed var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + Add ingredient
+          </button>
+          <button
+            type="button"
+            onClick={onAddSolution}
+            title="Add a pre-mixed solution (multiple ingredients at fixed percentages)"
+            style={{
+              padding: "6px 12px",
+              background: "transparent",
+              color: "var(--teal-900, #0f4a56)",
+              border: "1px dashed var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + Add solution
+          </button>
+        </div>
       </div>
 
       {/* Process notes — free-text mixing instructions for this blend
@@ -2403,6 +2449,364 @@ function BlendIngredientRow({
         </button>
       </BTd>
     </tr>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// SolutionRow — blend-section row for a pre-mixed solution. Renders across
+// all three columns (colSpan=3) with its own compound layout:
+//   - solution name input + total grams
+//   - one row per component ingredient (picker · % · × on hover)
+//   - "+ Add component" button
+// Components' % values should sum to 100; a small summary shows the running
+// total in real time.
+// -----------------------------------------------------------------------------
+function SolutionRow({
+  row,
+  rawMaterials,
+  onUpdate,
+  onRemove,
+}: {
+  row: GummyFormulaIngredient;
+  rawMaterials: RawMaterialOption[];
+  onUpdate: (patch: Partial<GummyFormulaIngredient>) => void;
+  onRemove: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const components: SolutionComponent[] = row.solutionComponents ?? [];
+  const totalPct = components.reduce((s, c) => s + (Number(c.pct) || 0), 0);
+
+  function updateComponent(id: string, patch: Partial<SolutionComponent>) {
+    onUpdate({
+      solutionComponents: components.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      ),
+    });
+  }
+  function addComponent() {
+    onUpdate({
+      solutionComponents: [...components, emptySolutionComponent()],
+    });
+  }
+  function removeComponent(id: string) {
+    onUpdate({
+      solutionComponents: components.filter((c) => c.id !== id),
+    });
+  }
+
+  return (
+    <tr
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        borderTop: "1px solid var(--line-2, #efe9da)",
+        background: hover ? "var(--cream-soft, #fbf6ec)" : "transparent",
+        transition: "background 80ms ease",
+      }}
+    >
+      <td colSpan={3} style={{ padding: "10px 12px", verticalAlign: "top" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {/* Header row — name, grams, remove button. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 130px 32px",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "var(--teal-700, #1d6c7b)",
+                  marginBottom: 2,
+                }}
+              >
+                Solution
+              </span>
+              <input
+                type="text"
+                value={row.customName ?? ""}
+                onChange={(e) => onUpdate({ customName: e.target.value })}
+                placeholder="e.g. Citric Acid 50% sol"
+                className="pricing__input"
+                autoComplete="off"
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="number"
+                value={
+                  row.grams !== null && row.grams !== undefined ? row.grams : 0
+                }
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  onUpdate({ grams: Number.isFinite(n) ? n : 0 });
+                }}
+                step="0.1"
+                min={0}
+                className="pricing__input"
+                style={{
+                  width: "100%",
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                g
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onRemove}
+              title="Remove solution"
+              aria-label="Remove solution"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--ink-3, #8a9498)",
+                cursor: "pointer",
+                fontSize: 16,
+                lineHeight: 1,
+                padding: 4,
+                opacity: hover ? 1 : 0,
+                transition: "opacity 80ms ease",
+              }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Component list — each ingredient in the solution with its %. */}
+          <div
+            style={{
+              padding: "8px 10px",
+              background: "var(--paper, #fffdf8)",
+              border: "1px solid var(--line-2, #efe9da)",
+              borderRadius: 6,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 2,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                Composition
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontVariantNumeric: "tabular-nums",
+                  color:
+                    Math.abs(totalPct - 100) < 0.01
+                      ? "var(--teal-700, #1d6c7b)"
+                      : "#8b2f2f",
+                  fontWeight: 700,
+                }}
+                title="Component percentages should sum to 100%"
+              >
+                Total: {totalPct.toFixed(2)}%
+              </span>
+            </div>
+            {components.length === 0 ? (
+              <div
+                style={{
+                  padding: "6px 8px",
+                  fontSize: 11.5,
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                No components. Add at least two ingredients.
+              </div>
+            ) : (
+              components.map((c) => (
+                <SolutionComponentRow
+                  key={c.id}
+                  component={c}
+                  rawMaterials={rawMaterials}
+                  onUpdate={(patch) => updateComponent(c.id, patch)}
+                  onRemove={() => removeComponent(c.id)}
+                />
+              ))
+            )}
+            <button
+              type="button"
+              onClick={addComponent}
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 2,
+                padding: "4px 10px",
+                background: "transparent",
+                color: "var(--teal-900, #0f4a56)",
+                border: "1px dashed var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              + Add component
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// SolutionComponentRow — a single ingredient inside a SolutionRow. Picker
+// + % input + delete-on-hover. Reuses IngredientPicker for the picker so
+// the same type-to-search flow (curated raw_materials, Fishbowl PC-RW,
+// custom "Not in FB") works inside solutions too.
+// -----------------------------------------------------------------------------
+function SolutionComponentRow({
+  component,
+  rawMaterials,
+  onUpdate,
+  onRemove,
+}: {
+  component: SolutionComponent;
+  rawMaterials: RawMaterialOption[];
+  onUpdate: (patch: Partial<SolutionComponent>) => void;
+  onRemove: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+
+  const resolved: RawMaterialOption | null = (() => {
+    if (component.rawMaterialId) {
+      const hit = rawMaterials.find((r) => r.id === component.rawMaterialId);
+      if (hit) return hit;
+    }
+    if (component.rawMaterialFpCode) {
+      const q = component.rawMaterialFpCode.toUpperCase();
+      const hit = rawMaterials.find(
+        (r) => (r.fpCode ?? "").toUpperCase() === q,
+      );
+      if (hit) return hit;
+    }
+    return null;
+  })();
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 90px 32px",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <IngredientPicker
+        row={{
+          rawMaterialId: component.rawMaterialId,
+          rawMaterialFpCode: component.rawMaterialFpCode ?? null,
+          customName: component.customName ?? null,
+        }}
+        resolved={resolved}
+        rawMaterials={rawMaterials}
+        onPick={(opt) =>
+          onUpdate(
+            opt.source === "fishbowl"
+              ? {
+                  rawMaterialId: null,
+                  rawMaterialFpCode: opt.fpCode,
+                  customName: null,
+                }
+              : {
+                  rawMaterialId: opt.id,
+                  rawMaterialFpCode: opt.fpCode,
+                  customName: null,
+                },
+          )
+        }
+        onPickCustom={(name) =>
+          onUpdate({
+            rawMaterialId: null,
+            rawMaterialFpCode: null,
+            customName: name,
+          })
+        }
+        onClear={() =>
+          onUpdate({
+            rawMaterialId: null,
+            rawMaterialFpCode: null,
+            customName: null,
+          })
+        }
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <input
+          type="number"
+          value={Number.isFinite(component.pct) ? component.pct : 0}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            onUpdate({ pct: Number.isFinite(n) ? n : 0 });
+          }}
+          step="0.1"
+          min={0}
+          max={100}
+          className="pricing__input"
+          style={{
+            width: "100%",
+            textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        />
+        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>%</span>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remove component"
+        aria-label="Remove component"
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "var(--ink-3, #8a9498)",
+          cursor: "pointer",
+          fontSize: 14,
+          lineHeight: 1,
+          padding: 4,
+          opacity: hover ? 1 : 0,
+          transition: "opacity 80ms ease",
+        }}
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
