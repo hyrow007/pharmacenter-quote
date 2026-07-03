@@ -2313,30 +2313,75 @@ function BlendSectionCard({
                 </span>
               </BTd>
               <BTd style={{ padding: "8px 6px" }}>
-                <select
-                  value={totalDecimals}
-                  onChange={(e) => setTotalDecimals(Number(e.target.value))}
-                  title="Decimal places shown on this total"
-                  aria-label="Total decimal places"
+                {/* Two chevron buttons — tighter than a dropdown pill.
+                    < decreases decimal places (min 0), > increases (max 4).
+                    Kept small so the delete-x column stays narrow. */}
+                <span
                   style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-3, #8a9498)",
-                    background: "transparent",
-                    border: "1px solid var(--line, #e3dcc9)",
-                    borderRadius: 4,
-                    padding: "0 2px",
-                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 2,
                   }}
                 >
-                  {[0, 1, 2, 3, 4].map((n) => (
-                    <option key={n} value={n}>
-                      {n} dp
-                    </option>
-                  ))}
-                </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTotalDecimals((d) => Math.max(0, d - 1))
+                    }
+                    disabled={totalDecimals <= 0}
+                    title="Fewer decimal places"
+                    aria-label="Fewer decimal places"
+                    style={{
+                      width: 16,
+                      height: 18,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color:
+                        totalDecimals <= 0
+                          ? "var(--ink-4, #c7cccf)"
+                          : "var(--ink-3, #8a9498)",
+                      background: "transparent",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 3,
+                      padding: 0,
+                      cursor: totalDecimals <= 0 ? "default" : "pointer",
+                    }}
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTotalDecimals((d) => Math.min(4, d + 1))
+                    }
+                    disabled={totalDecimals >= 4}
+                    title="More decimal places"
+                    aria-label="More decimal places"
+                    style={{
+                      width: 16,
+                      height: 18,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color:
+                        totalDecimals >= 4
+                          ? "var(--ink-4, #c7cccf)"
+                          : "var(--ink-3, #8a9498)",
+                      background: "transparent",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 3,
+                      padding: 0,
+                      cursor: totalDecimals >= 4 ? "default" : "pointer",
+                    }}
+                  >
+                    &gt;
+                  </button>
+                </span>
               </BTd>
             </tr>
           </tbody>
