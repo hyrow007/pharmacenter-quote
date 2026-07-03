@@ -2740,6 +2740,10 @@ function SolutionRow({
   const totalPct = components.reduce((s, c) => s + (Number(c.pct) || 0), 0);
   const nameTrimmed = (row.customName ?? "").trim();
   const canSave = nameTrimmed.length > 0 && components.length > 0;
+  // Once a solution has a name, collapse to a pill (like the ingredient
+  // picker's picked state). "Change" flips back to editing so the rep
+  // can rename or swap the whole solution out.
+  const [nameEditing, setNameEditing] = useState<boolean>(nameTrimmed === "");
 
   async function handleSave() {
     setSaveState({ kind: "saving" });
@@ -2891,14 +2895,74 @@ function SolutionRow({
                   </button>
                 </span>
               </div>
-              <input
-                type="text"
-                value={row.customName ?? ""}
-                onChange={(e) => onUpdate({ customName: e.target.value })}
-                placeholder="e.g. Citric Acid 50% sol"
-                className="pricing__input"
-                autoComplete="off"
-              />
+              {nameTrimmed !== "" && !nameEditing ? (
+                <div
+                  className="pricing__input"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                  title={nameTrimmed}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                    }}
+                  >
+                    {nameTrimmed}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setNameEditing(true)}
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "var(--teal-700, #1d6c7b)",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={row.customName ?? ""}
+                  onChange={(e) => onUpdate({ customName: e.target.value })}
+                  onBlur={() => {
+                    // Collapse back to pill on blur if the field has a
+                    // value. Otherwise leave the input open so the rep
+                    // doesn't lose the field.
+                    if ((row.customName ?? "").trim() !== "") {
+                      setNameEditing(false);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if ((row.customName ?? "").trim() !== "") {
+                        setNameEditing(false);
+                      }
+                    }
+                  }}
+                  placeholder="e.g. Citric Acid 50% sol"
+                  className="pricing__input"
+                  autoComplete="off"
+                  autoFocus
+                />
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
