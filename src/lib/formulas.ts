@@ -33,7 +33,8 @@ export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
 
 export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
   "pre-cook": "Ingredients weighed in before being cooked.",
-  cooked: "Secondary blend",
+  cooked:
+    "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
   secondary: "Added after cooking is complete.",
   final: "Colors, flavors, and any last-step masking agents.",
 };

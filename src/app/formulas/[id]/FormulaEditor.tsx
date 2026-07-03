@@ -2071,6 +2071,25 @@ function BlendSectionCard({
         )}
       </div>
 
+      {/* Cooked-blend gets a "Secondary Blend" sub-heading right above
+          the ingredients area — reflects the physical formula sheet
+          where the secondary blend components are folded into the cooked
+          batch. Other phases get nothing here. */}
+      {phase === "cooked" ? (
+        <div
+          style={{
+            padding: "10px 14px 4px",
+            borderTop: "1px solid var(--line-2, #efe9da)",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--teal-900, #0f4a56)",
+            letterSpacing: "-0.005em",
+          }}
+        >
+          Secondary Blend
+        </div>
+      ) : null}
+
       {rows.length === 0 ? (
         <div
           style={{
