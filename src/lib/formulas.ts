@@ -392,7 +392,7 @@ const IDENTITY_FIELD_LABELS: Record<
   string
 > = {
   name: "name",
-  pcBkCode: "PC-BK code",
+  pcBkCode: "Product Code",
   shape: "shape",
   flavor: "flavor",
   active: "active status",

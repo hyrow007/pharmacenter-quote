@@ -412,19 +412,25 @@ export default function FormulaEditor({
           boxShadow: "0 2px 6px rgba(15,74,86,0.06)",
         }}
       >
+        {/* Identity row.
+            Uses flex-wrap so every column keeps its natural min width and
+            the entire row wraps to a second line rather than pushing
+            Flavor off the right edge of the card. Fixed pixel widths on
+            the small columns; the two long-text columns (Name, Flavor)
+            grow to fill remaining space. */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1.5fr 2fr 0.9fr 1fr 1.4fr auto",
+            display: "flex",
+            flexWrap: "wrap",
             gap: 12,
-            alignItems: "end",
+            alignItems: "flex-end",
           }}
         >
-          {/* PC-BK code — leftmost column. TBD/Existing radio buttons on
-              top, either the Existing-product picker or a disabled
-              placeholder below. Selecting an Existing product auto-fills
-              the Name field to the right. */}
-          <Field label="PC-BK code">
+          {/* Product Code — leftmost column. TBD/Existing radio buttons on
+              top, either the typeahead product picker or a disabled
+              placeholder below. Both branches render an input of the SAME
+              height so switching modes doesn't jiggle the row. */}
+          <Field label="Product Code" width={260}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", gap: 10, fontSize: 11, fontWeight: 700 }}>
                 <label
@@ -474,29 +480,36 @@ export default function FormulaEditor({
                 </label>
               </div>
               {pcBkMode === "existing" ? (
-                <select
-                  value={pcBkCode}
-                  onChange={(e) => {
-                    const code = e.target.value;
-                    setPcBkCode(code);
-                    // Auto-fill the Name from the picked Fishbowl product,
-                    // but only if the name field is empty or still holds
-                    // the placeholder-y default so we don't clobber a
-                    // rep-typed override.
-                    const picked = pcBkProducts.find((p) => p.fpCode === code);
-                    if (picked && (!name.trim() || name === "Untitled gummy")) {
-                      setName(picked.name);
-                    }
-                  }}
-                  className="pricing__input"
-                >
-                  <option value="">— pick a PC-BK product —</option>
-                  {pcBkProducts.map((p) => (
-                    <option key={p.id} value={p.fpCode}>
-                      {p.fpCode} · {p.name}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  {/* Typeahead: <input list=…> against a native <datalist>.
+                      As the rep types, the browser filters options
+                      matching either the FP code (e.g. "PC-BK-24") or the
+                      product name. When they select a full match, we
+                      auto-fill Name from the picked product's name. */}
+                  <input
+                    type="text"
+                    list="pc-bk-typeahead"
+                    value={pcBkCode}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      setPcBkCode(code);
+                      const picked = pcBkProducts.find((p) => p.fpCode === code);
+                      if (picked && (!name.trim() || name === "Untitled gummy")) {
+                        setName(picked.name);
+                      }
+                    }}
+                    placeholder="Type to search…"
+                    className="pricing__input"
+                    autoComplete="off"
+                  />
+                  <datalist id="pc-bk-typeahead">
+                    {pcBkProducts.map((p) => (
+                      <option key={p.id} value={p.fpCode}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </datalist>
+                </>
               ) : (
                 <input
                   type="text"
@@ -509,9 +522,10 @@ export default function FormulaEditor({
             </div>
           </Field>
 
-          {/* Name — second column. Auto-fills from PC-BK picker when
-              Existing mode is active, but always remains editable. */}
-          <Field label="Name / description">
+          {/* Name — second column, grows. Auto-fills from Product Code
+              picker when Existing mode is active, but always remains
+              editable. */}
+          <Field label="Name / description" grow>
             <input
               type="text"
               value={name}
@@ -526,8 +540,8 @@ export default function FormulaEditor({
               trigger a version bump because cost math depends on it),
               but visually it lives with the identity because it's a
               physical property of the finished gummy the rep expects
-              to see up top alongside PC-BK / shape / flavor. */}
-          <Field label="Piece weight">
+              to see up top alongside Product Code / shape / flavor. */}
+          <Field label="Piece weight" width={110}>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
                 type="number"
@@ -545,7 +559,7 @@ export default function FormulaEditor({
             </div>
           </Field>
 
-          <Field label="Shape">
+          <Field label="Shape" width={130}>
             <select
               value={shape}
               onChange={(e) => setShape(e.target.value)}
@@ -559,7 +573,7 @@ export default function FormulaEditor({
             </select>
           </Field>
 
-          <Field label="Flavor">
+          <Field label="Flavor" grow>
             <input
               type="text"
               value={flavor}
@@ -725,12 +739,28 @@ export default function FormulaEditor({
 function Field({
   label,
   children,
+  width,
+  grow,
 }: {
   label: string;
   children: React.ReactNode;
+  /** Fixed width in px. Ignored when grow is true. */
+  width?: number;
+  /** When true, the field expands to fill remaining row space. Used for
+   *  long-text fields (Name, Flavor) so short-text fields (Piece weight,
+   *  Shape) can hold their compact width. */
+  grow?: boolean;
 }) {
+  const flexBasis = grow ? { flex: "1 1 220px", minWidth: 180 } : { flex: `0 0 ${width ?? 160}px` };
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <label
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        ...flexBasis,
+      }}
+    >
       <span
         style={{
           fontSize: 10.5,
