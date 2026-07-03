@@ -1835,9 +1835,9 @@ function BlendSectionCard({
                     ) ?? null
                   : null);
               return (
-                <tr
+                <BlendIngredientRow
                   key={row.id}
-                  style={{ borderTop: "1px solid var(--line-2, #efe9da)" }}
+                  onRemove={() => onRemoveRow(row.id)}
                 >
                   <BTd>
                     <IngredientPicker
@@ -1930,23 +1930,7 @@ function BlendSectionCard({
                       </span>
                     </div>
                   </BTd>
-                  <BTd style={{ textAlign: "center" }}>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveRow(row.id)}
-                      title="Remove row"
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "var(--ink-3, #8a9498)",
-                        cursor: "pointer",
-                        fontSize: 16,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </BTd>
-                </tr>
+                </BlendIngredientRow>
               );
             })}
             <tr
@@ -2302,17 +2286,7 @@ function LabelClaimsSection({
           {claims.map((c) => {
             const resolved = resolveClaim(c);
             return (
-              <div
-                key={c.id}
-                style={{
-                  display: "grid",
-                  // Ingredient picker takes remaining space; amount +
-                  // unit + remove pinned to the right at fixed widths.
-                  gridTemplateColumns: "1fr 110px 90px 32px",
-                  gap: 8,
-                  alignItems: "center",
-                }}
-              >
+              <LabelClaimRow key={c.id} onRemove={() => onRemove(c.id)}>
                 <IngredientPicker
                   row={{
                     rawMaterialId: c.rawMaterialId,
@@ -2374,31 +2348,113 @@ function LabelClaimsSection({
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => onRemove(c.id)}
-                  title="Remove claim"
-                  aria-label="Remove label claim"
-                  style={{
-                    width: 28,
-                    height: 28,
-                    background: "transparent",
-                    border: "1px solid var(--line, #e3dcc9)",
-                    borderRadius: 6,
-                    color: "var(--ink-3, #8a9498)",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    lineHeight: 1,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
+              </LabelClaimRow>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// BlendIngredientRow — wraps a blend-section table row so the delete
+// affordance stays hidden until the rep hovers the row. Reveals a small
+// × on hover that clears the entire ingredient line.
+// -----------------------------------------------------------------------------
+function BlendIngredientRow({
+  onRemove,
+  children,
+}: {
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <tr
+      style={{
+        borderTop: "1px solid var(--line-2, #efe9da)",
+        background: hover ? "var(--cream-soft, #fbf6ec)" : "transparent",
+        transition: "background 80ms ease",
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
+      <BTd style={{ textAlign: "center", width: 40 }}>
+        <button
+          type="button"
+          onClick={onRemove}
+          title="Remove ingredient"
+          aria-label="Remove ingredient"
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "var(--ink-3, #8a9498)",
+            cursor: "pointer",
+            fontSize: 16,
+            lineHeight: 1,
+            padding: 4,
+            opacity: hover ? 1 : 0,
+            transition: "opacity 80ms ease",
+          }}
+        >
+          ×
+        </button>
+      </BTd>
+    </tr>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// LabelClaimRow — grid row for a single label claim, with delete affordance
+// hidden until hover (matches BlendIngredientRow). Expects three children
+// (picker, amount input, unit select) plus the standard row grid.
+// -----------------------------------------------------------------------------
+function LabelClaimRow({
+  onRemove,
+  children,
+}: {
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "grid",
+        // Picker + amount + unit + delete (delete stays fixed-width so the
+        // other columns don't jiggle when the × fades in).
+        gridTemplateColumns: "1fr 110px 90px 32px",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remove claim"
+        aria-label="Remove label claim"
+        style={{
+          width: 28,
+          height: 28,
+          background: "transparent",
+          border: "1px solid var(--line, #e3dcc9)",
+          borderRadius: 6,
+          color: "var(--ink-3, #8a9498)",
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: "pointer",
+          lineHeight: 1,
+          opacity: hover ? 1 : 0,
+          transition: "opacity 80ms ease",
+        }}
+      >
+        ×
+      </button>
     </div>
   );
 }
