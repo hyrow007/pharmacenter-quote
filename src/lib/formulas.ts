@@ -34,14 +34,17 @@ export type GummyFormulaIngredient = {
 // Canonical shape picklist. Kept as a widened string on the record so we can
 // grow this list without a DB migration. UI enforces the picklist client-side.
 // -----------------------------------------------------------------------------
+// Ordering rule: TBD always first, Custom always last, everything in
+// between sorted alphabetically. Keeps the picker predictable regardless
+// of when a new shape is introduced.
 export const FORMULA_SHAPES = [
   "TBD",
   "Bear",
   "Cube",
-  "Heart",
-  "Dome",
-  "Puck",
   "Dog bone",
+  "Dome",
+  "Heart",
+  "Puck",
   "Custom",
 ] as const;
 

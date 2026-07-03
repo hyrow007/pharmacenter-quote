@@ -530,61 +530,56 @@ export default function FormulaEditor({
               </div>
               {pcBkMode === "existing" ? (
                 pickedPcBkProduct && !pcBkEditing ? (
-                  // Picked: show a compact pill with fpCode · name and a
-                  // Change button that reopens the search input.
+                  // Picked: render as a read-only input styled exactly
+                  // like Name / Shape / Flavor so it lines up in the row.
+                  // Clicking anywhere on the field reopens the typeahead;
+                  // a tiny right-aligned Change link disambiguates the
+                  // affordance so the rep knows the value is editable.
                   <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setPcBkEditing(true);
+                      setPcBkSearch("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setPcBkEditing(true);
+                        setPcBkSearch("");
+                      }
+                    }}
+                    className="pricing__input"
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 8,
-                      padding: "6px 10px",
-                      background: "#fff",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 6,
+                      gap: 6,
+                      cursor: "pointer",
                     }}
+                    title={pickedPcBkProduct.name}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: "var(--teal-900, #0f4a56)",
-                          fontFamily: "ui-monospace, SFMono-Regular, monospace",
-                        }}
-                      >
-                        {pickedPcBkProduct.fpCode}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "var(--ink-3, #8a9498)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {pickedPcBkProduct.name}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPcBkEditing(true);
-                        setPcBkSearch("");
-                      }}
+                    <span
                       style={{
-                        background: "transparent",
-                        border: "1px solid var(--line, #e3dcc9)",
-                        borderRadius: 4,
-                        padding: "3px 8px",
-                        fontSize: 11,
+                        flex: 1,
+                        minWidth: 0,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {pickedPcBkProduct.fpCode}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10.5,
                         fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        cursor: "pointer",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "var(--teal-700, #1d6c7b)",
                       }}
                     >
                       Change
-                    </button>
+                    </span>
                   </div>
                 ) : (
                   // Searching: text input + dropdown of filtered results
