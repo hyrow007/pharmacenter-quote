@@ -26,8 +26,10 @@ import { useRouter } from "next/navigation";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,
+  DEFAULT_PROCESS_NOTES,
   FORMULA_SHAPES,
   FORMULA_VERSION_DEFAULTS,
+  PROCESS_NOTES_PLACEHOLDER_NOTICE,
   computeMaterialCostPerGummy,
   emptyIngredient,
   ingredientGramsForBench,
@@ -160,8 +162,21 @@ export default function FormulaEditor({
   // Process notes are per-blend-phase free text (mixing steps, pH targets,
   // hydration times). Stored on the version alongside ingredients. Keyed
   // by BlendPhase string.
+  //
+  // On first render, any phase without a saved note gets seeded with the
+  // canonical default from DEFAULT_PROCESS_NOTES so the textarea is never
+  // blank. A "This is placeholder text…" banner + Reset-to-default link
+  // are rendered inside BlendSectionCard to signal that the shown text is
+  // the default and hasn't been reviewed for this specific formula.
   const [processNotes, setProcessNotes] = useState<Partial<Record<BlendPhase, string>>>(
-    seedVersion.processNotes ?? {},
+    () => {
+      const saved = seedVersion.processNotes ?? {};
+      const merged: Partial<Record<BlendPhase, string>> = { ...saved };
+      (Object.keys(DEFAULT_PROCESS_NOTES) as BlendPhase[]).forEach((phase) => {
+        if (!merged[phase]) merged[phase] = DEFAULT_PROCESS_NOTES[phase];
+      });
+      return merged;
+    },
   );
   function setPhaseProcessNote(phase: BlendPhase, text: string) {
     setProcessNotes((prev) => ({ ...prev, [phase]: text }));
@@ -170,8 +185,23 @@ export default function FormulaEditor({
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
   // whether Save writes a new version row.
+  //
+  // Important: we also hydrate the seed's processNotes with the defaults
+  // (same as the useState init below) so opening a formula that has no
+  // saved process notes doesn't immediately mark it dirty just because
+  // the textarea now displays the default text.
   const loadedSnapshot = useMemo(
-    () => JSON.stringify(seedVersion),
+    () => {
+      const hydratedProcessNotes: Partial<Record<BlendPhase, string>> = {
+        ...(seedVersion.processNotes ?? {}),
+      };
+      (Object.keys(DEFAULT_PROCESS_NOTES) as BlendPhase[]).forEach((phase) => {
+        if (!hydratedProcessNotes[phase]) {
+          hydratedProcessNotes[phase] = DEFAULT_PROCESS_NOTES[phase];
+        }
+      });
+      return JSON.stringify({ ...seedVersion, processNotes: hydratedProcessNotes });
+    },
     // Snapshot is fixed once mounted; ignoring reactive drift.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -900,6 +930,7 @@ export default function FormulaEditor({
             onAddRow={() => addRowForPhase("pre-cook")}
             onRemoveRow={removeRow}
             processNote={processNotes["pre-cook"] ?? ""}
+            defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
           />
         </>
@@ -1637,6 +1668,7 @@ function BlendSectionCard({
   onAddRow,
   onRemoveRow,
   processNote,
+  defaultProcessNote,
   onProcessNoteChange,
 }: {
   phase: BlendPhase;
@@ -1647,8 +1679,14 @@ function BlendSectionCard({
   onAddRow: () => void;
   onRemoveRow: (id: string) => void;
   processNote: string;
+  /** Canonical default text for this phase. Used to detect whether the
+   *  current process note is unmodified (banner + Reset link) and as the
+   *  target when Reset is clicked. */
+  defaultProcessNote: string;
   onProcessNoteChange: (text: string) => void;
 }) {
+  const isAtDefault =
+    defaultProcessNote.length > 0 && processNote.trim() === defaultProcessNote.trim();
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   const totalG = rows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
@@ -1903,7 +1941,14 @@ function BlendSectionCard({
       {/* Process notes — free-text mixing instructions for this blend
           phase (pre-blend pectin, hydration times, pH targets, etc.).
           Persisted on the version's process_notes JSONB column keyed by
-          the blend phase. */}
+          the blend phase.
+          - On first render the textarea is seeded with the canonical
+            DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
+          - If the current text still equals the default, a red
+            placeholder-notice banner is shown so the rep knows this hasn't
+            been reviewed for this specific formula yet.
+          - Once edited, a "Reset to default" link appears to bring it
+            back to the canonical text. */}
       <div
         style={{
           padding: "10px 14px 14px",
@@ -1911,7 +1956,16 @@ function BlendSectionCard({
           background: "var(--cream-soft, #fbf6ec)",
         }}
       >
-        <label style={{ display: "block", marginBottom: 6 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 6,
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           <span
             style={{
               fontSize: 13,
@@ -1921,12 +1975,44 @@ function BlendSectionCard({
           >
             Process:
           </span>
-        </label>
+          {defaultProcessNote && !isAtDefault ? (
+            <button
+              type="button"
+              onClick={() => onProcessNoteChange(defaultProcessNote)}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--teal-700, #1d6c7b)",
+                cursor: "pointer",
+              }}
+            >
+              Reset to default
+            </button>
+          ) : null}
+        </div>
+        {isAtDefault ? (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#b91c1c",
+            }}
+          >
+            {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+          </div>
+        ) : null}
         <textarea
           value={processNote}
           onChange={(e) => onProcessNoteChange(e.target.value)}
-          rows={4}
-          placeholder="e.g. In a suitable container pre-blend pectin and 1/2 sugar and when well dry blended add warm water (100-110F) to allow the pectin to hydrate (about 30 min)…"
+          rows={6}
+          placeholder="Describe the mixing steps, hydration times, pH targets, etc."
           className="pricing__input"
           style={{
             width: "100%",

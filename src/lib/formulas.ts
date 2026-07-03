@@ -37,6 +37,24 @@ export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
 };
 
 // -----------------------------------------------------------------------------
+// Default process notes per blend phase. Shown in the section's textarea on
+// first render if the version has no process notes saved yet. Editable —
+// once the rep types anything different, the placeholder notice (below)
+// disappears and a "Reset to default" affordance appears.
+// -----------------------------------------------------------------------------
+export const DEFAULT_PROCESS_NOTES: Partial<Record<BlendPhase, string>> = {
+  "pre-cook":
+    "In a suitable container, pre-blend the pectin with half the sugar. Once well dry-blended, add warm water (100–110°F) to hydrate the pectin (about 30 min). Complete the addition of the remaining ingredients per the formula listed and mix to full dispersion — even if the sugar is not fully dissolved. Once fully mixed and the sugar is dissolved, check the pH and adjust to approximately 4.5 by adding either Sodium Citrate (25% sol) or Citric Acid (50% sol). Target pH range for the pre-cook blend: 4.0–5.0.",
+};
+
+// Banner text shown above the textarea whenever the current process note
+// equals the default. Signals to the rep that R&D has since changed the
+// procedure and the placeholder should be replaced before this version is
+// treated as canonical.
+export const PROCESS_NOTES_PLACEHOLDER_NOTICE =
+  "This is place holder text the process has been modified";
+
+// -----------------------------------------------------------------------------
 // Ingredient row shape
 // -----------------------------------------------------------------------------
 //
