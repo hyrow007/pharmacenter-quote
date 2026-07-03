@@ -2072,6 +2072,12 @@ function BlendSectionCard({
             width: "100%",
             borderCollapse: "collapse",
             fontSize: 12.5,
+            // Fixed layout so the 120px grams column and 40px delete
+            // column are respected exactly. Without this, auto layout
+            // fudges column widths based on content, causing the
+            // solution rows' internal grid (which uses hard-coded
+            // 120/40) to misalign with the ingredient rows above.
+            tableLayout: "fixed",
           }}
         >
           <thead>
