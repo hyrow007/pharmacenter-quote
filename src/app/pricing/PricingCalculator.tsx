@@ -2888,27 +2888,13 @@ export default function PricingCalculator({
             </label>
           ) : null}
           {/* v2 landed-cost model — the manual "Customs broker" input is
-              retired for international shipments. Broker + delivery + MPF +
-              HMF are all auto-computed from CIF and shown in the audit
-              breakdown below. For USA/domestic mode we still expose the old
-              manual field until we build out the domestic model (task #157). */}
-          {shippingOrigin === "usa" && visibility.customs ? (
-            <label className="pricing__field">
-              <span className="pricing__label">Customs broker</span>
-              <div className="pricing__input-wrap">
-                <span className="pricing__input-prefix">$</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className="pricing__input pricing__input--money"
-                  value={customsBroker}
-                  onChange={(e) => setCustomsBroker(formatValueInput(e.target.value))}
-                  placeholder="0.00"
-                  autoComplete="off"
-                />
-              </div>
-            </label>
-          ) : null}
+              fully retired. For international shipments the broker cost is
+              auto-computed from the fixed baseline ($450 + $200 air terminal)
+              and shown in the audit breakdown below. USA/domestic doesn't
+              have a customs broker at all (no border to clear), so we don't
+              expose the input in either mode. The `customsBroker` state
+              string still exists for backward-compat with saved snapshots
+              from the pre-v2 calculator. */}
           <label className="pricing__field">
             <span className="pricing__label">Lab testing</span>
             <div className="pricing__input-wrap">
@@ -3130,9 +3116,9 @@ export default function PricingCalculator({
               {(shippingOrigin === "usa" || isStockProduct) && visibility.duties ? (
                 <Row label="Duties" value={usd.format(results.dutiesAmount)} muted />
               ) : null}
-              {(shippingOrigin === "usa" || isStockProduct) && visibility.customs ? (
-                <Row label="Customs broker" value={usd.format(num(customsBroker))} muted />
-              ) : null}
+              {/* Customs broker retired — USA/domestic has no broker fees
+                  (no border to clear), international auto-computes from the
+                  baseline. */}
               <Row label="Lab testing" value={usd.format(num(testing))} muted />
               <Row label="Other costs" value={usd.format(num(otherCosts))} muted />
               {shippingOrigin === "usa" ? (
@@ -3301,20 +3287,33 @@ export default function PricingCalculator({
                 <td>{dutiesPct || "0"}%</td>
               </tr>
             ) : null}
-            {visibility.customs ? (
-              <tr>
-                <td>Customs broker</td>
-                <td>{usd.format(num(customsBroker))}</td>
-              </tr>
-            ) : null}
+            {/* v2 landed-cost model mirrors the on-screen input list:
+                the manual "Customs broker" input is fully retired (USA has
+                no customs broker, and international auto-computes it from
+                the baseline expanded in the Results section below), and
+                "Other fees" was replaced by "Other costs" (bound to the
+                new `otherCosts` field). Handling stays as a USA-only input
+                until we build out the domestic model (task #157). */}
             <tr>
               <td>Lab testing</td>
               <td>{usd.format(num(testing))}</td>
             </tr>
             <tr>
-              <td>Other fees</td>
-              <td>{usd.format(num(handling))}</td>
+              <td>Other costs</td>
+              <td>{usd.format(num(otherCosts))}</td>
             </tr>
+            {shippingOrigin === "usa" ? (
+              <tr>
+                <td>Handling</td>
+                <td>{usd.format(num(handling))}</td>
+              </tr>
+            ) : null}
+            {shippingOrigin === "international" && !isStockProduct && num(deliveryOverride) > 0 ? (
+              <tr>
+                <td>Delivery override</td>
+                <td>{usd.format(num(deliveryOverride))}</td>
+              </tr>
+            ) : null}
             <tr>
               <td>{marginMode === "markup" ? "Markup" : "Gross margin"}</td>
               <td>{margin || "0"}%</td>

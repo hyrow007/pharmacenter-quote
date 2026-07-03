@@ -24,6 +24,7 @@ export default function NavLinks() {
 
   const isWorkflows =
     pathname === "/workflows" || pathname.startsWith("/workflow/") || pathname === "/start";
+  const isFormulas = pathname.startsWith("/formulas");
   const isFeedback = pathname.startsWith("/feedback");
   const isAdmin = pathname.startsWith("/admin");
 
@@ -34,6 +35,12 @@ export default function NavLinks() {
         className={`app-nav__link${isWorkflows ? " app-nav__link--active" : ""}`}
       >
         Workflows
+      </Link>
+      <Link
+        href="/formulas"
+        className={`app-nav__link${isFormulas ? " app-nav__link--active" : ""}`}
+      >
+        Formulas
       </Link>
       <Link
         href="/feedback"

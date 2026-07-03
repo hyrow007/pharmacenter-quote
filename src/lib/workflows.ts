@@ -146,7 +146,17 @@ export type WorkflowState = {
   // Saved gummy-formula calculator state for CP → Gummies → Manufactured at
   // PharmaCenter workflows. Optional; only present after the user visits
   // /workflow/[id]/gummy-formula and hits Save. See GummyFormula below.
+  //
+  // LEGACY: pre-catalog workflows authored the formula inline right here.
+  // New workflows (post-catalog rollout) use gummyFormulaRef instead — a
+  // pointer to a versioned catalog row. Both fields can coexist during the
+  // transition; if a ref is present it wins.
   gummyFormula?: GummyFormula;
+  // Reference to a snapshotted version in the gummy_formulas catalog. See
+  // /lib/formulas.ts (GummyFormulaReference). Small enough to store on the
+  // state row without bloating it — cached identity fields let the workflow
+  // detail page render "PC-BK-247 — Sour Green Apple" without a fetch.
+  gummyFormulaRef?: import("./formulas").GummyFormulaReference;
 };
 
 // -----------------------------------------------------------------------------
