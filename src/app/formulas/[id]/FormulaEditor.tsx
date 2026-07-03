@@ -1923,6 +1923,137 @@ function BlendSectionCard({
         </div>
       </header>
 
+      {/* Process notes — moved above the ingredients table so the mixing
+          steps sit right under the section title. Free-text mixing
+          instructions for this blend phase (pre-blend pectin, hydration
+          times, pH targets, etc.). Persisted on the version's
+          process_notes JSONB column keyed by the blend phase.
+          - On first render the textarea is seeded with the canonical
+            DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
+          - If the current text still equals the default, a red
+            placeholder-notice banner is shown so the rep knows this hasn't
+            been reviewed for this specific formula yet.
+          - Once edited, a "Reset to default" link appears to bring it
+            back to the canonical text. */}
+      <div
+        style={{
+          padding: "10px 14px 14px",
+          borderBottom: "1px solid var(--line-2, #efe9da)",
+          background: "var(--cream-soft, #fbf6ec)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 6,
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+            }}
+          >
+            Process:
+          </span>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            {defaultProcessNote && !isAtDefault ? (
+              <button
+                type="button"
+                onClick={() => onProcessNoteChange(defaultProcessNote)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--teal-700, #1d6c7b)",
+                  cursor: "pointer",
+                }}
+              >
+                Reset to default
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setProcessEditing((v) => !v)}
+              style={{
+                padding: "4px 10px",
+                background: processEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
+                color: processEditing ? "#fff" : "var(--teal-900, #0f4a56)",
+                border: "1px solid var(--teal-700, #1d6c7b)",
+                borderRadius: 6,
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+              }}
+            >
+              {processEditing ? "Done editing" : "Edit"}
+            </button>
+          </div>
+        </div>
+        {isAtDefault ? (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#b91c1c",
+            }}
+          >
+            {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+          </div>
+        ) : null}
+        {processEditing ? (
+          <textarea
+            value={processNote}
+            onChange={(e) => onProcessNoteChange(e.target.value)}
+            rows={6}
+            placeholder="Describe the mixing steps, hydration times, pH targets, etc."
+            className="pricing__input"
+            style={{
+              width: "100%",
+              resize: "vertical",
+              fontFamily: "inherit",
+              fontSize: 12.5,
+              lineHeight: 1.5,
+            }}
+            autoFocus
+          />
+        ) : (
+          // Read-only view. Whitespace: pre-wrap keeps whatever newlines
+          // the rep typed in edit mode. Empty state gets a placeholder
+          // hint since we know the default gets seeded on mount.
+          <div
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              background: "#fff",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              lineHeight: 1.5,
+              color: processNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              minHeight: 60,
+            }}
+          >
+            {processNote.trim() || "No process notes yet — click Edit to add."}
+          </div>
+        )}
+      </div>
+
       {rows.length === 0 ? (
         <div
           style={{
@@ -2331,135 +2462,6 @@ function BlendSectionCard({
         </div>
       </div>
 
-      {/* Process notes — free-text mixing instructions for this blend
-          phase (pre-blend pectin, hydration times, pH targets, etc.).
-          Persisted on the version's process_notes JSONB column keyed by
-          the blend phase.
-          - On first render the textarea is seeded with the canonical
-            DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
-          - If the current text still equals the default, a red
-            placeholder-notice banner is shown so the rep knows this hasn't
-            been reviewed for this specific formula yet.
-          - Once edited, a "Reset to default" link appears to bring it
-            back to the canonical text. */}
-      <div
-        style={{
-          padding: "10px 14px 14px",
-          borderTop: "1px solid var(--line-2, #efe9da)",
-          background: "var(--cream-soft, #fbf6ec)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 6,
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--teal-900, #0f4a56)",
-            }}
-          >
-            Process:
-          </span>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-            {defaultProcessNote && !isAtDefault ? (
-              <button
-                type="button"
-                onClick={() => onProcessNoteChange(defaultProcessNote)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "var(--teal-700, #1d6c7b)",
-                  cursor: "pointer",
-                }}
-              >
-                Reset to default
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setProcessEditing((v) => !v)}
-              style={{
-                padding: "4px 10px",
-                background: processEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
-                color: processEditing ? "#fff" : "var(--teal-900, #0f4a56)",
-                border: "1px solid var(--teal-700, #1d6c7b)",
-                borderRadius: 6,
-                fontSize: 10.5,
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-              }}
-            >
-              {processEditing ? "Done editing" : "Edit"}
-            </button>
-          </div>
-        </div>
-        {isAtDefault ? (
-          <div
-            role="alert"
-            style={{
-              marginBottom: 6,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#b91c1c",
-            }}
-          >
-            {PROCESS_NOTES_PLACEHOLDER_NOTICE}
-          </div>
-        ) : null}
-        {processEditing ? (
-          <textarea
-            value={processNote}
-            onChange={(e) => onProcessNoteChange(e.target.value)}
-            rows={6}
-            placeholder="Describe the mixing steps, hydration times, pH targets, etc."
-            className="pricing__input"
-            style={{
-              width: "100%",
-              resize: "vertical",
-              fontFamily: "inherit",
-              fontSize: 12.5,
-              lineHeight: 1.5,
-            }}
-            autoFocus
-          />
-        ) : (
-          // Read-only view. Whitespace: pre-wrap keeps whatever newlines
-          // the rep typed in edit mode. Empty state gets a placeholder
-          // hint since we know the default gets seeded on mount.
-          <div
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              background: "#fff",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 6,
-              fontSize: 12.5,
-              lineHeight: 1.5,
-              color: processNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              minHeight: 60,
-            }}
-          >
-            {processNote.trim() || "No process notes yet — click Edit to add."}
-          </div>
-        )}
-      </div>
     </section>
   );
 }
