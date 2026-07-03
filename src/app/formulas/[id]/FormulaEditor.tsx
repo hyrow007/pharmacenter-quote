@@ -2652,6 +2652,16 @@ function AuditTimeline({
   events: GummyFormulaAuditRecord[];
   loading: boolean;
 }) {
+  // Activity is auxiliary — the audit log is useful when investigating a
+  // change but noisy the rest of the time. Collapsed by default; the
+  // header is a click target that toggles the events list open.
+  const [expanded, setExpanded] = useState(false);
+  const countLabel = loading
+    ? "loading…"
+    : events.length === 0
+      ? "no events yet"
+      : `${events.length} event${events.length === 1 ? "" : "s"}`;
+
   return (
     <section
       style={{
@@ -2662,16 +2672,40 @@ function AuditTimeline({
         overflow: "hidden",
       }}
     >
-      <header
+      <button
+        type="button"
+        onClick={() => setExpanded((s) => !s)}
+        aria-expanded={expanded}
         style={{
+          width: "100%",
           padding: "10px 14px",
           background: "var(--cream, #f6efe3)",
-          borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+          borderTop: "none",
+          borderLeft: "none",
+          borderRight: "none",
+          borderBottom: expanded
+            ? "1.5px solid var(--teal-700, #1d6c7b)"
+            : "none",
           display: "flex",
           alignItems: "center",
           gap: 8,
+          cursor: "pointer",
+          textAlign: "left",
         }}
       >
+        <span
+          aria-hidden="true"
+          style={{
+            fontSize: 10,
+            color: "var(--teal-900, #0f4a56)",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 120ms ease",
+            display: "inline-block",
+            width: 10,
+          }}
+        >
+          ▶
+        </span>
         <span
           style={{
             fontSize: 10.5,
@@ -2689,31 +2723,41 @@ function AuditTimeline({
             color: "var(--ink-3, #8a9498)",
           }}
         >
-          {loading
-            ? "loading…"
-            : events.length === 0
-              ? "no events yet"
-              : `${events.length} event${events.length === 1 ? "" : "s"}`}
+          {countLabel}
         </span>
-      </header>
-      {events.length === 0 && !loading ? (
-        <div
+        <span style={{ flex: 1 }} />
+        <span
           style={{
-            padding: 18,
-            fontSize: 12,
-            color: "var(--ink-3, #8a9498)",
-            textAlign: "center",
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--teal-700, #1d6c7b)",
           }}
         >
-          No changes recorded yet.
-        </div>
-      ) : (
-        <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
-          {events.map((ev) => (
-            <AuditRow key={ev.id} event={ev} />
-          ))}
-        </ol>
-      )}
+          {expanded ? "Hide" : "Show"}
+        </span>
+      </button>
+      {expanded ? (
+        events.length === 0 && !loading ? (
+          <div
+            style={{
+              padding: 18,
+              fontSize: 12,
+              color: "var(--ink-3, #8a9498)",
+              textAlign: "center",
+            }}
+          >
+            No changes recorded yet.
+          </div>
+        ) : (
+          <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
+            {events.map((ev) => (
+              <AuditRow key={ev.id} event={ev} />
+            ))}
+          </ol>
+        )
+      ) : null}
     </section>
   );
 }
