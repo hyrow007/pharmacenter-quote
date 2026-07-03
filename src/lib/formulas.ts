@@ -37,11 +37,11 @@ export type GummyFormulaIngredient = {
 export const FORMULA_SHAPES = [
   "TBD",
   "Bear",
-  "Worm",
-  "Ring",
-  "Ball",
   "Cube",
   "Heart",
+  "Dome",
+  "Puck",
+  "Dog bone",
   "Custom",
 ] as const;
 
