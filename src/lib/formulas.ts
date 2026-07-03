@@ -21,17 +21,20 @@
 //
 // Rendered in Bench top tab as one card per phase.
 // -----------------------------------------------------------------------------
-export const BLEND_PHASES = ["pre-cook", "secondary", "final"] as const;
+export const BLEND_PHASES = ["pre-cook", "cooked", "secondary", "final"] as const;
 export type BlendPhase = (typeof BLEND_PHASES)[number];
 
 export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
   "pre-cook": "Pre-cook primary blend",
+  cooked: "Cooked blend",
   secondary: "Secondary blend",
   final: "Final blend",
 };
 
 export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
   "pre-cook": "Ingredients weighed in before being cooked.",
+  cooked:
+    "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
   secondary: "Added after cooking is complete.",
   final: "Colors, flavors, and any last-step masking agents.",
 };

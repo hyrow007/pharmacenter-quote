@@ -644,6 +644,7 @@ export default function FormulaEditor({
   const phaseIngredients = useMemo(() => {
     const groups: Record<BlendPhase, GummyFormulaIngredient[]> = {
       "pre-cook": [],
+      cooked: [],
       secondary: [],
       final: [],
     };
@@ -1096,6 +1097,22 @@ export default function FormulaEditor({
             processNote={processNotes["pre-cook"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
+          />
+          <BlendSectionCard
+            phase="cooked"
+            rows={phaseIngredients.groups["cooked"]}
+            rawMaterials={rawMaterials}
+            rmById={rmById}
+            savedSolutions={savedSolutions}
+            onUpdate={updateRow}
+            onAddRow={() => addRowForPhase("cooked")}
+            onAddSolution={() => addSolutionForPhase("cooked")}
+            onAddSavedSolution={(s) => addSavedSolutionForPhase("cooked", s)}
+            onSaveSolutionToLibrary={saveSolutionToLibrary}
+            onRemoveRow={removeRow}
+            processNote={processNotes["cooked"] ?? ""}
+            defaultProcessNote={DEFAULT_PROCESS_NOTES["cooked"] ?? ""}
+            onProcessNoteChange={(text) => setPhaseProcessNote("cooked", text)}
           />
         </>
       )}
