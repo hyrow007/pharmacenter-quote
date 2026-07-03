@@ -175,6 +175,50 @@ export function isSolutionRow(row: GummyFormulaIngredient): boolean {
 }
 
 // -----------------------------------------------------------------------------
+// Saved solutions library — reusable pre-mixed compounds (name + component
+// percentages) that any formula can pull into its blend sections. Stored in
+// public.gummy_solutions (see sql/gummy_solutions.sql).
+// -----------------------------------------------------------------------------
+export type SavedSolution = {
+  id: string;
+  name: string;
+  components: SolutionComponent[];
+  active: boolean;
+  createdAt: string;      // ISO
+  updatedAt: string;      // ISO
+  createdByEmail: string | null;
+  updatedByEmail: string | null;
+};
+
+/** Build a fresh GummyFormulaIngredient row from a saved solution. New
+ *  ids so multiple copies of the same solution can live in one formula
+ *  without id collisions. */
+export function ingredientFromSavedSolution(
+  s: SavedSolution,
+  phase: BlendPhase | null = null,
+): GummyFormulaIngredient {
+  return {
+    id: `ing_${Math.random().toString(36).slice(2, 10)}`,
+    rawMaterialId: null,
+    rawMaterialFpCode: null,
+    customName: s.name,
+    pctInFinished: 0,
+    grams: 0,
+    blendPhase: phase,
+    costPerKgOverride: null,
+    solidsOverride: null,
+    notes: null,
+    solutionComponents: s.components.map((c) => ({
+      ...c,
+      // Assign new component ids so removing a component from this
+      // instance doesn't accidentally target the library entry (they're
+      // independent copies once loaded).
+      id: newSolutionComponentId(),
+    })),
+  };
+}
+
+// -----------------------------------------------------------------------------
 // Canonical shape picklist. Kept as a widened string on the record so we can
 // grow this list without a DB migration. UI enforces the picklist client-side.
 // -----------------------------------------------------------------------------

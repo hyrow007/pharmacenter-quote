@@ -10,6 +10,8 @@ import {
   versionFromRow,
   type GummyFormulaRecord,
   type GummyFormulaVersion,
+  type SavedSolution,
+  type SolutionComponent,
 } from "@/lib/formulas";
 
 // /formulas/[id] — three-tab formula editor.
@@ -40,7 +42,7 @@ export default async function FormulaEditorPage({
   // in raw_materials get their overlay fields (cost / solids / category);
   // Fishbowl-only PC-RW products still appear in the picker but with
   // null cost until an admin or Fishbowl sync fills them in.
-  const [formulaRes, versionRes, rmRes, pcBkRes, pcRwRes] = await Promise.all([
+  const [formulaRes, versionRes, rmRes, pcBkRes, pcRwRes, solRes] = await Promise.all([
     supabase
       .from("gummy_formulas")
       .select(
@@ -75,6 +77,16 @@ export default async function FormulaEditorPage({
       .eq("active", true)
       .ilike("fp_code", "PC-RW-%")
       .order("fp_code", { ascending: true }),
+    // Saved solutions library — every active row from public.gummy_solutions.
+    // Powers the "load from library" dropdown when the rep clicks + Add
+    // solution in a blend section.
+    supabase
+      .from("gummy_solutions")
+      .select(
+        "id, name, components, active, created_at, updated_at, created_by_email, updated_by_email",
+      )
+      .eq("active", true)
+      .order("name", { ascending: true }),
   ]);
 
   if (formulaRes.error || !formulaRes.data) {
@@ -132,6 +144,24 @@ export default async function FormulaEditorPage({
       fpCode: p.fp_code as string,
       name: p.name as string,
     }));
+
+  // Saved solutions library. Ignore errors quietly — if the table hasn't
+  // been created yet (SQL migration not run), the editor still works, the
+  // library dropdown just shows empty.
+  const savedSolutions: SavedSolution[] = (solRes?.data ?? []).map(
+    (row: Record<string, unknown>) => ({
+      id: String(row.id),
+      name: String(row.name),
+      components: Array.isArray(row.components)
+        ? (row.components as SolutionComponent[])
+        : [],
+      active: row.active === true,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+      createdByEmail: (row.created_by_email as string | null) ?? null,
+      updatedByEmail: (row.updated_by_email as string | null) ?? null,
+    }),
+  );
 
   // Resolve the "updated by" email to a display name so the meta strip
   // reads "by Jairo Osorno" instead of "by josorno@pharmacenterusa.com".
@@ -220,6 +250,7 @@ export default async function FormulaEditorPage({
             initialVersion={latestVersion}
             rawMaterials={rawMaterials}
             pcBkProducts={pcBkProducts}
+            initialSavedSolutions={savedSolutions}
           />
         </div>
       </main>

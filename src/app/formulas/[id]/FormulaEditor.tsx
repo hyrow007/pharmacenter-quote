@@ -36,6 +36,7 @@ import {
   emptyLabelClaim,
   emptySolutionComponent,
   emptySolutionIngredient,
+  ingredientFromSavedSolution,
   ingredientGramsForBench,
   ingredientKgForScaleUp,
   isSolutionRow,
@@ -47,6 +48,7 @@ import {
   type IdentityDiff,
   type LabelClaim,
   type LabelClaimUnit,
+  type SavedSolution,
   type SolutionComponent,
   type VersionDiff,
   type RawMaterialCostLookup,
@@ -69,8 +71,25 @@ export type RawMaterialOption = {
   defaultCostPerKg: number | null;
   defaultSolids: number;
   category: "primary" | "secondary" | "final" | "other" | null;
-  source?: "raw_material" | "fishbowl";
+  source?: "raw_material" | "fishbowl" | "builtin";
 };
+
+// Built-in ingredients that should always appear in the picker regardless
+// of Fishbowl / raw_materials state. Currently: Water — used constantly
+// in solutions and pre-cook hydration but not tracked in Fishbowl as a
+// raw material.
+const BUILTIN_INGREDIENTS: RawMaterialOption[] = [
+  {
+    id: "builtin:water",
+    fpCode: null,
+    name: "Water",
+    defaultUnit: "kg",
+    defaultCostPerKg: 0,
+    defaultSolids: 0,
+    category: "primary",
+    source: "builtin",
+  },
+];
 
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
 // identity header's PC-BK code picker. Selecting one auto-fills Name.
@@ -85,6 +104,7 @@ type Props = {
   initialVersion: GummyFormulaVersion | null;
   rawMaterials: RawMaterialOption[];
   pcBkProducts: PcBkProductOption[];
+  initialSavedSolutions?: SavedSolution[];
 };
 
 type Tab = "bench" | "scale" | "cost";
@@ -105,10 +125,32 @@ const usdShort = new Intl.NumberFormat("en-US", {
 export default function FormulaEditor({
   initialFormula,
   initialVersion,
-  rawMaterials,
+  rawMaterials: rawMaterialsProp,
   pcBkProducts,
+  initialSavedSolutions = [],
 }: Props) {
   const router = useRouter();
+
+  // Saved-solutions library — client state so newly-saved entries appear
+  // in the "load from library" list without a full page refresh.
+  const [savedSolutions, setSavedSolutions] = useState<SavedSolution[]>(
+    initialSavedSolutions,
+  );
+
+  // Prepend BUILTIN_INGREDIENTS (currently just Water) to whatever the
+  // server sent so the picker always has them regardless of Fishbowl or
+  // raw_materials state. Deduped by fp_code just in case a real "Water"
+  // ever gets loaded into Fishbowl.
+  const rawMaterials = useMemo(() => {
+    const seenIds = new Set(rawMaterialsProp.map((r) => r.id));
+    const seenNames = new Set(
+      rawMaterialsProp.map((r) => r.name.trim().toLowerCase()),
+    );
+    const builtins = BUILTIN_INGREDIENTS.filter(
+      (b) => !seenIds.has(b.id) && !seenNames.has(b.name.trim().toLowerCase()),
+    );
+    return [...builtins, ...rawMaterialsProp];
+  }, [rawMaterialsProp]);
 
   // -- Identity state ---------------------------------------------------------
   const [name, setName] = useState(initialFormula.name);
@@ -536,6 +578,55 @@ export default function FormulaEditor({
       ...prev,
       { ...emptySolutionIngredient(), blendPhase: phase },
     ]);
+  }
+  function addSavedSolutionForPhase(phase: BlendPhase, s: SavedSolution) {
+    setIngredients((prev) => [
+      ...prev,
+      ingredientFromSavedSolution(s, phase),
+    ]);
+  }
+  // Persist a solution row's current name + components back to the
+  // library. Upserts by name — a second save with the same name
+  // overwrites the components. Returns the saved solution so the caller
+  // can flash a success message.
+  async function saveSolutionToLibrary(
+    row: GummyFormulaIngredient,
+  ): Promise<{ ok: true; solution: SavedSolution } | { ok: false; error: string }> {
+    const name = (row.customName ?? "").trim();
+    if (!name) return { ok: false, error: "Solution needs a name before saving." };
+    const components = row.solutionComponents ?? [];
+    if (components.length === 0) {
+      return { ok: false, error: "Add at least one component before saving." };
+    }
+    try {
+      const res = await fetch("/api/solutions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, components }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        return { ok: false, error: json?.error || `save_failed_${res.status}` };
+      }
+      // Merge into local list (upsert by id).
+      setSavedSolutions((prev) => {
+        const idx = prev.findIndex((p) => p.id === json.solution.id);
+        if (idx === -1) {
+          return [...prev, json.solution].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          );
+        }
+        const next = [...prev];
+        next[idx] = json.solution;
+        return next;
+      });
+      return { ok: true, solution: json.solution as SavedSolution };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "save_failed",
+      };
+    }
   }
   function removeRow(id: string) {
     // Removing the last-ever ingredient row would leave the shared table
@@ -992,9 +1083,12 @@ export default function FormulaEditor({
             rows={phaseIngredients.groups["pre-cook"]}
             rawMaterials={rawMaterials}
             rmById={rmById}
+            savedSolutions={savedSolutions}
             onUpdate={updateRow}
             onAddRow={() => addRowForPhase("pre-cook")}
             onAddSolution={() => addSolutionForPhase("pre-cook")}
+            onAddSavedSolution={(s) => addSavedSolutionForPhase("pre-cook", s)}
+            onSaveSolutionToLibrary={saveSolutionToLibrary}
             onRemoveRow={removeRow}
             processNote={processNotes["pre-cook"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
@@ -1731,9 +1825,12 @@ function BlendSectionCard({
   rows,
   rawMaterials,
   rmById,
+  savedSolutions,
   onUpdate,
   onAddRow,
   onAddSolution,
+  onAddSavedSolution,
+  onSaveSolutionToLibrary,
   onRemoveRow,
   processNote,
   defaultProcessNote,
@@ -1743,9 +1840,14 @@ function BlendSectionCard({
   rows: GummyFormulaIngredient[];
   rawMaterials: RawMaterialOption[];
   rmById: Map<string, RawMaterialOption>;
+  savedSolutions: SavedSolution[];
   onUpdate: (id: string, patch: Partial<GummyFormulaIngredient>) => void;
   onAddRow: () => void;
   onAddSolution: () => void;
+  onAddSavedSolution: (s: SavedSolution) => void;
+  onSaveSolutionToLibrary: (
+    row: GummyFormulaIngredient,
+  ) => Promise<{ ok: true; solution: SavedSolution } | { ok: false; error: string }>;
   onRemoveRow: (id: string) => void;
   processNote: string;
   /** Canonical default text for this phase. Used to detect whether the
@@ -1754,6 +1856,9 @@ function BlendSectionCard({
   defaultProcessNote: string;
   onProcessNoteChange: (text: string) => void;
 }) {
+  // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
+  // every saved-library entry.
+  const [solutionMenuOpen, setSolutionMenuOpen] = useState(false);
   const isAtDefault =
     defaultProcessNote.length > 0 && processNote.trim() === defaultProcessNote.trim();
   // Process text starts read-only. The rep has to click Edit to modify it,
@@ -1845,6 +1950,7 @@ function BlendSectionCard({
                     row={row}
                     rawMaterials={rawMaterials}
                     onUpdate={(patch) => onUpdate(row.id, patch)}
+                    onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
                     onRemove={() => onRemoveRow(row.id)}
                   />
                 );
@@ -2017,23 +2123,170 @@ function BlendSectionCard({
           >
             + Add ingredient
           </button>
-          <button
-            type="button"
-            onClick={onAddSolution}
-            title="Add a pre-mixed solution (multiple ingredients at fixed percentages)"
-            style={{
-              padding: "6px 12px",
-              background: "transparent",
-              color: "var(--teal-900, #0f4a56)",
-              border: "1px dashed var(--line, #e3dcc9)",
-              borderRadius: 6,
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            + Add solution
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setSolutionMenuOpen((s) => !s)}
+              title="Add a pre-mixed solution (multiple ingredients at fixed percentages)"
+              aria-haspopup="menu"
+              aria-expanded={solutionMenuOpen}
+              style={{
+                padding: "6px 12px",
+                background: "transparent",
+                color: "var(--teal-900, #0f4a56)",
+                border: "1px dashed var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              + Add solution
+              <span
+                aria-hidden="true"
+                style={{ fontSize: 9, color: "var(--ink-3, #8a9498)" }}
+              >
+                ▼
+              </span>
+            </button>
+            {solutionMenuOpen ? (
+              <>
+                {/* Backdrop that closes the menu on any outside click. */}
+                <div
+                  onClick={() => setSolutionMenuOpen(false)}
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 30,
+                    background: "transparent",
+                  }}
+                />
+                <ul
+                  role="menu"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 4px)",
+                    left: 0,
+                    zIndex: 40,
+                    margin: 0,
+                    padding: 4,
+                    listStyle: "none",
+                    background: "#fff",
+                    border: "1px solid var(--line, #e3dcc9)",
+                    borderRadius: 6,
+                    boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
+                    minWidth: 240,
+                    maxHeight: 320,
+                    overflow: "auto",
+                  }}
+                >
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        onAddSolution();
+                        setSolutionMenuOpen(false);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "8px 10px",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
+                    >
+                      New empty solution
+                    </button>
+                  </li>
+                  {savedSolutions.length > 0 ? (
+                    <li
+                      style={{
+                        borderTop: "1px solid var(--line-2, #efe9da)",
+                        margin: "4px 0",
+                        padding: "6px 10px 2px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      From library
+                    </li>
+                  ) : (
+                    <li
+                      style={{
+                        padding: "6px 10px",
+                        borderTop: "1px solid var(--line-2, #efe9da)",
+                        marginTop: 4,
+                        fontSize: 11,
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      No saved solutions yet. Save one from a solution
+                      row to make it show up here.
+                    </li>
+                  )}
+                  {savedSolutions.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          onAddSavedSolution(s);
+                          setSolutionMenuOpen(false);
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "6px 10px",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          color: "var(--ink, #1f2a2d)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "transparent")
+                        }
+                      >
+                        <div style={{ fontWeight: 700 }}>{s.name}</div>
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            color: "var(--ink-3, #8a9498)",
+                            marginTop: 1,
+                          }}
+                        >
+                          {s.components.length} component
+                          {s.components.length === 1 ? "" : "s"}
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -2465,16 +2718,42 @@ function SolutionRow({
   row,
   rawMaterials,
   onUpdate,
+  onSaveToLibrary,
   onRemove,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
   onUpdate: (patch: Partial<GummyFormulaIngredient>) => void;
+  onSaveToLibrary: () => Promise<
+    { ok: true; solution: SavedSolution } | { ok: false; error: string }
+  >;
   onRemove: () => void;
 }) {
   const [hover, setHover] = useState(false);
+  const [saveState, setSaveState] = useState<
+    | { kind: "idle" }
+    | { kind: "saving" }
+    | { kind: "ok"; when: number }
+    | { kind: "err"; text: string }
+  >({ kind: "idle" });
   const components: SolutionComponent[] = row.solutionComponents ?? [];
   const totalPct = components.reduce((s, c) => s + (Number(c.pct) || 0), 0);
+  const nameTrimmed = (row.customName ?? "").trim();
+  const canSave = nameTrimmed.length > 0 && components.length > 0;
+
+  async function handleSave() {
+    setSaveState({ kind: "saving" });
+    const res = await onSaveToLibrary();
+    if (res.ok) {
+      setSaveState({ kind: "ok", when: Date.now() });
+      // Auto-clear the "Saved" flash after a moment.
+      setTimeout(() => {
+        setSaveState((s) => (s.kind === "ok" ? { kind: "idle" } : s));
+      }, 2500);
+    } else {
+      setSaveState({ kind: "err", text: res.error });
+    }
+  }
   // Composition collapses by default so the pre-cook table stays scannable.
   // Auto-expand new solutions (no components filled in yet) so the rep isn't
   // confused about where to add them.
@@ -2535,18 +2814,83 @@ function SolutionRow({
             }}
           >
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span
+              <div
                 style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "var(--teal-700, #1d6c7b)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                   marginBottom: 2,
                 }}
               >
-                Solution
-              </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--teal-700, #1d6c7b)",
+                  }}
+                >
+                  Solution
+                </span>
+                <span
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {saveState.kind === "ok" ? (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: "var(--teal-700, #1d6c7b)",
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Saved to library
+                    </span>
+                  ) : saveState.kind === "err" ? (
+                    <span
+                      title={saveState.text}
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: "#8b2f2f",
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Save failed
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!canSave || saveState.kind === "saving"}
+                    title={
+                      canSave
+                        ? "Save this solution to the library so other formulas can pick it"
+                        : "Give the solution a name and at least one component before saving"
+                    }
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: canSave
+                        ? "var(--teal-700, #1d6c7b)"
+                        : "var(--ink-3, #8a9498)",
+                      background: "transparent",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 6,
+                      padding: "2px 8px",
+                      cursor:
+                        canSave && saveState.kind !== "saving" ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {saveState.kind === "saving" ? "Saving…" : "Save to library"}
+                  </button>
+                </span>
+              </div>
               <input
                 type="text"
                 value={row.customName ?? ""}
@@ -3185,6 +3529,22 @@ function IngredientPicker({
                       }}
                     >
                       Fishbowl
+                    </span>
+                  ) : r.source === "builtin" ? (
+                    <span
+                      title="Built-in ingredient — always available regardless of Fishbowl/raw_materials"
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "var(--teal-700, #1d6c7b)",
+                        border: "1px dashed var(--teal-700, #1d6c7b)",
+                        borderRadius: 999,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      Built-in
                     </span>
                   ) : null}
                 </div>
