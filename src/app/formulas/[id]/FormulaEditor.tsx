@@ -669,31 +669,23 @@ export default function FormulaEditor({
           background: "var(--cream-soft, #fbf6ec)",
           border: "1px solid var(--line, #e3dcc9)",
           borderRadius: 10,
-          padding: "18px 16px 14px",
-          marginTop: 32,
+          padding: "14px 16px",
           marginBottom: 14,
           boxShadow: "0 2px 6px rgba(15,74,86,0.06)",
         }}
       >
-        {/* File-tab title. Sticks up above the card so the identity
-            block reads like a labeled folder. */}
+        {/* Card title — bold, teal, with a thin teal underline to
+            anchor it inside the card without a separate tab shape. */}
         <div
           style={{
-            position: "absolute",
-            top: -28,
-            left: 14,
-            padding: "6px 18px 8px",
-            background: "var(--cream, #f6efe3)",
-            border: "1px solid var(--line, #e3dcc9)",
-            borderBottom: "1px solid var(--cream-soft, #fbf6ec)",
-            borderTopLeftRadius: 10,
-            borderTopRightRadius: 10,
-            boxShadow: "0 -1px 2px rgba(15,74,86,0.04)",
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: 800,
             color: "var(--teal-900, #0f4a56)",
-            letterSpacing: "-0.005em",
+            letterSpacing: "-0.01em",
             lineHeight: 1.15,
+            paddingBottom: 8,
+            marginBottom: 12,
+            borderBottom: "2px solid var(--teal-700, #1d6c7b)",
           }}
         >
           Product Details
@@ -1886,14 +1878,10 @@ function BlendSectionCard({
   return (
     <section
       style={{
-        // Extra top margin so the file-tab title has room to protrude
-        // above the card body without overlapping the section above.
-        marginTop: 32,
         marginBottom: 14,
         border: "1px solid var(--line, #e3dcc9)",
         borderRadius: 8,
         background: "var(--paper, #fffdf8)",
-        position: "relative",
         // overflow: visible so the ingredient-picker's absolute-positioned
         // results dropdown can extend below the section boundary. The
         // header's border-radius is handled per-corner instead of relying
@@ -1901,21 +1889,16 @@ function BlendSectionCard({
         overflow: "visible",
       }}
     >
-      {/* Title tab — sticks up above the card like the tab on a file
-          folder. The bottom border sits flush with the card's top edge
-          so the tab reads as one continuous shape with the body. */}
+      {/* Card header — cream band across the top of the card with a
+          teal divider underneath. The bold title reads as the card's
+          identity without introducing a floating tab shape. */}
       <header
         style={{
-          position: "absolute",
-          top: -28,
-          left: 14,
-          padding: "6px 18px 8px",
+          padding: "14px 18px 12px",
           background: "var(--cream, #f6efe3)",
-          border: "1px solid var(--line, #e3dcc9)",
-          borderBottom: "1px solid var(--paper, #fffdf8)",
-          borderTopLeftRadius: 10,
-          borderTopRightRadius: 10,
-          boxShadow: "0 -1px 2px rgba(15,74,86,0.04)",
+          borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+          borderTopLeftRadius: 8,
+          borderTopRightRadius: 8,
         }}
       >
         <div
@@ -1929,19 +1912,16 @@ function BlendSectionCard({
         >
           {label}
         </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--ink-3, #8a9498)",
+            marginTop: 4,
+          }}
+        >
+          {hint}
+        </div>
       </header>
-      {/* Hint sits inside the body, just below the tab, so it can wrap
-          without stretching the tab wider than needed. */}
-      <div
-        style={{
-          padding: "12px 16px 10px",
-          borderBottom: "1px solid var(--line-2, #efe9da)",
-          fontSize: 12,
-          color: "var(--ink-3, #8a9498)",
-        }}
-      >
-        {hint}
-      </div>
 
       {rows.length === 0 ? (
         <div
