@@ -2098,6 +2098,7 @@ function BlendSectionCard({
                     key={row.id}
                     row={row}
                     rawMaterials={rawMaterials}
+                    savedSolutions={savedSolutions}
                     onUpdate={(patch) => onUpdate(row.id, patch)}
                     onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
                     onRemove={() => onRemoveRow(row.id)}
@@ -2775,12 +2776,14 @@ function BlendIngredientRow({
 function SolutionRow({
   row,
   rawMaterials,
+  savedSolutions,
   onUpdate,
   onSaveToLibrary,
   onRemove,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
+  savedSolutions: SavedSolution[];
   onUpdate: (patch: Partial<GummyFormulaIngredient>) => void;
   onSaveToLibrary: () => Promise<
     { ok: true; solution: SavedSolution } | { ok: false; error: string }
@@ -2798,6 +2801,30 @@ function SolutionRow({
   const totalPct = components.reduce((s, c) => s + (Number(c.pct) || 0), 0);
   const nameTrimmed = (row.customName ?? "").trim();
   const canSave = nameTrimmed.length > 0 && components.length > 0;
+
+  // Is the current row already in the library? Check by case-insensitive
+  // name match. If the name matches AND the components look the same
+  // (same identifiers and same %), it's an exact match — show a static
+  // "Saved to library" pill and hide the Save button. If just the name
+  // matches (but components differ), fall back to showing a save button
+  // so the rep can update the library entry.
+  const librarySolution = useMemo(() => {
+    if (!nameTrimmed) return null;
+    const lower = nameTrimmed.toLowerCase();
+    return savedSolutions.find((s) => s.name.trim().toLowerCase() === lower) ?? null;
+  }, [nameTrimmed, savedSolutions]);
+  const componentsMatchLibrary = useMemo(() => {
+    if (!librarySolution) return false;
+    if (components.length !== librarySolution.components.length) return false;
+    // Compare by (rawMaterialId | rawMaterialFpCode | customName) + pct.
+    // Component ids differ per instance so we ignore them.
+    const key = (c: SolutionComponent) =>
+      `${c.rawMaterialId ?? ""}|${(c.rawMaterialFpCode ?? "").toUpperCase()}|${(c.customName ?? "").trim().toLowerCase()}|${Number(c.pct) || 0}`;
+    const rowKeys = components.map(key).sort();
+    const libKeys = librarySolution.components.map(key).sort();
+    return rowKeys.every((k, i) => k === libKeys[i]);
+  }, [librarySolution, components]);
+  const isAlreadySaved = !!librarySolution && componentsMatchLibrary;
   // Once a solution has a name, collapse to a pill (like the ingredient
   // picker's picked state). "Change" flips back to editing so the rep
   // can rename or swap the whole solution out.
@@ -2904,59 +2931,88 @@ function SolutionRow({
                 <span
                   style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
-                  {saveState.kind === "ok" ? (
+                  {isAlreadySaved ? (
+                    // Solution already exists in the library with the
+                    // exact same components — no reason to show a save
+                    // button. Static "In library" pill instead.
                     <span
+                      title="This solution matches an entry in the library"
                       style={{
                         fontSize: 10.5,
                         fontWeight: 700,
-                        color: "var(--teal-700, #1d6c7b)",
                         letterSpacing: "0.06em",
                         textTransform: "uppercase",
+                        color: "var(--teal-700, #1d6c7b)",
+                        border: "1px solid var(--teal-700, #1d6c7b)",
+                        borderRadius: 6,
+                        padding: "2px 8px",
                       }}
                     >
                       Saved to library
                     </span>
-                  ) : saveState.kind === "err" ? (
-                    <span
-                      title={saveState.text}
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        color: "#8b2f2f",
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Save failed
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={!canSave || saveState.kind === "saving"}
-                    title={
-                      canSave
-                        ? "Save this solution to the library so other formulas can pick it"
-                        : "Give the solution a name and at least one component before saving"
-                    }
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: canSave
-                        ? "var(--teal-700, #1d6c7b)"
-                        : "var(--ink-3, #8a9498)",
-                      background: "transparent",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 6,
-                      padding: "2px 8px",
-                      cursor:
-                        canSave && saveState.kind !== "saving" ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    {saveState.kind === "saving" ? "Saving…" : "Save to library"}
-                  </button>
+                  ) : (
+                    <>
+                      {saveState.kind === "ok" ? (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: "var(--teal-700, #1d6c7b)",
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Saved to library
+                        </span>
+                      ) : saveState.kind === "err" ? (
+                        <span
+                          title={saveState.text}
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: "#8b2f2f",
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Save failed
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={!canSave || saveState.kind === "saving"}
+                        title={
+                          canSave
+                            ? librarySolution
+                              ? "This name matches a library entry but components differ — click to overwrite the library version"
+                              : "Save this solution to the library so other formulas can pick it"
+                            : "Give the solution a name and at least one component before saving"
+                        }
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          color: canSave
+                            ? "var(--teal-700, #1d6c7b)"
+                            : "var(--ink-3, #8a9498)",
+                          background: "transparent",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 6,
+                          padding: "2px 8px",
+                          cursor:
+                            canSave && saveState.kind !== "saving" ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        {saveState.kind === "saving"
+                          ? "Saving…"
+                          : librarySolution
+                            ? "Update in library"
+                            : "Save to library"}
+                      </button>
+                    </>
+                  )}
                 </span>
               </div>
               {nameTrimmed !== "" && !nameEditing ? (
