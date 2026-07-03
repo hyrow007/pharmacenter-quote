@@ -1659,10 +1659,8 @@ function BlendSectionCard({
       >
         <div
           style={{
-            fontSize: 10.5,
+            fontSize: 13,
             fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
             color: "var(--teal-900, #0f4a56)",
           }}
         >

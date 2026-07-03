@@ -31,8 +31,7 @@ export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
 };
 
 export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
-  "pre-cook":
-    "Ingredients weighed in and cooked together. Water in the syrup + solutions boils off during cooking.",
+  "pre-cook": "Ingredients weighed in before being cooked.",
   secondary: "Added after cooking is complete.",
   final: "Colors, flavors, and any last-step masking agents.",
 };
