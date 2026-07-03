@@ -2286,9 +2286,25 @@ function BlendSectionCard({
                   whiteSpace: "nowrap",
                 }}
               >
-                <span style={{ whiteSpace: "nowrap" }}>
-                  {totalG.toFixed(totalDecimals)}
-                  <span style={{ color: "var(--ink-3, #8a9498)" }}> g</span>
+                {/* Mirror the ingredient rows' inline-flex layout so the
+                    "g" glyph sits at the exact same X-position as the
+                    "g" spans above. */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span>{totalG.toFixed(totalDecimals)}</span>
+                  <span
+                    style={{
+                      color: "var(--ink-3, #8a9498)",
+                      fontWeight: 400,
+                    }}
+                  >
+                    g
+                  </span>
                 </span>
               </BTd>
               <BTd style={{ padding: "8px 6px" }}>
