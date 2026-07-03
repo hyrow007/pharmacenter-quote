@@ -2846,7 +2846,7 @@ function SolutionRow({
         transition: "background 80ms ease",
       }}
     >
-      <td colSpan={3} style={{ padding: "10px 12px", verticalAlign: "top" }}>
+      <td colSpan={3} style={{ padding: "10px 0", verticalAlign: "top" }}>
         <div
           style={{
             display: "flex",
@@ -2866,7 +2866,10 @@ function SolutionRow({
               alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            {/* Picker column — pad-left 12 to match BTd horizontal
+                padding so the name/label lines up with ingredient
+                pickers above. */}
+            <div style={{ display: "flex", flexDirection: "column", paddingLeft: 12 }}>
               <div
                 style={{
                   display: "flex",
@@ -3013,11 +3016,13 @@ function SolutionRow({
                 />
               )}
             </div>
+            {/* Grams cell — mirrors BTd padding "8px 12px" so the input
+                sits at the same X-coordinate as the grams input in
+                ingredient rows above/below. */}
             <div
               style={{
                 textAlign: "right",
-                paddingRight: 12,
-                paddingLeft: 12,
+                padding: "0 12px",
               }}
             >
               <div
@@ -3079,8 +3084,11 @@ function SolutionRow({
           {/* Composition — collapsible sub-section. Header (Composition
               label + running total + chevron) is always visible; the
               component list only renders when expanded. Kept visually
-              quiet with just a thin left rule when open. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              quiet with just a thin left rule when open.
+              paddingLeft/Right 12 mirrors the outer BTd horizontal
+              padding so this sub-section still lines up with the
+              ingredient columns above. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px" }}>
             <button
               type="button"
               onClick={() => setExpanded((s) => !s)}
