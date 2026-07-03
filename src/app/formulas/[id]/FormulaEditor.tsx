@@ -157,6 +157,15 @@ export default function FormulaEditor({
       : [emptyIngredient()],
   );
   const [versionNotes, setVersionNotes] = useState<string>("");
+  // Process notes are per-blend-phase free text (mixing steps, pH targets,
+  // hydration times). Stored on the version alongside ingredients. Keyed
+  // by BlendPhase string.
+  const [processNotes, setProcessNotes] = useState<Partial<Record<BlendPhase, string>>>(
+    seedVersion.processNotes ?? {},
+  );
+  function setPhaseProcessNote(phase: BlendPhase, text: string) {
+    setProcessNotes((prev) => ({ ...prev, [phase]: text }));
+  }
 
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
@@ -187,6 +196,7 @@ export default function FormulaEditor({
       gummyPieceWeightG,
       yieldPct,
       ingredients,
+      processNotes,
     };
     try {
       const seed = JSON.parse(loadedSnapshot);
@@ -198,6 +208,7 @@ export default function FormulaEditor({
         gummyPieceWeightG: seed.gummyPieceWeightG,
         yieldPct: seed.yieldPct,
         ingredients: seed.ingredients,
+        processNotes: seed.processNotes ?? {},
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -211,6 +222,7 @@ export default function FormulaEditor({
     gummyPieceWeightG,
     yieldPct,
     ingredients,
+    processNotes,
     loadedSnapshot,
   ]);
 
@@ -408,6 +420,7 @@ export default function FormulaEditor({
               gummyPieceWeightG,
               yieldPct,
               ingredients,
+              processNotes,
               notes: versionNotes.trim() || null,
             }),
           },
@@ -886,6 +899,8 @@ export default function FormulaEditor({
             onUpdate={updateRow}
             onAddRow={() => addRowForPhase("pre-cook")}
             onRemoveRow={removeRow}
+            processNote={processNotes["pre-cook"] ?? ""}
+            onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
           />
         </>
       )}
@@ -1621,6 +1636,8 @@ function BlendSectionCard({
   onUpdate,
   onAddRow,
   onRemoveRow,
+  processNote,
+  onProcessNoteChange,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -1629,6 +1646,8 @@ function BlendSectionCard({
   onUpdate: (id: string, patch: Partial<GummyFormulaIngredient>) => void;
   onAddRow: () => void;
   onRemoveRow: (id: string) => void;
+  processNote: string;
+  onProcessNoteChange: (text: string) => void;
 }) {
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
@@ -1879,6 +1898,44 @@ function BlendSectionCard({
         >
           + Add ingredient
         </button>
+      </div>
+
+      {/* Process notes — free-text mixing instructions for this blend
+          phase (pre-blend pectin, hydration times, pH targets, etc.).
+          Persisted on the version's process_notes JSONB column keyed by
+          the blend phase. */}
+      <div
+        style={{
+          padding: "10px 14px 14px",
+          borderTop: "1px solid var(--line-2, #efe9da)",
+          background: "var(--cream-soft, #fbf6ec)",
+        }}
+      >
+        <label style={{ display: "block", marginBottom: 6 }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+            }}
+          >
+            Process:
+          </span>
+        </label>
+        <textarea
+          value={processNote}
+          onChange={(e) => onProcessNoteChange(e.target.value)}
+          rows={4}
+          placeholder="e.g. In a suitable container pre-blend pectin and 1/2 sugar and when well dry blended add warm water (100-110F) to allow the pectin to hydrate (about 30 min)…"
+          className="pricing__input"
+          style={{
+            width: "100%",
+            resize: "vertical",
+            fontFamily: "inherit",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+          }}
+        />
       </div>
     </section>
   );

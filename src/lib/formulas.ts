@@ -126,7 +126,12 @@ export type GummyFormulaVersion = {
   gummyPieceWeightG: number;
   yieldPct: number;             // 0..100 (before daily loss)
   ingredients: GummyFormulaIngredient[];
-  notes: string | null;         // why this version was cut
+  // Per-blend-phase process notes (mixing instructions, pH targets,
+  // hydration times, etc.). Keyed by blend phase so each section carries
+  // its own free-text procedure. Optional for backward compat with
+  // versions authored before the field existed.
+  processNotes?: Partial<Record<BlendPhase, string>> | null;
+  notes: string | null;         // why this version was cut (version-level)
   createdAt: string;            // ISO
   createdByEmail: string | null;
 };
@@ -610,6 +615,9 @@ export function versionFromRow(row: {
   gummy_piece_weight_g: number | string;
   yield_pct: number | string;
   ingredients: GummyFormulaIngredient[] | null;
+  // Optional so pre-migration rows don't blow up TS. Reader coerces
+  // null/undefined into empty {}.
+  process_notes?: Partial<Record<BlendPhase, string>> | null;
   notes: string | null;
   created_at: string;
   created_by_email: string | null;
@@ -628,6 +636,10 @@ export function versionFromRow(row: {
     gummyPieceWeightG: n(row.gummy_piece_weight_g),
     yieldPct: n(row.yield_pct),
     ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
+    processNotes:
+      row.process_notes && typeof row.process_notes === "object"
+        ? row.process_notes
+        : {},
     notes: row.notes,
     createdAt: row.created_at,
     createdByEmail: row.created_by_email,

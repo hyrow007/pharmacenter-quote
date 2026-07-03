@@ -49,7 +49,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("gummy_formula_versions")
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, notes, created_at, created_by_email",
     )
     .eq("formula_id", id)
     .eq("version_num", versionNumParsed)

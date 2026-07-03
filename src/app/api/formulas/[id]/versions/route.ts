@@ -104,6 +104,7 @@ type PostBody = {
   gummyPieceWeightG?: number;
   yieldPct?: number;
   ingredients?: GummyFormulaIngredient[];
+  processNotes?: Record<string, string> | null;
   notes?: string | null;
 };
 
@@ -138,6 +139,7 @@ export async function POST(
   }
 
   let currentIngredients: GummyFormulaIngredient[] = [];
+  let currentProcessNotes: Record<string, string> = {};
   // Explicit `number` type on each field — spreading FORMULA_VERSION_DEFAULTS
   // (which is `as const`) narrows to literal types like `250` / `100`, and
   // then the reassignment below to `Number(prev.bench_batch_g)` (a plain
@@ -154,7 +156,7 @@ export async function POST(
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients",
+        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -172,6 +174,9 @@ export async function POST(
         yieldPct: Number(prev.yield_pct),
       };
       currentIngredients = Array.isArray(prev.ingredients) ? prev.ingredients : [];
+      if (prev.process_notes && typeof prev.process_notes === "object") {
+        currentProcessNotes = prev.process_notes as Record<string, string>;
+      }
     }
   }
 
@@ -189,11 +194,15 @@ export async function POST(
       gummy_piece_weight_g: body.gummyPieceWeightG ?? currentParams.gummyPieceWeightG,
       yield_pct: body.yieldPct ?? currentParams.yieldPct,
       ingredients: Array.isArray(body.ingredients) ? body.ingredients : currentIngredients,
+      process_notes:
+        body.processNotes && typeof body.processNotes === "object"
+          ? body.processNotes
+          : currentProcessNotes,
       notes: body.notes ?? null,
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, notes, created_at, created_by_email",
     )
     .single();
 
