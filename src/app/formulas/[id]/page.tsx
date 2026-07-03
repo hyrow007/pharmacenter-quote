@@ -112,7 +112,10 @@ export default async function FormulaEditorPage({
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
-        <div className="page__inner--narrow">
+        {/* Use the wider standard container (1240px) so the 5-field
+            identity header + Save button fit on a single row without
+            wrapping Flavor to a second line. */}
+        <div className="page__inner">
           <a
             href="/formulas"
             style={{

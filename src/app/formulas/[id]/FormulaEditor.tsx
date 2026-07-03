@@ -926,7 +926,13 @@ function Field({
    *  Shape) can hold their compact width. */
   grow?: boolean;
 }) {
-  const flexBasis = grow ? { flex: "1 1 220px", minWidth: 180 } : { flex: `0 0 ${width ?? 160}px` };
+  // Grow columns share leftover row space with each other. maxWidth caps
+  // them so if one wraps to the next line the survivors don't stretch to
+  // fill the whole row (which left a big empty gap between Name and Piece
+  // Weight before this cap was in place).
+  const flexBasis = grow
+    ? { flex: "1 1 240px", minWidth: 180, maxWidth: 340 }
+    : { flex: `0 0 ${width ?? 160}px` };
   return (
     <label
       style={{
