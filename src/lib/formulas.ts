@@ -14,17 +14,51 @@
 //   /workflow/[id]/gummy-formula  — picker + reference view
 
 // -----------------------------------------------------------------------------
+// Blend phases — the ordered stages of a gummy recipe as they appear on the
+// physical formula sheet. Pre-cook goes in first, gets cooked (water boils
+// off), then Secondary + Final blends fold in until the finished blend
+// hits the target weight (bench_batch_g).
+//
+// Rendered in Bench top tab as one card per phase.
+// -----------------------------------------------------------------------------
+export const BLEND_PHASES = ["pre-cook", "secondary", "final"] as const;
+export type BlendPhase = (typeof BLEND_PHASES)[number];
+
+export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
+  "pre-cook": "Pre-cook blend",
+  secondary: "Secondary blend",
+  final: "Final blend",
+};
+
+export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
+  "pre-cook":
+    "Ingredients weighed in and cooked together. Water in the syrup + solutions boils off during cooking.",
+  secondary: "Added after cooking is complete.",
+  final: "Colors, flavors, and any last-step masking agents.",
+};
+
+// -----------------------------------------------------------------------------
 // Ingredient row shape
 // -----------------------------------------------------------------------------
 //
-// This is the same shape used by the legacy in-workflow GummyFormula so a
-// migration from inline → catalog is trivial (copy `rows` verbatim into a
-// new formula's first version).
+// Backward-compat notes:
+//   - `pctInFinished` (0..100) is the legacy % model. Still supported for
+//     rows written before the blend-phase overhaul.
+//   - `grams` is the new primary input. Matches how the physical formula
+//     sheet is written and lets us handle the pre-cook total naturally
+//     (which is larger than the finished 250g target thanks to water loss).
+//   - When `grams` is set, cost math uses it directly. When only
+//     `pctInFinished` is set, cost is derived via pct × bench_batch_g.
+//   - `blendPhase` groups the row under a section header on the Bench top
+//     tab. Legacy rows without a phase render under the shared table
+//     labelled "Ungrouped" until they're assigned to a phase.
 export type GummyFormulaIngredient = {
   id: string;                              // stable client-generated row id
   rawMaterialId: string | null;            // FK into raw_materials; null = custom one-off
   customName: string | null;               // display name when rawMaterialId is null
-  pctInFinished: number;                   // 0..100
+  pctInFinished: number;                   // 0..100 (legacy)
+  grams?: number | null;                   // input weight in the recipe; primary field for new rows
+  blendPhase?: BlendPhase | null;          // groups the row under a section on Bench top
   costPerKgOverride: number | null;        // dollars/kg; null = use raw material default
   solidsOverride: number | null;           // 0..1; null = use raw material default
   notes: string | null;
@@ -167,6 +201,7 @@ export function computeMaterialCostPerGummy(
     | "batchKg"
     | "batchesPerDay"
     | "fixedLossKgPerDay"
+    | "benchBatchG"
   >,
   lookup: (rawMaterialId: string) => RawMaterialCostLookup | null,
 ): {
@@ -175,8 +210,9 @@ export function computeMaterialCostPerGummy(
   dailyEffectiveYield: number;      // 0..1
   hasCompleteCosts: boolean;        // false if any line's cost is null
 } {
-  let dollarsPerGramOfBlend = 0;
+  let dollarsPerBench = 0;
   let hasCompleteCosts = true;
+  const benchG = Math.max(0.0001, version.benchBatchG);
 
   for (const line of version.ingredients) {
     // Resolve cost/kg + solids: line overrides > raw-material defaults.
@@ -203,16 +239,31 @@ export function computeMaterialCostPerGummy(
       continue;
     }
 
-    const pct = (line.pctInFinished || 0) / 100;
-    // $/g of finished blend contributed by this line.
-    dollarsPerGramOfBlend += (costPerKg / 1000) * pct * solids;
+    // Grams-first cost math: if grams is set, cost the row directly
+    // (grams × $/kg / 1000). Falls back to pct × bench for legacy rows
+    // authored before the grams field existed.
+    //
+    // Solids doesn't factor into $ (cost is per as-purchased kg) so it's
+    // only used elsewhere for the audit trail / blend-composition view.
+    void solids;
+    let rowCost: number;
+    if (line.grams !== null && line.grams !== undefined && Number.isFinite(line.grams)) {
+      rowCost = (line.grams / 1000) * costPerKg;
+    } else {
+      const pct = (line.pctInFinished || 0) / 100;
+      const gramsFromPct = pct * benchG;
+      rowCost = (gramsFromPct / 1000) * costPerKg;
+    }
+    dollarsPerBench += rowCost;
   }
 
   // Apply process yield (before the daily loss).
   const yieldFactor = Math.max(0.0001, (version.yieldPct || 100) / 100);
-  dollarsPerGramOfBlend = dollarsPerGramOfBlend / yieldFactor;
+  const yieldedDollarsPerBench = dollarsPerBench / yieldFactor;
 
-  const dollarsPerGummy = dollarsPerGramOfBlend * version.gummyPieceWeightG;
+  // Cost per gummy = bench cost / gummies per bench batch.
+  const gummiesPerBench = benchG / Math.max(0.0001, version.gummyPieceWeightG);
+  const dollarsPerGummy = gummiesPerBench > 0 ? yieldedDollarsPerBench / gummiesPerBench : 0;
 
   // Daily fixed-loss scaler.
   const totalKgPerDay = Math.max(

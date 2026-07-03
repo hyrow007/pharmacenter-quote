@@ -24,12 +24,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BLEND_PHASE_HINTS,
+  BLEND_PHASE_LABELS,
   FORMULA_SHAPES,
   FORMULA_VERSION_DEFAULTS,
   computeMaterialCostPerGummy,
   emptyIngredient,
   ingredientGramsForBench,
   ingredientKgForScaleUp,
+  type BlendPhase,
   type GummyFormulaAuditRecord,
   type GummyFormulaIngredient,
   type GummyFormulaRecord,
@@ -434,9 +437,41 @@ export default function FormulaEditor({
   function addRow() {
     setIngredients((prev) => [...prev, emptyIngredient()]);
   }
-  function removeRow(id: string) {
-    setIngredients((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.id !== id)));
+  function addRowForPhase(phase: BlendPhase) {
+    setIngredients((prev) => [
+      ...prev,
+      { ...emptyIngredient(), blendPhase: phase, grams: 0 },
+    ]);
   }
+  function removeRow(id: string) {
+    // Removing the last-ever ingredient row would leave the shared table
+    // stuck, so keep at least one row unless there are phase-scoped rows
+    // to fall back on.
+    setIngredients((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((r) => r.id !== id);
+    });
+  }
+
+  // Group ingredients by blendPhase for the sectioned bench-top view. Rows
+  // without a phase (legacy or explicitly unassigned) stay in the shared
+  // table at the bottom.
+  const phaseIngredients = useMemo(() => {
+    const groups: Record<BlendPhase, GummyFormulaIngredient[]> = {
+      "pre-cook": [],
+      secondary: [],
+      final: [],
+    };
+    const unassigned: GummyFormulaIngredient[] = [];
+    for (const row of ingredients) {
+      if (row.blendPhase && groups[row.blendPhase]) {
+        groups[row.blendPhase].push(row);
+      } else {
+        unassigned.push(row);
+      }
+    }
+    return { groups, unassigned };
+  }, [ingredients]);
 
   return (
     <div>
@@ -823,13 +858,28 @@ export default function FormulaEditor({
       </div>
 
       {/* ============ Tab content ============ */}
-      {tab === "bench" ? (
-        <BenchTopTab
-          benchBatchG={benchBatchG}
-          setBenchBatchG={setBenchBatchG}
-          totalPct={totalPct}
-        />
-      ) : tab === "scale" ? (
+      {tab === "bench" && (
+        <>
+          <BenchTopTab
+            benchBatchG={benchBatchG}
+            setBenchBatchG={setBenchBatchG}
+            totalPct={totalPct}
+          />
+          {/* Blend-phase sections. Currently only Pre-cook is rendered;
+              Secondary + Final will drop in the same way as the recipe
+              modeling continues. Order matches the physical sheet. */}
+          <BlendSectionCard
+            phase="pre-cook"
+            rows={phaseIngredients.groups["pre-cook"]}
+            rawMaterials={rawMaterials}
+            rmById={rmById}
+            onUpdate={updateRow}
+            onAddRow={() => addRowForPhase("pre-cook")}
+            onRemoveRow={removeRow}
+          />
+        </>
+      )}
+      {tab === "scale" && (
         <ScaleUpTab
           batchKg={batchKg}
           setBatchKg={setBatchKg}
@@ -843,7 +893,8 @@ export default function FormulaEditor({
           setYieldPct={setYieldPct}
           effectiveYield={cost.dailyEffectiveYield}
         />
-      ) : (
+      )}
+      {tab === "cost" && (
         <CostTab
           cost={cost}
           gummyPieceWeightG={gummyPieceWeightG}
@@ -852,20 +903,29 @@ export default function FormulaEditor({
         />
       )}
 
-      {/* ============ Ingredient table (shared) ============ */}
-      <IngredientTable
-        tab={tab}
-        ingredients={ingredients}
-        rawMaterials={rawMaterials}
-        benchGramById={benchGramById}
-        scaleKgById={scaleKgById}
-        onUpdate={updateRow}
-        onAdd={addRow}
-        onRemove={removeRow}
-        rmById={rmById}
-        yieldPct={yieldPct}
-        gummyPieceWeightG={gummyPieceWeightG}
-      />
+      {/* ============ Ingredient table (shared) ============
+          On the Bench top tab we only show rows without a blendPhase
+          (legacy / unassigned) here — phase-scoped rows live in the
+          BlendSectionCard(s) above. On Scale up + Material costing tabs
+          the flat table shows EVERY row so the rep sees production-side
+          totals across all phases in one place. */}
+      {tab === "bench" && phaseIngredients.unassigned.length === 0 ? null : (
+        <IngredientTable
+          tab={tab}
+          ingredients={
+            tab === "bench" ? phaseIngredients.unassigned : ingredients
+          }
+          rawMaterials={rawMaterials}
+          benchGramById={benchGramById}
+          scaleKgById={scaleKgById}
+          onUpdate={updateRow}
+          onAdd={addRow}
+          onRemove={removeRow}
+          rmById={rmById}
+          yieldPct={yieldPct}
+          gummyPieceWeightG={gummyPieceWeightG}
+        />
+      )}
 
       {/* Activity timeline (audit log). Renders below the ingredient
           table on every tab so users can always see history without
@@ -1532,6 +1592,282 @@ function ITd({ children, style }: { children: React.ReactNode; style?: React.CSS
         ...style,
       }}
     >
+      {children}
+    </td>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// BlendSectionCard — one card per blend phase (Pre-cook / Secondary / Final).
+// Contains the phase's ingredient table (ingredient picker + grams + cost),
+// a subtotal row, and its own "+ Add ingredient" button. Independent from
+// the other phases' cards.
+// -----------------------------------------------------------------------------
+function BlendSectionCard({
+  phase,
+  rows,
+  rawMaterials,
+  rmById,
+  onUpdate,
+  onAddRow,
+  onRemoveRow,
+}: {
+  phase: BlendPhase;
+  rows: GummyFormulaIngredient[];
+  rawMaterials: RawMaterialOption[];
+  rmById: Map<string, RawMaterialOption>;
+  onUpdate: (id: string, patch: Partial<GummyFormulaIngredient>) => void;
+  onAddRow: () => void;
+  onRemoveRow: (id: string) => void;
+}) {
+  const label = BLEND_PHASE_LABELS[phase];
+  const hint = BLEND_PHASE_HINTS[phase];
+  const totalG = rows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
+
+  return (
+    <section
+      style={{
+        marginBottom: 14,
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          padding: "10px 14px",
+          borderBottom: "1px solid var(--line-2, #efe9da)",
+          background: "var(--cream, #f6efe3)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--ink-3, #8a9498)",
+            marginTop: 2,
+          }}
+        >
+          {hint}
+        </div>
+      </header>
+
+      {rows.length === 0 ? (
+        <div
+          style={{
+            padding: "18px 14px",
+            textAlign: "center",
+            color: "var(--ink-3, #8a9498)",
+            fontSize: 12,
+            background: "var(--cream-soft, #fbf6ec)",
+          }}
+        >
+          No ingredients yet. Add the first one below.
+        </div>
+      ) : (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 12.5,
+          }}
+        >
+          <thead>
+            <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+              <BTh>Ingredient</BTh>
+              <BTh style={{ textAlign: "right", width: 120 }}>Grams</BTh>
+              <BTh style={{ width: 40 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const rm = row.rawMaterialId ? rmById.get(row.rawMaterialId) ?? null : null;
+              return (
+                <tr
+                  key={row.id}
+                  style={{ borderTop: "1px solid var(--line-2, #efe9da)" }}
+                >
+                  <BTd>
+                    <select
+                      value={row.rawMaterialId ?? ""}
+                      onChange={(e) =>
+                        onUpdate(row.id, {
+                          rawMaterialId: e.target.value || null,
+                          costPerKgOverride: null,
+                          solidsOverride: null,
+                        })
+                      }
+                      className="pricing__input"
+                      style={{ width: "100%" }}
+                    >
+                      <option value="">— pick a raw material —</option>
+                      {rawMaterials.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.fpCode ? `${r.fpCode} · ` : ""}
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                    {rm?.category ? (
+                      <div
+                        style={{
+                          fontSize: 10.5,
+                          color: "var(--ink-3, #8a9498)",
+                          marginTop: 2,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {rm.category} blend material
+                      </div>
+                    ) : null}
+                  </BTd>
+                  <BTd style={{ textAlign: "right" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        type="number"
+                        value={
+                          row.grams !== null && row.grams !== undefined
+                            ? row.grams
+                            : 0
+                        }
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          onUpdate(row.id, {
+                            grams: Number.isFinite(n) ? n : 0,
+                          });
+                        }}
+                        step="0.1"
+                        min={0}
+                        className="pricing__input"
+                        style={{
+                          width: 90,
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "var(--ink-3, #8a9498)",
+                        }}
+                      >
+                        g
+                      </span>
+                    </div>
+                  </BTd>
+                  <BTd style={{ textAlign: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveRow(row.id)}
+                      title="Remove row"
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--ink-3, #8a9498)",
+                        cursor: "pointer",
+                        fontSize: 16,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </BTd>
+                </tr>
+              );
+            })}
+            <tr
+              style={{
+                borderTop: "1.5px solid var(--teal-700, #1d6c7b)",
+                background: "var(--cream-soft, #fbf6ec)",
+              }}
+            >
+              <BTd>
+                <strong
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  Tot {label.toLowerCase()}
+                </strong>
+              </BTd>
+              <BTd
+                style={{
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                }}
+              >
+                {totalG.toFixed(3)} g
+              </BTd>
+              <BTd />
+            </tr>
+          </tbody>
+        </table>
+      )}
+      <div
+        style={{
+          padding: "10px 14px",
+          borderTop: "1px solid var(--line-2, #efe9da)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onAddRow}
+          style={{
+            padding: "6px 12px",
+            background: "transparent",
+            color: "var(--teal-900, #0f4a56)",
+            border: "1px dashed var(--line, #e3dcc9)",
+            borderRadius: 6,
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          + Add ingredient
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function BTh({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <th
+      style={{
+        textAlign: "left",
+        padding: "8px 12px",
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: "var(--ink-3, #8a9498)",
+        borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+        ...style,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+function BTd({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <td style={{ padding: "8px 12px", verticalAlign: "middle", ...style }}>
       {children}
     </td>
   );
