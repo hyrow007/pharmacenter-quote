@@ -2095,42 +2095,40 @@ function BlendSectionCard({
                   fontVariantNumeric: "tabular-nums",
                   fontWeight: 700,
                   color: "var(--teal-900, #0f4a56)",
+                  whiteSpace: "nowrap",
                 }}
               >
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  {totalG.toFixed(totalDecimals)} g
-                  <select
-                    value={totalDecimals}
-                    onChange={(e) => setTotalDecimals(Number(e.target.value))}
-                    title="Decimal places shown on this total"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: "var(--ink-3, #8a9498)",
-                      background: "transparent",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 4,
-                      padding: "0 2px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {[0, 1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>
-                        {n} dp
-                      </option>
-                    ))}
-                  </select>
+                <span style={{ whiteSpace: "nowrap" }}>
+                  {totalG.toFixed(totalDecimals)}
+                  <span style={{ color: "var(--ink-3, #8a9498)" }}> g</span>
                 </span>
               </BTd>
-              <BTd />
+              <BTd style={{ padding: "8px 6px" }}>
+                <select
+                  value={totalDecimals}
+                  onChange={(e) => setTotalDecimals(Number(e.target.value))}
+                  title="Decimal places shown on this total"
+                  aria-label="Total decimal places"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--ink-3, #8a9498)",
+                    background: "transparent",
+                    border: "1px solid var(--line, #e3dcc9)",
+                    borderRadius: 4,
+                    padding: "0 2px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {[0, 1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n} dp
+                    </option>
+                  ))}
+                </select>
+              </BTd>
             </tr>
           </tbody>
         </table>
