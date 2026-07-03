@@ -2192,6 +2192,12 @@ function BlendSectionCard({
                         className="pricing__input"
                         style={{
                           width: 90,
+                          // Override .pricing__input's `flex: 1` — with
+                          // that default, the width setting was being
+                          // ignored inside the inline-flex parent, so the
+                          // number position drifted from the solution
+                          // rows' identical input below.
+                          flex: "0 0 90px",
                           textAlign: "right",
                           fontVariantNumeric: "tabular-nums",
                         }}
@@ -3046,6 +3052,9 @@ function SolutionRow({
                   className="pricing__input"
                   style={{
                     width: 90,
+                    // Force literal width (see ingredient grams input
+                    // above for why this override is needed).
+                    flex: "0 0 90px",
                     textAlign: "right",
                     fontVariantNumeric: "tabular-nums",
                   }}
