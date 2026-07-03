@@ -2592,13 +2592,15 @@ function SolutionRow({
             </button>
           </div>
 
-          {/* Component list — each ingredient in the solution with its %. */}
+          {/* Component list — each ingredient in the solution with its %.
+              Kept visually quiet: no background, no full border, just a
+              thin left rule so the composition reads as a sub-section
+              belonging to the solution row above. */}
           <div
             style={{
-              padding: "8px 10px",
-              background: "var(--paper, #fffdf8)",
-              border: "1px solid var(--line-2, #efe9da)",
-              borderRadius: 6,
+              padding: "4px 0 4px 12px",
+              marginLeft: 2,
+              borderLeft: "2px solid var(--line-2, #efe9da)",
               display: "flex",
               flexDirection: "column",
               gap: 6,
