@@ -2854,12 +2854,15 @@ function SolutionRow({
             gap: 8,
           }}
         >
-          {/* Header row — name, grams, remove button. */}
+          {/* Header row — name, grams, remove button. Column widths
+              match the outer ingredient table (grams = 120, delete = 40)
+              so the grams input lines up vertically with ingredient
+              rows above and below. */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 130px 32px",
-              gap: 8,
+              gridTemplateColumns: "1fr 120px 40px",
+              gap: 0,
               alignItems: "center",
             }}
           >
@@ -3010,33 +3013,47 @@ function SolutionRow({
                 />
               )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="number"
-                value={
-                  row.grams !== null && row.grams !== undefined ? row.grams : 0
-                }
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  onUpdate({ grams: Number.isFinite(n) ? n : 0 });
-                }}
-                step="0.1"
-                min={0}
-                className="pricing__input"
+            <div
+              style={{
+                textAlign: "right",
+                paddingRight: 12,
+                paddingLeft: 12,
+              }}
+            >
+              <div
                 style={{
-                  width: "100%",
-                  textAlign: "right",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 12,
-                  color: "var(--ink-3, #8a9498)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
                 }}
               >
-                g
-              </span>
+                <input
+                  type="number"
+                  value={
+                    row.grams !== null && row.grams !== undefined ? row.grams : 0
+                  }
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onUpdate({ grams: Number.isFinite(n) ? n : 0 });
+                  }}
+                  step="0.1"
+                  min={0}
+                  className="pricing__input"
+                  style={{
+                    width: 90,
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "var(--ink-3, #8a9498)",
+                  }}
+                >
+                  g
+                </span>
+              </div>
             </div>
             <button
               type="button"
