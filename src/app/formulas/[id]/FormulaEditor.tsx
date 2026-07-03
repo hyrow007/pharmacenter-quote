@@ -542,6 +542,19 @@ export default function FormulaEditor({
           boxShadow: "0 2px 6px rgba(15,74,86,0.06)",
         }}
       >
+        {/* Card title. First of several — the rest of the cards (Batch
+            reference, Blend sections, Activity) will get their own titles
+            as the layout comes together. */}
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--teal-900, #0f4a56)",
+            marginBottom: 10,
+          }}
+        >
+          Product Details
+        </div>
         {/* Identity row.
             Uses flex-wrap so every column keeps its natural min width and
             the entire row wraps to a second line rather than pushing
