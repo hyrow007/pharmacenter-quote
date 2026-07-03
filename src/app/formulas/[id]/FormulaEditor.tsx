@@ -1687,6 +1687,9 @@ function BlendSectionCard({
 }) {
   const isAtDefault =
     defaultProcessNote.length > 0 && processNote.trim() === defaultProcessNote.trim();
+  // Process text starts read-only. The rep has to click Edit to modify it,
+  // which prevents accidental changes and makes edits deliberate.
+  const [processEditing, setProcessEditing] = useState(false);
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   const totalG = rows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
@@ -1975,25 +1978,45 @@ function BlendSectionCard({
           >
             Process:
           </span>
-          {defaultProcessNote && !isAtDefault ? (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            {defaultProcessNote && !isAtDefault ? (
+              <button
+                type="button"
+                onClick={() => onProcessNoteChange(defaultProcessNote)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--teal-700, #1d6c7b)",
+                  cursor: "pointer",
+                }}
+              >
+                Reset to default
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => onProcessNoteChange(defaultProcessNote)}
+              onClick={() => setProcessEditing((v) => !v)}
               style={{
-                background: "transparent",
-                border: "none",
-                padding: 0,
+                padding: "4px 10px",
+                background: processEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
+                color: processEditing ? "#fff" : "var(--teal-900, #0f4a56)",
+                border: "1px solid var(--teal-700, #1d6c7b)",
+                borderRadius: 6,
                 fontSize: 10.5,
                 fontWeight: 700,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                color: "var(--teal-700, #1d6c7b)",
                 cursor: "pointer",
               }}
             >
-              Reset to default
+              {processEditing ? "Done editing" : "Edit"}
             </button>
-          ) : null}
+          </div>
         </div>
         {isAtDefault ? (
           <div
@@ -2008,20 +2031,44 @@ function BlendSectionCard({
             {PROCESS_NOTES_PLACEHOLDER_NOTICE}
           </div>
         ) : null}
-        <textarea
-          value={processNote}
-          onChange={(e) => onProcessNoteChange(e.target.value)}
-          rows={6}
-          placeholder="Describe the mixing steps, hydration times, pH targets, etc."
-          className="pricing__input"
-          style={{
-            width: "100%",
-            resize: "vertical",
-            fontFamily: "inherit",
-            fontSize: 12.5,
-            lineHeight: 1.5,
-          }}
-        />
+        {processEditing ? (
+          <textarea
+            value={processNote}
+            onChange={(e) => onProcessNoteChange(e.target.value)}
+            rows={6}
+            placeholder="Describe the mixing steps, hydration times, pH targets, etc."
+            className="pricing__input"
+            style={{
+              width: "100%",
+              resize: "vertical",
+              fontFamily: "inherit",
+              fontSize: 12.5,
+              lineHeight: 1.5,
+            }}
+            autoFocus
+          />
+        ) : (
+          // Read-only view. Whitespace: pre-wrap keeps whatever newlines
+          // the rep typed in edit mode. Empty state gets a placeholder
+          // hint since we know the default gets seeded on mount.
+          <div
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              background: "#fff",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              lineHeight: 1.5,
+              color: processNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              minHeight: 60,
+            }}
+          >
+            {processNote.trim() || "No process notes yet — click Edit to add."}
+          </div>
+        )}
       </div>
     </section>
   );
