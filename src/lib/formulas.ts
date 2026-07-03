@@ -54,7 +54,8 @@ export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
 //     labelled "Ungrouped" until they're assigned to a phase.
 export type GummyFormulaIngredient = {
   id: string;                              // stable client-generated row id
-  rawMaterialId: string | null;            // FK into raw_materials; null = custom one-off
+  rawMaterialId: string | null;            // FK into raw_materials; null = Fishbowl-only or custom
+  rawMaterialFpCode?: string | null;       // Fallback identifier when the pick lives only in Fishbowl products, not raw_materials
   customName: string | null;               // display name when rawMaterialId is null
   pctInFinished: number;                   // 0..100 (legacy)
   grams?: number | null;                   // input weight in the recipe; primary field for new rows

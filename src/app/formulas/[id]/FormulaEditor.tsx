@@ -44,6 +44,13 @@ import {
 
 // Raw-material catalog option surfaced to the editor. Serialised from
 // server so the client doesn't need a separate fetch.
+//
+// `source` distinguishes rows that live in the curated raw_materials
+// table (which have full data — cost, solids, category, notes) from
+// rows that only exist as Fishbowl products (fp_code + name, cost null
+// until a raw_materials row is created). Fishbowl-only rows use
+// `id: "fb:PC-RW-XXXX"` — the fp_code is the durable identifier and
+// gets stored on the ingredient row's rawMaterialFpCode field.
 export type RawMaterialOption = {
   id: string;
   fpCode: string | null;
@@ -52,6 +59,7 @@ export type RawMaterialOption = {
   defaultCostPerKg: number | null;
   defaultSolids: number;
   category: "primary" | "secondary" | "final" | "other" | null;
+  source?: "raw_material" | "fishbowl";
 };
 
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
@@ -1694,34 +1702,58 @@ function BlendSectionCard({
           </thead>
           <tbody>
             {rows.map((row) => {
-              const rm = row.rawMaterialId ? rmById.get(row.rawMaterialId) ?? null : null;
+              // Resolve the row to a picker option: try rawMaterialId
+              // first (curated), then fp_code (Fishbowl-only rows use
+              // "fb:CODE" as their id).
+              const resolved =
+                (row.rawMaterialId && rmById.get(row.rawMaterialId)) ||
+                (row.rawMaterialFpCode
+                  ? rawMaterials.find(
+                      (r) =>
+                        (r.fpCode ?? "").toUpperCase() ===
+                        (row.rawMaterialFpCode ?? "").toUpperCase(),
+                    ) ?? null
+                  : null);
               return (
                 <tr
                   key={row.id}
                   style={{ borderTop: "1px solid var(--line-2, #efe9da)" }}
                 >
                   <BTd>
-                    <select
-                      value={row.rawMaterialId ?? ""}
-                      onChange={(e) =>
+                    <IngredientPicker
+                      row={row}
+                      resolved={resolved ?? null}
+                      rawMaterials={rawMaterials}
+                      onPick={(opt) => {
+                        // Curated pick: store rawMaterialId. Fishbowl
+                        // pick: store rawMaterialFpCode. Either way we
+                        // reset the override fields so defaults apply.
+                        if (opt.source === "fishbowl") {
+                          onUpdate(row.id, {
+                            rawMaterialId: null,
+                            rawMaterialFpCode: opt.fpCode,
+                            customName: null,
+                            costPerKgOverride: null,
+                            solidsOverride: null,
+                          });
+                        } else {
+                          onUpdate(row.id, {
+                            rawMaterialId: opt.id,
+                            rawMaterialFpCode: opt.fpCode,
+                            customName: null,
+                            costPerKgOverride: null,
+                            solidsOverride: null,
+                          });
+                        }
+                      }}
+                      onClear={() =>
                         onUpdate(row.id, {
-                          rawMaterialId: e.target.value || null,
-                          costPerKgOverride: null,
-                          solidsOverride: null,
+                          rawMaterialId: null,
+                          rawMaterialFpCode: null,
                         })
                       }
-                      className="pricing__input"
-                      style={{ width: "100%" }}
-                    >
-                      <option value="">— pick a raw material —</option>
-                      {rawMaterials.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.fpCode ? `${r.fpCode} · ` : ""}
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                    {rm?.category ? (
+                    />
+                    {resolved?.category ? (
                       <div
                         style={{
                           fontSize: 10.5,
@@ -1730,7 +1762,7 @@ function BlendSectionCard({
                           textTransform: "capitalize",
                         }}
                       >
-                        {rm.category} blend material
+                        {resolved.category} blend material
                       </div>
                     ) : null}
                   </BTd>
@@ -1872,6 +1904,259 @@ function BTd({ children, style }: { children?: React.ReactNode; style?: React.CS
     <td style={{ padding: "8px 12px", verticalAlign: "middle", ...style }}>
       {children}
     </td>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// IngredientPicker — type-to-search dropdown for picking a raw material
+// (curated raw_materials row OR Fishbowl-only PC-RW product). Mirrors the
+// Product Code picker on the identity header: shows a compact pill when a
+// pick is committed, expands into a text input + filtered results list
+// when the rep hits Change (or the row is empty).
+// -----------------------------------------------------------------------------
+function IngredientPicker({
+  row,
+  resolved,
+  rawMaterials,
+  onPick,
+  onClear,
+}: {
+  row: GummyFormulaIngredient;
+  resolved: RawMaterialOption | null;
+  rawMaterials: RawMaterialOption[];
+  onPick: (opt: RawMaterialOption) => void;
+  onClear: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<boolean>(!resolved);
+
+  // Auto-collapse to picked state if the row already carries a resolved
+  // raw material AND we're not mid-edit.
+  useEffect(() => {
+    if (resolved && editing && search === "") {
+      // Don't force-close; let the rep still change until they blur.
+    }
+  }, [resolved, editing, search]);
+
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return rawMaterials
+      .filter(
+        (r) =>
+          (r.fpCode ?? "").toLowerCase().includes(q) ||
+          r.name.toLowerCase().includes(q),
+      )
+      .slice(0, 10);
+  }, [search, rawMaterials]);
+
+  if (resolved && !editing) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          setEditing(true);
+          setSearch("");
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setEditing(true);
+            setSearch("");
+          }
+        }}
+        className="pricing__input"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          cursor: "pointer",
+        }}
+        title={resolved.name}
+      >
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {resolved.fpCode ? (
+            <>
+              <code style={{ fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                {resolved.fpCode}
+              </code>{" "}
+              <span style={{ color: "var(--ink-2, #415056)" }}>· {resolved.name}</span>
+            </>
+          ) : (
+            resolved.name
+          )}
+        </span>
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--teal-700, #1d6c7b)",
+          }}
+        >
+          Change
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Type to search PC-RW products or raw materials…"
+        className="pricing__input"
+        autoComplete="off"
+        autoFocus={!!resolved}
+        style={{ width: "100%" }}
+      />
+      {search.trim().length > 0 && results.length > 0 ? (
+        <ul
+          style={{
+            position: "absolute",
+            top: "calc(100% + 2px)",
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            background: "#fff",
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 6,
+            boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
+            maxHeight: 280,
+            overflow: "auto",
+          }}
+        >
+          {results.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPick(r);
+                  setEditing(false);
+                  setSearch("");
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "8px 10px",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid var(--line-2, #efe9da)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <div>
+                    {r.fpCode ? (
+                      <code
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--teal-900, #0f4a56)",
+                        }}
+                      >
+                        {r.fpCode}
+                      </code>
+                    ) : null}
+                    <div style={{ color: "var(--ink-2, #415056)", marginTop: 2 }}>
+                      {r.name}
+                    </div>
+                  </div>
+                  {r.source === "fishbowl" ? (
+                    <span
+                      title="From Fishbowl; cost not yet imported to raw_materials"
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                        border: "1px dashed var(--line, #e3dcc9)",
+                        borderRadius: 999,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      Fishbowl
+                    </span>
+                  ) : null}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : search.trim().length > 0 ? (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 2px)",
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            padding: "8px 10px",
+            background: "#fff",
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "var(--ink-3, #8a9498)",
+          }}
+        >
+          No raw materials matched &ldquo;{search.trim()}&rdquo;.
+        </div>
+      ) : null}
+      {row.rawMaterialId || row.rawMaterialFpCode ? (
+        <button
+          type="button"
+          onClick={() => {
+            onClear();
+            setEditing(true);
+            setSearch("");
+          }}
+          style={{
+            marginTop: 4,
+            background: "transparent",
+            border: "none",
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--ink-3, #8a9498)",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          Clear selection
+        </button>
+      ) : null}
+    </div>
   );
 }
 

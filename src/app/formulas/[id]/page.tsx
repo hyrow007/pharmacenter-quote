@@ -34,10 +34,13 @@ export default async function FormulaEditorPage({
   }
 
   // Fetch formula + latest version + raw materials + PC-BK Fishbowl
-  // products in parallel. PC-BK products power the "Existing" branch of
-  // the identity header's PC-BK code picker (all PharmaCenter gummy FP
-  // codes are prefixed 'PC-BK-').
-  const [formulaRes, versionRes, rmRes, pcBkRes] = await Promise.all([
+  // products + PC-RW raw-material Fishbowl products in parallel. PC-BK
+  // powers the identity header's Product Code picker; PC-RW powers the
+  // ingredient-row picker in each blend section. Raw material rows already
+  // in raw_materials get their overlay fields (cost / solids / category);
+  // Fishbowl-only PC-RW products still appear in the picker but with
+  // null cost until an admin or Fishbowl sync fills them in.
+  const [formulaRes, versionRes, rmRes, pcBkRes, pcRwRes] = await Promise.all([
     supabase
       .from("gummy_formulas")
       .select(
@@ -66,6 +69,12 @@ export default async function FormulaEditorPage({
       .eq("active", true)
       .ilike("fp_code", "PC-BK-%")
       .order("fp_code", { ascending: true }),
+    supabase
+      .from("products")
+      .select("id, fp_code, name, default_unit")
+      .eq("active", true)
+      .ilike("fp_code", "PC-RW-%")
+      .order("fp_code", { ascending: true }),
   ]);
 
   if (formulaRes.error || !formulaRes.data) {
@@ -76,7 +85,8 @@ export default async function FormulaEditorPage({
   const latestVersion: GummyFormulaVersion | null =
     versionRes.data ? versionFromRow(versionRes.data) : null;
 
-  const rawMaterials: RawMaterialOption[] = (rmRes.data ?? []).map((r) => ({
+  // Curated raw_materials rows — full data (cost, solids, category, notes).
+  const curatedRawMaterials: RawMaterialOption[] = (rmRes.data ?? []).map((r) => ({
     id: r.id,
     fpCode: r.fp_code,
     name: r.name,
@@ -85,7 +95,35 @@ export default async function FormulaEditorPage({
       r.default_cost_per_kg === null ? null : Number(r.default_cost_per_kg),
     defaultSolids: Number(r.default_solids),
     category: r.category,
+    source: "raw_material" as const,
   }));
+
+  // Fishbowl PC-RW products — every raw material that exists in Fishbowl,
+  // whether or not it's been imported into raw_materials yet. Any product
+  // whose fp_code already appears in curatedRawMaterials is skipped
+  // (curated data wins). Everything else shows up with null cost / default
+  // solids so the rep can still pick it and enter overrides.
+  const curatedFpCodes = new Set(
+    curatedRawMaterials.map((r) => (r.fpCode ?? "").toUpperCase()).filter(Boolean),
+  );
+  const fishbowlPcRw: RawMaterialOption[] = (pcRwRes.data ?? [])
+    .filter((p) => p.fp_code && p.name)
+    .filter((p) => !curatedFpCodes.has((p.fp_code as string).toUpperCase()))
+    .map((p) => ({
+      id: `fb:${p.fp_code}`,
+      fpCode: p.fp_code as string,
+      name: p.name as string,
+      defaultUnit: p.default_unit ?? "kg",
+      defaultCostPerKg: null,
+      defaultSolids: 1,
+      category: null,
+      source: "fishbowl" as const,
+    }));
+
+  const rawMaterials: RawMaterialOption[] = [
+    ...curatedRawMaterials,
+    ...fishbowlPcRw,
+  ].sort((a, b) => (a.fpCode ?? "").localeCompare(b.fpCode ?? ""));
 
   const pcBkProducts: PcBkProductOption[] = (pcBkRes.data ?? [])
     .filter((p) => p.fp_code && p.name)
