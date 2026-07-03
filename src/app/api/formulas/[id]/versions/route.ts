@@ -137,7 +137,18 @@ export async function POST(
   }
 
   let currentIngredients: GummyFormulaIngredient[] = [];
-  let currentParams = { ...FORMULA_VERSION_DEFAULTS };
+  // Explicit `number` type on each field — spreading FORMULA_VERSION_DEFAULTS
+  // (which is `as const`) narrows to literal types like `250` / `100`, and
+  // then the reassignment below to `Number(prev.bench_batch_g)` (a plain
+  // `number`) fails to assign back into the literal-typed field.
+  let currentParams: {
+    benchBatchG: number;
+    batchKg: number;
+    batchesPerDay: number;
+    fixedLossKgPerDay: number;
+    gummyPieceWeightG: number;
+    yieldPct: number;
+  } = { ...FORMULA_VERSION_DEFAULTS };
   if (formulaRow.latest_version_num > 0) {
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
