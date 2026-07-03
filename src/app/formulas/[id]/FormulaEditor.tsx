@@ -679,10 +679,11 @@ export default function FormulaEditor({
             as the layout comes together. */}
         <div
           style={{
-            fontSize: 13,
-            fontWeight: 700,
+            fontSize: 18,
+            fontWeight: 800,
             color: "var(--teal-900, #0f4a56)",
-            marginBottom: 10,
+            marginBottom: 12,
+            letterSpacing: "-0.005em",
           }}
         >
           Product Details
@@ -1888,7 +1889,7 @@ function BlendSectionCard({
     >
       <header
         style={{
-          padding: "10px 14px",
+          padding: "14px 16px",
           borderBottom: "1px solid var(--line-2, #efe9da)",
           background: "var(--cream, #f6efe3)",
           borderTopLeftRadius: 8,
@@ -1897,18 +1898,20 @@ function BlendSectionCard({
       >
         <div
           style={{
-            fontSize: 13,
-            fontWeight: 700,
+            fontSize: 20,
+            fontWeight: 800,
             color: "var(--teal-900, #0f4a56)",
+            letterSpacing: "-0.01em",
+            lineHeight: 1.15,
           }}
         >
           {label}
         </div>
         <div
           style={{
-            fontSize: 11,
+            fontSize: 12,
             color: "var(--ink-3, #8a9498)",
-            marginTop: 2,
+            marginTop: 4,
           }}
         >
           {hint}
@@ -2550,14 +2553,17 @@ function LabelClaimsSection({
         <div>
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 18,
+              fontWeight: 800,
               color: "var(--teal-900, #0f4a56)",
+              letterSpacing: "-0.005em",
+              lineHeight: 1.15,
             }}
           >
             Label claims{" "}
             <span
               style={{
+                fontSize: 13,
                 fontWeight: 500,
                 color: "var(--ink-3, #8a9498)",
               }}
