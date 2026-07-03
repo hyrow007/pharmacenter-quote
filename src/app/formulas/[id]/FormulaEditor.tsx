@@ -1867,6 +1867,10 @@ function BlendSectionCard({
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   const totalG = rows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
+  // Number of decimal places to show in this section's Total row. Kept
+  // per-section so pre-cook can show 3 dp while other sections stay at 2
+  // (or vice versa). 0..4 covered by the inline picker.
+  const [totalDecimals, setTotalDecimals] = useState<number>(3);
 
   return (
     <section
@@ -2093,7 +2097,38 @@ function BlendSectionCard({
                   color: "var(--teal-900, #0f4a56)",
                 }}
               >
-                {totalG.toFixed(3)} g
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  {totalG.toFixed(totalDecimals)} g
+                  <select
+                    value={totalDecimals}
+                    onChange={(e) => setTotalDecimals(Number(e.target.value))}
+                    title="Decimal places shown on this total"
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "var(--ink-3, #8a9498)",
+                      background: "transparent",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 4,
+                      padding: "0 2px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {[0, 1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n} dp
+                      </option>
+                    ))}
+                  </select>
+                </span>
               </BTd>
               <BTd />
             </tr>
