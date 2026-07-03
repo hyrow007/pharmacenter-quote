@@ -2523,9 +2523,10 @@ function IngredientPicker({
               border: "1px dashed var(--line, #e3dcc9)",
               borderRadius: 999,
               padding: "1px 6px",
+              whiteSpace: "nowrap",
             }}
           >
-            Custom
+            Not in FB
           </span>
         ) : null}
         <span
