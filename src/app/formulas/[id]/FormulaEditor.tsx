@@ -2238,7 +2238,10 @@ function LabelClaimsSection({
               marginTop: 2,
             }}
           >
-            Active ingredients with per-serving amount on the finished label.
+            Active ingredients with per-gummy amount on the finished label.{" "}
+            <strong style={{ color: "var(--ink-2, #415056)" }}>
+              Values are for one (1) gummy.
+            </strong>
           </div>
         </div>
         <button
