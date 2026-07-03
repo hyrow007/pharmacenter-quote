@@ -6,6 +6,7 @@ import {
   versionFromRow,
   type GummyFormulaIngredient,
   type GummyFormulaVersion,
+  type LabelClaim,
 } from "@/lib/formulas";
 
 // GET  /api/formulas/[id]/versions           — list version history (metadata only)
@@ -105,6 +106,7 @@ type PostBody = {
   yieldPct?: number;
   ingredients?: GummyFormulaIngredient[];
   processNotes?: Record<string, string> | null;
+  labelClaims?: LabelClaim[];
   notes?: string | null;
 };
 
@@ -140,6 +142,7 @@ export async function POST(
 
   let currentIngredients: GummyFormulaIngredient[] = [];
   let currentProcessNotes: Record<string, string> = {};
+  let currentLabelClaims: LabelClaim[] = [];
   // Explicit `number` type on each field — spreading FORMULA_VERSION_DEFAULTS
   // (which is `as const`) narrows to literal types like `250` / `100`, and
   // then the reassignment below to `Number(prev.bench_batch_g)` (a plain
@@ -156,7 +159,7 @@ export async function POST(
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes",
+        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, label_claims",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -176,6 +179,9 @@ export async function POST(
       currentIngredients = Array.isArray(prev.ingredients) ? prev.ingredients : [];
       if (prev.process_notes && typeof prev.process_notes === "object") {
         currentProcessNotes = prev.process_notes as Record<string, string>;
+      }
+      if (Array.isArray(prev.label_claims)) {
+        currentLabelClaims = prev.label_claims as LabelClaim[];
       }
     }
   }
@@ -198,11 +204,14 @@ export async function POST(
         body.processNotes && typeof body.processNotes === "object"
           ? body.processNotes
           : currentProcessNotes,
+      label_claims: Array.isArray(body.labelClaims)
+        ? body.labelClaims
+        : currentLabelClaims,
       notes: body.notes ?? null,
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
     )
     .single();
 

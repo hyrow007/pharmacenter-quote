@@ -29,9 +29,11 @@ import {
   DEFAULT_PROCESS_NOTES,
   FORMULA_SHAPES,
   FORMULA_VERSION_DEFAULTS,
+  LABEL_CLAIM_UNITS,
   PROCESS_NOTES_PLACEHOLDER_NOTICE,
   computeMaterialCostPerGummy,
   emptyIngredient,
+  emptyLabelClaim,
   ingredientGramsForBench,
   ingredientKgForScaleUp,
   type BlendPhase,
@@ -40,6 +42,8 @@ import {
   type GummyFormulaRecord,
   type GummyFormulaVersion,
   type IdentityDiff,
+  type LabelClaim,
+  type LabelClaimUnit,
   type VersionDiff,
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
@@ -182,6 +186,25 @@ export default function FormulaEditor({
     setProcessNotes((prev) => ({ ...prev, [phase]: text }));
   }
 
+  // Label claims — active-ingredient claim rows displayed in the Product
+  // Details card. Each row pins to a raw material (curated or Fishbowl)
+  // and carries an amount + unit. Stored on the version alongside
+  // ingredients so claim changes participate in version history.
+  const [labelClaims, setLabelClaims] = useState<LabelClaim[]>(
+    seedVersion.labelClaims ?? [],
+  );
+  function addLabelClaim() {
+    setLabelClaims((prev) => [...prev, emptyLabelClaim()]);
+  }
+  function updateLabelClaim(id: string, patch: Partial<LabelClaim>) {
+    setLabelClaims((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    );
+  }
+  function removeLabelClaim(id: string) {
+    setLabelClaims((prev) => prev.filter((c) => c.id !== id));
+  }
+
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
   // whether Save writes a new version row.
@@ -200,7 +223,11 @@ export default function FormulaEditor({
           hydratedProcessNotes[phase] = DEFAULT_PROCESS_NOTES[phase];
         }
       });
-      return JSON.stringify({ ...seedVersion, processNotes: hydratedProcessNotes });
+      return JSON.stringify({
+        ...seedVersion,
+        processNotes: hydratedProcessNotes,
+        labelClaims: seedVersion.labelClaims ?? [],
+      });
     },
     // Snapshot is fixed once mounted; ignoring reactive drift.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,6 +254,7 @@ export default function FormulaEditor({
       yieldPct,
       ingredients,
       processNotes,
+      labelClaims,
     };
     try {
       const seed = JSON.parse(loadedSnapshot);
@@ -239,6 +267,7 @@ export default function FormulaEditor({
         yieldPct: seed.yieldPct,
         ingredients: seed.ingredients,
         processNotes: seed.processNotes ?? {},
+        labelClaims: seed.labelClaims ?? [],
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -253,6 +282,7 @@ export default function FormulaEditor({
     yieldPct,
     ingredients,
     processNotes,
+    labelClaims,
     loadedSnapshot,
   ]);
 
@@ -451,6 +481,7 @@ export default function FormulaEditor({
               yieldPct,
               ingredients,
               processNotes,
+              labelClaims,
               notes: versionNotes.trim() || null,
             }),
           },
@@ -895,6 +926,18 @@ export default function FormulaEditor({
             ) : null}
           </div>
         </div>
+
+        {/* Label claims — active-ingredient claim rows under the identity
+            row. Each claim pins to a raw material and carries an amount +
+            unit (mcg / mg / g, defaulting to mg). Stored on the version so
+            claim edits participate in version history. */}
+        <LabelClaimsSection
+          claims={labelClaims}
+          rawMaterials={rawMaterials}
+          onAdd={addLabelClaim}
+          onUpdate={updateLabelClaim}
+          onRemove={removeLabelClaim}
+        />
 
         {/* Version / Updated / by meta strip now lives above the identity
             card, inside /formulas/[id]/page.tsx — it renders identically
@@ -2115,6 +2158,221 @@ function BTd({ children, style }: { children?: React.ReactNode; style?: React.CS
 }
 
 // -----------------------------------------------------------------------------
+// LabelClaimsSection — active-ingredient label claims for the Product
+// Details card. Each row is: [ingredient picker] · [amount] · [unit] · [x].
+// Ingredient picker reuses IngredientPicker so it behaves the same as the
+// per-blend picker (type-to-search, PC-RW + curated raw_materials, picked
+// state collapses to a pill).
+// -----------------------------------------------------------------------------
+function LabelClaimsSection({
+  claims,
+  rawMaterials,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  claims: LabelClaim[];
+  rawMaterials: RawMaterialOption[];
+  onAdd: () => void;
+  onUpdate: (id: string, patch: Partial<LabelClaim>) => void;
+  onRemove: (id: string) => void;
+}) {
+  // Build the same lookup the parent uses so we can resolve a claim's
+  // rawMaterialId or rawMaterialFpCode back to a RawMaterialOption without
+  // threading another prop.
+  const rmById = useMemo(() => {
+    const m = new Map<string, RawMaterialOption>();
+    for (const r of rawMaterials) m.set(r.id, r);
+    return m;
+  }, [rawMaterials]);
+  const rmByFpCode = useMemo(() => {
+    const m = new Map<string, RawMaterialOption>();
+    for (const r of rawMaterials) {
+      if (r.fpCode) m.set(r.fpCode.toUpperCase(), r);
+    }
+    return m;
+  }, [rawMaterials]);
+
+  function resolveClaim(c: LabelClaim): RawMaterialOption | null {
+    if (c.rawMaterialId) {
+      const hit = rmById.get(c.rawMaterialId);
+      if (hit) return hit;
+    }
+    if (c.rawMaterialFpCode) {
+      const hit = rmByFpCode.get(c.rawMaterialFpCode.toUpperCase());
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        paddingTop: 12,
+        borderTop: "1px dashed var(--line, #e3dcc9)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+            }}
+          >
+            Label claims
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--ink-3, #8a9498)",
+              marginTop: 2,
+            }}
+          >
+            Active ingredients with per-serving amount on the finished label.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          style={{
+            padding: "6px 12px",
+            background: "var(--paper, #fffdf8)",
+            border: "1px solid var(--teal-700, #1d6c7b)",
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Add ingredient
+        </button>
+      </div>
+
+      {claims.length === 0 ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            fontSize: 12,
+            color: "var(--ink-3, #8a9498)",
+            background: "var(--paper, #fffdf8)",
+            border: "1px dashed var(--line, #e3dcc9)",
+            borderRadius: 6,
+          }}
+        >
+          No label claims yet. Click <strong>Add ingredient</strong> to
+          declare an active.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {claims.map((c) => {
+            const resolved = resolveClaim(c);
+            return (
+              <div
+                key={c.id}
+                style={{
+                  display: "grid",
+                  // Ingredient picker takes remaining space; amount +
+                  // unit + remove pinned to the right at fixed widths.
+                  gridTemplateColumns: "1fr 110px 90px 32px",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <IngredientPicker
+                  row={{
+                    rawMaterialId: c.rawMaterialId,
+                    rawMaterialFpCode: c.rawMaterialFpCode ?? null,
+                  }}
+                  resolved={resolved}
+                  rawMaterials={rawMaterials}
+                  onPick={(opt) =>
+                    onUpdate(c.id, {
+                      rawMaterialId:
+                        opt.source === "fishbowl" ? null : opt.id,
+                      rawMaterialFpCode:
+                        opt.source === "fishbowl" ? opt.fpCode : null,
+                    })
+                  }
+                  onClear={() =>
+                    onUpdate(c.id, {
+                      rawMaterialId: null,
+                      rawMaterialFpCode: null,
+                    })
+                  }
+                />
+                <input
+                  type="number"
+                  value={Number.isFinite(c.amount) ? c.amount : 0}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onUpdate(c.id, { amount: Number.isFinite(n) ? n : 0 });
+                  }}
+                  step="0.01"
+                  min={0}
+                  className="pricing__input"
+                  style={{
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                  placeholder="Amount"
+                />
+                <select
+                  value={c.unit}
+                  onChange={(e) =>
+                    onUpdate(c.id, { unit: e.target.value as LabelClaimUnit })
+                  }
+                  className="pricing__input"
+                >
+                  {LABEL_CLAIM_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => onRemove(c.id)}
+                  title="Remove claim"
+                  aria-label="Remove label claim"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    background: "transparent",
+                    border: "1px solid var(--line, #e3dcc9)",
+                    borderRadius: 6,
+                    color: "var(--ink-3, #8a9498)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // IngredientPicker — type-to-search dropdown for picking a raw material
 // (curated raw_materials row OR Fishbowl-only PC-RW product). Mirrors the
 // Product Code picker on the identity header: shows a compact pill when a
@@ -2128,7 +2386,10 @@ function IngredientPicker({
   onPick,
   onClear,
 }: {
-  row: GummyFormulaIngredient;
+  // Minimal shape so both GummyFormulaIngredient and LabelClaim rows can
+  // share this picker — both carry the same rawMaterialId /
+  // rawMaterialFpCode fields.
+  row: { rawMaterialId: string | null; rawMaterialFpCode?: string | null };
   resolved: RawMaterialOption | null;
   rawMaterials: RawMaterialOption[];
   onPick: (opt: RawMaterialOption) => void;

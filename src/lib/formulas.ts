@@ -55,6 +55,40 @@ export const PROCESS_NOTES_PLACEHOLDER_NOTICE =
   "This is place holder text the process has been modified";
 
 // -----------------------------------------------------------------------------
+// Label claims — the active-ingredient amounts printed on the finished
+// product's label (e.g. "Vitamin D3 25 mcg"). Per-version because they
+// often move when the recipe moves.
+// -----------------------------------------------------------------------------
+export const LABEL_CLAIM_UNITS = ["mcg", "mg", "g"] as const;
+export type LabelClaimUnit = (typeof LABEL_CLAIM_UNITS)[number];
+
+/** UI default for new label-claim rows — matches how the reg-affairs team
+ *  most commonly authors claims. */
+export const DEFAULT_LABEL_CLAIM_UNIT: LabelClaimUnit = "mg";
+
+export type LabelClaim = {
+  id: string;                            // stable client-generated row id
+  rawMaterialId: string | null;          // curated raw_materials row uuid, when picked
+  rawMaterialFpCode?: string | null;     // fp_code fallback for Fishbowl-only picks
+  amount: number;                        // numeric label-claim quantity
+  unit: LabelClaimUnit;                  // mcg / mg / g
+};
+
+export function newLabelClaimId(): string {
+  return `lc_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function emptyLabelClaim(): LabelClaim {
+  return {
+    id: newLabelClaimId(),
+    rawMaterialId: null,
+    rawMaterialFpCode: null,
+    amount: 0,
+    unit: DEFAULT_LABEL_CLAIM_UNIT,
+  };
+}
+
+// -----------------------------------------------------------------------------
 // Ingredient row shape
 // -----------------------------------------------------------------------------
 //
@@ -149,6 +183,10 @@ export type GummyFormulaVersion = {
   // its own free-text procedure. Optional for backward compat with
   // versions authored before the field existed.
   processNotes?: Partial<Record<BlendPhase, string>> | null;
+  // Active-ingredient label claims (mcg / mg / g on the finished label).
+  // Optional for backward compat with versions authored before the field
+  // existed; read as [] when null/undefined.
+  labelClaims?: LabelClaim[] | null;
   notes: string | null;         // why this version was cut (version-level)
   createdAt: string;            // ISO
   createdByEmail: string | null;
@@ -636,6 +674,7 @@ export function versionFromRow(row: {
   // Optional so pre-migration rows don't blow up TS. Reader coerces
   // null/undefined into empty {}.
   process_notes?: Partial<Record<BlendPhase, string>> | null;
+  label_claims?: LabelClaim[] | null;
   notes: string | null;
   created_at: string;
   created_by_email: string | null;
@@ -658,6 +697,7 @@ export function versionFromRow(row: {
       row.process_notes && typeof row.process_notes === "object"
         ? row.process_notes
         : {},
+    labelClaims: Array.isArray(row.label_claims) ? row.label_claims : [],
     notes: row.notes,
     createdAt: row.created_at,
     createdByEmail: row.created_by_email,
