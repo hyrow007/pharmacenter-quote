@@ -484,41 +484,10 @@ export default function FormulaEditor({
           </div>
         </div>
 
-        {/* Meta strip: version num + who edited last */}
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            gap: 14,
-            fontSize: 11,
-            color: "var(--ink-3, #8a9498)",
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            fontWeight: 700,
-          }}
-        >
-          <span>
-            Version{" "}
-            <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
-              v{initialFormula.latestVersionNum}
-            </strong>
-          </span>
-          <span>·</span>
-          <span>
-            Updated{" "}
-            {new Date(initialFormula.updatedAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-          </span>
-          {initialFormula.updatedByEmail ? (
-            <>
-              <span>·</span>
-              <span>by {initialFormula.updatedByEmail}</span>
-            </>
-          ) : null}
-        </div>
+        {/* Version / Updated / by meta strip now lives above the identity
+            card, inside /formulas/[id]/page.tsx — it renders identically
+            regardless of the tab you're on and doesn't scroll with the
+            sticky header. */}
       </div>
 
       {/* ============ Tab bar ============ */}

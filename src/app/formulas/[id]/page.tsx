@@ -77,6 +77,19 @@ export default async function FormulaEditorPage({
     category: r.category,
   }));
 
+  // Resolve the "updated by" email to a display name so the meta strip
+  // reads "by Jairo Osorno" instead of "by josorno@pharmacenterusa.com".
+  // Mirrors the pattern used on /workflow/[id]/page.tsx.
+  let updatedByDisplay: string | null = formula.updatedByEmail;
+  if (formula.updatedByEmail) {
+    const { data: dir } = await supabase
+      .from("user_directory")
+      .select("display_name")
+      .eq("email", formula.updatedByEmail)
+      .maybeSingle();
+    if (dir?.display_name) updatedByDisplay = dir.display_name;
+  }
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
@@ -96,12 +109,52 @@ export default async function FormulaEditorPage({
               fontWeight: 700,
               color: "var(--teal-900, #0f4a56)",
               textDecoration: "none",
-              marginBottom: 16,
+              marginBottom: 10,
               whiteSpace: "nowrap",
             }}
           >
             <span aria-hidden="true">&larr;</span> Back to formulas
           </a>
+
+          {/* Version / Updated / by strip. Sits between the Back pill and
+              the sticky identity header so it doesn't scroll away with the
+              editor and doesn't clutter the identity card. */}
+          <div
+            style={{
+              marginBottom: 12,
+              display: "flex",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            <span>
+              Version{" "}
+              <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
+                v{formula.latestVersionNum}
+              </strong>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              Updated{" "}
+              {new Date(formula.updatedAt).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+            {updatedByDisplay ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>by {updatedByDisplay}</span>
+              </>
+            ) : null}
+          </div>
 
           <FormulaEditor
             initialFormula={formula}
