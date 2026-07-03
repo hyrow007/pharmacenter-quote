@@ -1641,7 +1641,11 @@ function BlendSectionCard({
         border: "1px solid var(--line, #e3dcc9)",
         borderRadius: 8,
         background: "var(--paper, #fffdf8)",
-        overflow: "hidden",
+        // overflow: visible so the ingredient-picker's absolute-positioned
+        // results dropdown can extend below the section boundary. The
+        // header's border-radius is handled per-corner instead of relying
+        // on the parent's overflow clip.
+        overflow: "visible",
       }}
     >
       <header
@@ -1649,6 +1653,8 @@ function BlendSectionCard({
           padding: "10px 14px",
           borderBottom: "1px solid var(--line-2, #efe9da)",
           background: "var(--cream, #f6efe3)",
+          borderTopLeftRadius: 8,
+          borderTopRightRadius: 8,
         }}
       >
         <div
