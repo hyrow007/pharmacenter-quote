@@ -65,10 +65,9 @@ export const PROCESS_NOTES_PLACEHOLDER_NOTICE =
 export const LABEL_CLAIM_UNITS = ["mcg", "mg", "g"] as const;
 export type LabelClaimUnit = (typeof LABEL_CLAIM_UNITS)[number];
 
-/** UI default for new label-claim rows. Reg-affairs asked for grams as the
- *  starting unit — reps can bump to mg / mcg from the section-level unit
- *  picker if the claim calls for a smaller magnitude. */
-export const DEFAULT_LABEL_CLAIM_UNIT: LabelClaimUnit = "g";
+/** UI default for new label-claim rows — matches how the reg-affairs team
+ *  most commonly authors claims. */
+export const DEFAULT_LABEL_CLAIM_UNIT: LabelClaimUnit = "mg";
 
 export type LabelClaim = {
   id: string;                            // stable client-generated row id

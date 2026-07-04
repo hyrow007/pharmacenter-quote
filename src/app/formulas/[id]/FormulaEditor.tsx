@@ -26,7 +26,6 @@ import { useRouter } from "next/navigation";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,
-  DEFAULT_LABEL_CLAIM_UNIT,
   DEFAULT_PROCESS_NOTES,
   FORMULA_SHAPES,
   FORMULA_VERSION_DEFAULTS,
@@ -240,18 +239,8 @@ export default function FormulaEditor({
   const [labelClaims, setLabelClaims] = useState<LabelClaim[]>(
     seedVersion.labelClaims ?? [],
   );
-  // Section-level unit for all label claims. Seeded from the first
-  // existing claim so re-opening a saved formula preserves the author's
-  // unit; falls back to the module default ("g") for new formulas.
-  const [claimsUnit, setClaimsUnit] = useState<LabelClaimUnit>(
-    (seedVersion.labelClaims?.[0]?.unit as LabelClaimUnit | undefined) ??
-      DEFAULT_LABEL_CLAIM_UNIT,
-  );
   function addLabelClaim() {
-    setLabelClaims((prev) => [
-      ...prev,
-      { ...emptyLabelClaim(), unit: claimsUnit },
-    ]);
+    setLabelClaims((prev) => [...prev, emptyLabelClaim()]);
   }
   function updateLabelClaim(id: string, patch: Partial<LabelClaim>) {
     setLabelClaims((prev) =>
@@ -260,12 +249,6 @@ export default function FormulaEditor({
   }
   function removeLabelClaim(id: string) {
     setLabelClaims((prev) => prev.filter((c) => c.id !== id));
-  }
-  // Section-level unit change: update the header state AND rewrite every
-  // existing claim's unit so the printed label reads consistently.
-  function setSectionClaimsUnit(u: LabelClaimUnit) {
-    setClaimsUnit(u);
-    setLabelClaims((prev) => prev.map((c) => ({ ...c, unit: u })));
   }
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1056,8 +1039,6 @@ export default function FormulaEditor({
         <LabelClaimsSection
           claims={labelClaims}
           rawMaterials={rawMaterials}
-          sectionUnit={claimsUnit}
-          onSetSectionUnit={setSectionClaimsUnit}
           onAdd={addLabelClaim}
           onUpdate={updateLabelClaim}
           onRemove={removeLabelClaim}
@@ -1910,6 +1891,18 @@ function BlendSectionCard({
   // per-section so pre-cook can show 3 dp while other sections stay at 2
   // (or vice versa). 0..4 covered by the inline picker.
   const [totalDecimals, setTotalDecimals] = useState<number>(3);
+  // Section-level unit picker — mirrors the mcg/mg/g options on Label
+  // claims. Every ingredient row + total is displayed and entered in the
+  // selected unit; internally the values are still stored as grams so
+  // percentages, scale-up, and cost math don't have to know about the
+  // display unit. Default "g" for the bench-scale author.
+  const [sectionUnit, setSectionUnit] = useState<LabelClaimUnit>("g");
+  const unitFactor: Record<LabelClaimUnit, number> = {
+    g: 1,
+    mg: 1000,
+    mcg: 1_000_000,
+  };
+  const factor = unitFactor[sectionUnit];
 
   return (
     <section
@@ -1935,28 +1928,71 @@ function BlendSectionCard({
           borderBottom: "2px solid var(--teal-700, #1d6c7b)",
           borderTopLeftRadius: 8,
           borderTopRightRadius: 8,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
         }}
       >
-        <div
-          style={{
-            fontSize: 20,
-            fontWeight: 800,
-            color: "var(--teal-900, #0f4a56)",
-            letterSpacing: "-0.01em",
-            lineHeight: 1.15,
-          }}
-        >
-          {label}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: "var(--teal-900, #0f4a56)",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.15,
+            }}
+          >
+            {label}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--ink-3, #8a9498)",
+              marginTop: 4,
+            }}
+          >
+            {hint}
+          </div>
         </div>
-        <div
+        {/* Section-level unit picker. Every grams input, glyph, and total
+            below is displayed and entered in this unit; internally we
+            still store grams, so switching mid-authoring rescales
+            numbers correctly without touching the underlying data. */}
+        <label
           style={{
-            fontSize: 12,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
             color: "var(--ink-3, #8a9498)",
-            marginTop: 4,
+            whiteSpace: "nowrap",
+            marginTop: 2,
           }}
         >
-          {hint}
-        </div>
+          <span>Unit</span>
+          <select
+            value={sectionUnit}
+            onChange={(e) => setSectionUnit(e.target.value as LabelClaimUnit)}
+            className="pricing__input"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "4px 6px",
+              width: "auto",
+            }}
+            aria-label="Unit for this blend section"
+          >
+            {LABEL_CLAIM_UNITS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </label>
       </header>
 
       {/* Process notes — moved above the ingredients table so the mixing
@@ -2154,6 +2190,8 @@ function BlendSectionCard({
                     row={row}
                     rawMaterials={rawMaterials}
                     savedSolutions={savedSolutions}
+                    sectionUnit={sectionUnit}
+                    unitFactor={factor}
                     onUpdate={(patch) => onUpdate(row.id, patch)}
                     onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
                     onRemove={() => onRemoveRow(row.id)}
@@ -2240,13 +2278,15 @@ function BlendSectionCard({
                         type="number"
                         value={
                           row.grams !== null && row.grams !== undefined
-                            ? row.grams
+                            ? row.grams * factor
                             : 0
                         }
                         onChange={(e) => {
                           const n = Number(e.target.value);
+                          // Convert the displayed unit back to grams for
+                          // storage so downstream math stays in one base.
                           onUpdate(row.id, {
-                            grams: Number.isFinite(n) ? n : 0,
+                            grams: Number.isFinite(n) ? n / factor : 0,
                           });
                         }}
                         step="0.1"
@@ -2259,11 +2299,9 @@ function BlendSectionCard({
                           // ignored inside the inline-flex parent, so the
                           // number position drifted from the solution
                           // rows' identical input below.
-                          // 80 (not 90) so input + gap + "g" (~92px total)
-                          // fits inside the 96px cell content area and
-                          // right-aligns properly — with 90 the flex
-                          // container overflowed and got left-anchored,
-                          // pushing the "g" 5px past the total row's "g".
+                          // 80 (not 90) so input + gap + unit glyph
+                          // (~92px total) fits inside the 96px cell
+                          // content area and right-aligns properly.
                           flex: "0 0 80px",
                           textAlign: "right",
                           fontVariantNumeric: "tabular-nums",
@@ -2275,7 +2313,7 @@ function BlendSectionCard({
                           color: "var(--ink-3, #8a9498)",
                         }}
                       >
-                        g
+                        {sectionUnit}
                       </span>
                     </div>
                   </BTd>
@@ -2311,8 +2349,10 @@ function BlendSectionCard({
                 }}
               >
                 {/* Mirror the ingredient rows' inline-flex layout so the
-                    "g" glyph sits at the exact same X-position as the
-                    "g" spans above. */}
+                    unit glyph sits at the exact same X-position as the
+                    unit spans above. Total is scaled to the section unit
+                    (grams × factor) so switching mid-authoring feels
+                    consistent between rows and totals. */}
                 <span
                   style={{
                     display: "inline-flex",
@@ -2320,14 +2360,14 @@ function BlendSectionCard({
                     gap: 4,
                   }}
                 >
-                  <span>{totalG.toFixed(totalDecimals)}</span>
+                  <span>{(totalG * factor).toFixed(totalDecimals)}</span>
                   <span
                     style={{
                       color: "var(--ink-3, #8a9498)",
                       fontWeight: 400,
                     }}
                   >
-                    g
+                    {sectionUnit}
                   </span>
                 </span>
               </BTd>
@@ -2637,16 +2677,12 @@ function BTd({ children, style }: { children?: React.ReactNode; style?: React.CS
 function LabelClaimsSection({
   claims,
   rawMaterials,
-  sectionUnit,
-  onSetSectionUnit,
   onAdd,
   onUpdate,
   onRemove,
 }: {
   claims: LabelClaim[];
   rawMaterials: RawMaterialOption[];
-  sectionUnit: LabelClaimUnit;
-  onSetSectionUnit: (u: LabelClaimUnit) => void;
   onAdd: () => void;
   onUpdate: (id: string, patch: Partial<LabelClaim>) => void;
   onRemove: (id: string) => void;
@@ -2687,18 +2723,12 @@ function LabelClaimsSection({
         borderTop: "1px dashed var(--line, #e3dcc9)",
       }}
     >
-      {/* Section header. The unit picker up top applies to every claim
-          row — reg-affairs almost always authors a batch of claims in the
-          same unit (all mg, all mcg, etc.), so a single picker beats a
-          per-row dropdown that fights for the tight last column. */}
       <div
         style={{
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
           marginBottom: 8,
-          gap: 12,
-          flexWrap: "wrap",
         }}
       >
         <div>
@@ -2735,69 +2765,25 @@ function LabelClaimsSection({
             </strong>
           </div>
         </div>
-        <div
+        <button
+          type="button"
+          onClick={onAdd}
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
+            padding: "6px 12px",
+            background: "var(--paper, #fffdf8)",
+            border: "1px solid var(--teal-700, #1d6c7b)",
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
           }}
         >
-          {/* Section-level unit picker. Setting a new unit rewrites every
-              existing row's unit so the printed label reads consistently. */}
-          <label
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--ink-3, #8a9498)",
-            }}
-          >
-            <span>Unit</span>
-            <select
-              value={sectionUnit}
-              onChange={(e) =>
-                onSetSectionUnit(e.target.value as LabelClaimUnit)
-              }
-              className="pricing__input"
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                padding: "4px 6px",
-                width: "auto",
-              }}
-              aria-label="Unit for all label claims"
-            >
-              {LABEL_CLAIM_UNITS.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={onAdd}
-            style={{
-              padding: "6px 12px",
-              background: "var(--paper, #fffdf8)",
-              border: "1px solid var(--teal-700, #1d6c7b)",
-              borderRadius: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--teal-900, #0f4a56)",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            + Add ingredient
-          </button>
-        </div>
+          + Add ingredient
+        </button>
       </div>
 
       {claims.length === 0 ? (
@@ -2868,23 +2854,19 @@ function LabelClaimsSection({
                   }}
                   placeholder="Amount"
                 />
-                {/* Static unit label — all rows share the section-level
-                    unit picked at the top, so we just echo it here as a
-                    read-only glyph to save the last column's width. */}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minWidth: 32,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--ink-3, #8a9498)",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
+                <select
+                  value={c.unit}
+                  onChange={(e) =>
+                    onUpdate(c.id, { unit: e.target.value as LabelClaimUnit })
+                  }
+                  className="pricing__input"
                 >
-                  {c.unit}
-                </span>
+                  {LABEL_CLAIM_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
               </LabelClaimRow>
             );
           })}
@@ -2956,6 +2938,8 @@ function SolutionRow({
   row,
   rawMaterials,
   savedSolutions,
+  sectionUnit,
+  unitFactor,
   onUpdate,
   onSaveToLibrary,
   onRemove,
@@ -2963,6 +2947,8 @@ function SolutionRow({
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
   savedSolutions: SavedSolution[];
+  sectionUnit: LabelClaimUnit;
+  unitFactor: number;
   onUpdate: (patch: Partial<GummyFormulaIngredient>) => void;
   onSaveToLibrary: () => Promise<
     { ok: true; solution: SavedSolution } | { ok: false; error: string }
@@ -3282,11 +3268,18 @@ function SolutionRow({
                 <input
                   type="number"
                   value={
-                    row.grams !== null && row.grams !== undefined ? row.grams : 0
+                    row.grams !== null && row.grams !== undefined
+                      ? row.grams * unitFactor
+                      : 0
                   }
                   onChange={(e) => {
                     const n = Number(e.target.value);
-                    onUpdate({ grams: Number.isFinite(n) ? n : 0 });
+                    // Store as grams regardless of display unit so the
+                    // saved formula scales identically no matter which
+                    // unit the author happened to be viewing.
+                    onUpdate({
+                      grams: Number.isFinite(n) ? n / unitFactor : 0,
+                    });
                   }}
                   step="0.1"
                   min={0}
@@ -3306,7 +3299,7 @@ function SolutionRow({
                     color: "var(--ink-3, #8a9498)",
                   }}
                 >
-                  g
+                  {sectionUnit}
                 </span>
               </div>
             </div>
