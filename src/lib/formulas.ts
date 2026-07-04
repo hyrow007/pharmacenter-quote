@@ -25,7 +25,7 @@ export const BLEND_PHASES = ["pre-cook", "cooking", "cooked", "secondary", "fina
 export type BlendPhase = (typeof BLEND_PHASES)[number];
 
 export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
-  "pre-cook": "Pre-cook primary blend",
+  "pre-cook": "Pre-cook blend",
   cooking: "Cooking",
   cooked: "Cooked blend",
   secondary: "Secondary blend",
