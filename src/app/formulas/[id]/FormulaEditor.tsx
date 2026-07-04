@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,
+  DEFAULT_LABEL_CLAIM_UNIT,
   DEFAULT_PROCESS_NOTES,
   FORMULA_SHAPES,
   FORMULA_VERSION_DEFAULTS,
@@ -239,8 +240,18 @@ export default function FormulaEditor({
   const [labelClaims, setLabelClaims] = useState<LabelClaim[]>(
     seedVersion.labelClaims ?? [],
   );
+  // Section-level unit for all label claims. Seeded from the first
+  // existing claim so re-opening a saved formula preserves the author's
+  // unit; falls back to the module default ("g") for new formulas.
+  const [claimsUnit, setClaimsUnit] = useState<LabelClaimUnit>(
+    (seedVersion.labelClaims?.[0]?.unit as LabelClaimUnit | undefined) ??
+      DEFAULT_LABEL_CLAIM_UNIT,
+  );
   function addLabelClaim() {
-    setLabelClaims((prev) => [...prev, emptyLabelClaim()]);
+    setLabelClaims((prev) => [
+      ...prev,
+      { ...emptyLabelClaim(), unit: claimsUnit },
+    ]);
   }
   function updateLabelClaim(id: string, patch: Partial<LabelClaim>) {
     setLabelClaims((prev) =>
@@ -249,6 +260,12 @@ export default function FormulaEditor({
   }
   function removeLabelClaim(id: string) {
     setLabelClaims((prev) => prev.filter((c) => c.id !== id));
+  }
+  // Section-level unit change: update the header state AND rewrite every
+  // existing claim's unit so the printed label reads consistently.
+  function setSectionClaimsUnit(u: LabelClaimUnit) {
+    setClaimsUnit(u);
+    setLabelClaims((prev) => prev.map((c) => ({ ...c, unit: u })));
   }
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1039,6 +1056,8 @@ export default function FormulaEditor({
         <LabelClaimsSection
           claims={labelClaims}
           rawMaterials={rawMaterials}
+          sectionUnit={claimsUnit}
+          onSetSectionUnit={setSectionClaimsUnit}
           onAdd={addLabelClaim}
           onUpdate={updateLabelClaim}
           onRemove={removeLabelClaim}
@@ -2618,12 +2637,16 @@ function BTd({ children, style }: { children?: React.ReactNode; style?: React.CS
 function LabelClaimsSection({
   claims,
   rawMaterials,
+  sectionUnit,
+  onSetSectionUnit,
   onAdd,
   onUpdate,
   onRemove,
 }: {
   claims: LabelClaim[];
   rawMaterials: RawMaterialOption[];
+  sectionUnit: LabelClaimUnit;
+  onSetSectionUnit: (u: LabelClaimUnit) => void;
   onAdd: () => void;
   onUpdate: (id: string, patch: Partial<LabelClaim>) => void;
   onRemove: (id: string) => void;
@@ -2664,12 +2687,18 @@ function LabelClaimsSection({
         borderTop: "1px dashed var(--line, #e3dcc9)",
       }}
     >
+      {/* Section header. The unit picker up top applies to every claim
+          row — reg-affairs almost always authors a batch of claims in the
+          same unit (all mg, all mcg, etc.), so a single picker beats a
+          per-row dropdown that fights for the tight last column. */}
       <div
         style={{
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
           marginBottom: 8,
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <div>
@@ -2706,25 +2735,69 @@ function LabelClaimsSection({
             </strong>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onAdd}
+        <div
           style={{
-            padding: "6px 12px",
-            background: "var(--paper, #fffdf8)",
-            border: "1px solid var(--teal-700, #1d6c7b)",
-            borderRadius: 6,
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "var(--teal-900, #0f4a56)",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          + Add ingredient
-        </button>
+          {/* Section-level unit picker. Setting a new unit rewrites every
+              existing row's unit so the printed label reads consistently. */}
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            <span>Unit</span>
+            <select
+              value={sectionUnit}
+              onChange={(e) =>
+                onSetSectionUnit(e.target.value as LabelClaimUnit)
+              }
+              className="pricing__input"
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "4px 6px",
+                width: "auto",
+              }}
+              aria-label="Unit for all label claims"
+            >
+              {LABEL_CLAIM_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={onAdd}
+            style={{
+              padding: "6px 12px",
+              background: "var(--paper, #fffdf8)",
+              border: "1px solid var(--teal-700, #1d6c7b)",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            + Add ingredient
+          </button>
+        </div>
       </div>
 
       {claims.length === 0 ? (
@@ -2795,19 +2868,23 @@ function LabelClaimsSection({
                   }}
                   placeholder="Amount"
                 />
-                <select
-                  value={c.unit}
-                  onChange={(e) =>
-                    onUpdate(c.id, { unit: e.target.value as LabelClaimUnit })
-                  }
-                  className="pricing__input"
+                {/* Static unit label — all rows share the section-level
+                    unit picked at the top, so we just echo it here as a
+                    read-only glyph to save the last column's width. */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: 32,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--ink-3, #8a9498)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
                 >
-                  {LABEL_CLAIM_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
+                  {c.unit}
+                </span>
               </LabelClaimRow>
             );
           })}
