@@ -953,7 +953,16 @@ export default function FormulaEditor({
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
                 type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
                 value={Number.isFinite(gummyPieceWeightG) ? gummyPieceWeightG : 0}
                 onChange={(e) => {
                   const n = Number(e.target.value);
@@ -1312,7 +1321,16 @@ function NumberInput({
     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
       <input
         type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => {
           const n = Number(e.target.value);
@@ -2497,7 +2515,16 @@ function BlendSectionCard({
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                               <input
                                 type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
                                 value={
                                   row.grams !== null && row.grams !== undefined
                                     ? row.grams * factor
@@ -3116,7 +3143,16 @@ function LabelClaimsSection({
                 />
                 <input
                   type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
                   value={Number.isFinite(c.amount) ? c.amount : 0}
                   onChange={(e) => {
                     const n = Number(e.target.value);
@@ -3544,7 +3580,16 @@ function SolutionRow({
               >
                 <input
                   type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
                   value={
                     row.grams !== null && row.grams !== undefined
                       ? row.grams * unitFactor
@@ -3824,7 +3869,16 @@ function SolutionComponentRow({
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <input
           type="number"
-                onFocus={(e) => e.currentTarget.select()}
+                onFocus={(e) => {
+                  // Chrome's <input type="number"> doesn't select on
+                  // focus synchronously — defer one frame so the
+                  // digits are highlighted and any keystroke replaces
+                  // the placeholder 0 instead of prepending to it.
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
           value={Number.isFinite(component.pct) ? component.pct : 0}
           onChange={(e) => {
             const n = Number(e.target.value);
