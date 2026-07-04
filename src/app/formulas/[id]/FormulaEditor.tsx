@@ -1174,17 +1174,14 @@ export default function FormulaEditor({
       )}
 
       {/* ============ Ingredient table (shared) ============
-          On the Bench top tab we only show rows without a blendPhase
-          (legacy / unassigned) here — phase-scoped rows live in the
-          BlendSectionCard(s) above. On Scale up + Material costing tabs
-          the flat table shows EVERY row so the rep sees production-side
-          totals across all phases in one place. */}
-      {tab === "bench" && phaseIngredients.unassigned.length === 0 ? null : (
+          Bench top no longer renders the shared/legacy ingredient table —
+          per-blend cards cover ingredients fully. On Scale up + Material
+          costing tabs the flat table still shows EVERY row so the rep
+          sees production-side totals across all phases in one place. */}
+      {tab === "bench" ? null : (
         <IngredientTable
           tab={tab}
-          ingredients={
-            tab === "bench" ? phaseIngredients.unassigned : ingredients
-          }
+          ingredients={ingredients}
           rawMaterials={rawMaterials}
           benchGramById={benchGramById}
           scaleKgById={scaleKgById}
