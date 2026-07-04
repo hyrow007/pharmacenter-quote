@@ -1113,6 +1113,10 @@ export default function FormulaEditor({
             processNote={processNotes["cooked"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["cooked"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("cooked", text)}
+            finalRows={phaseIngredients.groups["final"]}
+            onAddFinalRow={() => addRowForPhase("final")}
+            onAddFinalSolution={() => addSolutionForPhase("final")}
+            onAddSavedFinalSolution={(s) => addSavedSolutionForPhase("final", s)}
           />
         </>
       )}
@@ -1855,6 +1859,10 @@ function BlendSectionCard({
   processNote,
   defaultProcessNote,
   onProcessNoteChange,
+  finalRows,
+  onAddFinalRow,
+  onAddFinalSolution,
+  onAddSavedFinalSolution,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -1875,10 +1883,20 @@ function BlendSectionCard({
    *  target when Reset is clicked. */
   defaultProcessNote: string;
   onProcessNoteChange: (text: string) => void;
+  /** Cooked-only: rows/handlers for the Final Blend subsection that lives
+   *  inside the same card, right under Secondary Blend. Optional so the
+   *  pre-cook card doesn't need to pass them. */
+  finalRows?: GummyFormulaIngredient[];
+  onAddFinalRow?: () => void;
+  onAddFinalSolution?: () => void;
+  onAddSavedFinalSolution?: (s: SavedSolution) => void;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
   const [solutionMenuOpen, setSolutionMenuOpen] = useState(false);
+  // Independent menu state for the Final Blend subsection so opening
+  // that one doesn't close/toggle the Secondary Blend one.
+  const [finalSolutionMenuOpen, setFinalSolutionMenuOpen] = useState(false);
   const isAtDefault =
     defaultProcessNote.length > 0 && processNote.trim() === defaultProcessNote.trim();
   // Process text starts read-only. The rep has to click Edit to modify it,
@@ -1886,7 +1904,6 @@ function BlendSectionCard({
   const [processEditing, setProcessEditing] = useState(false);
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
-  const totalG = rows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
   // Number of decimal places to show in this section's Total row. Kept
   // per-section so pre-cook can show 3 dp while other sections stay at 2
   // (or vice versa). 0..4 covered by the inline picker.
@@ -2083,550 +2100,626 @@ function BlendSectionCard({
         )}
       </div>
 
-      {/* Cooked-blend gets a "Secondary Blend" sub-heading right above
-          the ingredients area — reflects the physical formula sheet
-          where the secondary blend components are folded into the cooked
-          batch. Other phases get nothing here. */}
-      {phase === "cooked" ? (
-        <div
-          style={{
-            padding: "10px 14px 4px",
-            borderTop: "1px solid var(--line-2, #efe9da)",
-            fontSize: 13,
-            fontWeight: 700,
-            color: "var(--teal-900, #0f4a56)",
-            letterSpacing: "-0.005em",
-          }}
-        >
-          Secondary Blend
-        </div>
-      ) : null}
-
-      {rows.length === 0 ? (
-        <div
-          style={{
-            padding: "18px 14px",
-            textAlign: "center",
-            color: "var(--ink-3, #8a9498)",
-            fontSize: 12,
-            background: "var(--cream-soft, #fbf6ec)",
-          }}
-        >
-          No ingredients yet. Add the first one below.
-        </div>
-      ) : (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 12.5,
-            // Fixed layout so the 120px grams column and 40px delete
-            // column are respected exactly. Without this, auto layout
-            // fudges column widths based on content, causing the
-            // solution rows' internal grid (which uses hard-coded
-            // 120/40) to misalign with the ingredient rows above.
-            tableLayout: "fixed",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
-              <BTh>Ingredient</BTh>
-              <BTh style={{ textAlign: "right", width: 120 }}>
-                {/* The column header itself picks the unit for the
-                    column. Options spell out the unit (Grams, Milligrams,
-                    Micrograms) so the header reads naturally as a
-                    column label. Internally we always store grams — the
-                    ingredient/total display just rescales when this
-                    switches. */}
-                <select
-                  value={sectionUnit}
-                  onChange={(e) =>
-                    setSectionUnit(e.target.value as LabelClaimUnit)
-                  }
-                  aria-label="Unit for this blend section"
-                  title="Unit for this blend section"
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    padding: 0,
-                    margin: 0,
-                    fontSize: "inherit",
-                    fontWeight: "inherit",
-                    letterSpacing: "inherit",
-                    textTransform: "inherit",
-                    color: "inherit",
-                    cursor: "pointer",
-                    textAlign: "right",
-                    // Small caret hint via appearance:auto (native
-                    // browser look) — keeps the header compact.
-                    appearance: "auto",
-                  }}
-                >
-                  <option value="g">Grams</option>
-                  <option value="mg">Milligrams</option>
-                  <option value="mcg">Micrograms</option>
-                </select>
-              </BTh>
-              <BTh style={{ width: 40 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              // Solution rows have their own layout — a name field, a
-              // total-weight input, and an inline list of component
-              // ingredients with %s that sum to 100.
-              if (isSolutionRow(row)) {
-                return (
-                  <SolutionRow
-                    key={row.id}
-                    row={row}
-                    rawMaterials={rawMaterials}
-                    savedSolutions={savedSolutions}
-                    sectionUnit={sectionUnit}
-                    unitFactor={factor}
-                    onUpdate={(patch) => onUpdate(row.id, patch)}
-                    onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
-                    onRemove={() => onRemoveRow(row.id)}
-                  />
-                );
-              }
-              // Resolve the row to a picker option: try rawMaterialId
-              // first (curated), then fp_code (Fishbowl-only rows use
-              // "fb:CODE" as their id).
-              const resolved =
-                (row.rawMaterialId && rmById.get(row.rawMaterialId)) ||
-                (row.rawMaterialFpCode
-                  ? rawMaterials.find(
-                      (r) =>
-                        (r.fpCode ?? "").toUpperCase() ===
-                        (row.rawMaterialFpCode ?? "").toUpperCase(),
-                    ) ?? null
-                  : null);
-              return (
-                <BlendIngredientRow
-                  key={row.id}
-                  onRemove={() => onRemoveRow(row.id)}
-                >
-                  <BTd>
-                    <IngredientPicker
-                      row={row}
-                      resolved={resolved ?? null}
-                      rawMaterials={rawMaterials}
-                      onPick={(opt) => {
-                        // Curated pick: store rawMaterialId. Fishbowl
-                        // pick: store rawMaterialFpCode. Either way we
-                        // reset the override fields so defaults apply.
-                        if (opt.source === "fishbowl") {
-                          onUpdate(row.id, {
-                            rawMaterialId: null,
-                            rawMaterialFpCode: opt.fpCode,
-                            customName: null,
-                            costPerKgOverride: null,
-                            solidsOverride: null,
-                          });
-                        } else {
-                          onUpdate(row.id, {
-                            rawMaterialId: opt.id,
-                            rawMaterialFpCode: opt.fpCode,
-                            customName: null,
-                            costPerKgOverride: null,
-                            solidsOverride: null,
-                          });
-                        }
-                      }}
-                      onPickCustom={(name) =>
-                        onUpdate(row.id, {
-                          rawMaterialId: null,
-                          rawMaterialFpCode: null,
-                          customName: name,
-                          costPerKgOverride: null,
-                          solidsOverride: null,
-                        })
-                      }
-                      onClear={() =>
-                        onUpdate(row.id, {
-                          rawMaterialId: null,
-                          rawMaterialFpCode: null,
-                          customName: null,
-                        })
-                      }
-                    />
-                    {resolved?.category ? (
-                      <div
-                        style={{
-                          fontSize: 10.5,
-                          color: "var(--ink-3, #8a9498)",
-                          marginTop: 2,
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {resolved.category} blend material
-                      </div>
-                    ) : null}
-                  </BTd>
-                  <BTd style={{ textAlign: "right" }}>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <input
-                        type="number"
-                        value={
-                          row.grams !== null && row.grams !== undefined
-                            ? row.grams * factor
-                            : 0
-                        }
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          // Convert the displayed unit back to grams for
-                          // storage so downstream math stays in one base.
-                          onUpdate(row.id, {
-                            grams: Number.isFinite(n) ? n / factor : 0,
-                          });
-                        }}
-                        step="0.1"
-                        min={0}
-                        className="pricing__input"
-                        style={{
-                          width: 80,
-                          // Override .pricing__input's `flex: 1` — with
-                          // that default, the width setting was being
-                          // ignored inside the inline-flex parent, so the
-                          // number position drifted from the solution
-                          // rows' identical input below.
-                          // 80 (not 90) so input + gap + unit glyph
-                          // (~92px total) fits inside the 96px cell
-                          // content area and right-aligns properly.
-                          flex: "0 0 80px",
-                          textAlign: "right",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: "var(--ink-3, #8a9498)",
-                        }}
-                      >
-                        {sectionUnit}
-                      </span>
-                    </div>
-                  </BTd>
-                </BlendIngredientRow>
-              );
-            })}
-            <tr
-              style={{
-                borderTop: "1.5px solid var(--teal-700, #1d6c7b)",
-                background: "var(--cream-soft, #fbf6ec)",
-              }}
-            >
-              <BTd>
-                <strong
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--teal-900, #0f4a56)",
-                  }}
-                >
-                  Tot {label.toLowerCase()}
-                </strong>
-              </BTd>
-              <BTd
-                style={{
-                  textAlign: "right",
-                  fontVariantNumeric: "tabular-nums",
-                  fontWeight: 700,
-                  color: "var(--teal-900, #0f4a56)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {/* Mirror the ingredient rows' inline-flex layout so the
-                    unit glyph sits at the exact same X-position as the
-                    unit spans above. Total is scaled to the section unit
-                    (grams × factor) so switching mid-authoring feels
-                    consistent between rows and totals. */}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <span>{(totalG * factor).toFixed(totalDecimals)}</span>
-                  <span
-                    style={{
-                      color: "var(--ink-3, #8a9498)",
-                      fontWeight: 400,
-                    }}
-                  >
-                    {sectionUnit}
-                  </span>
-                </span>
-              </BTd>
-              <BTd style={{ padding: "8px 6px" }}>
-                {/* Two chevron buttons — tighter than a dropdown pill.
-                    < decreases decimal places (min 0), > increases (max 4).
-                    Kept small so the delete-x column stays narrow. */}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 2,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setTotalDecimals((d) => Math.max(0, d - 1))
-                    }
-                    disabled={totalDecimals <= 0}
-                    title="Fewer decimal places"
-                    aria-label="Fewer decimal places"
-                    style={{
-                      width: 16,
-                      height: 18,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color:
-                        totalDecimals <= 0
-                          ? "var(--ink-4, #c7cccf)"
-                          : "var(--ink-3, #8a9498)",
-                      background: "transparent",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 3,
-                      padding: 0,
-                      cursor: totalDecimals <= 0 ? "default" : "pointer",
-                    }}
-                  >
-                    &lt;
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setTotalDecimals((d) => Math.min(4, d + 1))
-                    }
-                    disabled={totalDecimals >= 4}
-                    title="More decimal places"
-                    aria-label="More decimal places"
-                    style={{
-                      width: 16,
-                      height: 18,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color:
-                        totalDecimals >= 4
-                          ? "var(--ink-4, #c7cccf)"
-                          : "var(--ink-3, #8a9498)",
-                      background: "transparent",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 3,
-                      padding: 0,
-                      cursor: totalDecimals >= 4 ? "default" : "pointer",
-                    }}
-                  >
-                    &gt;
-                  </button>
-                </span>
-              </BTd>
-            </tr>
-          </tbody>
-        </table>
-      )}
-      <div
-        style={{
-          padding: "10px 14px",
-          borderTop: "1px solid var(--line-2, #efe9da)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={onAddRow}
-            style={{
-              padding: "6px 12px",
-              background: "transparent",
-              color: "var(--teal-900, #0f4a56)",
-              border: "1px dashed var(--line, #e3dcc9)",
-              borderRadius: 6,
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            + Add ingredient
-          </button>
-          <div style={{ position: "relative" }}>
-            <button
-              type="button"
-              onClick={() => setSolutionMenuOpen((s) => !s)}
-              title="Add a pre-mixed solution (multiple ingredients at fixed percentages)"
-              aria-haspopup="menu"
-              aria-expanded={solutionMenuOpen}
-              style={{
-                padding: "6px 12px",
-                background: "transparent",
-                color: "var(--teal-900, #0f4a56)",
-                border: "1px dashed var(--line, #e3dcc9)",
-                borderRadius: 6,
-                fontSize: 12.5,
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              + Add solution
-              <span
-                aria-hidden="true"
-                style={{ fontSize: 9, color: "var(--ink-3, #8a9498)" }}
-              >
-                ▼
-              </span>
-            </button>
-            {solutionMenuOpen ? (
-              <>
-                {/* Backdrop that closes the menu on any outside click. */}
+      {(() => {
+        // Renders one subsection block: optional subheading + ingredients
+        // table (or empty state) + Add ingredient / Add solution row. The
+        // section-wide UOM picker and decimal chevrons deliberately share
+        // state (sectionUnit / totalDecimals) across every block rendered
+        // in this card, since they represent the same card-level display
+        // choice. Only the solution-menu open flag is per-subsection so
+        // opening one dropdown doesn't affect the other.
+        const renderIngredientsBlock = ({
+          subHeading,
+          blockRows,
+          blockOnAddRow,
+          blockOnAddSolution,
+          blockOnAddSavedSolution,
+          blockSolutionMenuOpen,
+          setBlockSolutionMenuOpen,
+        }: {
+          subHeading: string | null;
+          blockRows: GummyFormulaIngredient[];
+          blockOnAddRow: () => void;
+          blockOnAddSolution: () => void;
+          blockOnAddSavedSolution: (s: SavedSolution) => void;
+          blockSolutionMenuOpen: boolean;
+          setBlockSolutionMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+        }) => {
+          const totalG = blockRows.reduce(
+            (s, r) => s + (Number(r.grams) || 0),
+            0,
+          );
+          return (
+            <>
+              {/* Optional sub-heading — e.g. "Secondary Blend" or
+                  "Final Blend" on the cooked card. Other subsections pass
+                  null so nothing renders. */}
+              {subHeading ? (
                 <div
-                  onClick={() => setSolutionMenuOpen(false)}
                   style={{
-                    position: "fixed",
-                    inset: 0,
-                    zIndex: 30,
-                    background: "transparent",
-                  }}
-                />
-                <ul
-                  role="menu"
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 4px)",
-                    left: 0,
-                    zIndex: 40,
-                    margin: 0,
-                    padding: 4,
-                    listStyle: "none",
-                    background: "#fff",
-                    border: "1px solid var(--line, #e3dcc9)",
-                    borderRadius: 6,
-                    boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
-                    minWidth: 240,
-                    maxHeight: 320,
-                    overflow: "auto",
+                    padding: "10px 14px 4px",
+                    borderTop: "1px solid var(--line-2, #efe9da)",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "var(--teal-900, #0f4a56)",
+                    letterSpacing: "-0.005em",
                   }}
                 >
-                  <li>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        onAddSolution();
-                        setSolutionMenuOpen(false);
-                      }}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "8px 10px",
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                    >
-                      New empty solution
-                    </button>
-                  </li>
-                  {savedSolutions.length > 0 ? (
-                    <li
-                      style={{
-                        borderTop: "1px solid var(--line-2, #efe9da)",
-                        margin: "4px 0",
-                        padding: "6px 10px 2px",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      From library
-                    </li>
-                  ) : (
-                    <li
-                      style={{
-                        padding: "6px 10px",
-                        borderTop: "1px solid var(--line-2, #efe9da)",
-                        marginTop: 4,
-                        fontSize: 11,
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      No saved solutions yet. Save one from a solution
-                      row to make it show up here.
-                    </li>
-                  )}
-                  {savedSolutions.map((s) => (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          onAddSavedSolution(s);
-                          setSolutionMenuOpen(false);
-                        }}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "6px 10px",
-                          background: "transparent",
-                          border: "none",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          color: "var(--ink, #1f2a2d)",
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.background = "transparent")
-                        }
-                      >
-                        <div style={{ fontWeight: 700 }}>{s.name}</div>
-                        <div
+                  {subHeading}
+                </div>
+              ) : null}
+
+              {blockRows.length === 0 ? (
+                <div
+                  style={{
+                    padding: "18px 14px",
+                    textAlign: "center",
+                    color: "var(--ink-3, #8a9498)",
+                    fontSize: 12,
+                    background: "var(--cream-soft, #fbf6ec)",
+                  }}
+                >
+                  No ingredients yet. Add the first one below.
+                </div>
+              ) : (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 12.5,
+                    // Fixed layout so the 120px grams column and 40px delete
+                    // column are respected exactly. Without this, auto layout
+                    // fudges column widths based on content, causing the
+                    // solution rows' internal grid (which uses hard-coded
+                    // 120/40) to misalign with the ingredient rows above.
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                      <BTh>Ingredient</BTh>
+                      <BTh style={{ textAlign: "right", width: 120 }}>
+                        {/* The column header itself picks the unit for the
+                            column. Options spell out the unit (Grams, Milligrams,
+                            Micrograms) so the header reads naturally as a
+                            column label. Internally we always store grams — the
+                            ingredient/total display just rescales when this
+                            switches. Every subsection in this card shares the
+                            same sectionUnit state, so the picker on either
+                            table drives both. */}
+                        <select
+                          value={sectionUnit}
+                          onChange={(e) =>
+                            setSectionUnit(e.target.value as LabelClaimUnit)
+                          }
+                          aria-label="Unit for this blend section"
+                          title="Unit for this blend section"
                           style={{
-                            fontSize: 10.5,
-                            color: "var(--ink-3, #8a9498)",
-                            marginTop: 1,
+                            background: "transparent",
+                            border: "none",
+                            padding: 0,
+                            margin: 0,
+                            fontSize: "inherit",
+                            fontWeight: "inherit",
+                            letterSpacing: "inherit",
+                            textTransform: "inherit",
+                            color: "inherit",
+                            cursor: "pointer",
+                            textAlign: "right",
+                            // Small caret hint via appearance:auto (native
+                            // browser look) — keeps the header compact.
+                            appearance: "auto",
                           }}
                         >
-                          {s.components.length} component
-                          {s.components.length === 1 ? "" : "s"}
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </div>
+                          <option value="g">Grams</option>
+                          <option value="mg">Milligrams</option>
+                          <option value="mcg">Micrograms</option>
+                        </select>
+                      </BTh>
+                      <BTh style={{ width: 40 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {blockRows.map((row) => {
+                      // Solution rows have their own layout — a name field, a
+                      // total-weight input, and an inline list of component
+                      // ingredients with %s that sum to 100.
+                      if (isSolutionRow(row)) {
+                        return (
+                          <SolutionRow
+                            key={row.id}
+                            row={row}
+                            rawMaterials={rawMaterials}
+                            savedSolutions={savedSolutions}
+                            sectionUnit={sectionUnit}
+                            unitFactor={factor}
+                            onUpdate={(patch) => onUpdate(row.id, patch)}
+                            onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
+                            onRemove={() => onRemoveRow(row.id)}
+                          />
+                        );
+                      }
+                      // Resolve the row to a picker option: try rawMaterialId
+                      // first (curated), then fp_code (Fishbowl-only rows use
+                      // "fb:CODE" as their id).
+                      const resolved =
+                        (row.rawMaterialId && rmById.get(row.rawMaterialId)) ||
+                        (row.rawMaterialFpCode
+                          ? rawMaterials.find(
+                              (r) =>
+                                (r.fpCode ?? "").toUpperCase() ===
+                                (row.rawMaterialFpCode ?? "").toUpperCase(),
+                            ) ?? null
+                          : null);
+                      return (
+                        <BlendIngredientRow
+                          key={row.id}
+                          onRemove={() => onRemoveRow(row.id)}
+                        >
+                          <BTd>
+                            <IngredientPicker
+                              row={row}
+                              resolved={resolved ?? null}
+                              rawMaterials={rawMaterials}
+                              onPick={(opt) => {
+                                // Curated pick: store rawMaterialId. Fishbowl
+                                // pick: store rawMaterialFpCode. Either way we
+                                // reset the override fields so defaults apply.
+                                if (opt.source === "fishbowl") {
+                                  onUpdate(row.id, {
+                                    rawMaterialId: null,
+                                    rawMaterialFpCode: opt.fpCode,
+                                    customName: null,
+                                    costPerKgOverride: null,
+                                    solidsOverride: null,
+                                  });
+                                } else {
+                                  onUpdate(row.id, {
+                                    rawMaterialId: opt.id,
+                                    rawMaterialFpCode: opt.fpCode,
+                                    customName: null,
+                                    costPerKgOverride: null,
+                                    solidsOverride: null,
+                                  });
+                                }
+                              }}
+                              onPickCustom={(name) =>
+                                onUpdate(row.id, {
+                                  rawMaterialId: null,
+                                  rawMaterialFpCode: null,
+                                  customName: name,
+                                  costPerKgOverride: null,
+                                  solidsOverride: null,
+                                })
+                              }
+                              onClear={() =>
+                                onUpdate(row.id, {
+                                  rawMaterialId: null,
+                                  rawMaterialFpCode: null,
+                                  customName: null,
+                                })
+                              }
+                            />
+                            {resolved?.category ? (
+                              <div
+                                style={{
+                                  fontSize: 10.5,
+                                  color: "var(--ink-3, #8a9498)",
+                                  marginTop: 2,
+                                  textTransform: "capitalize",
+                                }}
+                              >
+                                {resolved.category} blend material
+                              </div>
+                            ) : null}
+                          </BTd>
+                          <BTd style={{ textAlign: "right" }}>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <input
+                                type="number"
+                                value={
+                                  row.grams !== null && row.grams !== undefined
+                                    ? row.grams * factor
+                                    : 0
+                                }
+                                onChange={(e) => {
+                                  const n = Number(e.target.value);
+                                  // Convert the displayed unit back to grams for
+                                  // storage so downstream math stays in one base.
+                                  onUpdate(row.id, {
+                                    grams: Number.isFinite(n) ? n / factor : 0,
+                                  });
+                                }}
+                                step="0.1"
+                                min={0}
+                                className="pricing__input"
+                                style={{
+                                  width: 80,
+                                  // Override .pricing__input's `flex: 1` — with
+                                  // that default, the width setting was being
+                                  // ignored inside the inline-flex parent, so the
+                                  // number position drifted from the solution
+                                  // rows' identical input below.
+                                  // 80 (not 90) so input + gap + unit glyph
+                                  // (~92px total) fits inside the 96px cell
+                                  // content area and right-aligns properly.
+                                  flex: "0 0 80px",
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--ink-3, #8a9498)",
+                                }}
+                              >
+                                {sectionUnit}
+                              </span>
+                            </div>
+                          </BTd>
+                        </BlendIngredientRow>
+                      );
+                    })}
+                    <tr
+                      style={{
+                        borderTop: "1.5px solid var(--teal-700, #1d6c7b)",
+                        background: "var(--cream-soft, #fbf6ec)",
+                      }}
+                    >
+                      <BTd>
+                        <strong
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            color: "var(--teal-900, #0f4a56)",
+                          }}
+                        >
+                          {/* When a subsection heading is provided, the
+                              Total row labels this specific subsection
+                              (e.g. "Tot secondary blend" / "Tot final
+                              blend"). Otherwise fall back to the outer
+                              phase label (pre-cook card). */}
+                          Tot {subHeading?.toLowerCase() ?? label.toLowerCase()}
+                        </strong>
+                      </BTd>
+                      <BTd
+                        style={{
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          fontWeight: 700,
+                          color: "var(--teal-900, #0f4a56)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {/* Mirror the ingredient rows' inline-flex layout so the
+                            unit glyph sits at the exact same X-position as the
+                            unit spans above. Total is scaled to the section unit
+                            (grams × factor) so switching mid-authoring feels
+                            consistent between rows and totals. */}
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <span>{(totalG * factor).toFixed(totalDecimals)}</span>
+                          <span
+                            style={{
+                              color: "var(--ink-3, #8a9498)",
+                              fontWeight: 400,
+                            }}
+                          >
+                            {sectionUnit}
+                          </span>
+                        </span>
+                      </BTd>
+                      <BTd style={{ padding: "8px 6px" }}>
+                        {/* Two chevron buttons — tighter than a dropdown pill.
+                            < decreases decimal places (min 0), > increases (max 4).
+                            Kept small so the delete-x column stays narrow. */}
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 2,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTotalDecimals((d) => Math.max(0, d - 1))
+                            }
+                            disabled={totalDecimals <= 0}
+                            title="Fewer decimal places"
+                            aria-label="Fewer decimal places"
+                            style={{
+                              width: 16,
+                              height: 18,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color:
+                                totalDecimals <= 0
+                                  ? "var(--ink-4, #c7cccf)"
+                                  : "var(--ink-3, #8a9498)",
+                              background: "transparent",
+                              border: "1px solid var(--line, #e3dcc9)",
+                              borderRadius: 3,
+                              padding: 0,
+                              cursor: totalDecimals <= 0 ? "default" : "pointer",
+                            }}
+                          >
+                            &lt;
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTotalDecimals((d) => Math.min(4, d + 1))
+                            }
+                            disabled={totalDecimals >= 4}
+                            title="More decimal places"
+                            aria-label="More decimal places"
+                            style={{
+                              width: 16,
+                              height: 18,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color:
+                                totalDecimals >= 4
+                                  ? "var(--ink-4, #c7cccf)"
+                                  : "var(--ink-3, #8a9498)",
+                              background: "transparent",
+                              border: "1px solid var(--line, #e3dcc9)",
+                              borderRadius: 3,
+                              padding: 0,
+                              cursor: totalDecimals >= 4 ? "default" : "pointer",
+                            }}
+                          >
+                            &gt;
+                          </button>
+                        </span>
+                      </BTd>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderTop: "1px solid var(--line-2, #efe9da)",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={blockOnAddRow}
+                    style={{
+                      padding: "6px 12px",
+                      background: "transparent",
+                      color: "var(--teal-900, #0f4a56)",
+                      border: "1px dashed var(--line, #e3dcc9)",
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Add ingredient
+                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      onClick={() => setBlockSolutionMenuOpen((s) => !s)}
+                      title="Add a pre-mixed solution (multiple ingredients at fixed percentages)"
+                      aria-haspopup="menu"
+                      aria-expanded={blockSolutionMenuOpen}
+                      style={{
+                        padding: "6px 12px",
+                        background: "transparent",
+                        color: "var(--teal-900, #0f4a56)",
+                        border: "1px dashed var(--line, #e3dcc9)",
+                        borderRadius: 6,
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      + Add solution
+                      <span
+                        aria-hidden="true"
+                        style={{ fontSize: 9, color: "var(--ink-3, #8a9498)" }}
+                      >
+                        ▼
+                      </span>
+                    </button>
+                    {blockSolutionMenuOpen ? (
+                      <>
+                        {/* Backdrop that closes the menu on any outside click. */}
+                        <div
+                          onClick={() => setBlockSolutionMenuOpen(false)}
+                          style={{
+                            position: "fixed",
+                            inset: 0,
+                            zIndex: 30,
+                            background: "transparent",
+                          }}
+                        />
+                        <ul
+                          role="menu"
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 4px)",
+                            left: 0,
+                            zIndex: 40,
+                            margin: 0,
+                            padding: 4,
+                            listStyle: "none",
+                            background: "#fff",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 6,
+                            boxShadow: "0 4px 12px rgba(15,74,86,0.12)",
+                            minWidth: 240,
+                            maxHeight: 320,
+                            overflow: "auto",
+                          }}
+                        >
+                          <li>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                blockOnAddSolution();
+                                setBlockSolutionMenuOpen(false);
+                              }}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                color: "var(--teal-900, #0f4a56)",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background = "transparent")
+                              }
+                            >
+                              New empty solution
+                            </button>
+                          </li>
+                          {savedSolutions.length > 0 ? (
+                            <li
+                              style={{
+                                borderTop: "1px solid var(--line-2, #efe9da)",
+                                margin: "4px 0",
+                                padding: "6px 10px 2px",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: "0.1em",
+                                textTransform: "uppercase",
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              From library
+                            </li>
+                          ) : (
+                            <li
+                              style={{
+                                padding: "6px 10px",
+                                borderTop: "1px solid var(--line-2, #efe9da)",
+                                marginTop: 4,
+                                fontSize: 11,
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              No saved solutions yet. Save one from a solution
+                              row to make it show up here.
+                            </li>
+                          )}
+                          {savedSolutions.map((s) => (
+                            <li key={s.id}>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  blockOnAddSavedSolution(s);
+                                  setBlockSolutionMenuOpen(false);
+                                }}
+                                style={{
+                                  display: "block",
+                                  width: "100%",
+                                  textAlign: "left",
+                                  padding: "6px 10px",
+                                  background: "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  color: "var(--ink, #1f2a2d)",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.background = "var(--cream-soft, #fbf6ec)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.background = "transparent")
+                                }
+                              >
+                                <div style={{ fontWeight: 700 }}>{s.name}</div>
+                                <div
+                                  style={{
+                                    fontSize: 10.5,
+                                    color: "var(--ink-3, #8a9498)",
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {s.components.length} component
+                                  {s.components.length === 1 ? "" : "s"}
+                                </div>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        };
+
+        return (
+          <>
+            {/* Primary subsection — this is the ONLY block on pre-cook,
+                and the "Secondary Blend" block on cooked. */}
+            {renderIngredientsBlock({
+              subHeading: phase === "cooked" ? "Secondary Blend" : null,
+              blockRows: rows,
+              blockOnAddRow: onAddRow,
+              blockOnAddSolution: onAddSolution,
+              blockOnAddSavedSolution: onAddSavedSolution,
+              blockSolutionMenuOpen: solutionMenuOpen,
+              setBlockSolutionMenuOpen: setSolutionMenuOpen,
+            })}
+            {/* Cooked-only Final Blend subsection — same structure as
+                Secondary but wired to phase="final" state on the parent.
+                Only rendered when the parent passes all four final-*
+                props (which FormulaEditor does for the cooked card). */}
+            {phase === "cooked" &&
+            finalRows &&
+            onAddFinalRow &&
+            onAddFinalSolution &&
+            onAddSavedFinalSolution
+              ? renderIngredientsBlock({
+                  subHeading: "Final Blend",
+                  blockRows: finalRows,
+                  blockOnAddRow: onAddFinalRow,
+                  blockOnAddSolution: onAddFinalSolution,
+                  blockOnAddSavedSolution: onAddSavedFinalSolution,
+                  blockSolutionMenuOpen: finalSolutionMenuOpen,
+                  setBlockSolutionMenuOpen: setFinalSolutionMenuOpen,
+                })
+              : null}
+          </>
+        );
+      })()}
 
     </section>
   );
