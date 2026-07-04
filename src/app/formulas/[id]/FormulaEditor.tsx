@@ -2133,9 +2133,11 @@ function BlendSectionCard({
               <BTh>Ingredient</BTh>
               <BTh style={{ textAlign: "right", width: 120 }}>
                 {/* The column header itself picks the unit for the
-                    column. mcg/mg/g options — internally we always
-                    store grams, so switching mid-authoring rescales the
-                    display without touching stored values. */}
+                    column. Options spell out the unit (Grams, Milligrams,
+                    Micrograms) so the header reads naturally as a
+                    column label. Internally we always store grams — the
+                    ingredient/total display just rescales when this
+                    switches. */}
                 <select
                   value={sectionUnit}
                   onChange={(e) =>
@@ -2160,11 +2162,9 @@ function BlendSectionCard({
                     appearance: "auto",
                   }}
                 >
-                  {LABEL_CLAIM_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
+                  <option value="g">Grams</option>
+                  <option value="mg">Milligrams</option>
+                  <option value="mcg">Micrograms</option>
                 </select>
               </BTh>
               <BTh style={{ width: 40 }} />
