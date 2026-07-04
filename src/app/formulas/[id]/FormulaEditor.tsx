@@ -91,6 +91,22 @@ const BUILTIN_INGREDIENTS: RawMaterialOption[] = [
   },
 ];
 
+// Default moisture-loss % for known ingredients / solutions in the
+// Cooked card's "Primary Blend Carry Over" subsection. Shared by both
+// the carry-over UI rendering and the Bench Top card's Primary Blend
+// (cooked) total so they always agree. Water is intentionally NOT
+// included here — its behavior is defined by a separate rule.
+function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
+  const fp = (r.rawMaterialFpCode ?? "").toUpperCase();
+  if (fp === "PC-RW-0010") return 0; // Pectin Classic CS 502
+  if (fp === "PC-RW-0012") return 0; // Regular white granulated sugar
+  if (fp === "PC-RW-0108") return 20; // Corn Syrup (NON GMO)
+  const name = (r.customName ?? "").trim().toLowerCase();
+  if (name.startsWith("citric acid + water solution")) return 50;
+  if (name.startsWith("sodium citrate + water solution")) return 75;
+  return 0;
+}
+
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
 // identity header's PC-BK code picker. Selecting one auto-fills Name.
 export type PcBkProductOption = {
@@ -1099,13 +1115,15 @@ export default function FormulaEditor({
               // Primary blend (cooked) = pre-cook rows net of moisture
               // loss. Mirrors the "Primary Blend Carry Over" total on
               // the Cooked card so the summary card and the carry-over
-              // subsection always agree.
+              // subsection always agree — including per-ingredient
+              // default moisture-loss values (see carryOverDefaultMoisturePct).
               const rows = phaseIngredients.groups["pre-cook"];
               return rows.reduce((s, r) => {
-                const loss = Math.max(
-                  0,
-                  Math.min(100, Number(r.moistureLossPct ?? 0)),
-                ) / 100;
+                const raw = Number(r.moistureLossPct);
+                const pct = Number.isFinite(raw)
+                  ? raw
+                  : carryOverDefaultMoisturePct(r);
+                const loss = Math.max(0, Math.min(100, pct)) / 100;
                 return s + (Number(r.grams) || 0) * (1 - loss);
               }, 0);
             })()}
@@ -2176,14 +2194,26 @@ function BlendSectionCard({
           The unit follows the Pre-cook card's picker so operators see
           amounts in the same unit they authored the pre-cook blend in. */}
       {phase === "cooked" && carryOverRows && carryOverRows.length > 0 ? (() => {
-        // Per-row moisture-loss fraction, clamped to [0, 1]. Null / NaN /
-        // negative → 0; > 100 → 1. Kept as a local helper so the total
+        // Per-row moisture-loss fraction, clamped to [0, 1]. When
+        // moistureLossPct is null/NaN, fall through to the ingredient's
+        // default (see carryOverDefaultMoisturePct at module scope).
+        // > 100 → 1; < 0 → 0. Kept as a local helper so the total
         // computation and each row's grams display use identical math.
         const lossFracFor = (r: GummyFormulaIngredient): number => {
           const raw = Number(r.moistureLossPct);
-          if (!Number.isFinite(raw) || raw <= 0) return 0;
-          if (raw >= 100) return 1;
-          return raw / 100;
+          const pct = Number.isFinite(raw)
+            ? raw
+            : carryOverDefaultMoisturePct(r);
+          if (pct <= 0) return 0;
+          if (pct >= 100) return 1;
+          return pct / 100;
+        };
+        // For the input's displayed value — show the explicit value if
+        // the user typed one, otherwise the ingredient's default so the
+        // rep sees the sensible pre-fill.
+        const moisturePctFor = (r: GummyFormulaIngredient): number => {
+          const raw = Number(r.moistureLossPct);
+          return Number.isFinite(raw) ? raw : carryOverDefaultMoisturePct(r);
         };
         // Sum of NET grams (post-moisture-loss) across every carry-over
         // row — this is what the operator actually sees carrying into
@@ -2251,11 +2281,9 @@ function BlendSectionCard({
                   if (isSolutionRow(row)) {
                     const solLossFrac = lossFracFor(row);
                     const solNetGrams = (Number(row.grams) || 0) * (1 - solLossFrac);
-                    const solMoisturePctValue = Number.isFinite(
-                      Number(row.moistureLossPct),
-                    )
-                      ? (row.moistureLossPct as number)
-                      : 0;
+                    // Show the explicit value the user set, or the
+                    // ingredient's default (see moisturePctFor above).
+                    const solMoisturePctValue = moisturePctFor(row);
                     return (
                       <tr
                         key={row.id}
@@ -2387,11 +2415,9 @@ function BlendSectionCard({
                   }
                   const rowLossFrac = lossFracFor(row);
                   const rowNetGrams = (Number(row.grams) || 0) * (1 - rowLossFrac);
-                  const rowMoisturePctValue = Number.isFinite(
-                    Number(row.moistureLossPct),
-                  )
-                    ? (row.moistureLossPct as number)
-                    : 0;
+                  // Show the explicit value the user set, or the
+                  // ingredient's default (see moisturePctFor above).
+                  const rowMoisturePctValue = moisturePctFor(row);
                   return (
                     <tr
                       key={row.id}
