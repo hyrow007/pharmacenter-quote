@@ -1427,7 +1427,7 @@ function BenchTopTab({
               marginBottom: 4,
             }}
           >
-            Bench top batch
+            Bench top batch size
           </div>
           <NumberInput
             value={benchBatchG}
@@ -1436,7 +1436,7 @@ function BenchTopTab({
             min={1}
           />
           <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
-            Reference size for the R&amp;D lab. All grams below scale to this.
+            Reference size for the R&amp;D lab.
           </div>
         </div>
         {/* Per-phase blend totals + combined total — mirror the
