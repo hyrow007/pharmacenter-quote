@@ -107,6 +107,86 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   return 0;
 }
 
+// Water rows in the Primary Blend Carry Over subsection have a special
+// rule: the moisture-loss % is auto-computed so the recipe balances —
+// Primary Blend (cooked, net of loss) + Secondary Blend + Final Blend
+// = Bench top batch size. This lets the operator dial the recipe and
+// the water automatically absorbs the imbalance.
+//
+// Detection is dual-path: real formulas set rawMaterialId to the
+// BUILTIN_INGREDIENTS "builtin:water" sentinel, but we also fall back
+// to name matching so legacy rows without a rawMaterialId still get
+// picked up correctly.
+function isWaterRow(r: GummyFormulaIngredient): boolean {
+  if (r.rawMaterialId === "builtin:water") return true;
+  const name = (r.customName ?? "").trim().toLowerCase();
+  return name === "water";
+}
+
+// Compute the auto moisture-loss % (0..100, clamped) that must be
+// applied to every water row in the carry-over subsection so the
+// recipe balances to the bench-top batch size. Non-water rows use the
+// per-row explicit moistureLossPct OR carryOverDefaultMoisturePct as a
+// fallback. Returns 0 when there's no water row to absorb the delta.
+function computeCarryOverWaterPct(params: {
+  preCookRows: GummyFormulaIngredient[];
+  benchBatchG: number;
+  secondaryG: number;
+  finalG: number;
+}): number {
+  const { preCookRows, benchBatchG, secondaryG, finalG } = params;
+  let P = 0;
+  let waterGrams = 0;
+  let nonWaterLossG = 0;
+  for (const r of preCookRows) {
+    const g = Number(r.grams) || 0;
+    P += g;
+    if (isWaterRow(r)) {
+      waterGrams += g;
+    } else {
+      const raw = Number(r.moistureLossPct);
+      const pct = Number.isFinite(raw)
+        ? raw
+        : carryOverDefaultMoisturePct(r);
+      const frac = Math.max(0, Math.min(100, pct)) / 100;
+      nonWaterLossG += g * frac;
+    }
+  }
+  if (waterGrams <= 0) return 0;
+  const targetLossG = P - benchBatchG + secondaryG + finalG;
+  const pct = ((targetLossG - nonWaterLossG) / waterGrams) * 100;
+  if (!Number.isFinite(pct)) return 0;
+  return Math.max(0, Math.min(100, pct));
+}
+
+// Compute the Primary Blend (cooked) NET grams for the Bench Top card
+// — i.e., the pre-cook rows summed after moisture loss, using the same
+// water-auto-balance rule as the carry-over subsection. Shared with
+// the UI rendering so the summary card and the carry-over "Tot" row
+// always agree, including when water auto-computes.
+function computeCarryOverPrimaryNetG(params: {
+  preCookRows: GummyFormulaIngredient[];
+  benchBatchG: number;
+  secondaryG: number;
+  finalG: number;
+}): number {
+  const { preCookRows } = params;
+  const waterPct = computeCarryOverWaterPct(params);
+  const waterFrac = waterPct / 100;
+  return preCookRows.reduce((s, r) => {
+    const g = Number(r.grams) || 0;
+    if (isWaterRow(r)) {
+      return s + g * (1 - waterFrac);
+    }
+    const raw = Number(r.moistureLossPct);
+    const pct = Number.isFinite(raw)
+      ? raw
+      : carryOverDefaultMoisturePct(r);
+    const frac = Math.max(0, Math.min(100, pct)) / 100;
+    return s + g * (1 - frac);
+  }, 0);
+}
+
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
 // identity header's PC-BK code picker. Selecting one auto-fills Name.
 export type PcBkProductOption = {
@@ -1111,22 +1191,24 @@ export default function FormulaEditor({
           <BenchTopTab
             benchBatchG={benchBatchG}
             setBenchBatchG={setBenchBatchG}
-            primaryBlendG={(() => {
+            primaryBlendG={computeCarryOverPrimaryNetG({
               // Primary blend (cooked) = pre-cook rows net of moisture
               // loss. Mirrors the "Primary Blend Carry Over" total on
               // the Cooked card so the summary card and the carry-over
               // subsection always agree — including per-ingredient
-              // default moisture-loss values (see carryOverDefaultMoisturePct).
-              const rows = phaseIngredients.groups["pre-cook"];
-              return rows.reduce((s, r) => {
-                const raw = Number(r.moistureLossPct);
-                const pct = Number.isFinite(raw)
-                  ? raw
-                  : carryOverDefaultMoisturePct(r);
-                const loss = Math.max(0, Math.min(100, pct)) / 100;
-                return s + (Number(r.grams) || 0) * (1 - loss);
-              }, 0);
-            })()}
+              // default moisture-loss values (see carryOverDefaultMoisturePct)
+              // AND the water auto-balance rule (see computeCarryOverWaterPct).
+              preCookRows: phaseIngredients.groups["pre-cook"],
+              benchBatchG,
+              secondaryG: phaseIngredients.groups["cooked"].reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              ),
+              finalG: phaseIngredients.groups["final"].reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              ),
+            })}
             secondaryBlendG={phaseIngredients.groups["cooked"].reduce(
               (s, r) => s + (Number(r.grams) || 0),
               0,
@@ -1184,6 +1266,7 @@ export default function FormulaEditor({
             onFinalProcessNoteChange={(text) => setPhaseProcessNote("final", text)}
             carryOverRows={phaseIngredients.groups["pre-cook"]}
             carryOverUnit={preCookUnit}
+            benchBatchG={benchBatchG}
           />
         </>
       )}
@@ -2016,6 +2099,7 @@ function BlendSectionCard({
   onFinalProcessNoteChange,
   carryOverRows,
   carryOverUnit,
+  benchBatchG,
   sectionUnitValue,
   onSectionUnitChange,
 }: {
@@ -2069,6 +2153,11 @@ function BlendSectionCard({
    *  the same unit as the Pre-cook card. Falls back to the effective
    *  section unit when undefined. */
   carryOverUnit?: LabelClaimUnit;
+  /** Cooked-only: bench-top batch size in grams, used to auto-compute
+   *  the moisture-loss % on water rows in the Primary Blend Carry Over
+   *  subsection so the recipe balances (Primary net + Secondary + Final
+   *  = benchBatchG). Optional so the pre-cook card doesn't need it. */
+  benchBatchG?: number;
   /** When provided, makes the section unit controlled by the parent
    *  (used for the pre-cook card so the Cooked card's carry-over
    *  subsection can mirror it). When undefined, the card manages its
@@ -2194,12 +2283,32 @@ function BlendSectionCard({
           The unit follows the Pre-cook card's picker so operators see
           amounts in the same unit they authored the pre-cook blend in. */}
       {phase === "cooked" && carryOverRows && carryOverRows.length > 0 ? (() => {
-        // Per-row moisture-loss fraction, clamped to [0, 1]. When
-        // moistureLossPct is null/NaN, fall through to the ingredient's
-        // default (see carryOverDefaultMoisturePct at module scope).
-        // > 100 → 1; < 0 → 0. Kept as a local helper so the total
-        // computation and each row's grams display use identical math.
+        // Water rows in the carry-over auto-balance: their moisture-loss
+        // % is computed so Primary (net) + Secondary + Final = benchBatchG.
+        // Compute once here and reuse for both the water row display and
+        // the total. Non-water rows use the per-row explicit
+        // moistureLossPct OR carryOverDefaultMoisturePct as a fallback.
+        const secondaryG = rows.reduce(
+          (s, r) => s + (Number(r.grams) || 0),
+          0,
+        );
+        const finalG = (finalRows ?? []).reduce(
+          (s, r) => s + (Number(r.grams) || 0),
+          0,
+        );
+        const waterPct = computeCarryOverWaterPct({
+          preCookRows: carryOverRows,
+          benchBatchG: benchBatchG ?? 0,
+          secondaryG,
+          finalG,
+        });
+        // Per-row moisture-loss fraction, clamped to [0, 1]. Water rows
+        // always use the auto waterPct — any stored moistureLossPct on a
+        // water row is ignored so the balance rule is inviolable. Every
+        // other row falls back to its default (see carryOverDefaultMoisturePct
+        // at module scope) when moistureLossPct is null/NaN.
         const lossFracFor = (r: GummyFormulaIngredient): number => {
+          if (isWaterRow(r)) return waterPct / 100;
           const raw = Number(r.moistureLossPct);
           const pct = Number.isFinite(raw)
             ? raw
@@ -2208,19 +2317,25 @@ function BlendSectionCard({
           if (pct >= 100) return 1;
           return pct / 100;
         };
-        // For the input's displayed value — show the explicit value if
-        // the user typed one, otherwise the ingredient's default so the
-        // rep sees the sensible pre-fill.
+        // For the input's displayed value — water rows show the auto
+        // waterPct; other rows show the explicit value the user typed,
+        // otherwise the ingredient's default.
         const moisturePctFor = (r: GummyFormulaIngredient): number => {
+          if (isWaterRow(r)) return waterPct;
           const raw = Number(r.moistureLossPct);
           return Number.isFinite(raw) ? raw : carryOverDefaultMoisturePct(r);
         };
         // Sum of NET grams (post-moisture-loss) across every carry-over
         // row — this is what the operator actually sees carrying into
-        // the pot after the water boils off.
-        const totalNetGrams = carryOverRows.reduce((s, r) => {
-          return s + (Number(r.grams) || 0) * (1 - lossFracFor(r));
-        }, 0);
+        // the pot after the water boils off. Uses the shared helper so
+        // it stays perfectly in sync with the Bench Top card's Primary
+        // Blend total.
+        const totalNetGrams = computeCarryOverPrimaryNetG({
+          preCookRows: carryOverRows,
+          benchBatchG: benchBatchG ?? 0,
+          secondaryG,
+          finalG,
+        });
         return (
           <>
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
@@ -2284,6 +2399,10 @@ function BlendSectionCard({
                     // Show the explicit value the user set, or the
                     // ingredient's default (see moisturePctFor above).
                     const solMoisturePctValue = moisturePctFor(row);
+                    // Solutions can technically be a Water "solution" (rare
+                    // but possible via customName), so mirror the same
+                    // auto-water treatment as the ingredient rows below.
+                    const solIsWater = isWaterRow(row);
                     return (
                       <tr
                         key={row.id}
@@ -2327,7 +2446,17 @@ function BlendSectionCard({
                               min={0}
                               max={100}
                               step="0.1"
-                              value={solMoisturePctValue}
+                              value={
+                                solIsWater
+                                  ? Number(solMoisturePctValue.toFixed(2))
+                                  : solMoisturePctValue
+                              }
+                              disabled={solIsWater}
+                              title={
+                                solIsWater
+                                  ? "Auto-calculated so the recipe balances to bench top batch"
+                                  : undefined
+                              }
                               onFocus={(e) => {
                                 // Chrome's <input type="number"> doesn't select
                                 // on focus synchronously — defer one frame so the
@@ -2338,13 +2467,19 @@ function BlendSectionCard({
                                   try { el.select(); } catch {}
                                 }, 0);
                               }}
-                              onChange={(e) => {
-                                const n = Number(e.target.value);
-                                const clamped = !Number.isFinite(n)
-                                  ? 0
-                                  : Math.max(0, Math.min(100, n));
-                                onUpdate(row.id, { moistureLossPct: clamped });
-                              }}
+                              onChange={
+                                solIsWater
+                                  ? undefined
+                                  : (e) => {
+                                      const n = Number(e.target.value);
+                                      const clamped = !Number.isFinite(n)
+                                        ? 0
+                                        : Math.max(0, Math.min(100, n));
+                                      onUpdate(row.id, {
+                                        moistureLossPct: clamped,
+                                      });
+                                    }
+                              }
                               className="pricing__input"
                               style={{
                                 width: 60,
@@ -2355,6 +2490,11 @@ function BlendSectionCard({
                                 flex: "0 0 60px",
                                 textAlign: "right",
                                 fontVariantNumeric: "tabular-nums",
+                                // Muted color hints that the value is
+                                // auto-calculated, not user-editable.
+                                ...(solIsWater
+                                  ? { color: "var(--ink-3, #8a9498)" }
+                                  : null),
                               }}
                             />
                             <span
@@ -2418,6 +2558,11 @@ function BlendSectionCard({
                   // Show the explicit value the user set, or the
                   // ingredient's default (see moisturePctFor above).
                   const rowMoisturePctValue = moisturePctFor(row);
+                  // Water rows are auto-computed so the recipe balances
+                  // (see computeCarryOverWaterPct). The input is disabled
+                  // and shows the calculated value; any stored
+                  // moistureLossPct is ignored.
+                  const rowIsWater = isWaterRow(row);
                   return (
                     <tr
                       key={row.id}
@@ -2461,7 +2606,17 @@ function BlendSectionCard({
                             min={0}
                             max={100}
                             step="0.1"
-                            value={rowMoisturePctValue}
+                            value={
+                              rowIsWater
+                                ? Number(rowMoisturePctValue.toFixed(2))
+                                : rowMoisturePctValue
+                            }
+                            disabled={rowIsWater}
+                            title={
+                              rowIsWater
+                                ? "Auto-calculated so the recipe balances to bench top batch"
+                                : undefined
+                            }
                             onFocus={(e) => {
                               // Chrome's <input type="number"> doesn't select
                               // on focus synchronously — defer one frame so
@@ -2472,13 +2627,19 @@ function BlendSectionCard({
                                 try { el.select(); } catch {}
                               }, 0);
                             }}
-                            onChange={(e) => {
-                              const n = Number(e.target.value);
-                              const clamped = !Number.isFinite(n)
-                                ? 0
-                                : Math.max(0, Math.min(100, n));
-                              onUpdate(row.id, { moistureLossPct: clamped });
-                            }}
+                            onChange={
+                              rowIsWater
+                                ? undefined
+                                : (e) => {
+                                    const n = Number(e.target.value);
+                                    const clamped = !Number.isFinite(n)
+                                      ? 0
+                                      : Math.max(0, Math.min(100, n));
+                                    onUpdate(row.id, {
+                                      moistureLossPct: clamped,
+                                    });
+                                  }
+                            }
                             className="pricing__input"
                             style={{
                               width: 60,
@@ -2487,6 +2648,11 @@ function BlendSectionCard({
                               flex: "0 0 60px",
                               textAlign: "right",
                               fontVariantNumeric: "tabular-nums",
+                              // Muted color hints that the value is
+                              // auto-calculated, not user-editable.
+                              ...(rowIsWater
+                                ? { color: "var(--ink-3, #8a9498)" }
+                                : null),
                             }}
                           />
                           <span
