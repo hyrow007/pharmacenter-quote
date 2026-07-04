@@ -348,6 +348,14 @@ export default function FormulaEditor({
   // -- Tabs -------------------------------------------------------------------
   const [tab, setTab] = useState<Tab>("bench");
 
+  // Pre-cook blend section unit — lifted from BlendSectionCard so the
+  // Cooked card's "Primary Blend Carry Over" subsection can mirror the
+  // unit currently shown on the Pre-cook card. When the operator changes
+  // the Pre-cook card's Grams/Milligrams/Micrograms picker, the carry-over
+  // rows update automatically. The Cooked card keeps its own local
+  // sectionUnit state for its Secondary/Final subsections.
+  const [preCookUnit, setPreCookUnit] = useState<LabelClaimUnit>("g");
+
   // -- Raw material lookup (for cost math) ------------------------------------
   const rmById = useMemo(() => {
     const m = new Map<string, RawMaterialOption>();
@@ -1108,6 +1116,8 @@ export default function FormulaEditor({
             processNote={processNotes["pre-cook"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
+            sectionUnitValue={preCookUnit}
+            onSectionUnitChange={setPreCookUnit}
           />
           <BlendSectionCard
             phase="cooked"
@@ -1135,6 +1145,7 @@ export default function FormulaEditor({
             defaultFinalProcessNote={DEFAULT_PROCESS_NOTES["final"] ?? ""}
             onFinalProcessNoteChange={(text) => setPhaseProcessNote("final", text)}
             carryOverRows={phaseIngredients.groups["pre-cook"]}
+            carryOverUnit={preCookUnit}
           />
         </>
       )}
@@ -1898,6 +1909,9 @@ function BlendSectionCard({
   defaultFinalProcessNote,
   onFinalProcessNoteChange,
   carryOverRows,
+  carryOverUnit,
+  sectionUnitValue,
+  onSectionUnitChange,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -1943,6 +1957,18 @@ function BlendSectionCard({
    *  the "Cooking" process notes and the Secondary/Final subsections.
    *  Optional — when undefined or empty, the subsection is not rendered. */
   carryOverRows?: GummyFormulaIngredient[];
+  /** Cooked-only: unit to render the carry-over subsection in. When
+   *  provided, the Primary Blend Carry Over rows display in this unit
+   *  instead of the cooked card's own sectionUnit — so operators can see
+   *  the same unit as the Pre-cook card. Falls back to the effective
+   *  section unit when undefined. */
+  carryOverUnit?: LabelClaimUnit;
+  /** When provided, makes the section unit controlled by the parent
+   *  (used for the pre-cook card so the Cooked card's carry-over
+   *  subsection can mirror it). When undefined, the card manages its
+   *  own local sectionUnit state. */
+  sectionUnitValue?: LabelClaimUnit;
+  onSectionUnitChange?: (u: LabelClaimUnit) => void;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -1977,7 +2003,28 @@ function BlendSectionCard({
     mg: 1000,
     mcg: 1_000_000,
   };
-  const factor = unitFactor[sectionUnit];
+  // When the parent controls the section unit (pre-cook card), use its
+  // value/setter; otherwise fall back to local state. This lets the
+  // Cooked card mirror the Pre-cook card's unit in the carry-over
+  // subsection while keeping its own Secondary/Final subsections on
+  // their own local unit.
+  const effectiveSectionUnit: LabelClaimUnit = sectionUnitValue ?? sectionUnit;
+  const effectiveSetSectionUnit: (u: LabelClaimUnit) => void =
+    onSectionUnitChange ?? setSectionUnit;
+  const factor = unitFactor[effectiveSectionUnit];
+  // Carry-over subsection unit — parent (FormulaEditor) passes the
+  // pre-cook card's unit so this card's Primary Blend Carry Over rows
+  // display in the same unit as the Pre-cook card. Falls back to the
+  // effective section unit when not provided.
+  const carryOverEffectiveUnit: LabelClaimUnit =
+    carryOverUnit ?? effectiveSectionUnit;
+  const carryOverFactor = unitFactor[carryOverEffectiveUnit];
+  const carryOverUnitLabel =
+    carryOverEffectiveUnit === "g"
+      ? "Grams"
+      : carryOverEffectiveUnit === "mg"
+        ? "Milligrams"
+        : "Micrograms";
 
   return (
     <section
@@ -2032,7 +2079,9 @@ function BlendSectionCard({
           operator can see what's carrying into the pot. Rendered
           BEFORE the Cooking notes and the Secondary/Final subsections.
           No inputs, no add/delete buttons — just names + amounts scaled
-          to the card's current sectionUnit. */}
+          to the Pre-cook card's current unit (carryOverEffectiveUnit).
+          The unit follows the Pre-cook card's picker so operators see
+          amounts in the same unit they authored the pre-cook blend in. */}
       {phase === "cooked" && carryOverRows && carryOverRows.length > 0 ? (() => {
         const carryTotalG = carryOverRows.reduce(
           (s, r) => s + (Number(r.grams) || 0),
@@ -2074,7 +2123,12 @@ function BlendSectionCard({
               <thead>
                 <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
                   <BTh>Ingredient</BTh>
-                  <BTh style={{ textAlign: "right", width: 120 }}>Grams</BTh>
+                  {/* Read-only label — the unit is driven by the Pre-cook
+                      card's picker, so this header shows the spelled-out
+                      unit but isn't interactive from here. */}
+                  <BTh style={{ textAlign: "right", width: 120 }}>
+                    {carryOverUnitLabel}
+                  </BTh>
                   <BTh style={{ width: 40 }} />
                 </tr>
               </thead>
@@ -2116,7 +2170,7 @@ function BlendSectionCard({
                           }}
                         >
                           <span>
-                            {((Number(row.grams) || 0) * factor).toFixed(2)}
+                            {((Number(row.grams) || 0) * carryOverFactor).toFixed(2)}
                           </span>{" "}
                           <span
                             style={{
@@ -2124,7 +2178,7 @@ function BlendSectionCard({
                               color: "var(--ink-3, #8a9498)",
                             }}
                           >
-                            {sectionUnit}
+                            {carryOverEffectiveUnit}
                           </span>
                         </BTd>
                         <BTd />
@@ -2186,7 +2240,7 @@ function BlendSectionCard({
                         }}
                       >
                         <span>
-                          {((Number(row.grams) || 0) * factor).toFixed(2)}
+                          {((Number(row.grams) || 0) * carryOverFactor).toFixed(2)}
                         </span>{" "}
                         <span
                           style={{
@@ -2194,7 +2248,7 @@ function BlendSectionCard({
                             color: "var(--ink-3, #8a9498)",
                           }}
                         >
-                          {sectionUnit}
+                          {carryOverEffectiveUnit}
                         </span>
                       </BTd>
                       <BTd />
@@ -2241,14 +2295,14 @@ function BlendSectionCard({
                         gap: 4,
                       }}
                     >
-                      <span>{(carryTotalG * factor).toFixed(2)}</span>
+                      <span>{(carryTotalG * carryOverFactor).toFixed(2)}</span>
                       <span
                         style={{
                           color: "var(--ink-3, #8a9498)",
                           fontWeight: 400,
                         }}
                       >
-                        {sectionUnit}
+                        {carryOverEffectiveUnit}
                       </span>
                     </span>
                   </BTd>
@@ -2625,11 +2679,14 @@ function BlendSectionCard({
                             ingredient/total display just rescales when this
                             switches. Every subsection in this card shares the
                             same sectionUnit state, so the picker on either
-                            table drives both. */}
+                            table drives both. When the parent controls the
+                            unit (pre-cook card), this write goes through
+                            effectiveSetSectionUnit — which propagates to the
+                            Cooked card's carry-over subsection. */}
                         <select
-                          value={sectionUnit}
+                          value={effectiveSectionUnit}
                           onChange={(e) =>
-                            setSectionUnit(e.target.value as LabelClaimUnit)
+                            effectiveSetSectionUnit(e.target.value as LabelClaimUnit)
                           }
                           aria-label="Unit for this blend section"
                           title="Unit for this blend section"
@@ -2670,7 +2727,7 @@ function BlendSectionCard({
                             row={row}
                             rawMaterials={rawMaterials}
                             savedSolutions={savedSolutions}
-                            sectionUnit={sectionUnit}
+                            sectionUnit={effectiveSectionUnit}
                             unitFactor={factor}
                             onUpdate={(patch) => onUpdate(row.id, patch)}
                             onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
@@ -2803,7 +2860,7 @@ function BlendSectionCard({
                                   color: "var(--ink-3, #8a9498)",
                                 }}
                               >
-                                {sectionUnit}
+                                {effectiveSectionUnit}
                               </span>
                             </div>
                           </BTd>
@@ -2862,7 +2919,7 @@ function BlendSectionCard({
                               fontWeight: 400,
                             }}
                           >
-                            {sectionUnit}
+                            {effectiveSectionUnit}
                           </span>
                         </span>
                       </BTd>
