@@ -1571,7 +1571,14 @@ function BenchTopTab({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {pctOfBench.toFixed(2)}%
+            {(() => {
+              // Drop the ".00" when the percentage lands on a whole
+              // number so "100.00%" renders as "100%". Any non-zero
+              // decimals still show at full 2dp precision.
+              const s = pctOfBench.toFixed(2);
+              return s.endsWith(".00") ? s.slice(0, -3) : s;
+            })()}
+            %
           </div>
           <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
             {totalOk
