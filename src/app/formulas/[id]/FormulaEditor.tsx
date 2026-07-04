@@ -374,10 +374,9 @@ export default function FormulaEditor({
   );
 
   // -- Derived math -----------------------------------------------------------
-  const totalPct = useMemo(
-    () => ingredients.reduce((s, r) => s + (Number(r.pctInFinished) || 0), 0),
-    [ingredients],
-  );
+  // Legacy `totalPct` (sum of pctInFinished across rows) was removed —
+  // Bench Top now shows blend-phase totals + % of bench batch instead of
+  // the old ingredients-total percentage.
 
   const benchGrams = useMemo(
     () => ingredientGramsForBench({ ingredients, benchBatchG }),
@@ -1096,7 +1095,6 @@ export default function FormulaEditor({
           <BenchTopTab
             benchBatchG={benchBatchG}
             setBenchBatchG={setBenchBatchG}
-            totalPct={totalPct}
             primaryBlendG={(() => {
               // Primary blend (cooked) = pre-cook rows net of moisture
               // loss. Mirrors the "Primary Blend Carry Over" total on
@@ -1384,14 +1382,12 @@ function NumberInput({
 function BenchTopTab({
   benchBatchG,
   setBenchBatchG,
-  totalPct,
   primaryBlendG,
   secondaryBlendG,
   finalBlendG,
 }: {
   benchBatchG: number;
   setBenchBatchG: (n: number) => void;
-  totalPct: number;
   /** Sum of pre-cook grams AFTER moisture loss. Matches the total on the
    *  Cooked card's "Primary Blend Carry Over" subsection. */
   primaryBlendG: number;
@@ -1402,7 +1398,13 @@ function BenchTopTab({
    *  Blend subsection. */
   finalBlendG: number;
 }) {
-  const totalOk = Math.abs(totalPct - 100) < 0.01;
+  // Combined batch weight across all three blends. Compared against the
+  // bench top batch so the rep can see at a glance how close the recipe
+  // sums to the target reference size.
+  const totalBlendsG = primaryBlendG + secondaryBlendG + finalBlendG;
+  const pctOfBench =
+    benchBatchG > 0 ? (totalBlendsG / benchBatchG) * 100 : 0;
+  const totalOk = Math.abs(pctOfBench - 100) < 0.01;
   return (
     <div
       style={{
@@ -1437,12 +1439,16 @@ function BenchTopTab({
             Reference size for the R&amp;D lab. All grams below scale to this.
           </div>
         </div>
-        {/* Three at-a-glance totals — mirror the per-subsection totals
-            inside the blend cards so R&D can eyeball the whole pipeline
-            without scrolling. All values shown in grams. */}
+        {/* Per-phase blend totals + combined total — mirror the
+            per-subsection totals inside the blend cards so R&D can
+            eyeball the whole pipeline without scrolling. All grams. */}
         <BlendTotalStat label="Primary Blend (cooked)" value={primaryBlendG} />
         <BlendTotalStat label="Secondary Blend" value={secondaryBlendG} />
         <BlendTotalStat label="Final Blend" value={finalBlendG} />
+        <BlendTotalStat
+          label="Total (Sum of all blends)"
+          value={totalBlendsG}
+        />
         <div>
           <div
             style={{
@@ -1454,7 +1460,7 @@ function BenchTopTab({
               marginBottom: 4,
             }}
           >
-            Ingredients total
+            % of bench batch
           </div>
           <div
             style={{
@@ -1464,10 +1470,12 @@ function BenchTopTab({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {totalPct.toFixed(2)}%
+            {pctOfBench.toFixed(2)}%
           </div>
           <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
-            {totalOk ? "Balances to 100%." : "Adjust rows to sum to 100%."}
+            {totalOk
+              ? "Blend total matches bench batch."
+              : "Sum of all blends vs. bench top batch."}
           </div>
         </div>
       </div>
