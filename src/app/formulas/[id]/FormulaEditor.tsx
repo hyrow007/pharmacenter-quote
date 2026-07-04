@@ -1134,6 +1134,7 @@ export default function FormulaEditor({
             finalProcessNote={processNotes["final"] ?? ""}
             defaultFinalProcessNote={DEFAULT_PROCESS_NOTES["final"] ?? ""}
             onFinalProcessNoteChange={(text) => setPhaseProcessNote("final", text)}
+            carryOverRows={phaseIngredients.groups["pre-cook"]}
           />
         </>
       )}
@@ -1896,6 +1897,7 @@ function BlendSectionCard({
   finalProcessNote,
   defaultFinalProcessNote,
   onFinalProcessNoteChange,
+  carryOverRows,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -1935,6 +1937,12 @@ function BlendSectionCard({
   finalProcessNote?: string;
   defaultFinalProcessNote?: string;
   onFinalProcessNoteChange?: (text: string) => void;
+  /** Cooked-only: read-only display of the pre-cook blend's ingredient
+   *  rows so the cook operator can see what's carrying into the pot.
+   *  Rendered as a subsection at the very top of the cooked card, above
+   *  the "Cooking" process notes and the Secondary/Final subsections.
+   *  Optional — when undefined or empty, the subsection is not rendered. */
+  carryOverRows?: GummyFormulaIngredient[];
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -2018,6 +2026,239 @@ function BlendSectionCard({
           {hint}
         </div>
       </header>
+
+      {/* Cooked-only: Primary Blend Carry Over — read-only display of
+          every ingredient row from the pre-cook blend so the cook
+          operator can see what's carrying into the pot. Rendered
+          BEFORE the Cooking notes and the Secondary/Final subsections.
+          No inputs, no add/delete buttons — just names + amounts scaled
+          to the card's current sectionUnit. */}
+      {phase === "cooked" && carryOverRows && carryOverRows.length > 0 ? (() => {
+        const carryTotalG = carryOverRows.reduce(
+          (s, r) => s + (Number(r.grams) || 0),
+          0,
+        );
+        return (
+          <>
+            {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
+                subheading styling from renderIngredientsBlock. */}
+            <div
+              style={{
+                padding: "10px 14px 4px",
+                borderTop: "1px solid var(--line-2, #efe9da)",
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--teal-900, #0f4a56)",
+                letterSpacing: "-0.005em",
+              }}
+            >
+              Primary Blend Carry Over
+            </div>
+            <div
+              style={{
+                padding: "0 14px 8px",
+                fontSize: 11,
+                color: "var(--ink-3, #8a9498)",
+              }}
+            >
+              From the pre-cook blend — carried over into the pot.
+            </div>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12.5,
+                tableLayout: "fixed",
+              }}
+            >
+              <thead>
+                <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                  <BTh>Ingredient</BTh>
+                  <BTh style={{ textAlign: "right", width: 120 }}>Grams</BTh>
+                  <BTh style={{ width: 40 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {carryOverRows.map((row) => {
+                  // Solutions: show the solution's custom name with a small
+                  // SOLUTION label — no component expansion here since this
+                  // is a read-only carry-over view.
+                  if (isSolutionRow(row)) {
+                    return (
+                      <tr
+                        key={row.id}
+                        style={{
+                          borderBottom: "1px solid var(--line-2, #efe9da)",
+                        }}
+                      >
+                        <BTd>
+                          <div style={{ fontWeight: 700, color: "var(--ink, #1f2a2d)" }}>
+                            {row.customName || "Solution"}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                              color: "var(--ink-3, #8a9498)",
+                              marginTop: 2,
+                            }}
+                          >
+                            Solution
+                          </div>
+                        </BTd>
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span>
+                            {((Number(row.grams) || 0) * factor).toFixed(2)}
+                          </span>{" "}
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--ink-3, #8a9498)",
+                            }}
+                          >
+                            {sectionUnit}
+                          </span>
+                        </BTd>
+                        <BTd />
+                      </tr>
+                    );
+                  }
+                  // Non-solution rows: resolve display name in the order
+                  // customName → curated → Fishbowl fp_code → fallback.
+                  const resolved =
+                    (row.rawMaterialId && rmById.get(row.rawMaterialId)) ||
+                    (row.rawMaterialFpCode
+                      ? rawMaterials.find(
+                          (r) =>
+                            (r.fpCode ?? "").toUpperCase() ===
+                            (row.rawMaterialFpCode ?? "").toUpperCase(),
+                        ) ?? null
+                      : null);
+                  let displayName: string;
+                  if (row.customName) {
+                    displayName = row.customName;
+                  } else if (resolved) {
+                    displayName = resolved.fpCode
+                      ? `${resolved.fpCode} · ${resolved.name}`
+                      : resolved.name;
+                  } else if (row.rawMaterialFpCode) {
+                    displayName = row.rawMaterialFpCode;
+                  } else {
+                    displayName = "Unnamed";
+                  }
+                  return (
+                    <tr
+                      key={row.id}
+                      style={{
+                        borderBottom: "1px solid var(--line-2, #efe9da)",
+                      }}
+                    >
+                      <BTd>
+                        <div style={{ fontWeight: 600, color: "var(--ink, #1f2a2d)" }}>
+                          {displayName}
+                        </div>
+                        {resolved?.category ? (
+                          <div
+                            style={{
+                              fontSize: 10.5,
+                              color: "var(--ink-3, #8a9498)",
+                              marginTop: 2,
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            {resolved.category} blend material
+                          </div>
+                        ) : null}
+                      </BTd>
+                      <BTd
+                        style={{
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span>
+                          {((Number(row.grams) || 0) * factor).toFixed(2)}
+                        </span>{" "}
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--ink-3, #8a9498)",
+                          }}
+                        >
+                          {sectionUnit}
+                        </span>
+                      </BTd>
+                      <BTd />
+                    </tr>
+                  );
+                })}
+                {/* Read-only total row — same visual treatment as the
+                    Tot rows in renderIngredientsBlock, but without the
+                    decimal-chevron controls (this is display-only, so
+                    the operator's precision preference on the primary
+                    subsection isn't relevant here). */}
+                <tr
+                  style={{
+                    borderTop: "1.5px solid var(--teal-700, #1d6c7b)",
+                    background: "var(--cream-soft, #fbf6ec)",
+                  }}
+                >
+                  <BTd>
+                    <strong
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                    >
+                      Tot primary blend carry over
+                    </strong>
+                  </BTd>
+                  <BTd
+                    style={{
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <span>{(carryTotalG * factor).toFixed(2)}</span>
+                      <span
+                        style={{
+                          color: "var(--ink-3, #8a9498)",
+                          fontWeight: 400,
+                        }}
+                      >
+                        {sectionUnit}
+                      </span>
+                    </span>
+                  </BTd>
+                  <BTd />
+                </tr>
+              </tbody>
+            </table>
+          </>
+        );
+      })() : null}
 
       {/* Cooked-only: top-level "Cooking" Process notes block. Rendered
           right below the card header, above the Secondary Blend and
