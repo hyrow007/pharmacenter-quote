@@ -1097,6 +1097,28 @@ export default function FormulaEditor({
             benchBatchG={benchBatchG}
             setBenchBatchG={setBenchBatchG}
             totalPct={totalPct}
+            primaryBlendG={(() => {
+              // Primary blend (cooked) = pre-cook rows net of moisture
+              // loss. Mirrors the "Primary Blend Carry Over" total on
+              // the Cooked card so the summary card and the carry-over
+              // subsection always agree.
+              const rows = phaseIngredients.groups["pre-cook"];
+              return rows.reduce((s, r) => {
+                const loss = Math.max(
+                  0,
+                  Math.min(100, Number(r.moistureLossPct ?? 0)),
+                ) / 100;
+                return s + (Number(r.grams) || 0) * (1 - loss);
+              }, 0);
+            })()}
+            secondaryBlendG={phaseIngredients.groups["cooked"].reduce(
+              (s, r) => s + (Number(r.grams) || 0),
+              0,
+            )}
+            finalBlendG={phaseIngredients.groups["final"].reduce(
+              (s, r) => s + (Number(r.grams) || 0),
+              0,
+            )}
           />
           {/* Blend-phase sections. Currently only Pre-cook is rendered;
               Secondary + Final will drop in the same way as the recipe
@@ -1363,10 +1385,22 @@ function BenchTopTab({
   benchBatchG,
   setBenchBatchG,
   totalPct,
+  primaryBlendG,
+  secondaryBlendG,
+  finalBlendG,
 }: {
   benchBatchG: number;
   setBenchBatchG: (n: number) => void;
   totalPct: number;
+  /** Sum of pre-cook grams AFTER moisture loss. Matches the total on the
+   *  Cooked card's "Primary Blend Carry Over" subsection. */
+  primaryBlendG: number;
+  /** Sum of "cooked" phase grams — displayed as "Secondary Blend" in the
+   *  Cooked card's second subsection. */
+  secondaryBlendG: number;
+  /** Sum of "final" phase grams — displayed in the Cooked card's Final
+   *  Blend subsection. */
+  finalBlendG: number;
 }) {
   const totalOk = Math.abs(totalPct - 100) < 0.01;
   return (
@@ -1403,6 +1437,12 @@ function BenchTopTab({
             Reference size for the R&amp;D lab. All grams below scale to this.
           </div>
         </div>
+        {/* Three at-a-glance totals — mirror the per-subsection totals
+            inside the blend cards so R&D can eyeball the whole pipeline
+            without scrolling. All values shown in grams. */}
+        <BlendTotalStat label="Primary Blend (cooked)" value={primaryBlendG} />
+        <BlendTotalStat label="Secondary Blend" value={secondaryBlendG} />
+        <BlendTotalStat label="Final Blend" value={finalBlendG} />
         <div>
           <div
             style={{
@@ -1430,6 +1470,49 @@ function BenchTopTab({
             {totalOk ? "Balances to 100%." : "Adjust rows to sum to 100%."}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Small stat block used inside the Bench Top summary card for the three
+// blend-phase totals. Shows a labeled grams value in the same visual
+// weight as the other summary card fields.
+function BlendTotalStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          marginBottom: 4,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          color: "var(--teal-900, #0f4a56)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value.toFixed(2)}
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: "var(--ink-3, #8a9498)",
+            marginLeft: 4,
+          }}
+        >
+          g
+        </span>
       </div>
     </div>
   );
