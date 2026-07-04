@@ -128,6 +128,14 @@ export type GummyFormulaIngredient = {
   costPerKgOverride: number | null;        // dollars/kg; null = use raw material default
   solidsOverride: number | null;           // 0..1; null = use raw material default
   notes: string | null;
+  /**
+   * Percentage of the ingredient's mass (0..100) expected to boil off
+   * during cooking. Only surfaces in the Cooked card's Primary Blend
+   * Carry Over subsection — the pre-cook / secondary / final cards
+   * don't read this field. When null/undefined/NaN, treated as 0 (no
+   * moisture loss).
+   */
+  moistureLossPct?: number | null;
   // -- Solution rows ---------------------------------------------------------
   // A "solution" is a pre-mixed compound that shows up in the blend as one
   // line but is really a blend of two or more raw materials at fixed

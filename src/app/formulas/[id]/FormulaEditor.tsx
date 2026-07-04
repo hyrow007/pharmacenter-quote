@@ -2083,10 +2083,21 @@ function BlendSectionCard({
           The unit follows the Pre-cook card's picker so operators see
           amounts in the same unit they authored the pre-cook blend in. */}
       {phase === "cooked" && carryOverRows && carryOverRows.length > 0 ? (() => {
-        const carryTotalG = carryOverRows.reduce(
-          (s, r) => s + (Number(r.grams) || 0),
-          0,
-        );
+        // Per-row moisture-loss fraction, clamped to [0, 1]. Null / NaN /
+        // negative → 0; > 100 → 1. Kept as a local helper so the total
+        // computation and each row's grams display use identical math.
+        const lossFracFor = (r: GummyFormulaIngredient): number => {
+          const raw = Number(r.moistureLossPct);
+          if (!Number.isFinite(raw) || raw <= 0) return 0;
+          if (raw >= 100) return 1;
+          return raw / 100;
+        };
+        // Sum of NET grams (post-moisture-loss) across every carry-over
+        // row — this is what the operator actually sees carrying into
+        // the pot after the water boils off.
+        const totalNetGrams = carryOverRows.reduce((s, r) => {
+          return s + (Number(r.grams) || 0) * (1 - lossFracFor(r));
+        }, 0);
         return (
           <>
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
@@ -2123,6 +2134,13 @@ function BlendSectionCard({
               <thead>
                 <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
                   <BTh>Ingredient</BTh>
+                  {/* Moisture Loss — per-row percentage of the ingredient's
+                      mass expected to boil off during cooking. Sits BEFORE
+                      the grams column so the reduced grams (grams × (1 −
+                      pct/100)) is what's shown in the next cell over. */}
+                  <BTh style={{ textAlign: "right", width: 110 }}>
+                    Moisture Loss
+                  </BTh>
                   {/* Read-only label — the unit is driven by the Pre-cook
                       card's picker, so this header shows the spelled-out
                       unit but isn't interactive from here. */}
@@ -2138,6 +2156,13 @@ function BlendSectionCard({
                   // SOLUTION label — no component expansion here since this
                   // is a read-only carry-over view.
                   if (isSolutionRow(row)) {
+                    const solLossFrac = lossFracFor(row);
+                    const solNetGrams = (Number(row.grams) || 0) * (1 - solLossFrac);
+                    const solMoisturePctValue = Number.isFinite(
+                      Number(row.moistureLossPct),
+                    )
+                      ? (row.moistureLossPct as number)
+                      : 0;
                     return (
                       <tr
                         key={row.id}
@@ -2169,8 +2194,67 @@ function BlendSectionCard({
                             whiteSpace: "nowrap",
                           }}
                         >
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.1"
+                              value={solMoisturePctValue}
+                              onFocus={(e) => {
+                                // Chrome's <input type="number"> doesn't select
+                                // on focus synchronously — defer one frame so the
+                                // digits are highlighted and any keystroke
+                                // replaces the value instead of prepending to it.
+                                const el = e.currentTarget;
+                                setTimeout(() => {
+                                  try { el.select(); } catch {}
+                                }, 0);
+                              }}
+                              onChange={(e) => {
+                                const n = Number(e.target.value);
+                                const clamped = !Number.isFinite(n)
+                                  ? 0
+                                  : Math.max(0, Math.min(100, n));
+                                onUpdate(row.id, { moistureLossPct: clamped });
+                              }}
+                              className="pricing__input"
+                              style={{
+                                width: 60,
+                                // Override .pricing__input's `flex: 1` so the
+                                // 60px width sticks inside the inline-flex
+                                // parent (same pattern as the grams input in
+                                // the primary blend tables).
+                                flex: "0 0 60px",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            />
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              %
+                            </span>
+                          </div>
+                        </BTd>
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           <span>
-                            {((Number(row.grams) || 0) * carryOverFactor).toFixed(2)}
+                            {(solNetGrams * carryOverFactor).toFixed(2)}
                           </span>{" "}
                           <span
                             style={{
@@ -2208,6 +2292,13 @@ function BlendSectionCard({
                   } else {
                     displayName = "Unnamed";
                   }
+                  const rowLossFrac = lossFracFor(row);
+                  const rowNetGrams = (Number(row.grams) || 0) * (1 - rowLossFrac);
+                  const rowMoisturePctValue = Number.isFinite(
+                    Number(row.moistureLossPct),
+                  )
+                    ? (row.moistureLossPct as number)
+                    : 0;
                   return (
                     <tr
                       key={row.id}
@@ -2239,8 +2330,65 @@ function BlendSectionCard({
                           whiteSpace: "nowrap",
                         }}
                       >
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="0.1"
+                            value={rowMoisturePctValue}
+                            onFocus={(e) => {
+                              // Chrome's <input type="number"> doesn't select
+                              // on focus synchronously — defer one frame so
+                              // the digits are highlighted and any keystroke
+                              // replaces the value instead of prepending to it.
+                              const el = e.currentTarget;
+                              setTimeout(() => {
+                                try { el.select(); } catch {}
+                              }, 0);
+                            }}
+                            onChange={(e) => {
+                              const n = Number(e.target.value);
+                              const clamped = !Number.isFinite(n)
+                                ? 0
+                                : Math.max(0, Math.min(100, n));
+                              onUpdate(row.id, { moistureLossPct: clamped });
+                            }}
+                            className="pricing__input"
+                            style={{
+                              width: 60,
+                              // Override .pricing__input's `flex: 1` so the
+                              // 60px width sticks inside the inline-flex parent.
+                              flex: "0 0 60px",
+                              textAlign: "right",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--ink-3, #8a9498)",
+                            }}
+                          >
+                            %
+                          </span>
+                        </div>
+                      </BTd>
+                      <BTd
+                        style={{
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <span>
-                          {((Number(row.grams) || 0) * carryOverFactor).toFixed(2)}
+                          {(rowNetGrams * carryOverFactor).toFixed(2)}
                         </span>{" "}
                         <span
                           style={{
@@ -2279,6 +2427,18 @@ function BlendSectionCard({
                       Tot primary blend carry over
                     </strong>
                   </BTd>
+                  {/* Total-row moisture-loss placeholder — no aggregate
+                      percentage makes sense here (each row has its own
+                      loss), so just show a small em-dash. */}
+                  <BTd
+                    style={{
+                      textAlign: "right",
+                      color: "var(--ink-3, #8a9498)",
+                      fontWeight: 400,
+                    }}
+                  >
+                    —
+                  </BTd>
                   <BTd
                     style={{
                       textAlign: "right",
@@ -2295,7 +2455,7 @@ function BlendSectionCard({
                         gap: 4,
                       }}
                     >
-                      <span>{(carryTotalG * carryOverFactor).toFixed(2)}</span>
+                      <span>{(totalNetGrams * carryOverFactor).toFixed(2)}</span>
                       <span
                         style={{
                           color: "var(--ink-3, #8a9498)",
