@@ -21,11 +21,12 @@
 //
 // Rendered in Bench top tab as one card per phase.
 // -----------------------------------------------------------------------------
-export const BLEND_PHASES = ["pre-cook", "cooked", "secondary", "final"] as const;
+export const BLEND_PHASES = ["pre-cook", "cooking", "cooked", "secondary", "final"] as const;
 export type BlendPhase = (typeof BLEND_PHASES)[number];
 
 export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
   "pre-cook": "Pre-cook primary blend",
+  cooking: "Cooking",
   cooked: "Cooked blend",
   secondary: "Secondary blend",
   final: "Final blend",
@@ -33,6 +34,8 @@ export const BLEND_PHASE_LABELS: Record<BlendPhase, string> = {
 
 export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
   "pre-cook": "Ingredients weighed in before being cooked.",
+  cooking:
+    "Cook the pre-cook blend down to target solids before folding in the secondary blend.",
   cooked:
     "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
   secondary: "Added after cooking is complete.",
@@ -48,6 +51,12 @@ export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
 export const DEFAULT_PROCESS_NOTES: Partial<Record<BlendPhase, string>> = {
   "pre-cook":
     "In a suitable container, pre-blend the pectin with half the sugar. Once well dry-blended, add warm water (100–110°F) to hydrate the pectin (about 30 min). Complete the addition of the remaining ingredients per the formula listed and mix to full dispersion — even if the sugar is not fully dissolved. Once fully mixed and the sugar is dissolved, check the pH and adjust to approximately 4.5 by adding either Sodium Citrate (25% sol) or Citric Acid (50% sol). Target pH range for the pre-cook blend: 4.0–5.0.",
+  cooking:
+    "Cook to 220-225F To reach 78-80% solids. Record pH and Solids.",
+  cooked:
+    "NO SECONDARY BLEND IS COMPOSED FOR PLACEBO SAMPLES",
+  final:
+    "While maintaining the product at a temperature not lower than 200F add the required amount of flavor, color and Citric Acid water solution (50/50) and mix well maintaining the product temperature at about 180-200F while depositing.  Keep the depositor hopper at 220-230F to evoid gummy set-up.  The gummy should be cooled to Room temperature and demolded within 15-30 minutes and place it onto perforated ss trayes for drying.",
 };
 
 // Banner text shown above the textarea whenever the current process note

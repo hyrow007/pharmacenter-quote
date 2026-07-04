@@ -644,6 +644,7 @@ export default function FormulaEditor({
   const phaseIngredients = useMemo(() => {
     const groups: Record<BlendPhase, GummyFormulaIngredient[]> = {
       "pre-cook": [],
+      cooking: [],
       cooked: [],
       secondary: [],
       final: [],
@@ -1113,6 +1114,9 @@ export default function FormulaEditor({
             processNote={processNotes["cooked"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["cooked"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("cooked", text)}
+            cookingProcessNote={processNotes["cooking"] ?? ""}
+            defaultCookingProcessNote={DEFAULT_PROCESS_NOTES["cooking"] ?? ""}
+            onCookingProcessNoteChange={(text) => setPhaseProcessNote("cooking", text)}
             finalRows={phaseIngredients.groups["final"]}
             onAddFinalRow={() => addRowForPhase("final")}
             onAddFinalSolution={() => addSolutionForPhase("final")}
@@ -1862,6 +1866,9 @@ function BlendSectionCard({
   processNote,
   defaultProcessNote,
   onProcessNoteChange,
+  cookingProcessNote,
+  defaultCookingProcessNote,
+  onCookingProcessNoteChange,
   finalRows,
   onAddFinalRow,
   onAddFinalSolution,
@@ -1889,6 +1896,12 @@ function BlendSectionCard({
    *  target when Reset is clicked. */
   defaultProcessNote: string;
   onProcessNoteChange: (text: string) => void;
+  /** Cooked-only: top-level "Cooking" Process notes block rendered right
+   *  under the card header, above the Secondary and Final subsections.
+   *  Independent default/reset/edit state from the two subsections. */
+  cookingProcessNote?: string;
+  defaultCookingProcessNote?: string;
+  onCookingProcessNoteChange?: (text: string) => void;
   /** Cooked-only: rows/handlers for the Final Blend subsection that lives
    *  inside the same card, right under Secondary Blend. Optional so the
    *  pre-cook card doesn't need to pass them. */
@@ -1915,6 +1928,10 @@ function BlendSectionCard({
   // toggling one doesn't affect the other.
   const [processEditing, setProcessEditing] = useState(false);
   const [finalProcessEditing, setFinalProcessEditing] = useState(false);
+  // Top-level "Cooking" Process notes edit toggle (cooked card only). Kept
+  // independent of the Secondary/Final subsection toggles so opening one
+  // doesn't affect the others.
+  const [cookingProcessEditing, setCookingProcessEditing] = useState(false);
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   // Number of decimal places to show in this section's Total row. Kept
@@ -1981,6 +1998,137 @@ function BlendSectionCard({
           {hint}
         </div>
       </header>
+
+      {/* Cooked-only: top-level "Cooking" Process notes block. Rendered
+          right below the card header, above the Secondary Blend and
+          Final Blend subsections. Same visual/behaviour as the
+          per-subsection Process notes blocks inside renderIngredientsBlock,
+          just labelled "Cooking:" instead of "Process:" and wired to
+          independent cooking* state. */}
+      {phase === "cooked" && onCookingProcessNoteChange ? (() => {
+        const currentCookingNote = cookingProcessNote ?? "";
+        const currentDefaultCookingNote = defaultCookingProcessNote ?? "";
+        const cookingIsAtDefault =
+          currentDefaultCookingNote.length > 0 &&
+          currentCookingNote.trim() === currentDefaultCookingNote.trim();
+        return (
+          <div
+            style={{
+              padding: "10px 14px 14px",
+              borderBottom: "1px solid var(--line-2, #efe9da)",
+              background: "var(--cream-soft, #fbf6ec)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 6,
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                }}
+              >
+                Cooking:
+              </span>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                {currentDefaultCookingNote && !cookingIsAtDefault ? (
+                  <button
+                    type="button"
+                    onClick={() => onCookingProcessNoteChange(currentDefaultCookingNote)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "var(--teal-700, #1d6c7b)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reset to default
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setCookingProcessEditing((v) => !v)}
+                  style={{
+                    padding: "4px 10px",
+                    background: cookingProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
+                    color: cookingProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
+                    border: "1px solid var(--teal-700, #1d6c7b)",
+                    borderRadius: 6,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                  }}
+                >
+                  {cookingProcessEditing ? "Done editing" : "Edit"}
+                </button>
+              </div>
+            </div>
+            {cookingIsAtDefault ? (
+              <div
+                role="alert"
+                style={{
+                  marginBottom: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#b91c1c",
+                }}
+              >
+                {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+              </div>
+            ) : null}
+            {cookingProcessEditing ? (
+              <textarea
+                value={currentCookingNote}
+                onChange={(e) => onCookingProcessNoteChange(e.target.value)}
+                rows={6}
+                placeholder="Describe the cooking steps, target temperature, solids, pH, etc."
+                className="pricing__input"
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                }}
+                autoFocus
+              />
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: "#fff",
+                  border: "1px solid var(--line, #e3dcc9)",
+                  borderRadius: 6,
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                  color: currentCookingNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  minHeight: 60,
+                }}
+              >
+                {currentCookingNote.trim() || "No cooking notes yet — click Edit to add."}
+              </div>
+            )}
+          </div>
+        );
+      })() : null}
 
       {(() => {
         // Renders one subsection block: optional subheading + ingredients
