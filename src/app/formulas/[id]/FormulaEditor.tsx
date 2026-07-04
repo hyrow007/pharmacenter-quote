@@ -1992,6 +1992,11 @@ function BlendSectionCard({
   // per-section so pre-cook can show 3 dp while other sections stay at 2
   // (or vice versa). 0..4 covered by the inline picker.
   const [totalDecimals, setTotalDecimals] = useState<number>(3);
+  // Independent decimal-places picker for the Primary Blend Carry Over
+  // subsection on the cooked card. Kept separate from `totalDecimals` so
+  // the operator can dial in a different precision on the carry-over
+  // display vs. the Secondary/Final totals below it. 0..4 range, default 2.
+  const [carryOverDecimals, setCarryOverDecimals] = useState<number>(2);
   // Section-level unit picker — mirrors the mcg/mg/g options on Label
   // claims. Every ingredient row + total is displayed and entered in the
   // selected unit; internally the values are still stored as grams so
@@ -2254,7 +2259,7 @@ function BlendSectionCard({
                           }}
                         >
                           <span>
-                            {(solNetGrams * carryOverFactor).toFixed(2)}
+                            {(solNetGrams * carryOverFactor).toFixed(carryOverDecimals)}
                           </span>{" "}
                           <span
                             style={{
@@ -2388,7 +2393,7 @@ function BlendSectionCard({
                         }}
                       >
                         <span>
-                          {(rowNetGrams * carryOverFactor).toFixed(2)}
+                          {(rowNetGrams * carryOverFactor).toFixed(carryOverDecimals)}
                         </span>{" "}
                         <span
                           style={{
@@ -2455,7 +2460,7 @@ function BlendSectionCard({
                         gap: 4,
                       }}
                     >
-                      <span>{(totalNetGrams * carryOverFactor).toFixed(2)}</span>
+                      <span>{(totalNetGrams * carryOverFactor).toFixed(carryOverDecimals)}</span>
                       <span
                         style={{
                           color: "var(--ink-3, #8a9498)",
@@ -2466,7 +2471,81 @@ function BlendSectionCard({
                       </span>
                     </span>
                   </BTd>
-                  <BTd />
+                  <BTd style={{ padding: "8px 6px" }}>
+                    {/* Two chevron buttons — mirrors the Secondary/Final
+                        total-row picker in renderIngredientsBlock. < drops
+                        one decimal (min 0), > adds one (max 4). Bound to
+                        `carryOverDecimals` so the carry-over precision is
+                        independent of the Secondary/Final totalDecimals. */}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 2,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCarryOverDecimals((d) => Math.max(0, d - 1))
+                        }
+                        disabled={carryOverDecimals <= 0}
+                        title="Fewer decimal places"
+                        aria-label="Fewer decimal places"
+                        style={{
+                          width: 16,
+                          height: 18,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color:
+                            carryOverDecimals <= 0
+                              ? "var(--ink-4, #c7cccf)"
+                              : "var(--ink-3, #8a9498)",
+                          background: "transparent",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 3,
+                          padding: 0,
+                          cursor:
+                            carryOverDecimals <= 0 ? "default" : "pointer",
+                        }}
+                      >
+                        &lt;
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCarryOverDecimals((d) => Math.min(4, d + 1))
+                        }
+                        disabled={carryOverDecimals >= 4}
+                        title="More decimal places"
+                        aria-label="More decimal places"
+                        style={{
+                          width: 16,
+                          height: 18,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color:
+                            carryOverDecimals >= 4
+                              ? "var(--ink-4, #c7cccf)"
+                              : "var(--ink-3, #8a9498)",
+                          background: "transparent",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 3,
+                          padding: 0,
+                          cursor:
+                            carryOverDecimals >= 4 ? "default" : "pointer",
+                        }}
+                      >
+                        &gt;
+                      </button>
+                    </span>
+                  </BTd>
                 </tr>
               </tbody>
             </table>
