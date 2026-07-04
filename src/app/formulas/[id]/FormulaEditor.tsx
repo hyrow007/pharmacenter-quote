@@ -953,6 +953,7 @@ export default function FormulaEditor({
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
                 type="number"
+                onFocus={(e) => e.currentTarget.select()}
                 value={Number.isFinite(gummyPieceWeightG) ? gummyPieceWeightG : 0}
                 onChange={(e) => {
                   const n = Number(e.target.value);
@@ -1311,6 +1312,7 @@ function NumberInput({
     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
       <input
         type="number"
+                onFocus={(e) => e.currentTarget.select()}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => {
           const n = Number(e.target.value);
@@ -2495,6 +2497,7 @@ function BlendSectionCard({
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                               <input
                                 type="number"
+                onFocus={(e) => e.currentTarget.select()}
                                 value={
                                   row.grams !== null && row.grams !== undefined
                                     ? row.grams * factor
@@ -3113,6 +3116,7 @@ function LabelClaimsSection({
                 />
                 <input
                   type="number"
+                onFocus={(e) => e.currentTarget.select()}
                   value={Number.isFinite(c.amount) ? c.amount : 0}
                   onChange={(e) => {
                     const n = Number(e.target.value);
@@ -3540,6 +3544,7 @@ function SolutionRow({
               >
                 <input
                   type="number"
+                onFocus={(e) => e.currentTarget.select()}
                   value={
                     row.grams !== null && row.grams !== undefined
                       ? row.grams * unitFactor
@@ -3819,6 +3824,7 @@ function SolutionComponentRow({
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <input
           type="number"
+                onFocus={(e) => e.currentTarget.select()}
           value={Number.isFinite(component.pct) ? component.pct : 0}
           onChange={(e) => {
             const n = Number(e.target.value);
