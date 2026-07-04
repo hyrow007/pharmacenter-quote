@@ -1117,6 +1117,9 @@ export default function FormulaEditor({
             onAddFinalRow={() => addRowForPhase("final")}
             onAddFinalSolution={() => addSolutionForPhase("final")}
             onAddSavedFinalSolution={(s) => addSavedSolutionForPhase("final", s)}
+            finalProcessNote={processNotes["final"] ?? ""}
+            defaultFinalProcessNote={DEFAULT_PROCESS_NOTES["final"] ?? ""}
+            onFinalProcessNoteChange={(text) => setPhaseProcessNote("final", text)}
           />
         </>
       )}
@@ -1863,6 +1866,9 @@ function BlendSectionCard({
   onAddFinalRow,
   onAddFinalSolution,
   onAddSavedFinalSolution,
+  finalProcessNote,
+  defaultFinalProcessNote,
+  onFinalProcessNoteChange,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -1890,6 +1896,12 @@ function BlendSectionCard({
   onAddFinalRow?: () => void;
   onAddFinalSolution?: () => void;
   onAddSavedFinalSolution?: (s: SavedSolution) => void;
+  /** Cooked-only: Process notes for the Final Blend subsection. When the
+   *  cooked card renders, Secondary Blend and Final Blend each get their
+   *  own Process notes block with independent default/reset/edit state. */
+  finalProcessNote?: string;
+  defaultFinalProcessNote?: string;
+  onFinalProcessNoteChange?: (text: string) => void;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -1897,11 +1909,12 @@ function BlendSectionCard({
   // Independent menu state for the Final Blend subsection so opening
   // that one doesn't close/toggle the Secondary Blend one.
   const [finalSolutionMenuOpen, setFinalSolutionMenuOpen] = useState(false);
-  const isAtDefault =
-    defaultProcessNote.length > 0 && processNote.trim() === defaultProcessNote.trim();
   // Process text starts read-only. The rep has to click Edit to modify it,
-  // which prevents accidental changes and makes edits deliberate.
+  // which prevents accidental changes and makes edits deliberate. Each
+  // subsection (Secondary + Final on cooked) has its own edit-mode toggle so
+  // toggling one doesn't affect the other.
   const [processEditing, setProcessEditing] = useState(false);
+  const [finalProcessEditing, setFinalProcessEditing] = useState(false);
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   // Number of decimal places to show in this section's Total row. Kept
@@ -1969,137 +1982,6 @@ function BlendSectionCard({
         </div>
       </header>
 
-      {/* Process notes — moved above the ingredients table so the mixing
-          steps sit right under the section title. Free-text mixing
-          instructions for this blend phase (pre-blend pectin, hydration
-          times, pH targets, etc.). Persisted on the version's
-          process_notes JSONB column keyed by the blend phase.
-          - On first render the textarea is seeded with the canonical
-            DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
-          - If the current text still equals the default, a red
-            placeholder-notice banner is shown so the rep knows this hasn't
-            been reviewed for this specific formula yet.
-          - Once edited, a "Reset to default" link appears to bring it
-            back to the canonical text. */}
-      <div
-        style={{
-          padding: "10px 14px 14px",
-          borderBottom: "1px solid var(--line-2, #efe9da)",
-          background: "var(--cream-soft, #fbf6ec)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 6,
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--teal-900, #0f4a56)",
-            }}
-          >
-            Process:
-          </span>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-            {defaultProcessNote && !isAtDefault ? (
-              <button
-                type="button"
-                onClick={() => onProcessNoteChange(defaultProcessNote)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "var(--teal-700, #1d6c7b)",
-                  cursor: "pointer",
-                }}
-              >
-                Reset to default
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setProcessEditing((v) => !v)}
-              style={{
-                padding: "4px 10px",
-                background: processEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
-                color: processEditing ? "#fff" : "var(--teal-900, #0f4a56)",
-                border: "1px solid var(--teal-700, #1d6c7b)",
-                borderRadius: 6,
-                fontSize: 10.5,
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-              }}
-            >
-              {processEditing ? "Done editing" : "Edit"}
-            </button>
-          </div>
-        </div>
-        {isAtDefault ? (
-          <div
-            role="alert"
-            style={{
-              marginBottom: 6,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#b91c1c",
-            }}
-          >
-            {PROCESS_NOTES_PLACEHOLDER_NOTICE}
-          </div>
-        ) : null}
-        {processEditing ? (
-          <textarea
-            value={processNote}
-            onChange={(e) => onProcessNoteChange(e.target.value)}
-            rows={6}
-            placeholder="Describe the mixing steps, hydration times, pH targets, etc."
-            className="pricing__input"
-            style={{
-              width: "100%",
-              resize: "vertical",
-              fontFamily: "inherit",
-              fontSize: 12.5,
-              lineHeight: 1.5,
-            }}
-            autoFocus
-          />
-        ) : (
-          // Read-only view. Whitespace: pre-wrap keeps whatever newlines
-          // the rep typed in edit mode. Empty state gets a placeholder
-          // hint since we know the default gets seeded on mount.
-          <div
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              background: "#fff",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 6,
-              fontSize: 12.5,
-              lineHeight: 1.5,
-              color: processNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              minHeight: 60,
-            }}
-          >
-            {processNote.trim() || "No process notes yet — click Edit to add."}
-          </div>
-        )}
-      </div>
-
       {(() => {
         // Renders one subsection block: optional subheading + ingredients
         // table (or empty state) + Add ingredient / Add solution row. The
@@ -2116,6 +1998,11 @@ function BlendSectionCard({
           blockOnAddSavedSolution,
           blockSolutionMenuOpen,
           setBlockSolutionMenuOpen,
+          blockProcessNote,
+          blockDefaultProcessNote,
+          blockOnProcessNoteChange,
+          blockProcessEditing,
+          setBlockProcessEditing,
         }: {
           subHeading: string | null;
           blockRows: GummyFormulaIngredient[];
@@ -2124,11 +2011,22 @@ function BlendSectionCard({
           blockOnAddSavedSolution: (s: SavedSolution) => void;
           blockSolutionMenuOpen: boolean;
           setBlockSolutionMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+          blockProcessNote: string;
+          blockDefaultProcessNote: string;
+          blockOnProcessNoteChange: (text: string) => void;
+          blockProcessEditing: boolean;
+          setBlockProcessEditing: React.Dispatch<React.SetStateAction<boolean>>;
         }) => {
           const totalG = blockRows.reduce(
             (s, r) => s + (Number(r.grams) || 0),
             0,
           );
+          // Per-subsection default-detection so Secondary and Final each
+          // decide independently whether to show the red placeholder-notice
+          // banner and the Reset link.
+          const blockIsAtDefault =
+            blockDefaultProcessNote.length > 0 &&
+            blockProcessNote.trim() === blockDefaultProcessNote.trim();
           return (
             <>
               {/* Optional sub-heading — e.g. "Secondary Blend" or
@@ -2148,6 +2046,138 @@ function BlendSectionCard({
                   {subHeading}
                 </div>
               ) : null}
+
+              {/* Process notes — one block per subsection so Secondary and
+                  Final each own their default text, Reset link, Edit
+                  toggle, and placeholder banner. Free-text mixing
+                  instructions for this subsection (pre-blend pectin,
+                  hydration times, pH targets, etc.). Persisted on the
+                  version's process_notes JSONB column keyed by phase.
+                  - On first render the textarea is seeded with the canonical
+                    DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
+                  - If the current text still equals the default, a red
+                    placeholder-notice banner is shown so the rep knows this
+                    hasn't been reviewed for this specific formula yet.
+                  - Once edited, a "Reset to default" link appears to bring
+                    it back to the canonical text. */}
+              <div
+                style={{
+                  padding: "10px 14px 14px",
+                  borderBottom: "1px solid var(--line-2, #efe9da)",
+                  background: "var(--cream-soft, #fbf6ec)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 6,
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                    }}
+                  >
+                    Process:
+                  </span>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                    {blockDefaultProcessNote && !blockIsAtDefault ? (
+                      <button
+                        type="button"
+                        onClick={() => blockOnProcessNoteChange(blockDefaultProcessNote)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          padding: 0,
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          color: "var(--teal-700, #1d6c7b)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Reset to default
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setBlockProcessEditing((v) => !v)}
+                      style={{
+                        padding: "4px 10px",
+                        background: blockProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
+                        color: blockProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
+                        border: "1px solid var(--teal-700, #1d6c7b)",
+                        borderRadius: 6,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {blockProcessEditing ? "Done editing" : "Edit"}
+                    </button>
+                  </div>
+                </div>
+                {blockIsAtDefault ? (
+                  <div
+                    role="alert"
+                    style={{
+                      marginBottom: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#b91c1c",
+                    }}
+                  >
+                    {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+                  </div>
+                ) : null}
+                {blockProcessEditing ? (
+                  <textarea
+                    value={blockProcessNote}
+                    onChange={(e) => blockOnProcessNoteChange(e.target.value)}
+                    rows={6}
+                    placeholder="Describe the mixing steps, hydration times, pH targets, etc."
+                    className="pricing__input"
+                    style={{
+                      width: "100%",
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  // Read-only view. Whitespace: pre-wrap keeps whatever newlines
+                  // the rep typed in edit mode. Empty state gets a placeholder
+                  // hint since we know the default gets seeded on mount.
+                  <div
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      background: "#fff",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      color: blockProcessNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      minHeight: 60,
+                    }}
+                  >
+                    {blockProcessNote.trim() || "No process notes yet — click Edit to add."}
+                  </div>
+                )}
+              </div>
 
               {blockRows.length === 0 ? (
                 <div
@@ -2697,6 +2727,11 @@ function BlendSectionCard({
               blockOnAddSavedSolution: onAddSavedSolution,
               blockSolutionMenuOpen: solutionMenuOpen,
               setBlockSolutionMenuOpen: setSolutionMenuOpen,
+              blockProcessNote: processNote,
+              blockDefaultProcessNote: defaultProcessNote,
+              blockOnProcessNoteChange: onProcessNoteChange,
+              blockProcessEditing: processEditing,
+              setBlockProcessEditing: setProcessEditing,
             })}
             {/* Cooked-only Final Blend subsection — same structure as
                 Secondary but wired to phase="final" state on the parent.
@@ -2715,6 +2750,11 @@ function BlendSectionCard({
                   blockOnAddSavedSolution: onAddSavedFinalSolution,
                   blockSolutionMenuOpen: finalSolutionMenuOpen,
                   setBlockSolutionMenuOpen: setFinalSolutionMenuOpen,
+                  blockProcessNote: finalProcessNote ?? "",
+                  blockDefaultProcessNote: defaultFinalProcessNote ?? "",
+                  blockOnProcessNoteChange: onFinalProcessNoteChange ?? (() => {}),
+                  blockProcessEditing: finalProcessEditing,
+                  setBlockProcessEditing: setFinalProcessEditing,
                 })
               : null}
           </>
