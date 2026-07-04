@@ -1928,71 +1928,28 @@ function BlendSectionCard({
           borderBottom: "2px solid var(--teal-700, #1d6c7b)",
           borderTopLeftRadius: 8,
           borderTopRightRadius: 8,
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 12,
         }}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 800,
-              color: "var(--teal-900, #0f4a56)",
-              letterSpacing: "-0.01em",
-              lineHeight: 1.15,
-            }}
-          >
-            {label}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--ink-3, #8a9498)",
-              marginTop: 4,
-            }}
-          >
-            {hint}
-          </div>
-        </div>
-        {/* Section-level unit picker. Every grams input, glyph, and total
-            below is displayed and entered in this unit; internally we
-            still store grams, so switching mid-authoring rescales
-            numbers correctly without touching the underlying data. */}
-        <label
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--ink-3, #8a9498)",
-            whiteSpace: "nowrap",
-            marginTop: 2,
+            fontSize: 20,
+            fontWeight: 800,
+            color: "var(--teal-900, #0f4a56)",
+            letterSpacing: "-0.01em",
+            lineHeight: 1.15,
           }}
         >
-          <span>Unit</span>
-          <select
-            value={sectionUnit}
-            onChange={(e) => setSectionUnit(e.target.value as LabelClaimUnit)}
-            className="pricing__input"
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              padding: "4px 6px",
-              width: "auto",
-            }}
-            aria-label="Unit for this blend section"
-          >
-            {LABEL_CLAIM_UNITS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-        </label>
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--ink-3, #8a9498)",
+            marginTop: 4,
+          }}
+        >
+          {hint}
+        </div>
       </header>
 
       {/* Process notes — moved above the ingredients table so the mixing
@@ -2174,7 +2131,42 @@ function BlendSectionCard({
           <thead>
             <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
               <BTh>Ingredient</BTh>
-              <BTh style={{ textAlign: "right", width: 120 }}>Grams</BTh>
+              <BTh style={{ textAlign: "right", width: 120 }}>
+                {/* The column header itself picks the unit for the
+                    column. mcg/mg/g options — internally we always
+                    store grams, so switching mid-authoring rescales the
+                    display without touching stored values. */}
+                <select
+                  value={sectionUnit}
+                  onChange={(e) =>
+                    setSectionUnit(e.target.value as LabelClaimUnit)
+                  }
+                  aria-label="Unit for this blend section"
+                  title="Unit for this blend section"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                    fontSize: "inherit",
+                    fontWeight: "inherit",
+                    letterSpacing: "inherit",
+                    textTransform: "inherit",
+                    color: "inherit",
+                    cursor: "pointer",
+                    textAlign: "right",
+                    // Small caret hint via appearance:auto (native
+                    // browser look) — keeps the header compact.
+                    appearance: "auto",
+                  }}
+                >
+                  {LABEL_CLAIM_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </BTh>
               <BTh style={{ width: 40 }} />
             </tr>
           </thead>
