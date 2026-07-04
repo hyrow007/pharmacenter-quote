@@ -2898,7 +2898,12 @@ function BlendSectionCard({
             {/* Primary subsection — this is the ONLY block on pre-cook,
                 and the "Secondary Blend" block on cooked. */}
             {renderIngredientsBlock({
-              subHeading: phase === "cooked" ? "Secondary Blend" : null,
+              subHeading:
+                phase === "cooked"
+                  ? "Secondary Blend"
+                  : phase === "pre-cook"
+                    ? "Primary Blend"
+                    : null,
               blockRows: rows,
               blockOnAddRow: onAddRow,
               blockOnAddSolution: onAddSolution,
