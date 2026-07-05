@@ -2396,9 +2396,11 @@ function BenchTopTab({
               />
             </div>
             {/* marginLeft: auto flushes % of bench to the far right of
-                the row so it stays visually anchored to the card edge,
-                mirroring the Sugar/Syrup ratio's right-anchor on row 2. */}
-            <div style={{ marginLeft: "auto" }}>
+                the row. flex-shrink: 0 keeps the cell at its natural
+                size so the label never clips against the card edge.
+                paddingRight: 4 gives the label a hair of breathing room
+                inside the card's inner padding. */}
+            <div style={{ marginLeft: "auto", flexShrink: 0, paddingRight: 4 }}>
               <KeyIndicatorPctStat
                 label="% of bench batch"
                 value={pctOfBench}
@@ -2575,9 +2577,13 @@ function KeyIndicatorPctStat({
         flexDirection: "column",
         alignItems: "center",
         gap: 4,
-        // Same 155 min-width as KeyIndicatorStat so this pill lines up
-        // with the equation cells on row 1 and stays on the same line.
-        minWidth: 155,
+        // 190px min-width — the polish pass label bump made
+        // "% OF BENCH BATCH" and "RESIDUAL MOISTURE TOTAL" wider than
+        // the old 155px cell, so their centered/nowrap labels
+        // overflowed and the right side clipped past the card edge
+        // (since row 1's cell is right-anchored via marginLeft:auto).
+        // 190 gives even the widest label ~15px of side padding.
+        minWidth: 190,
       }}
     >
       <div
