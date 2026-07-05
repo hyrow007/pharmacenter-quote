@@ -2406,18 +2406,18 @@ function BenchTopTab({
               />
             </div>
           </div>
-          {/* Row 2: supporting indicators. Residual Moisture Total on
-              the left balances the equation group above; the Sugar to
-              Syrup ratio sits on the right under the % of bench. A thin
-              dashed rule separates it from the equation so it reads as
-              a distinct "supporting metrics" band. */}
+          {/* Row 2: three supporting indicators — Residual Moisture Total,
+              Sugar (dry), Syrup (dry) — distributed evenly. Sugar and
+              Syrup sit as siblings with a ":" operator between them to
+              read as a proper ratio (dry/dry). Separated from the
+              equation above by the same dashed rule. */}
           <div
             style={{
               display: "flex",
               alignItems: "flex-end",
-              gap: 16,
+              gap: 20,
               flexWrap: "wrap",
-              justifyContent: "space-between",
+              justifyContent: "space-around",
               marginTop: 14,
               paddingTop: 12,
               borderTop: "1px dashed var(--line, #e3dcc9)",
@@ -2428,19 +2428,30 @@ function BenchTopTab({
               value={residualMoistureTotalPct}
               ok
             />
-            <KeyIndicatorRatioStat
-              label="Sugar to Syrup Ratio (dry)"
-              sugarText={
-                sugarSyrupRatio
-                  ? `${Format.pct(sugarSyrupRatio.sugarPct)}%`
-                  : "—"
-              }
-              syrupText={
-                sugarSyrupRatio
-                  ? `${Format.pct(sugarSyrupRatio.syrupPct)}%`
-                  : "—"
-              }
-            />
+            {/* Sugar : Syrup — sit as siblings with a small ":" glyph
+                between them so the pair reads as a dry/dry ratio without
+                needing a heavy composite cell. Wrapped so they stay
+                together if the row wraps to a second line. */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 12,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <KeyIndicatorPctStat
+                label="Sugar (dry)"
+                value={sugarSyrupRatio ? sugarSyrupRatio.sugarPct : NaN}
+                ok
+              />
+              <KeyIndicatorOp glyph=":" />
+              <KeyIndicatorPctStat
+                label="Syrup (dry)"
+                value={sugarSyrupRatio ? sugarSyrupRatio.syrupPct : NaN}
+                ok
+              />
+            </div>
           </div>
         </div>
       </div>
