@@ -4221,50 +4221,197 @@ function BlendSectionCard({
                   const s = (grandTotalCookedBlendG * factor).toFixed(2);
                   // Mirror the pctOfBench trick — drop a trailing ".00" so a
                   // whole number renders cleanly without visual noise.
-                  const display = s.endsWith(".00") ? s.slice(0, -3) : s;
+                  const gramsDisplay = s.endsWith(".00") ? s.slice(0, -3) : s;
+                  // % of finished product — by construction the Grand Total
+                  // is 100% of itself. Guard against a degenerate 0/0 case
+                  // (nothing entered anywhere) by rendering an empty string.
+                  const pctDisplay = grandTotalCookedBlendG > 0 ? "100" : "";
+                  // Residual Moisture % — sum across all three subsections.
+                  // Primary Blend Carry Over: only non-solution rows
+                  //   contribute; uses each row's NET grams (post moisture
+                  //   loss) so it matches the carry-over table's own total.
+                  // Secondary Blend: only non-solution rows contribute; uses
+                  //   raw row.grams.
+                  // Final Blend: water rows AND solution rows contribute;
+                  //   uses raw row.grams.
+                  // Divide by grandTotalCookedBlendG (guarded) so each row's
+                  // contribution is expressed as a share of the finished
+                  // product, mirroring the per-row residual math in each
+                  // subsection.
+                  let grandResidualPct = 0;
+                  if (grandTotalCookedBlendG > 0) {
+                    // Primary Blend Carry Over — recompute the same
+                    // per-row NET grams the carry-over table uses. This
+                    // mirrors the water-auto-balance / per-row loss-fraction
+                    // math from the carry-over IIFE above so the footer
+                    // ties out with the subsection totals exactly.
+                    const carryWaterPct = computeCarryOverWaterPct({
+                      preCookRows: carryOverRows,
+                      benchBatchG: benchBatchG ?? 0,
+                      secondaryG: secondaryTotalG,
+                      finalG: finalTotalG,
+                    });
+                    for (const r of carryOverRows) {
+                      if (isSolutionRow(r)) continue;
+                      const wf = waterFractionFor(r);
+                      if (wf === 0) continue;
+                      let lossFrac: number;
+                      if (isWaterRow(r)) {
+                        lossFrac = carryWaterPct / 100;
+                      } else {
+                        const raw = Number(r.moistureLossPct);
+                        const pct = Number.isFinite(raw)
+                          ? raw
+                          : carryOverDefaultMoisturePct(r);
+                        lossFrac = pct <= 0 ? 0 : pct >= 100 ? 1 : pct / 100;
+                      }
+                      const netG = (Number(r.grams) || 0) * (1 - lossFrac);
+                      grandResidualPct +=
+                        wf * ((netG / grandTotalCookedBlendG) * 100);
+                    }
+                    // Secondary Blend — skip solutions, use raw grams.
+                    for (const r of rows) {
+                      if (isSolutionRow(r)) continue;
+                      const wf = waterFractionFor(r);
+                      if (wf === 0) continue;
+                      grandResidualPct +=
+                        wf *
+                        (((Number(r.grams) || 0) / grandTotalCookedBlendG) *
+                          100);
+                    }
+                    // Final Blend — solutions AND water rows contribute.
+                    for (const r of finalRows ?? []) {
+                      const wf = waterFractionFor(r);
+                      if (wf === 0) continue;
+                      grandResidualPct +=
+                        wf *
+                        (((Number(r.grams) || 0) / grandTotalCookedBlendG) *
+                          100);
+                    }
+                  }
+                  const residualStr = grandResidualPct.toFixed(2);
+                  const residualDisplay = residualStr.endsWith(".00")
+                    ? residualStr.slice(0, -3)
+                    : residualStr;
                   return (
                     <div
                       style={{
                         borderTop: "2px solid var(--teal-700, #1d6c7b)",
                         background: "var(--cream-soft, #fbf6ec)",
-                        padding: "10px 14px",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
                       }}
                     >
-                      <strong
+                      <table
                         style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          color: "var(--teal-900, #0f4a56)",
+                          width: "100%",
+                          borderCollapse: "collapse",
+                          fontSize: 12.5,
+                          tableLayout: "fixed",
                         }}
                       >
-                        Grand Total Cooked Blend
-                      </strong>
-                      <span
-                        style={{
-                          fontVariantNumeric: "tabular-nums",
-                          fontWeight: 700,
-                          color: "var(--teal-900, #0f4a56)",
-                          whiteSpace: "nowrap",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <span>{display}</span>
-                        <span
-                          style={{
-                            color: "var(--ink-3, #8a9498)",
-                            fontWeight: 400,
-                          }}
-                        >
-                          {effectiveSectionUnit}
-                        </span>
-                      </span>
+                        <colgroup>
+                          {/* Ingredient — auto width to match the
+                              Secondary/Final tables above. */}
+                          <col />
+                          {/* Grams */}
+                          <col style={{ width: 120 }} />
+                          {/* % of finished product */}
+                          <col style={{ width: 120 }} />
+                          {/* Residual Moisture % */}
+                          <col style={{ width: 120 }} />
+                          {/* Chevron / empty */}
+                          <col style={{ width: 40 }} />
+                        </colgroup>
+                        <tbody>
+                          <tr>
+                            <BTd style={{ padding: "10px 14px" }}>
+                              <strong
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.1em",
+                                  textTransform: "uppercase",
+                                  color: "var(--teal-900, #0f4a56)",
+                                }}
+                              >
+                                Grand Total Cooked Blend
+                              </strong>
+                            </BTd>
+                            <BTd
+                              style={{
+                                padding: "10px 14px",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                fontWeight: 700,
+                                color: "var(--teal-900, #0f4a56)",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                <span>{gramsDisplay}</span>
+                                <span
+                                  style={{
+                                    color: "var(--ink-3, #8a9498)",
+                                    fontWeight: 400,
+                                  }}
+                                >
+                                  {effectiveSectionUnit}
+                                </span>
+                              </span>
+                            </BTd>
+                            <BTd
+                              style={{
+                                padding: "10px 14px",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                fontWeight: 700,
+                                color: "var(--teal-900, #0f4a56)",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {pctDisplay ? (
+                                <>
+                                  <span>{pctDisplay}</span>
+                                  <span
+                                    style={{
+                                      color: "var(--ink-3, #8a9498)",
+                                      fontWeight: 400,
+                                    }}
+                                  >
+                                    %
+                                  </span>
+                                </>
+                              ) : null}
+                            </BTd>
+                            <BTd
+                              style={{
+                                padding: "10px 14px",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                fontWeight: 700,
+                                color: "var(--teal-900, #0f4a56)",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <span>{residualDisplay}</span>
+                              <span
+                                style={{
+                                  color: "var(--ink-3, #8a9498)",
+                                  fontWeight: 400,
+                                }}
+                              >
+                                %
+                              </span>
+                            </BTd>
+                            <BTd style={{ padding: "10px 14px" }} />
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   );
                 })()
