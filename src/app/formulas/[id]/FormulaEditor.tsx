@@ -209,6 +209,71 @@ function computeCarryOverPrimaryNetG(params: {
   }, 0);
 }
 
+// Compute the grand-total Residual Moisture % across the whole Cooked
+// blend card — Primary Blend Carry Over (only non-solution rows, water +
+// water-defaults contribute), Secondary Blend (only non-solutions), and
+// Final Blend (solutions + water rows). Mirrors the exact math used by
+// the Grand Total Cooked Blend footer so the Bench Top card's readout
+// always matches what's rendered inside the Cooked card itself.
+function computeGrandResidualPct(params: {
+  preCookRows: GummyFormulaIngredient[];
+  secondaryRows: GummyFormulaIngredient[];
+  finalRows: GummyFormulaIngredient[];
+  benchBatchG: number;
+}): number {
+  const { preCookRows, secondaryRows, finalRows, benchBatchG } = params;
+  const secondaryG = secondaryRows.reduce(
+    (s, r) => s + (Number(r.grams) || 0),
+    0,
+  );
+  const finalG = finalRows.reduce((s, r) => s + (Number(r.grams) || 0), 0);
+  const primaryNetG = computeCarryOverPrimaryNetG({
+    preCookRows,
+    benchBatchG,
+    secondaryG,
+    finalG,
+  });
+  const grandTotalG = primaryNetG + secondaryG + finalG;
+  if (grandTotalG <= 0) return 0;
+  const carryWaterPct = computeCarryOverWaterPct({
+    preCookRows,
+    benchBatchG,
+    secondaryG,
+    finalG,
+  });
+  let residualPct = 0;
+  // Primary Blend Carry Over — skip solutions, use per-row NET grams.
+  for (const r of preCookRows) {
+    if (isSolutionRow(r)) continue;
+    const wf = waterFractionFor(r);
+    if (wf === 0) continue;
+    let lossFrac: number;
+    if (isWaterRow(r)) {
+      lossFrac = carryWaterPct / 100;
+    } else {
+      const raw = Number(r.moistureLossPct);
+      const pct = Number.isFinite(raw) ? raw : carryOverDefaultMoisturePct(r);
+      lossFrac = pct <= 0 ? 0 : pct >= 100 ? 1 : pct / 100;
+    }
+    const netG = (Number(r.grams) || 0) * (1 - lossFrac);
+    residualPct += wf * ((netG / grandTotalG) * 100);
+  }
+  // Secondary Blend — skip solutions.
+  for (const r of secondaryRows) {
+    if (isSolutionRow(r)) continue;
+    const wf = waterFractionFor(r);
+    if (wf === 0) continue;
+    residualPct += wf * (((Number(r.grams) || 0) / grandTotalG) * 100);
+  }
+  // Final Blend — solutions AND water rows contribute.
+  for (const r of finalRows) {
+    const wf = waterFractionFor(r);
+    if (wf === 0) continue;
+    residualPct += wf * (((Number(r.grams) || 0) / grandTotalG) * 100);
+  }
+  return residualPct;
+}
+
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
 // identity header's PC-BK code picker. Selecting one auto-fills Name.
 export type PcBkProductOption = {
@@ -1239,6 +1304,12 @@ export default function FormulaEditor({
               (s, r) => s + (Number(r.grams) || 0),
               0,
             )}
+            residualMoistureTotalPct={computeGrandResidualPct({
+              preCookRows: phaseIngredients.groups["pre-cook"],
+              secondaryRows: phaseIngredients.groups["cooked"],
+              finalRows: phaseIngredients.groups["final"],
+              benchBatchG,
+            })}
           />
           {/* Blend-phase sections. Currently only Pre-cook is rendered;
               Secondary + Final will drop in the same way as the recipe
@@ -1508,6 +1579,7 @@ function BenchTopTab({
   primaryBlendG,
   secondaryBlendG,
   finalBlendG,
+  residualMoistureTotalPct,
 }: {
   benchBatchG: number;
   setBenchBatchG: (n: number) => void;
@@ -1520,6 +1592,9 @@ function BenchTopTab({
   /** Sum of "final" phase grams — displayed in the Cooked card's Final
    *  Blend subsection. */
   finalBlendG: number;
+  /** Grand-total Residual Moisture % across the whole Cooked blend card.
+   *  Mirrors the value in the Grand Total Cooked Blend footer row. */
+  residualMoistureTotalPct: number;
 }) {
   // Combined batch weight across all three blends. Compared against the
   // bench top batch so the rep can see at a glance how close the recipe
@@ -1644,6 +1719,32 @@ function BenchTopTab({
               ok={totalOk}
             />
           </div>
+          {/* Second-row indicators: derived values that supplement the
+              blend equation above. Separated by a thin dashed rule so
+              they read as "additional metrics" rather than more terms
+              in the equation. */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 16,
+              flexWrap: "wrap",
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: "1px dashed var(--line, #e3dcc9)",
+            }}
+          >
+            <KeyIndicatorPctStat
+              label="Residual Moisture Total"
+              value={residualMoistureTotalPct}
+              ok
+            />
+            <KeyIndicatorRatioStat
+              label="Sugar to Syrup Ratio (dry)"
+              sugarText="—"
+              syrupText="—"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1766,6 +1867,86 @@ function KeyIndicatorPctStat({
         }}
       >
         {display}%
+      </div>
+    </div>
+  );
+}
+
+// Two-value ratio stat used for "Sugar to Syrup Ratio (dry)" in the
+// Key Indicators card. Shows a single label above two labelled sub-
+// values (Sugar / Syrup) side by side. Same 190px fixed cell width so
+// it aligns with the other Key Indicator stats.
+function KeyIndicatorRatioStat({
+  label,
+  sugarText,
+  syrupText,
+}: {
+  label: string;
+  sugarText: string;
+  syrupText: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+        minWidth: 190,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          whiteSpace: "nowrap",
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </div>
+      {/* Two labelled sub-values side by side. Kept as separate stacks
+          so each has its own "SUGAR" / "SYRUP" caption above the digit. */}
+      <div style={{ display: "flex", gap: 18, alignItems: "flex-end" }}>
+        <RatioSubValue caption="Sugar" text={sugarText} />
+        <RatioSubValue caption="Syrup" text={syrupText} />
+      </div>
+    </div>
+  );
+}
+
+// A single value under a small "SUGAR" / "SYRUP" caption. Used by
+// KeyIndicatorRatioStat.
+function RatioSubValue({ caption, text }: { caption: string; text: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          lineHeight: 1,
+          marginBottom: 3,
+        }}
+      >
+        {caption}
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          color: "var(--teal-900, #0f4a56)",
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {text}
       </div>
     </div>
   );
