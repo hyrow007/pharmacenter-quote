@@ -2406,18 +2406,19 @@ function BenchTopTab({
               />
             </div>
           </div>
-          {/* Row 2: three supporting indicators — Residual Moisture Total,
-              Sugar (dry), Syrup (dry) — distributed evenly. Sugar and
-              Syrup sit as siblings with a ":" operator between them to
-              read as a proper ratio (dry/dry). Separated from the
-              equation above by the same dashed rule. */}
+          {/* Row 2: two grouped indicators — Residual Moisture Total on
+              the left, Sugar to Syrup Ratio on the right. The ratio has
+              a small centered group title above its two sub-values
+              (Sugar (dry) : Syrup (dry)) so it reads as a labelled pair
+              instead of two orphan stats. Both groups are centered in
+              the row with a comfortable gap so nothing feels stranded. */}
           <div
             style={{
               display: "flex",
-              alignItems: "flex-end",
-              gap: 20,
+              alignItems: "center",
+              gap: 60,
               flexWrap: "wrap",
-              justifyContent: "space-around",
+              justifyContent: "center",
               marginTop: 14,
               paddingTop: 12,
               borderTop: "1px dashed var(--line, #e3dcc9)",
@@ -2428,29 +2429,54 @@ function BenchTopTab({
               value={residualMoistureTotalPct}
               ok
             />
-            {/* Sugar : Syrup — sit as siblings with a small ":" glyph
-                between them so the pair reads as a dry/dry ratio without
-                needing a heavy composite cell. Wrapped so they stay
-                together if the row wraps to a second line. */}
+            {/* Sugar to Syrup Ratio group — small title centered above
+                the two sub-stats so the semantic pairing is explicit.
+                A thin hairline between title and sub-stats reinforces
+                the "this is a group" reading without adding a heavy
+                border. */}
             <div
               style={{
                 display: "flex",
-                alignItems: "flex-end",
-                gap: 12,
-                whiteSpace: "nowrap",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              <KeyIndicatorPctStat
-                label="Sugar (dry)"
-                value={sugarSyrupRatio ? sugarSyrupRatio.sugarPct : NaN}
-                ok
-              />
-              <KeyIndicatorOp glyph=":" />
-              <KeyIndicatorPctStat
-                label="Syrup (dry)"
-                value={sugarSyrupRatio ? sugarSyrupRatio.syrupPct : NaN}
-                ok
-              />
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  color: "var(--ink-2, #415056)",
+                  textTransform: "uppercase",
+                  paddingBottom: 3,
+                  borderBottom: "1px solid var(--line, #e3dcc9)",
+                  minWidth: 240,
+                  textAlign: "center",
+                }}
+              >
+                Sugar to Syrup Ratio
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <KeyIndicatorPctStat
+                  label="Sugar (dry)"
+                  value={sugarSyrupRatio ? sugarSyrupRatio.sugarPct : NaN}
+                  ok
+                />
+                <KeyIndicatorOp glyph=":" />
+                <KeyIndicatorPctStat
+                  label="Syrup (dry)"
+                  value={sugarSyrupRatio ? sugarSyrupRatio.syrupPct : NaN}
+                  ok
+                />
+              </div>
             </div>
           </div>
         </div>
