@@ -312,6 +312,10 @@ export type GummyFormulaRecord = {
   name: string;
   shape: string;                // canonical picklist enforced client-side
   flavor: string | null;
+  // Customer this formula was designed for. Null = R&D-stage or
+  // unassigned. FK into public.customers with ON DELETE SET NULL, so a
+  // purged customer clears the reference without dropping the formula.
+  customerId: string | null;
   active: boolean;
   latestVersionNum: number;     // 0 while the first version is being written
   createdAt: string;            // ISO
@@ -581,6 +585,9 @@ export function recordFromRow(row: {
   name: string;
   shape: string;
   flavor: string | null;
+  // Optional so pre-migration rows and SELECTs that predate the column
+  // still map cleanly. Reader coerces undefined → null.
+  customer_id?: string | null;
   active: boolean;
   latest_version_num: number;
   created_at: string;
@@ -594,6 +601,7 @@ export function recordFromRow(row: {
     name: row.name,
     shape: row.shape,
     flavor: row.flavor,
+    customerId: row.customer_id ?? null,
     active: row.active,
     latestVersionNum: row.latest_version_num,
     createdAt: row.created_at,
@@ -629,7 +637,7 @@ export type GummyFormulaAuditRecord = {
 // coerce per kind.
 export type IdentityDiff = {
   changes: Array<{
-    field: "name" | "pcBkCode" | "shape" | "flavor" | "active";
+    field: "name" | "pcBkCode" | "shape" | "flavor" | "active" | "customerId";
     from: string | boolean | null;
     to: string | boolean | null;
   }>;
@@ -693,12 +701,13 @@ const IDENTITY_FIELD_LABELS: Record<
   pcBkCode: "Product Code",
   shape: "shape",
   flavor: "flavor",
+  customerId: "customer",
   active: "active status",
 };
 
 export function diffIdentity(
-  before: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "active">,
-  after: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "active">,
+  before: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "active">,
+  after: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "active">,
 ): { diff: IdentityDiff; summary: string } {
   const changes: IdentityDiff["changes"] = [];
   (Object.keys(IDENTITY_FIELD_LABELS) as Array<keyof typeof IDENTITY_FIELD_LABELS>).forEach(

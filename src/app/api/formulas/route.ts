@@ -57,7 +57,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("gummy_formulas")
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .order("updated_at", { ascending: false });
 
@@ -105,6 +105,9 @@ type PostBody = {
   pcBkCode?: string | null;
   shape?: string;
   flavor?: string | null;
+  // Customer this formula was designed for. Optional so R&D can create
+  // a formula without a customer picked yet. Set later via PUT /[id].
+  customerId?: string | null;
   benchBatchG?: number;
   batchKg?: number;
   batchesPerDay?: number;
@@ -136,6 +139,12 @@ export async function POST(request: Request) {
   const shape = body.shape?.trim() || "TBD";
   const pcBkCode = body.pcBkCode?.trim() || null;
   const flavor = body.flavor?.trim() || null;
+  // Trim + coerce empty string → null so the FK stays clean if the
+  // caller sends "" for a "no customer picked yet" state.
+  const customerId =
+    typeof body.customerId === "string"
+      ? body.customerId.trim() || null
+      : body.customerId ?? null;
 
   // Insert the catalog row first. If pc_bk_code collides with an existing
   // (non-null) row we bounce the caller with 409.
@@ -146,11 +155,12 @@ export async function POST(request: Request) {
       name,
       shape,
       flavor,
+      customer_id: customerId,
       created_by_email: user.email,
       updated_by_email: user.email,
     })
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .single();
 

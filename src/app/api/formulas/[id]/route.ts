@@ -53,7 +53,7 @@ export async function GET(
   const { data: formulaRow, error: formulaErr } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .eq("id", id)
     .maybeSingle();
@@ -107,6 +107,9 @@ type PutBody = {
   pcBkCode?: string | null;
   shape?: string;
   flavor?: string | null;
+  // Customer this formula is designed for. Set to null explicitly to
+  // clear the reference; omit the field entirely to leave it untouched.
+  customerId?: string | null;
   active?: boolean;
 };
 
@@ -131,7 +134,7 @@ export async function PUT(
   const { data: beforeRow, error: beforeErr } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .eq("id", id)
     .maybeSingle();
@@ -158,6 +161,13 @@ export async function PUT(
   }
   if (body.shape !== undefined) patch.shape = body.shape.trim() || "TBD";
   if (body.flavor !== undefined) patch.flavor = body.flavor?.trim() || null;
+  if (body.customerId !== undefined) {
+    // Empty string coerces to null so the FK stays clean. A real uuid
+    // is trusted through — Supabase will reject a malformed one at the
+    // insert boundary with a 400 the caller can surface.
+    const trimmed = typeof body.customerId === "string" ? body.customerId.trim() : body.customerId;
+    patch.customer_id = trimmed ? trimmed : null;
+  }
   if (body.active !== undefined) patch.active = !!body.active;
 
   const { data, error } = await supabase
@@ -165,7 +175,7 @@ export async function PUT(
     .update(patch)
     .eq("id", id)
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .maybeSingle();
 

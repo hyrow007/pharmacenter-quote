@@ -44,6 +44,11 @@ create table if not exists public.gummy_formulas (
   -- "current version: v4" without joining. Updated by the API on every
   -- new version insert.
   latest_version_num   integer not null default 0,
+  -- Customer this formula was designed for. Optional — R&D formulas
+  -- often exist before a specific customer is on the hook, and the same
+  -- formula can be re-quoted to different customers. ON DELETE SET NULL
+  -- so purging a customer row doesn't cascade-delete the formula.
+  customer_id          uuid references public.customers(id) on delete set null,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
   created_by_email     text,
@@ -82,6 +87,8 @@ create index if not exists gummy_formulas_shape_idx
   on public.gummy_formulas (shape);
 create index if not exists gummy_formulas_active_idx
   on public.gummy_formulas (active);
+create index if not exists gummy_formulas_customer_id_idx
+  on public.gummy_formulas (customer_id);
 
 -- ============================================================
 -- 2. gummy_formula_versions (immutable recipe snapshots)
@@ -285,3 +292,18 @@ exception
   when duplicate_object then null;
 end;
 $$;
+
+-- Adding customer_id to gummy_formulas (Jul 2026) — lets us tag a
+-- formula with the customer it was designed for so the /formulas
+-- editor can surface a Customer picker on the Product Details card.
+-- Nullable because R&D formulas often exist before a customer is
+-- committed, and legacy rows have no customer to backfill. ON DELETE
+-- SET NULL so a customer purge doesn't cascade into the catalog.
+alter table public.gummy_formulas
+  add column if not exists customer_id uuid
+  references public.customers(id) on delete set null;
+
+-- Search index on customer_id so a customer profile page can list
+-- "formulas designed for this customer" without a seq scan.
+create index if not exists gummy_formulas_customer_id_idx
+  on public.gummy_formulas (customer_id);

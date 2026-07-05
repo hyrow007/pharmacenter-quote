@@ -29,7 +29,7 @@ export default async function FormulasPage() {
   const { data, error } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, pc_bk_code, name, shape, flavor, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .eq("active", true)
     .order("updated_at", { ascending: false });

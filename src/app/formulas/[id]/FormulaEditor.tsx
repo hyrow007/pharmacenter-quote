@@ -23,6 +23,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,
@@ -402,6 +403,11 @@ export type PcBkProductOption = {
   name: string;
 };
 
+// Lightweight shape for the Customer picker's search results + picked
+// pill. Mirrors the row selected in /start's customer section — we only
+// need name + default_ship_to for the display, and the id for the FK.
+type CustomerRow = { id: string; name: string; default_ship_to: string | null };
+
 type Props = {
   initialFormula: GummyFormulaRecord;
   initialVersion: GummyFormulaVersion | null;
@@ -467,6 +473,38 @@ export default function FormulaEditor({
   );
   const [shape, setShape] = useState(initialFormula.shape);
   const [flavor, setFlavor] = useState(initialFormula.flavor ?? "");
+
+  // -- Customer picker state ---------------------------------------------------
+  // Mirrors /start's customer section: Existing (default) vs New customer
+  // tabs; when Existing is picked and a customer is bound we render a
+  // read-only pill with a Change button; otherwise a search input + list
+  // of matching customers. New-customer form fields are captured but not
+  // wired to a DB write yet — see TODO on the New-customer flow below.
+  const [customerId, setCustomerId] = useState<string | null>(
+    initialFormula.customerId ?? null,
+  );
+  const [customerMode, setCustomerMode] = useState<"existing" | "new">(
+    "existing",
+  );
+  // Display state resolved from the customers table when the formula
+  // loads with a saved customer_id (or when the operator picks one).
+  const [customerName, setCustomerName] = useState<string | null>(null);
+  const [customerShipTo, setCustomerShipTo] = useState<string | null>(null);
+  // "Am I currently searching?" flag — collapses to the picked pill once
+  // a customer is bound, mirrors /start's editingCustomer.
+  const [editingCustomer, setEditingCustomer] = useState<boolean>(
+    initialFormula.customerId == null,
+  );
+  const [customerSearch, setCustomerSearch] = useState<string>("");
+  const [customerResults, setCustomerResults] = useState<CustomerRow[]>([]);
+  // New-customer form fields — kept in state so the form doesn't reset
+  // when the operator toggles between Existing / New. Not yet wired to a
+  // DB write; see the TODO below the Save-selection flow.
+  const [newCustomer, setNewCustomer] = useState<{
+    name: string;
+    contact: string;
+    email: string;
+  }>({ name: "", contact: "", email: "" });
 
   // Product Code search state — mirrors the "search vendors" pattern on
   // PricingCalculator. pcBkSearch is the query string; pcBkEditing is the
@@ -772,6 +810,95 @@ export default function FormulaEditor({
     // rep-typed override.
     if (!name.trim() || name === "Untitled gummy") {
       setName(p.name);
+    }
+  }
+
+  // -- Customer picker: hydrate + search -------------------------------------
+  // Hydrate the display name / ship-to whenever we hold a customerId but
+  // haven't resolved the customer row yet. Mirrors /start's approach —
+  // one maybeSingle() to fetch the paired display fields off the row.
+  useEffect(() => {
+    if (!customerId || customerName) return;
+    const sb = supabase;
+    if (!sb) return;
+    let cancelled = false;
+    sb.from("customers")
+      .select("id, name, default_ship_to")
+      .eq("id", customerId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setCustomerName(data.name);
+        setCustomerShipTo(data.default_ship_to);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, customerName]);
+
+  // Debounced customer search — same shape as /start's customer effect
+  // (180ms setTimeout, active-only rows, name ilike, capped at 50).
+  useEffect(() => {
+    const sb = supabase;
+    if (!sb) return;
+    const term = customerSearch.trim();
+    if (term.length === 0) {
+      setCustomerResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      const { data } = await sb
+        .from("customers")
+        .select("id, name, default_ship_to")
+        .eq("active", true)
+        .ilike("name", `%${term}%`)
+        .order("name")
+        .limit(50);
+      setCustomerResults((data ?? []) as CustomerRow[]);
+    }, 180);
+    return () => clearTimeout(handle);
+  }, [customerSearch]);
+
+  // Pick + save a customer. Fires an immediate identity PUT (same pattern
+  // as name / pcBkCode / shape / flavor saves) so the FK persists without
+  // waiting for the operator to hit the top Save button.
+  async function pickCustomer(c: CustomerRow) {
+    setCustomerId(c.id);
+    setCustomerName(c.name);
+    setCustomerShipTo(c.default_ship_to);
+    setEditingCustomer(false);
+    setCustomerSearch("");
+    setCustomerResults([]);
+    // Fire the PUT — pass only the customerId so we don't accidentally
+    // stomp on other identity fields the operator may be editing.
+    try {
+      await fetch(`/api/formulas/${initialFormula.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ customerId: c.id }),
+      });
+      // Refresh audit so the "customer" identity diff appears immediately.
+      refetchAudit();
+    } catch {
+      // Silent — the top Save button will retry the PUT if this fails.
+    }
+  }
+
+  // Clear the picked customer + write the null through immediately.
+  async function clearCustomer() {
+    setCustomerId(null);
+    setCustomerName(null);
+    setCustomerShipTo(null);
+    setEditingCustomer(true);
+    try {
+      await fetch(`/api/formulas/${initialFormula.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ customerId: null }),
+      });
+      refetchAudit();
+    } catch {
+      // Silent — see pickCustomer.
     }
   }
 
@@ -1489,6 +1616,31 @@ export default function FormulaEditor({
             ) : null}
           </div>
         </div>
+
+        {/* Customer — pinned below the identity row. Mirrors the picker
+            on /start (Existing / New customer tabs, search input, picked
+            pill with Change button, new-customer form fields). Selecting
+            an existing customer immediately fires an identity PUT so the
+            customer_id persists without waiting for Save. New-customer
+            creation is form-only for now — see the TODO below. */}
+        <CustomerSection
+          customerId={customerId}
+          customerName={customerName}
+          customerShipTo={customerShipTo}
+          customerMode={customerMode}
+          editing={editingCustomer}
+          search={customerSearch}
+          results={customerResults}
+          newCustomer={newCustomer}
+          onSetMode={setCustomerMode}
+          onSearchChange={setCustomerSearch}
+          onPick={pickCustomer}
+          onClear={clearCustomer}
+          onStartEdit={() => setEditingCustomer(true)}
+          onNewCustomerChange={(patch) =>
+            setNewCustomer((prev) => ({ ...prev, ...patch }))
+          }
+        />
 
         {/* Label claims — active-ingredient claim rows under the identity
             row. Each claim pins to a raw material and carries an amount +
@@ -5636,6 +5788,332 @@ function BTd({ children, style }: { children?: React.ReactNode; style?: React.CS
     <td style={{ padding: "8px 12px", verticalAlign: "middle", ...style }}>
       {children}
     </td>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// CustomerSection — customer picker for the Product Details card.
+// Ports the visual pattern from /start's Customer section: Existing / New
+// customer tabs, search input with debounced typeahead, a picked pill
+// with a Change affordance, and a New-customer form. Reuses the same
+// tab / pill / input styles /start already established (redefined here
+// as local CSSProperties objects because /start's styles module isn't
+// exported).
+//
+// TODO: the New-customer form currently only captures the fields — it
+// does NOT write a new customers row. The plan is to wire it through a
+// dedicated POST /api/customers endpoint (or reuse the /start flow's
+// insert path) so the operator can create + immediately pin a customer
+// from the formula editor. Until then, the form only serves as a
+// placeholder for the eventual UX.
+// -----------------------------------------------------------------------------
+function CustomerSection(props: {
+  customerId: string | null;
+  customerName: string | null;
+  customerShipTo: string | null;
+  customerMode: "existing" | "new";
+  editing: boolean;
+  search: string;
+  results: CustomerRow[];
+  newCustomer: { name: string; contact: string; email: string };
+  onSetMode: (m: "existing" | "new") => void;
+  onSearchChange: (v: string) => void;
+  onPick: (c: CustomerRow) => void;
+  onClear: () => void;
+  onStartEdit: () => void;
+  onNewCustomerChange: (
+    patch: Partial<{ name: string; contact: string; email: string }>,
+  ) => void;
+}) {
+  const {
+    customerId,
+    customerName,
+    customerShipTo,
+    customerMode,
+    editing,
+    search,
+    results,
+    newCustomer,
+    onSetMode,
+    onSearchChange,
+    onPick,
+    onClear,
+    onStartEdit,
+    onNewCustomerChange,
+  } = props;
+
+  // Section styles — mirror /start's approach so the picker reads as an
+  // obvious sibling of the identity row. Small uppercase label, tab
+  // pills, teal-on-cream inputs.
+  const sectionLabel: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--ink-3, #8a9498)",
+    marginBottom: 10,
+  };
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 14px",
+    border: "1.5px solid #e3dcc9",
+    borderRadius: 8,
+    fontSize: 14,
+    background: "#fff",
+    color: "var(--ink-1)",
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+  };
+  const tabsStyle: React.CSSProperties = {
+    display: "inline-flex",
+    gap: 0,
+    marginBottom: 12,
+    border: "1.5px solid #e3dcc9",
+    borderRadius: 10,
+    padding: 4,
+    background: "#fffdf8",
+  };
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    padding: "6px 16px",
+    border: "none",
+    borderRadius: 6,
+    background: active ? "var(--teal-900, #0f4a56)" : "transparent",
+    color: active ? "#fff" : "var(--teal-700, #1d6c7b)",
+    fontWeight: 700,
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  });
+  const selectedRow: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    padding: "12px 14px",
+    background: "#fff",
+    border: "1.5px solid #e3dcc9",
+    borderRadius: 8,
+    gap: 12,
+  };
+  const changeBtn: React.CSSProperties = {
+    background: "transparent",
+    border: "none",
+    color: "var(--teal-700, #1d6c7b)",
+    fontWeight: 700,
+    fontSize: 12,
+    cursor: "pointer",
+    padding: "2px 6px",
+    fontFamily: "inherit",
+  };
+  const labelText: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--ink-3, #8a9498)",
+  };
+
+  const showPicked =
+    customerMode === "existing" && !!customerId && !!customerName && !editing;
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        paddingTop: 12,
+        borderTop: "1px dashed var(--line, #e3dcc9)",
+      }}
+    >
+      <p style={sectionLabel}>Customer</p>
+      {showPicked ? (
+        <div style={selectedRow}>
+          <div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: "var(--ink-1)",
+              }}
+            >
+              {customerName}
+            </div>
+            {customerShipTo ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "var(--ink-3, #8a9498)",
+                  marginTop: 2,
+                }}
+              >
+                {customerShipTo}
+              </div>
+            ) : null}
+          </div>
+          <button type="button" style={changeBtn} onClick={onStartEdit}>
+            Change
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={tabsStyle}>
+            <button
+              type="button"
+              style={tabBtn(customerMode === "existing")}
+              onClick={() => onSetMode("existing")}
+            >
+              Existing
+            </button>
+            <button
+              type="button"
+              style={tabBtn(customerMode === "new")}
+              onClick={() => onSetMode("new")}
+            >
+              New customer
+            </button>
+          </div>
+          {customerMode === "existing" ? (
+            <>
+              <input
+                type="text"
+                placeholder="Search customers…"
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                style={inputStyle}
+              />
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {results.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onPick(c)}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "#fff",
+                      border: "1px solid #e3dcc9",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: "var(--ink-1)",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    {c.default_ship_to ? (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--ink-3, #8a9498)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {c.default_ship_to}
+                      </div>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              {/* Give the operator an explicit "unassign" affordance when
+                  they're re-editing but still hold a saved customerId.
+                  Fires the identity PUT with customerId: null. */}
+              {customerId ? (
+                <button
+                  type="button"
+                  onClick={onClear}
+                  style={{
+                    marginTop: 10,
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--ink-3, #8a9498)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  Clear customer
+                </button>
+              ) : null}
+            </>
+          ) : (
+            // TODO: wire this form to an actual create-customer POST so
+            // the operator can create + pin a new customers row without
+            // leaving the formula editor. Right now the fields are
+            // captured locally but never persisted — matches the visual
+            // requirement in the spec while leaving the DB write for a
+            // follow-up.
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            >
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={labelText}>Company name *</span>
+                <input
+                  type="text"
+                  value={newCustomer.name}
+                  onChange={(e) =>
+                    onNewCustomerChange({ name: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={labelText}>Primary contact</span>
+                <input
+                  type="text"
+                  value={newCustomer.contact}
+                  onChange={(e) =>
+                    onNewCustomerChange({ contact: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={labelText}>Email</span>
+                <input
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) =>
+                    onNewCustomerChange({ email: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+              </label>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "var(--ink-3, #8a9498)",
+                  margin: "2px 0 0",
+                  fontStyle: "italic",
+                }}
+              >
+                New customer creation coming soon — for now, add the
+                customer via /start, then pick it here.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
