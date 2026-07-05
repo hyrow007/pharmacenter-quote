@@ -958,6 +958,11 @@ export default function FormulaEditor({
       const fromRow = prev.find((r) => r.id === fromId);
       const toRow = prev.find((r) => r.id === toId);
       if (!fromRow || !toRow) return prev;
+      // Ingredient rows without a blendPhase (legacy or unassigned) live
+      // in the shared bottom table which doesn't render a drag handle,
+      // so drag events can't reach us with a null phase — but bail
+      // defensively so the strict BlendPhase type below holds.
+      if (!fromRow.blendPhase || !toRow.blendPhase) return prev;
       if (fromRow.blendPhase !== toRow.blendPhase) return prev;
       return reorderIngredientsInPhase(prev, fromRow.blendPhase, fromId, toId);
     });
