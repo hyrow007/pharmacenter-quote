@@ -1596,33 +1596,33 @@ function BenchTopTab({
             style={{
               display: "flex",
               alignItems: "flex-end",
-              gap: 14,
+              gap: 16,
               flexWrap: "wrap",
             }}
           >
-            {/* Each stat cell renders label above value in one column.
-                Subsequent cells prefix their value with an operator
-                glyph (+, =) so the operator sits directly next to the
-                digits rather than being pushed into a wide column gap.
-                Reads as: 223.73 g  +17.90 g  +8.38 g  =250.00 g */}
+            {/* Each stat cell has a fixed min-width so all four cells
+                share the same visual size regardless of value/label
+                length. The +/= operators sit in their own flex items
+                between the stats, so they land equidistant between the
+                two neighbouring value cells and read as a true equation. */}
             <KeyIndicatorStat
               label="Primary Blend (cooked)"
               value={primaryBlendG}
             />
+            <KeyIndicatorOp glyph="+" />
             <KeyIndicatorStat
               label="Secondary Blend"
               value={secondaryBlendG}
-              op="+"
             />
+            <KeyIndicatorOp glyph="+" />
             <KeyIndicatorStat
               label="Final Blend"
               value={finalBlendG}
-              op="+"
             />
+            <KeyIndicatorOp glyph="=" />
             <KeyIndicatorStat
               label="Total (Sum of all blends)"
               value={totalBlendsG}
-              op="="
             />
           </div>
         </div>
@@ -1667,12 +1667,31 @@ function BenchTopTab({
   );
 }
 
-// Small stat block used inside the Bench Top summary card for the three
-// blend-phase totals. Shows a labeled grams value in the same visual
-// weight as the other summary card fields.
-function BlendTotalStat({ label, value }: { label: string; value: number }) {
+// ---- Key Indicators stat cell ----
+// Each cell is a fixed-width column with the label centered above the
+// value. All four stat cells share the same width (min-width) so the
+// equation lays out as evenly-sized boxes with operators between —
+// giving each + / = an equal amount of space on both sides.
+function KeyIndicatorStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
   return (
-    <div>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+        // Fixed min-width sized to comfortably fit the widest label
+        // ("TOTAL (SUM OF ALL BLENDS)"). All four cells share this so
+        // the operators land equidistant between them.
+        minWidth: 190,
+      }}
+    >
       <div
         style={{
           fontSize: 10.5,
@@ -1680,8 +1699,8 @@ function BlendTotalStat({ label, value }: { label: string; value: number }) {
           letterSpacing: "0.1em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
-          marginBottom: 4,
           whiteSpace: "nowrap",
+          textAlign: "center",
         }}
       >
         {label}
@@ -1692,6 +1711,9 @@ function BlendTotalStat({ label, value }: { label: string; value: number }) {
           fontWeight: 700,
           color: "var(--teal-900, #0f4a56)",
           fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+          textAlign: "center",
         }}
       >
         {value.toFixed(2)}
@@ -1710,103 +1732,25 @@ function BlendTotalStat({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Inline operator glyph (+ / =) used between BlendTotalStat entries in the
-// Bench Top card's Key Indicators row. Vertically aligned to the numeric
-// value line rather than the label line so the equation reads naturally.
-function BlendOperator({ glyph }: { glyph: string }) {
+// Operator glyph (+, =) between KeyIndicatorStat cells. Aligns to the
+// value baseline (not the label above) so the equation reads across.
+function KeyIndicatorOp({ glyph }: { glyph: string }) {
   return (
     <div
       aria-hidden="true"
       style={{
-        fontSize: 20,
+        // Nudge down so the glyph sits at the digit baseline, not the
+        // top of the cell. The parent's alignItems: "flex-end" bottoms
+        // the operator; a tiny paddingBottom fine-tunes to the digit
+        // baseline for visual symmetry with the values.
+        paddingBottom: 2,
+        fontSize: 22,
         fontWeight: 700,
         color: "var(--ink-3, #8a9498)",
-        // Nudge down so the operator lines up with the digit baseline,
-        // not the label above.
-        paddingBottom: 2,
+        lineHeight: 1,
       }}
     >
       {glyph}
-    </div>
-  );
-}
-
-// ---- Key Indicators stat cell ----
-// Each cell shows a label above a value. When an operator glyph is
-// provided (+, =), it renders INSIDE the value line right before the
-// digits — so the equation reads as a continuous string of "value +
-// value" pairs rather than glyphs floating between wide columns.
-function KeyIndicatorStat({
-  label,
-  value,
-  op,
-}: {
-  label: string;
-  value: number;
-  op?: string;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      {/* Label centered above the value line so the whole cell reads
-          as a small vertical stack even though the value line may lead
-          with an operator. */}
-      <div
-        style={{
-          fontSize: 10.5,
-          fontWeight: 700,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-          whiteSpace: "nowrap",
-          // Center the label over the digits of the value (not over the
-          // leading operator). Using text-align on the flex column
-          // container achieves this while the value stays a single
-          // flex line below.
-          textAlign: "center",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "baseline",
-          gap: 6,
-          fontSize: 20,
-          fontWeight: 700,
-          color: "var(--teal-900, #0f4a56)",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-          whiteSpace: "nowrap",
-          justifyContent: "center",
-        }}
-      >
-        {op ? (
-          <span
-            aria-hidden="true"
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: "var(--ink-3, #8a9498)",
-            }}
-          >
-            {op}
-          </span>
-        ) : null}
-        <span>
-          {value.toFixed(2)}
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: "var(--ink-3, #8a9498)",
-              marginLeft: 4,
-            }}
-          >
-            g
-          </span>
-        </span>
-      </div>
     </div>
   );
 }
