@@ -1745,6 +1745,9 @@ function KeyIndicatorLabel({
       style={{
         gridColumn: col,
         gridRow: 1,
+        // Center the label inside its column so it lines up over the
+        // centered value below (see KeyIndicatorValue).
+        justifySelf: "center",
         fontSize: 10.5,
         fontWeight: 700,
         letterSpacing: "0.1em",
@@ -1763,6 +1766,12 @@ function KeyIndicatorValue({ value }: { value: number }) {
     <div
       style={{
         gridRow: 2,
+        // Center the value in its column. Because the column auto-sizes
+        // to the wider label above, this places the digits in the middle
+        // of the column — which means the +/= glyphs in the adjacent
+        // operator columns end up equidistant from the values on both
+        // sides, so the whole thing reads as a proper equation.
+        justifySelf: "center",
         fontSize: 20,
         fontWeight: 700,
         color: "var(--teal-900, #0f4a56)",
