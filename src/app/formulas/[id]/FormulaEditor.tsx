@@ -1949,20 +1949,31 @@ function BenchTopReadout({
       >
         {label}
       </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+      {/* Stack the value and unit vertically so the digits right-align
+          with the numeric inputs above (which are all 90px wide, right-
+          aligned) instead of being pushed left by a wide inline unit
+          label. The unit sits directly beneath the number in the same
+          90px column so it still reads as "N gummies". */}
+      <div
+        style={{
+          width: 90,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+        }}
+      >
         <div
           style={{
             fontSize: 14,
             fontWeight: 500,
             color: "var(--teal-900, #0f4a56)",
             fontVariantNumeric: "tabular-nums",
-            minWidth: 90,
-            textAlign: "right",
+            lineHeight: 1.15,
           }}
         >
           {valueText}
         </div>
-        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
+        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
           {suffix}
         </span>
       </div>
