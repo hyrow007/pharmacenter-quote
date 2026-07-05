@@ -1528,17 +1528,30 @@ function BenchTopTab({
   const pctOfBench =
     benchBatchG > 0 ? (totalBlendsG / benchBatchG) * 100 : 0;
   const totalOk = Math.abs(pctOfBench - 100) < 0.01;
+  // Shared card chrome — extracted so the two cards below share the
+  // same border/background/radius without repeating the style props.
+  const cardStyle: React.CSSProperties = {
+    padding: 14,
+    border: "1px solid var(--line, #e3dcc9)",
+    borderRadius: 8,
+    background: "var(--paper, #fffdf8)",
+  };
   return (
+    // Two side-by-side cards separated by a small gap. Wraps to two
+    // rows on narrow viewports so the batch input stays reachable
+    // even when the equation can't fit on one line.
     <div
       style={{
         marginBottom: 14,
-        padding: 14,
-        border: "1px solid var(--line, #e3dcc9)",
-        borderRadius: 8,
-        background: "var(--paper, #fffdf8)",
+        display: "flex",
+        gap: 12,
+        alignItems: "stretch",
+        flexWrap: "wrap",
       }}
     >
-      <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+      {/* Left card — Bench top batch size only. Sized to its content
+          so the right card gets the remaining width for the equation. */}
+      <div style={{ ...cardStyle, display: "flex", alignItems: "center" }}>
         <div>
           <div
             style={{
@@ -1562,16 +1575,11 @@ function BenchTopTab({
             please set the batch size
           </div>
         </div>
-        {/* Vertical divider — visually splits the "set your batch size"
-            control from the derived-stats block on its right. */}
-        <div
-          aria-hidden="true"
-          style={{
-            width: 1,
-            alignSelf: "stretch",
-            background: "var(--line, #e3dcc9)",
-          }}
-        />
+      </div>
+      {/* Right card — Key Indicators equation + % of bench batch.
+          Grows to fill remaining space so the equation stays readable
+          without cramping on wider viewports. */}
+      <div style={{ ...cardStyle, flex: 1, minWidth: 0 }}>
         {/* Key Indicators — per-phase blend totals wired together as a
             visible equation: Primary + Secondary + Final = Total. The
             block is laid out on a CSS grid with two rows so each label
