@@ -688,6 +688,19 @@ export type CreatedDiff = {
 };
 
 // -----------------------------------------------------------------------------
+// User-authored notes. Separate from the audit log — notes are free-form
+// text a rep or formulator adds to a formula. Read + append only from the
+// UI; the timeline attributes each entry to its author.
+// -----------------------------------------------------------------------------
+export type GummyFormulaNote = {
+  id: string;
+  body: string;
+  authorEmail: string;
+  authorDisplayName: string | null;
+  createdAt: string; // ISO
+};
+
+// -----------------------------------------------------------------------------
 // Diff computation. Callers on the API boundary use these to build the
 // summary + diff before inserting an audit row.
 // -----------------------------------------------------------------------------

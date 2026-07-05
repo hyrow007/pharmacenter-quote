@@ -44,6 +44,7 @@ import {
   isSolutionRow,
   type BlendPhase,
   type GummyFormulaAuditRecord,
+  type GummyFormulaNote,
   type GummyFormulaIngredient,
   type GummyFormulaRecord,
   type GummyFormulaVersion,
@@ -957,6 +958,57 @@ export default function FormulaEditor({
   // Fetch once on mount.
   useEffect(() => {
     refetchAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -- Notes (user-authored, read + append only) -----------------------------
+  const [notes, setNotes] = useState<GummyFormulaNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [submittingNote, setSubmittingNote] = useState(false);
+
+  async function refetchNotes() {
+    setNotesLoading(true);
+    try {
+      const res = await fetch(`/api/formulas/${initialFormula.id}/notes`, {
+        headers: { accept: "application/json" },
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setNotes(Array.isArray(json.notes) ? json.notes : []);
+      }
+    } catch {
+      // Silent — notes are auxiliary; a failure shouldn't disrupt the editor.
+    } finally {
+      setNotesLoading(false);
+    }
+  }
+
+  async function submitNote() {
+    const body = noteDraft.trim();
+    if (!body || submittingNote) return;
+    setSubmittingNote(true);
+    try {
+      const res = await fetch(`/api/formulas/${initialFormula.id}/notes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setNoteDraft("");
+        refetchNotes();
+      }
+    } catch {
+      // Silent — the user can retry.
+    } finally {
+      setSubmittingNote(false);
+    }
+  }
+
+  // Fetch once on mount.
+  useEffect(() => {
+    refetchNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1903,6 +1955,18 @@ export default function FormulaEditor({
           leaving what they were editing. */}
       <AuditTimeline events={auditEvents} loading={auditLoading} />
 
+      {/* Notes — free-form, user-authored. Mirrors the Activity card's
+          visual treatment; positioned directly below so both are in the
+          same "history + collaboration" strip at the bottom of the tab. */}
+      <NotesCard
+        notes={notes}
+        loading={notesLoading}
+        draft={noteDraft}
+        onDraftChange={setNoteDraft}
+        onSubmit={submitNote}
+        submitting={submittingNote}
+      />
+
       {/* Version notes (only relevant when writing a new version) */}
       {versionDirty ? (
         <div style={{ marginTop: 18 }}>
@@ -2315,14 +2379,14 @@ function BenchTopTab({
           {/* Theoretical yield — batchSize ÷ castWeight, in gummies.
               Read-only display in the same visual pattern as the input
               rows above so the four values read as a stack. Rounded
-              to 1 decimal so operators see e.g. 86.2 gummies without
-              too much precision noise. Falls back to "—" when either
-              side is 0/missing. */}
+              to a whole number since you can't produce a fraction of
+              a gummy on the line. Falls back to "—" when either side
+              is 0/missing. */}
           <BenchTopReadout
             label="Theoretical Yield"
             valueText={
               wetCastPieceWeightG > 0 && benchBatchG > 0
-                ? (benchBatchG / wetCastPieceWeightG).toFixed(1)
+                ? Math.round(benchBatchG / wetCastPieceWeightG).toString()
                 : "—"
             }
             suffix="gummies"
@@ -2395,19 +2459,19 @@ function BenchTopTab({
                 value={totalBlendsG}
               />
             </div>
-            {/* marginLeft: auto anchors % of bench batch to the far
-                right of the row. This cell is a bespoke inline layout
-                (rather than <KeyIndicatorPctStat>) so the label + value
-                can BOTH right-align — that way, if the label happens to
-                be wider than the numeric column below it, the overflow
-                sits on the LEFT (in the equation-group gap) instead of
-                clipping past the card's right edge. */}
+            {/* marginLeft: auto anchors the cell to the far right of
+                the row. alignItems: center centers each child (the
+                label + the value) horizontally within the container.
+                Since the container sizes to its widest child (the
+                label — the value is narrower), the value ends up
+                centered under the label without stretching the cell
+                past the card edge. */}
             <div
               style={{
                 marginLeft: "auto",
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "flex-end",
+                alignItems: "center",
                 gap: 4,
                 flexShrink: 0,
               }}
@@ -3340,6 +3404,11 @@ function BlendSectionCard({
   // the operator can dial in a different precision on the carry-over
   // display vs. the Secondary/Final totals below it. 0..4 range, default 2.
   const [carryOverDecimals, setCarryOverDecimals] = useState<number>(2);
+  // Independent decimal-places picker for the Grand Total Cooked Blend
+  // footer row (grams, % of finished, residual moisture %). Uses its own
+  // state so the operator can dial the summary line's precision without
+  // touching the subsection totals above it. Default 2.
+  const [grandTotalDecimals, setGrandTotalDecimals] = useState<number>(2);
   // Section-level unit picker — mirrors the mcg/mg/g options on Label
   // claims. Every ingredient row + total is displayed and entered in the
   // selected unit; internally the values are still stored as grams so
@@ -5681,14 +5750,19 @@ function BlendSectionCard({
                   // Reuse the shared grandTotalCookedBlendG computed at the
                   // top of the render body so the footer and the new "% of
                   // finished product" column agree by construction.
-                  // Grams display — 2 dp, and mirror the pctOfBench trick
-                  // (drop trailing ".00" for a clean whole-number display)
-                  // via Format.pctCompact which does the same trim.
-                  const gramsDisplay = Format.pctCompact(grandTotalCookedBlendG * factor);
+                  // Grams display — driven by the grandTotalDecimals state
+                  // so the operator can dial the precision via the < >
+                  // chevron picker (same pattern as the subsection totals).
+                  const gramsDisplay = (grandTotalCookedBlendG * factor).toFixed(
+                    grandTotalDecimals,
+                  );
                   // % of finished product — by construction the Grand Total
-                  // is 100% of itself. Guard against a degenerate 0/0 case
-                  // (nothing entered anywhere) by rendering an empty string.
-                  const pctDisplay = grandTotalCookedBlendG > 0 ? "100" : "";
+                  // is 100% of itself. Rendered at the same precision as the
+                  // grams cell for consistency.
+                  const pctDisplay =
+                    grandTotalCookedBlendG > 0
+                      ? (100).toFixed(grandTotalDecimals)
+                      : "";
                   // Residual Moisture % — sum across all three subsections.
                   // Primary Blend Carry Over: only non-solution rows
                   //   contribute; uses each row's NET grams (post moisture
@@ -5752,7 +5826,9 @@ function BlendSectionCard({
                           100);
                     }
                   }
-                  const residualDisplay = Format.pctCompact(grandResidualPct);
+                  const residualDisplay = grandResidualPct.toFixed(
+                    grandTotalDecimals,
+                  );
                   return (
                     <div
                       style={{
@@ -5877,7 +5953,86 @@ function BlendSectionCard({
                                 %
                               </span>
                             </BTd>
-                            <BTd style={{ padding: "10px 14px" }} />
+                            {/* Grand Total decimal-places chevrons —
+                                same pattern as the subsection totals
+                                (< decreases, > increases, 0..4 range).
+                                Controls the precision of the grams,
+                                % of finished, and residual columns above
+                                via the grandTotalDecimals state. */}
+                            <BTd style={{ padding: "10px 6px" }}>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 2,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setGrandTotalDecimals((d) => Math.max(0, d - 1))
+                                  }
+                                  disabled={grandTotalDecimals <= 0}
+                                  title="Fewer decimal places"
+                                  aria-label="Fewer decimal places"
+                                  style={{
+                                    width: 16,
+                                    height: 18,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color:
+                                      grandTotalDecimals <= 0
+                                        ? "var(--ink-4, #c7cccf)"
+                                        : "var(--ink-3, #8a9498)",
+                                    background: "transparent",
+                                    border: "1px solid var(--line, #e3dcc9)",
+                                    borderRadius: 3,
+                                    padding: 0,
+                                    cursor:
+                                      grandTotalDecimals <= 0
+                                        ? "default"
+                                        : "pointer",
+                                  }}
+                                >
+                                  &lt;
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setGrandTotalDecimals((d) => Math.min(4, d + 1))
+                                  }
+                                  disabled={grandTotalDecimals >= 4}
+                                  title="More decimal places"
+                                  aria-label="More decimal places"
+                                  style={{
+                                    width: 16,
+                                    height: 18,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color:
+                                      grandTotalDecimals >= 4
+                                        ? "var(--ink-4, #c7cccf)"
+                                        : "var(--ink-3, #8a9498)",
+                                    background: "transparent",
+                                    border: "1px solid var(--line, #e3dcc9)",
+                                    borderRadius: 3,
+                                    padding: 0,
+                                    cursor:
+                                      grandTotalDecimals >= 4
+                                        ? "default"
+                                        : "pointer",
+                                  }}
+                                >
+                                  &gt;
+                                </button>
+                              </span>
+                            </BTd>
                           </tr>
                         </tbody>
                       </table>
@@ -8202,4 +8357,236 @@ function formatDiffValue(v: unknown): string {
   if (v === "") return "(empty)";
   if (typeof v === "boolean") return v ? "true" : "false";
   return String(v);
+}
+
+// -----------------------------------------------------------------------------
+// NotesCard — free-form user notes attached to a formula. Mirrors the
+// AuditTimeline card visually (same border, same heading treatment, same
+// expand/collapse chrome) but the payload is a textarea + a list of
+// author-attributed notes rather than structured audit rows.
+// -----------------------------------------------------------------------------
+
+function NotesCard({
+  notes,
+  loading,
+  draft,
+  onDraftChange,
+  onSubmit,
+  submitting,
+}: {
+  notes: GummyFormulaNote[];
+  loading: boolean;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const countLabel = loading
+    ? "loading…"
+    : notes.length === 0
+      ? "no notes yet"
+      : `${notes.length} note${notes.length === 1 ? "" : "s"}`;
+  const canSubmit = draft.trim().length > 0 && !submitting;
+
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        overflow: "hidden",
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((s) => !s)}
+        aria-expanded={expanded}
+        style={{
+          width: "100%",
+          padding: "10px 14px",
+          background: "var(--cream, #f6efe3)",
+          borderTop: "none",
+          borderLeft: "none",
+          borderRight: "none",
+          borderBottom: expanded
+            ? "1.5px solid var(--teal-700, #1d6c7b)"
+            : "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            fontSize: 10,
+            color: "var(--teal-900, #0f4a56)",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 120ms ease",
+            display: "inline-block",
+            width: 10,
+          }}
+        >
+          ▶
+        </span>
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+          }}
+        >
+          Notes
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--ink-3, #8a9498)",
+          }}
+        >
+          {countLabel}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--teal-700, #1d6c7b)",
+          }}
+        >
+          {expanded ? "Hide" : "Show"}
+        </span>
+      </button>
+      {expanded ? (
+        <div>
+          {/* Compose row — small textarea + submit button. Ctrl/Cmd+Enter
+              also submits so keyboard-heavy operators can flow without
+              reaching for the mouse. */}
+          <div
+            style={{
+              padding: "12px 14px",
+              borderBottom: "1px solid var(--line-2, #efe9da)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+            }}
+          >
+            <textarea
+              value={draft}
+              onChange={(e) => onDraftChange(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  if (canSubmit) onSubmit();
+                }
+              }}
+              placeholder="Add a note…"
+              rows={2}
+              className="pricing__input"
+              style={{
+                flex: 1,
+                resize: "vertical",
+                fontSize: 13,
+                lineHeight: 1.4,
+                padding: "6px 8px",
+                minHeight: 44,
+              }}
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              style={{
+                padding: "6px 14px",
+                background: canSubmit
+                  ? "var(--teal-700, #1d6c7b)"
+                  : "var(--line, #e3dcc9)",
+                color: canSubmit ? "#fff" : "var(--ink-3, #8a9498)",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                cursor: canSubmit ? "pointer" : "not-allowed",
+                flexShrink: 0,
+                alignSelf: "stretch",
+              }}
+            >
+              {submitting ? "Adding…" : "Add note"}
+            </button>
+          </div>
+
+          {/* Notes timeline. Server returns newest first. */}
+          {notes.length === 0 && !loading ? (
+            <div
+              style={{
+                padding: 18,
+                fontSize: 12,
+                color: "var(--ink-3, #8a9498)",
+                textAlign: "center",
+              }}
+            >
+              No notes yet.
+            </div>
+          ) : (
+            <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
+              {notes.map((n) => (
+                <NoteRow key={n.id} note={n} />
+              ))}
+            </ol>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function NoteRow({ note }: { note: GummyFormulaNote }) {
+  const at = new Date(note.createdAt);
+  const when = at.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const who = note.authorDisplayName || note.authorEmail;
+  return (
+    <li
+      style={{
+        padding: "10px 14px",
+        borderTop: "1px solid var(--line-2, #efe9da)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12.5,
+          color: "var(--ink, #1f2a2d)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {note.body}
+      </div>
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 11,
+          color: "var(--ink-3, #8a9498)",
+        }}
+      >
+        — <strong>{who}</strong> · {when}
+      </div>
+    </li>
+  );
 }
