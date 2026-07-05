@@ -21,7 +21,7 @@
 // The Save button figures out which of the two calls to make (or both)
 // by comparing the current state to the loaded snapshot.
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BLEND_PHASE_HINTS,
@@ -105,6 +105,44 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   if (name.startsWith("citric acid + water solution")) return 50;
   if (name.startsWith("sodium citrate + water solution")) return 75;
   return 0;
+}
+
+// Drag-and-drop reorder helper. Rebuilds the flat ingredients array by
+// walking it once and, on each row that belongs to `phase`, emitting the
+// next id from the newly-ordered phase list. Non-`phase` rows keep their
+// original slots so unrelated blends don't shift when the operator drags
+// a Primary Blend row.
+//
+// - `fromId` and `toId` must both belong to `phase`. If either doesn't,
+//   the input array is returned unchanged (the caller — reorderRow — also
+//   guards against cross-phase drops, but this helper is defensive too).
+// - `fromId === toId` returns the input unchanged (no-op self-drop).
+// - Dropping onto `toId` places the source row where the target currently
+//   sits, shifting the target and everything after it down by one slot.
+function reorderIngredientsInPhase(
+  ingredients: GummyFormulaIngredient[],
+  phase: BlendPhase,
+  fromId: string,
+  toId: string,
+): GummyFormulaIngredient[] {
+  if (fromId === toId) return ingredients;
+  const phaseRows = ingredients.filter((r) => r.blendPhase === phase);
+  const fromIdx = phaseRows.findIndex((r) => r.id === fromId);
+  const toIdx = phaseRows.findIndex((r) => r.id === toId);
+  if (fromIdx === -1 || toIdx === -1) return ingredients;
+  const reorderedPhase = phaseRows.slice();
+  const [moved] = reorderedPhase.splice(fromIdx, 1);
+  reorderedPhase.splice(toIdx, 0, moved);
+  // Walk the original array and emit the next reordered phase id whenever
+  // we hit a row that belongs to `phase`. Other rows stay in place.
+  let cursor = 0;
+  return ingredients.map((r) => {
+    if (r.blendPhase === phase) {
+      const next = reorderedPhase[cursor++];
+      return next;
+    }
+    return r;
+  });
 }
 
 // Water rows in the Primary Blend Carry Over subsection have a special
@@ -908,6 +946,22 @@ export default function FormulaEditor({
       return prev.filter((r) => r.id !== id);
     });
   }
+  // Drag-and-drop row reorder. Fired by BlendSectionCard when the operator
+  // drops one blend row onto another. No-ops when the two rows are in
+  // different phases (drag from Primary Blend, drop on Secondary Blend
+  // isn't a supported gesture — the operator would have to explicitly move
+  // the row's phase first). See reorderIngredientsInPhase for the
+  // rebuild-in-place logic.
+  function reorderRow(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setIngredients((prev) => {
+      const fromRow = prev.find((r) => r.id === fromId);
+      const toRow = prev.find((r) => r.id === toId);
+      if (!fromRow || !toRow) return prev;
+      if (fromRow.blendPhase !== toRow.blendPhase) return prev;
+      return reorderIngredientsInPhase(prev, fromRow.blendPhase, fromId, toId);
+    });
+  }
 
   // Group ingredients by blendPhase for the sectioned bench-top view. Rows
   // without a phase (legacy or explicitly unassigned) stay in the shared
@@ -1414,6 +1468,7 @@ export default function FormulaEditor({
             onAddSavedSolution={(s) => addSavedSolutionForPhase("pre-cook", s)}
             onSaveSolutionToLibrary={saveSolutionToLibrary}
             onRemoveRow={removeRow}
+            onReorderRow={reorderRow}
             processNote={processNotes["pre-cook"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["pre-cook"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
@@ -1432,6 +1487,7 @@ export default function FormulaEditor({
             onAddSavedSolution={(s) => addSavedSolutionForPhase("cooked", s)}
             onSaveSolutionToLibrary={saveSolutionToLibrary}
             onRemoveRow={removeRow}
+            onReorderRow={reorderRow}
             processNote={processNotes["cooked"] ?? ""}
             defaultProcessNote={DEFAULT_PROCESS_NOTES["cooked"] ?? ""}
             onProcessNoteChange={(text) => setPhaseProcessNote("cooked", text)}
@@ -2548,6 +2604,7 @@ function BlendSectionCard({
   onAddSavedSolution,
   onSaveSolutionToLibrary,
   onRemoveRow,
+  onReorderRow,
   processNote,
   defaultProcessNote,
   onProcessNoteChange,
@@ -2580,6 +2637,13 @@ function BlendSectionCard({
     row: GummyFormulaIngredient,
   ) => Promise<{ ok: true; solution: SavedSolution } | { ok: false; error: string }>;
   onRemoveRow: (id: string) => void;
+  /** Drag-and-drop reorder. Fired when the operator drops one row (fromId)
+   *  onto another (toId) in ANY subsection of this card — including the
+   *  Primary Blend Carry Over subsection, which reorders the same
+   *  pre-cook rows that the pre-cook card renders. Rows in different
+   *  phases can't be cross-dropped; the parent handler ignores the call
+   *  in that case. */
+  onReorderRow: (fromId: string, toId: string) => void;
   processNote: string;
   /** Canonical default text for this phase. Used to detect whether the
    *  current process note is unmodified (banner + Reset link) and as the
@@ -2662,6 +2726,14 @@ function BlendSectionCard({
   // percentages, scale-up, and cost math don't have to know about the
   // display unit. Default "g" for the bench-scale author.
   const [sectionUnit, setSectionUnit] = useState<LabelClaimUnit>("g");
+  // Drag-and-drop reorder state — shared across every subsection in this
+  // card (Primary/Secondary/Final/Carry Over) so a drop into any table
+  // triggers the same reorder handler on the parent. `draggingId` styles
+  // the source row (opacity 0.4) so the operator can see what's picked
+  // up; `dropTargetId` styles the hover-over row with a bold top border
+  // as a drop-hint. Both are cleared on drop or dragEnd.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const unitFactor: Record<LabelClaimUnit, number> = {
     g: 1,
     mg: 1000,
@@ -2732,6 +2804,99 @@ function BlendSectionCard({
     const s = residualPct.toFixed(2);
     return s.endsWith(".00") ? s.slice(0, -3) : s;
   };
+
+  // Drag-and-drop wiring for a single blend row. Returns the set of
+  // <tr>-level HTML5 DnD props plus a JSX drag-handle to render inside
+  // the row's first cell. The handle sits as an absolutely-positioned
+  // ⋮⋮ glyph at the far left of the ingredient/name cell with a small
+  // negative margin so it doesn't shift the column widths — every
+  // subsection in this card uses different colspans (pre-cook 3 cols,
+  // cooked 4/5 cols, carry-over 6 cols) so adding a real column would
+  // have required editing every thead + total row. Absolute-positioning
+  // sidesteps that entirely.
+  //
+  // The tr keeps `draggable` on the row (native HTML5 DnD is happy with
+  // inputs inside a draggable tr — text-selection + typing still works
+  // in Chrome), and the handle itself is also draggable so the row is
+  // easy to grab even when the operator's cursor is over an input.
+  const rowDndBaseStyle = (rowId: string): React.CSSProperties => ({
+    opacity: draggingId === rowId ? 0.4 : 1,
+    borderTop:
+      dropTargetId === rowId
+        ? "2px solid var(--teal-700, #1d6c7b)"
+        : undefined,
+  });
+  const rowDndTrProps = (rowId: string) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent<HTMLTableRowElement>) => {
+      e.dataTransfer.setData("text/plain", rowId);
+      e.dataTransfer.effectAllowed = "move";
+      setDraggingId(rowId);
+    },
+    onDragOver: (e: React.DragEvent<HTMLTableRowElement>) => {
+      // Prevent-default is what tells the browser this is a valid drop
+      // target. Without it, onDrop never fires.
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (dropTargetId !== rowId) setDropTargetId(rowId);
+    },
+    onDragLeave: (e: React.DragEvent<HTMLTableRowElement>) => {
+      // Only clear the drop hint when the pointer actually leaves this
+      // row (not just moves to a child element). relatedTarget is the
+      // element the pointer entered — if it's still inside currentTarget,
+      // we're just moving between cells.
+      const next = e.relatedTarget as Node | null;
+      if (next && e.currentTarget.contains(next)) return;
+      if (dropTargetId === rowId) setDropTargetId(null);
+    },
+    onDrop: (e: React.DragEvent<HTMLTableRowElement>) => {
+      e.preventDefault();
+      const fromId = e.dataTransfer.getData("text/plain");
+      setDraggingId(null);
+      setDropTargetId(null);
+      if (fromId && fromId !== rowId) onReorderRow(fromId, rowId);
+    },
+    onDragEnd: () => {
+      setDraggingId(null);
+      setDropTargetId(null);
+    },
+  });
+  // Small ⋮⋮ handle rendered inside the first cell of every blend row.
+  // Absolute-positioned so it sits in the gutter without a real column;
+  // mirrors the delete-× opacity-on-hover pattern below.
+  const renderDragHandle = (rowId: string, hover: boolean) => (
+    <span
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", rowId);
+        e.dataTransfer.effectAllowed = "move";
+        setDraggingId(rowId);
+      }}
+      onDragEnd={() => {
+        setDraggingId(null);
+        setDropTargetId(null);
+      }}
+      title="Drag to reorder"
+      aria-label="Drag to reorder"
+      style={{
+        position: "absolute",
+        left: -4,
+        top: "50%",
+        transform: "translateY(-50%)",
+        fontSize: 13,
+        lineHeight: 1,
+        color: "var(--ink-3, #8a9498)",
+        cursor: "grab",
+        userSelect: "none",
+        // Match the delete-× opacity ramp so the affordance only fully
+        // reveals on row hover, keeping the resting state clean.
+        opacity: hover || draggingId === rowId ? 0.9 : 0.25,
+        transition: "opacity 80ms ease",
+      }}
+    >
+      ⋮⋮
+    </span>
+  );
 
   return (
     <section
@@ -2920,6 +3085,17 @@ function BlendSectionCard({
               </thead>
               <tbody>
                 {carryOverRows.map((row) => {
+                  // Drag-and-drop wiring — mirrors the primary/secondary/
+                  // final subsections below. Reordering a Primary Blend
+                  // Carry Over row rewrites the same underlying pre-cook
+                  // rows the Pre-cook card renders, since both point at
+                  // the same phase="pre-cook" slice of ingredients.
+                  const rowDnd = {
+                    trProps: rowDndTrProps(row.id),
+                    trStyle: rowDndBaseStyle(row.id),
+                    renderHandle: (hover: boolean) =>
+                      renderDragHandle(row.id, hover),
+                  };
                   // Solutions: show the solution's custom name with a small
                   // SOLUTION label — no component expansion here since this
                   // is a read-only carry-over view.
@@ -2938,9 +3114,13 @@ function BlendSectionCard({
                         key={row.id}
                         style={{
                           borderBottom: "1px solid var(--line-2, #efe9da)",
+                          transition: "opacity 80ms ease",
+                          ...rowDnd.trStyle,
                         }}
+                        {...rowDnd.trProps}
                       >
-                        <BTd>
+                        <BTd style={{ position: "relative" }}>
+                          {rowDnd.renderHandle(false)}
                           <div style={{ fontWeight: 700, color: "var(--ink, #1f2a2d)" }}>
                             {row.customName || "Solution"}
                           </div>
@@ -3129,9 +3309,13 @@ function BlendSectionCard({
                       key={row.id}
                       style={{
                         borderBottom: "1px solid var(--line-2, #efe9da)",
+                        transition: "opacity 80ms ease",
+                        ...rowDnd.trStyle,
                       }}
+                      {...rowDnd.trProps}
                     >
-                      <BTd>
+                      <BTd style={{ position: "relative" }}>
+                        {rowDnd.renderHandle(false)}
                         <div style={{ fontWeight: 600, color: "var(--ink, #1f2a2d)" }}>
                           {displayName}
                         </div>
@@ -3974,6 +4158,16 @@ function BlendSectionCard({
                   </thead>
                   <tbody>
                     {blockRows.map((row) => {
+                      // Drag-and-drop wiring — built once per row and
+                      // passed to whichever component renders this row.
+                      // See dndRowProps / renderDragHandle above for the
+                      // handlers + handle glyph.
+                      const rowDnd = {
+                        trProps: rowDndTrProps(row.id),
+                        trStyle: rowDndBaseStyle(row.id),
+                        renderHandle: (hover: boolean) =>
+                          renderDragHandle(row.id, hover),
+                      };
                       // Solution rows have their own layout — a name field, a
                       // total-weight input, and an inline list of component
                       // ingredients with %s that sum to 100.
@@ -4013,6 +4207,7 @@ function BlendSectionCard({
                                   : formatBlockResidualPct(residualPctFor(row))
                                 : undefined
                             }
+                            dnd={rowDnd}
                           />
                         );
                       }
@@ -4032,6 +4227,7 @@ function BlendSectionCard({
                         <BlendIngredientRow
                           key={row.id}
                           onRemove={() => onRemoveRow(row.id)}
+                          dnd={rowDnd}
                         >
                           <BTd>
                             <IngredientPicker
@@ -5112,23 +5308,66 @@ function LabelClaimsSection({
 // -----------------------------------------------------------------------------
 function BlendIngredientRow({
   onRemove,
+  dnd,
   children,
 }: {
   onRemove: () => void;
+  /** Drag-and-drop wiring, produced by BlendSectionCard. When present,
+   *  the row becomes draggable and renders a ⋮⋮ handle in the gutter of
+   *  its first cell. Optional so any callers that don't need DnD (none
+   *  today, but future variants like a read-only view) can skip it. */
+  dnd?: {
+    trProps: React.HTMLAttributes<HTMLTableRowElement> & { draggable: boolean };
+    trStyle?: React.CSSProperties;
+    renderHandle: (hover: boolean) => React.ReactNode;
+  };
   children: React.ReactNode;
 }) {
   const [hover, setHover] = useState(false);
+  // Splice the drag handle into the first child cell as an
+  // absolutely-positioned overlay. Callers always pass a leading <BTd>
+  // as the first child (the Ingredient cell), so cloneElement wraps its
+  // children with the handle + gives it `position: relative` so the
+  // handle can absolute-position inside it. This avoids adding a real
+  // column, which would misalign with the shared thead's colgroup.
+  const decoratedChildren = React.useMemo(() => {
+    if (!dnd) return children;
+    const arr = React.Children.toArray(children);
+    if (arr.length === 0) return children;
+    const [first, ...rest] = arr;
+    const firstEl = first as React.ReactElement<{
+      children?: React.ReactNode;
+      style?: React.CSSProperties;
+    }>;
+    const injected = React.cloneElement(firstEl, {
+      style: { position: "relative", ...(firstEl.props.style ?? null) },
+      children: (
+        <>
+          {dnd.renderHandle(hover)}
+          {firstEl.props.children}
+        </>
+      ),
+    });
+    return (
+      <>
+        {injected}
+        {rest}
+      </>
+    );
+  }, [dnd, children, hover]);
   return (
     <tr
       style={{
         borderTop: "1px solid var(--line-2, #efe9da)",
         background: hover ? "var(--cream-soft, #fbf6ec)" : "transparent",
-        transition: "background 80ms ease",
+        transition: "background 80ms ease, opacity 80ms ease",
+        ...(dnd?.trStyle ?? null),
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      {...(dnd?.trProps ?? {})}
     >
-      {children}
+      {decoratedChildren}
       <BTd style={{ textAlign: "center", width: 40 }}>
         <button
           type="button"
@@ -5174,6 +5413,7 @@ function SolutionRow({
   onRemove,
   pctOfFinishedText,
   residualMoistureText,
+  dnd,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
@@ -5196,6 +5436,15 @@ function SolutionRow({
    *  pre-cook where the column doesn't exist. Paired with
    *  pctOfFinishedText — the two travel together. */
   residualMoistureText?: string;
+  /** Drag-and-drop wiring (same shape as BlendIngredientRow). When
+   *  present, the row becomes draggable and renders a ⋮⋮ handle inside
+   *  the single spanning <td> at the far left, mirroring the delete-×
+   *  opacity-on-hover pattern. */
+  dnd?: {
+    trProps: React.HTMLAttributes<HTMLTableRowElement> & { draggable: boolean };
+    trStyle?: React.CSSProperties;
+    renderHandle: (hover: boolean) => React.ReactNode;
+  };
 }) {
   const showPctCell = pctOfFinishedText !== undefined;
   const showResidualCell = residualMoistureText !== undefined;
@@ -5291,8 +5540,10 @@ function SolutionRow({
       style={{
         borderTop: "1px solid var(--line-2, #efe9da)",
         background: hover ? "var(--cream-soft, #fbf6ec)" : "transparent",
-        transition: "background 80ms ease",
+        transition: "background 80ms ease, opacity 80ms ease",
+        ...(dnd?.trStyle ?? null),
       }}
+      {...(dnd?.trProps ?? {})}
     >
       <td
         colSpan={
@@ -5302,8 +5553,9 @@ function SolutionRow({
               ? 4
               : 3
         }
-        style={{ padding: "10px 0", verticalAlign: "top" }}
+        style={{ padding: "10px 0", verticalAlign: "top", position: "relative" }}
       >
+        {dnd ? dnd.renderHandle(hover) : null}
         <div
           style={{
             display: "flex",
