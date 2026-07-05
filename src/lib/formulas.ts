@@ -147,7 +147,47 @@ export type GummyFormulaIngredient = {
   // solution being weighed in. The picker is hidden for solution rows —
   // the individual ingredient picks live inside `solutionComponents`.
   solutionComponents?: SolutionComponent[] | null;
+  /** Set when this row was auto-created from a Label Claim. The row's
+   *  ingredient identity + base grams are driven by the claim; the operator
+   *  only edits `overagePct` to scale it. */
+  sourceLabelClaimId?: string | null;
+  /** 0..100 (or higher) — extra % to add over the base amount derived from
+   *  the label claim. Grams = baseG × (1 + overagePct/100). null/undefined
+   *  = 0% (no overage). Applies to Secondary Blend rows; other subsections
+   *  ignore the field. */
+  overagePct?: number | null;
 };
+
+// -----------------------------------------------------------------------------
+// Label-claim → Secondary Blend derivation. Converts a label claim (e.g.
+// "Vitamin D3 25 mcg") to a base gram amount for the current bench batch
+// so an auto-synced Secondary Blend row can carry the correct weight.
+//
+//   perGummyG = amount × (unit → g factor)
+//     unit "mg"  → /1000
+//     unit "mcg" → /1_000_000
+//     unit "g"   → ×1
+//   baseG = perGummyG × (benchBatchG / gummyPieceWeightG)
+//
+// Returns 0 if pieceWeight is 0 or amount is non-finite.
+// -----------------------------------------------------------------------------
+export function claimBaseGramsForBench(
+  claim: LabelClaim,
+  benchBatchG: number,
+  gummyPieceWeightG: number,
+): number {
+  if (!(gummyPieceWeightG > 0)) return 0;
+  const amount = Number(claim.amount);
+  if (!Number.isFinite(amount)) return 0;
+  const unitToG: Record<LabelClaimUnit, number> = {
+    g: 1,
+    mg: 1 / 1000,
+    mcg: 1 / 1_000_000,
+  };
+  const perGummyG = amount * unitToG[claim.unit];
+  const gummiesPerBench = benchBatchG / gummyPieceWeightG;
+  return perGummyG * gummiesPerBench;
+}
 
 export type SolutionComponent = {
   id: string;                              // stable client-generated row id

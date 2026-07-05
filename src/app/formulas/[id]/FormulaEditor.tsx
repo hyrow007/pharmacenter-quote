@@ -31,6 +31,7 @@ import {
   FORMULA_VERSION_DEFAULTS,
   LABEL_CLAIM_UNITS,
   PROCESS_NOTES_PLACEHOLDER_NOTICE,
+  claimBaseGramsForBench,
   computeMaterialCostPerGummy,
   emptyIngredient,
   emptyLabelClaim,
@@ -968,6 +969,134 @@ export default function FormulaEditor({
     });
   }
 
+  // Label-claim → Secondary Blend auto-sync. Keeps the cooked-phase rows
+  // (which the UI calls "Secondary Blend") in lock-step with the current
+  // labelClaims list:
+  //   - For each claim, ensure exactly one ingredient row exists with
+  //     sourceLabelClaimId === claim.id and blendPhase === "cooked". If
+  //     missing, INSERT it at the end of the cooked-phase run. The row's
+  //     rawMaterialId/rawMaterialFpCode/customName mirror the claim's
+  //     identity; overagePct starts at 0.
+  //   - For each existing cooked row with sourceLabelClaimId set:
+  //       * If the claim still exists, RE-COMPUTE grams from
+  //         claimBaseGramsForBench × (1 + overagePct/100) and refresh the
+  //         identity fields from the claim. overagePct is preserved.
+  //       * If the claim is gone, REMOVE the row.
+  //   - Cooked rows WITHOUT sourceLabelClaimId are untouched (hand-authored).
+  //
+  // Idempotent — the functional setState returns `prev` unchanged when
+  // nothing changed so React doesn't re-render in a loop.
+  useEffect(() => {
+    setIngredients((prev) => {
+      const claimById = new Map<string, LabelClaim>();
+      for (const c of labelClaims) claimById.set(c.id, c);
+      // Walk once, transforming existing rows with sourceLabelClaimId in
+      // place (removing when the claim is gone) and tracking which claim
+      // ids already have a row so we can append missing ones after the
+      // last cooked row.
+      const seenClaimIds = new Set<string>();
+      const transformed: (GummyFormulaIngredient | null)[] = prev.map((r) => {
+        if (r.sourceLabelClaimId == null) return r;
+        const claim = claimById.get(r.sourceLabelClaimId);
+        if (!claim) return null; // claim removed → drop row
+        seenClaimIds.add(claim.id);
+        const overagePct = Number.isFinite(Number(r.overagePct))
+          ? Number(r.overagePct)
+          : 0;
+        const baseG = claimBaseGramsForBench(
+          claim,
+          benchBatchG,
+          gummyPieceWeightG,
+        );
+        const newGrams = baseG * (1 + overagePct / 100);
+        const nextRow: GummyFormulaIngredient = {
+          ...r,
+          rawMaterialId: claim.rawMaterialId,
+          rawMaterialFpCode: claim.rawMaterialFpCode ?? null,
+          customName: claim.customName ?? null,
+          blendPhase: "cooked",
+          grams: newGrams,
+          overagePct,
+        };
+        return nextRow;
+      });
+      // Filter out removed rows.
+      const kept = transformed.filter(
+        (r): r is GummyFormulaIngredient => r !== null,
+      );
+      // Determine which claims need a fresh row appended.
+      const missingClaims = labelClaims.filter(
+        (c) => !seenClaimIds.has(c.id),
+      );
+      let next: GummyFormulaIngredient[];
+      if (missingClaims.length === 0) {
+        next = kept;
+      } else {
+        // Insert new rows at the end of the cooked-phase run. If no
+        // cooked rows exist yet, append at the end of the whole list.
+        let lastCookedIdx = -1;
+        for (let i = 0; i < kept.length; i++) {
+          if (kept[i].blendPhase === "cooked") lastCookedIdx = i;
+        }
+        const newRows: GummyFormulaIngredient[] = missingClaims.map((c) => {
+          const baseG = claimBaseGramsForBench(
+            c,
+            benchBatchG,
+            gummyPieceWeightG,
+          );
+          return {
+            id: `ing_${Math.random().toString(36).slice(2, 10)}`,
+            rawMaterialId: c.rawMaterialId,
+            rawMaterialFpCode: c.rawMaterialFpCode ?? null,
+            customName: c.customName ?? null,
+            pctInFinished: 0,
+            grams: baseG,
+            blendPhase: "cooked" as BlendPhase,
+            costPerKgOverride: null,
+            solidsOverride: null,
+            notes: null,
+            sourceLabelClaimId: c.id,
+            overagePct: 0,
+          };
+        });
+        if (lastCookedIdx === -1) {
+          next = [...kept, ...newRows];
+        } else {
+          next = [
+            ...kept.slice(0, lastCookedIdx + 1),
+            ...newRows,
+            ...kept.slice(lastCookedIdx + 1),
+          ];
+        }
+      }
+      // Compare-then-set — bail out with `prev` if the effect produced
+      // an identical array so React doesn't re-render / re-fire this
+      // effect (prevents render loops when nothing actually changed).
+      if (next.length !== prev.length) return next;
+      for (let i = 0; i < next.length; i++) {
+        const a = next[i];
+        const b = prev[i];
+        if (a === b) continue;
+        // Shallow compare the fields this effect can touch. Other
+        // fields don't change here so a reference miss elsewhere would
+        // have been produced by a different setter, not us.
+        if (
+          a.id !== b.id ||
+          a.rawMaterialId !== b.rawMaterialId ||
+          (a.rawMaterialFpCode ?? null) !== (b.rawMaterialFpCode ?? null) ||
+          (a.customName ?? null) !== (b.customName ?? null) ||
+          a.blendPhase !== b.blendPhase ||
+          (a.grams ?? null) !== (b.grams ?? null) ||
+          (a.sourceLabelClaimId ?? null) !== (b.sourceLabelClaimId ?? null) ||
+          (a.overagePct ?? null) !== (b.overagePct ?? null)
+        ) {
+          return next;
+        }
+      }
+      return prev;
+    });
+  }, [labelClaims, benchBatchG, gummyPieceWeightG]);
+
   // Group ingredients by blendPhase for the sectioned bench-top view. Rows
   // without a phase (legacy or explicitly unassigned) stay in the shared
   // table at the bottom.
@@ -1509,6 +1638,8 @@ export default function FormulaEditor({
             carryOverRows={phaseIngredients.groups["pre-cook"]}
             carryOverUnit={preCookUnit}
             benchBatchG={benchBatchG}
+            labelClaims={labelClaims}
+            gummyPieceWeightG={gummyPieceWeightG}
           />
         </>
       )}
@@ -2628,6 +2759,8 @@ function BlendSectionCard({
   benchBatchG,
   sectionUnitValue,
   onSectionUnitChange,
+  labelClaims,
+  gummyPieceWeightG,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -2697,6 +2830,15 @@ function BlendSectionCard({
    *  own local sectionUnit state. */
   sectionUnitValue?: LabelClaimUnit;
   onSectionUnitChange?: (u: LabelClaimUnit) => void;
+  /** Cooked-only: current label claims for the version. Passed through
+   *  so the Secondary Blend subsection can look up the claim for a
+   *  claim-sourced row and drive the Overage % column's grams
+   *  recomputation. Undefined for cards that don't need it (pre-cook). */
+  labelClaims?: LabelClaim[];
+  /** Cooked-only: per-gummy piece weight (grams). Paired with
+   *  benchBatchG + a label claim's amount to derive the base grams for
+   *  a claim-sourced Secondary Blend row via claimBaseGramsForBench. */
+  gummyPieceWeightG?: number;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -3839,6 +3981,7 @@ function BlendSectionCard({
           setBlockProcessEditing,
           pctBaseG,
           includeSolutionsInResidual,
+          showOverageColumn,
         }: {
           subHeading: string | null;
           blockRows: GummyFormulaIngredient[];
@@ -3864,6 +4007,13 @@ function BlendSectionCard({
            *  behaviour). Water ingredient rows (isWaterRow) continue to
            *  contribute regardless — this flag only gates SOLUTION rows. */
           includeSolutionsInResidual?: boolean;
+          /** Secondary-Blend-only: when true, renders an extra "Overage %"
+           *  column to the LEFT of the Grams column. Claim-sourced rows
+           *  (sourceLabelClaimId set) show an editable % input driving the
+           *  row's overagePct; non-claim rows show an em-dash. Claim-sourced
+           *  rows also lose their inline picker (read-only identity) and
+           *  their delete button (removal happens via Label Claims). */
+          showOverageColumn?: boolean;
         }) => {
           const totalG = blockRows.reduce(
             (s, r) => s + (Number(r.grams) || 0),
@@ -4101,6 +4251,16 @@ function BlendSectionCard({
                   <thead>
                     <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
                       <BTh>Ingredient</BTh>
+                      {/* Secondary-Blend-only: Overage % — inserted to the
+                          LEFT of the Grams column so it visually reads as
+                          "add X% on top of the label-claim base". Only
+                          renders in the Secondary Blend subsection; other
+                          subsections keep their existing layout. */}
+                      {showOverageColumn ? (
+                        <BTh style={{ textAlign: "right", width: 90 }}>
+                          Overage %
+                        </BTh>
+                      ) : null}
                       <BTh style={{ textAlign: "right", width: 120 }}>
                         {/* The column header itself picks the unit for the
                             column. Options spell out the unit (Grams, Milligrams,
@@ -4212,6 +4372,12 @@ function BlendSectionCard({
                                   : formatBlockResidualPct(residualPctFor(row))
                                 : undefined
                             }
+                            // Secondary-Blend-only: solutions can't be
+                            // claim-sourced (a claim always seeds an
+                            // ingredient row, not a solution), so the
+                            // Overage cell is a fixed em-dash. Undefined
+                            // in other subsections so no cell renders.
+                            showOverageColumn={showOverageColumn}
                             dnd={rowDnd}
                           />
                         );
@@ -4228,57 +4394,145 @@ function BlendSectionCard({
                                 (row.rawMaterialFpCode ?? "").toUpperCase(),
                             ) ?? null
                           : null);
+                      // Claim-sourced row detection — only meaningful in
+                      // the Secondary Blend subsection (Overage column
+                      // exists). When true, the picker locks to a
+                      // read-only pill, Grams becomes read-only, delete
+                      // is hidden, and the Overage input drives grams.
+                      const claimForRow =
+                        showOverageColumn && row.sourceLabelClaimId
+                          ? (labelClaims ?? []).find(
+                              (c) => c.id === row.sourceLabelClaimId,
+                            ) ?? null
+                          : null;
+                      const isClaimSourced = claimForRow != null;
+                      // Display name for a claim-sourced row's read-only
+                      // picker cell. Prefer the resolved raw-material
+                      // record (fp_code + name) so the styling matches
+                      // the picker's picked-pill; fall back to the
+                      // claim's customName if the raw material isn't
+                      // resolved (custom claim ingredient).
+                      const claimDisplayName = isClaimSourced
+                        ? resolved
+                          ? resolved.name
+                          : (claimForRow?.customName ?? "").trim() ||
+                            (claimForRow?.rawMaterialFpCode ?? "")
+                        : "";
                       return (
                         <BlendIngredientRow
                           key={row.id}
                           onRemove={() => onRemoveRow(row.id)}
                           dnd={rowDnd}
+                          hideDelete={isClaimSourced}
                         >
                           <BTd>
-                            <IngredientPicker
-                              row={row}
-                              resolved={resolved ?? null}
-                              rawMaterials={rawMaterials}
-                              onPick={(opt) => {
-                                // Curated pick: store rawMaterialId. Fishbowl
-                                // pick: store rawMaterialFpCode. Either way we
-                                // reset the override fields so defaults apply.
-                                if (opt.source === "fishbowl") {
+                            {isClaimSourced ? (
+                              // Read-only picker cell — same visual
+                              // language as the IngredientPicker's
+                              // picked-pill state (pricing__input frame,
+                              // fp_code · name) minus the Change/Clear
+                              // affordances. Ingredient identity is
+                              // dictated by the label claim; edits
+                              // happen in the Product Details card.
+                              <div
+                                className="pricing__input"
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                                title={claimDisplayName}
+                              >
+                                <span
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {resolved && resolved.fpCode ? (
+                                    <>
+                                      <code
+                                        style={{
+                                          fontWeight: 700,
+                                          color: "var(--teal-900, #0f4a56)",
+                                        }}
+                                      >
+                                        {resolved.fpCode}
+                                      </code>{" "}
+                                      <span style={{ color: "var(--ink-2, #415056)" }}>
+                                        · {resolved.name}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span style={{ color: "var(--ink-2, #415056)" }}>
+                                      {claimDisplayName}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            ) : (
+                              <IngredientPicker
+                                row={row}
+                                resolved={resolved ?? null}
+                                rawMaterials={rawMaterials}
+                                onPick={(opt) => {
+                                  // Curated pick: store rawMaterialId. Fishbowl
+                                  // pick: store rawMaterialFpCode. Either way we
+                                  // reset the override fields so defaults apply.
+                                  if (opt.source === "fishbowl") {
+                                    onUpdate(row.id, {
+                                      rawMaterialId: null,
+                                      rawMaterialFpCode: opt.fpCode,
+                                      customName: null,
+                                      costPerKgOverride: null,
+                                      solidsOverride: null,
+                                    });
+                                  } else {
+                                    onUpdate(row.id, {
+                                      rawMaterialId: opt.id,
+                                      rawMaterialFpCode: opt.fpCode,
+                                      customName: null,
+                                      costPerKgOverride: null,
+                                      solidsOverride: null,
+                                    });
+                                  }
+                                }}
+                                onPickCustom={(name) =>
                                   onUpdate(row.id, {
                                     rawMaterialId: null,
-                                    rawMaterialFpCode: opt.fpCode,
-                                    customName: null,
+                                    rawMaterialFpCode: null,
+                                    customName: name,
                                     costPerKgOverride: null,
                                     solidsOverride: null,
-                                  });
-                                } else {
-                                  onUpdate(row.id, {
-                                    rawMaterialId: opt.id,
-                                    rawMaterialFpCode: opt.fpCode,
-                                    customName: null,
-                                    costPerKgOverride: null,
-                                    solidsOverride: null,
-                                  });
+                                  })
                                 }
-                              }}
-                              onPickCustom={(name) =>
-                                onUpdate(row.id, {
-                                  rawMaterialId: null,
-                                  rawMaterialFpCode: null,
-                                  customName: name,
-                                  costPerKgOverride: null,
-                                  solidsOverride: null,
-                                })
-                              }
-                              onClear={() =>
-                                onUpdate(row.id, {
-                                  rawMaterialId: null,
-                                  rawMaterialFpCode: null,
-                                  customName: null,
-                                })
-                              }
-                            />
-                            {resolved?.category ? (
+                                onClear={() =>
+                                  onUpdate(row.id, {
+                                    rawMaterialId: null,
+                                    rawMaterialFpCode: null,
+                                    customName: null,
+                                  })
+                                }
+                              />
+                            )}
+                            {isClaimSourced ? (
+                              // Tiny caption below the read-only pill so
+                              // it's obvious this row is claim-driven.
+                              // Mirrors the "primary blend material"
+                              // subtitle styling used elsewhere.
+                              <div
+                                style={{
+                                  fontSize: 10.5,
+                                  color: "var(--ink-3, #8a9498)",
+                                  marginTop: 2,
+                                }}
+                              >
+                                from label claim
+                              </div>
+                            ) : resolved?.category ? (
                               <div
                                 style={{
                                   fontSize: 10.5,
@@ -4291,51 +4545,156 @@ function BlendSectionCard({
                               </div>
                             ) : null}
                           </BTd>
+                          {/* Overage % — Secondary Blend only, and only
+                              live on claim-sourced rows. Non-claim rows
+                              show a grey em-dash so the column width
+                              still holds. */}
+                          {showOverageColumn ? (
+                            <BTd
+                              style={{
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {isClaimSourced ? (
+                                <div
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <input
+                                    type="number"
+                                    onFocus={(e) => {
+                                      const el = e.currentTarget;
+                                      setTimeout(() => {
+                                        try { el.select(); } catch {}
+                                      }, 0);
+                                    }}
+                                    value={
+                                      Number.isFinite(Number(row.overagePct))
+                                        ? Number(row.overagePct)
+                                        : 0
+                                    }
+                                    onChange={(e) => {
+                                      const raw = Number(e.target.value);
+                                      const pct = Number.isFinite(raw) ? raw : 0;
+                                      // Recompute grams from the claim's base
+                                      // amount in a single setIngredients call
+                                      // so React batches the update.
+                                      const baseG = claimBaseGramsForBench(
+                                        claimForRow!,
+                                        benchBatchG ?? 0,
+                                        gummyPieceWeightG ?? 0,
+                                      );
+                                      const newGrams = baseG * (1 + pct / 100);
+                                      onUpdate(row.id, {
+                                        overagePct: pct,
+                                        grams: newGrams,
+                                      });
+                                    }}
+                                    step="0.1"
+                                    min={0}
+                                    className="pricing__input"
+                                    style={{
+                                      width: 60,
+                                      flex: "0 0 60px",
+                                      textAlign: "right",
+                                      fontVariantNumeric: "tabular-nums",
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      fontSize: 12,
+                                      color: "var(--ink-3, #8a9498)",
+                                    }}
+                                  >
+                                    %
+                                  </span>
+                                </div>
+                              ) : (
+                                <span
+                                  style={{
+                                    color: "var(--ink-3, #8a9498)",
+                                  }}
+                                >
+                                  —
+                                </span>
+                              )}
+                            </BTd>
+                          ) : null}
                           <BTd style={{ textAlign: "right" }}>
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                              <input
-                                type="number"
-                onFocus={(e) => {
-                  // Chrome's <input type="number"> doesn't select on
-                  // focus synchronously — defer one frame so the
-                  // digits are highlighted and any keystroke replaces
-                  // the placeholder 0 instead of prepending to it.
-                  const el = e.currentTarget;
-                  setTimeout(() => {
-                    try { el.select(); } catch {}
-                  }, 0);
-                }}
-                                value={
-                                  row.grams !== null && row.grams !== undefined
-                                    ? row.grams * factor
-                                    : 0
-                                }
-                                onChange={(e) => {
-                                  const n = Number(e.target.value);
-                                  // Convert the displayed unit back to grams for
-                                  // storage so downstream math stays in one base.
-                                  onUpdate(row.id, {
-                                    grams: Number.isFinite(n) ? n / factor : 0,
-                                  });
-                                }}
-                                step="0.1"
-                                min={0}
-                                className="pricing__input"
-                                style={{
-                                  width: 80,
-                                  // Override .pricing__input's `flex: 1` — with
-                                  // that default, the width setting was being
-                                  // ignored inside the inline-flex parent, so the
-                                  // number position drifted from the solution
-                                  // rows' identical input below.
-                                  // 80 (not 90) so input + gap + unit glyph
-                                  // (~92px total) fits inside the 96px cell
-                                  // content area and right-aligns properly.
-                                  flex: "0 0 80px",
-                                  textAlign: "right",
-                                  fontVariantNumeric: "tabular-nums",
-                                }}
-                              />
+                              {isClaimSourced ? (
+                                // Read-only computed grams display —
+                                // matches the input's tabular alignment
+                                // but is styled as static text so
+                                // operators can't type into it directly.
+                                <span
+                                  style={{
+                                    width: 80,
+                                    flex: "0 0 80px",
+                                    textAlign: "right",
+                                    fontVariantNumeric: "tabular-nums",
+                                    color: "var(--ink-2, #415056)",
+                                    padding: "4px 8px",
+                                    background: "var(--cream-soft, #fbf6ec)",
+                                    border: "1px solid var(--line-2, #efe9da)",
+                                    borderRadius: 4,
+                                    boxSizing: "border-box",
+                                  }}
+                                >
+                                  {(
+                                    ((row.grams ?? 0) as number) * factor
+                                  ).toFixed(3)}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  onFocus={(e) => {
+                                    // Chrome's <input type="number"> doesn't select on
+                                    // focus synchronously — defer one frame so the
+                                    // digits are highlighted and any keystroke replaces
+                                    // the placeholder 0 instead of prepending to it.
+                                    const el = e.currentTarget;
+                                    setTimeout(() => {
+                                      try { el.select(); } catch {}
+                                    }, 0);
+                                  }}
+                                  value={
+                                    row.grams !== null && row.grams !== undefined
+                                      ? row.grams * factor
+                                      : 0
+                                  }
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    // Convert the displayed unit back to grams for
+                                    // storage so downstream math stays in one base.
+                                    onUpdate(row.id, {
+                                      grams: Number.isFinite(n) ? n / factor : 0,
+                                    });
+                                  }}
+                                  step="0.1"
+                                  min={0}
+                                  className="pricing__input"
+                                  style={{
+                                    width: 80,
+                                    // Override .pricing__input's `flex: 1` — with
+                                    // that default, the width setting was being
+                                    // ignored inside the inline-flex parent, so the
+                                    // number position drifted from the solution
+                                    // rows' identical input below.
+                                    // 80 (not 90) so input + gap + unit glyph
+                                    // (~92px total) fits inside the 96px cell
+                                    // content area and right-aligns properly.
+                                    flex: "0 0 80px",
+                                    textAlign: "right",
+                                    fontVariantNumeric: "tabular-nums",
+                                  }}
+                                />
+                              )}
                               <span
                                 style={{
                                   fontSize: 12,
@@ -4435,6 +4794,14 @@ function BlendSectionCard({
                           Tot {subHeading?.toLowerCase() ?? label.toLowerCase()}
                         </strong>
                       </BTd>
+                      {/* Empty Overage cell in the Total row so column
+                          widths line up with the Overage % header in
+                          Secondary Blend. No overall subtotal makes
+                          sense for a "per-row scaler" so we deliberately
+                          leave the cell blank. */}
+                      {showOverageColumn ? (
+                        <BTd style={{ textAlign: "right" }} />
+                      ) : null}
                       <BTd
                         style={{
                           textAlign: "right",
@@ -4810,6 +5177,12 @@ function BlendSectionCard({
               // skipped and pre-cook rendering stays unchanged.
               pctBaseG:
                 phase === "cooked" ? grandTotalCookedBlendG : undefined,
+              // Secondary-Blend-only: render the "Overage %" column
+              // (claim-sourced rows only). Every other subsection —
+              // Primary Blend on the pre-cook card, Primary Blend Carry
+              // Over + Final Blend on the cooked card — keeps its
+              // existing layout unchanged.
+              showOverageColumn: phase === "cooked",
             })}
             {/* Cooked-only Final Blend subsection — same structure as
                 Secondary but wired to phase="final" state on the parent.
@@ -4948,6 +5321,12 @@ function BlendSectionCard({
                           {/* Ingredient — auto width to match the
                               Secondary/Final tables above. */}
                           <col />
+                          {/* Overage % — Secondary Blend introduced this
+                              column, so the Grand Total footer needs to
+                              hold the same slot for column alignment.
+                              Always renders empty in the footer (there's
+                              no meaningful grand-total overage %). */}
+                          <col style={{ width: 90 }} />
                           {/* Grams */}
                           <col style={{ width: 120 }} />
                           {/* % of finished product */}
@@ -4972,6 +5351,9 @@ function BlendSectionCard({
                                 Grand Total Cooked Blend
                               </strong>
                             </BTd>
+                            {/* Empty Overage % cell for column
+                                alignment (see colgroup above). */}
+                            <BTd style={{ padding: "10px 14px" }} />
                             <BTd
                               style={{
                                 padding: "10px 14px",
@@ -5314,6 +5696,7 @@ function LabelClaimsSection({
 function BlendIngredientRow({
   onRemove,
   dnd,
+  hideDelete,
   children,
 }: {
   onRemove: () => void;
@@ -5326,6 +5709,11 @@ function BlendIngredientRow({
     trStyle?: React.CSSProperties;
     renderHandle: (hover: boolean) => React.ReactNode;
   };
+  /** When true, the trailing delete-× cell renders an empty placeholder
+   *  instead of a removal button. Used by claim-sourced Secondary Blend
+   *  rows — deletion happens by removing the label claim in Product
+   *  Details, not by clicking × on the row. */
+  hideDelete?: boolean;
   children: React.ReactNode;
 }) {
   const [hover, setHover] = useState(false);
@@ -5374,25 +5762,27 @@ function BlendIngredientRow({
     >
       {decoratedChildren}
       <BTd style={{ textAlign: "center", width: 40 }}>
-        <button
-          type="button"
-          onClick={onRemove}
-          title="Remove ingredient"
-          aria-label="Remove ingredient"
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--ink-3, #8a9498)",
-            cursor: "pointer",
-            fontSize: 16,
-            lineHeight: 1,
-            padding: 4,
-            opacity: hover ? 1 : 0,
-            transition: "opacity 80ms ease",
-          }}
-        >
-          ×
-        </button>
+        {hideDelete ? null : (
+          <button
+            type="button"
+            onClick={onRemove}
+            title="Remove ingredient"
+            aria-label="Remove ingredient"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--ink-3, #8a9498)",
+              cursor: "pointer",
+              fontSize: 16,
+              lineHeight: 1,
+              padding: 4,
+              opacity: hover ? 1 : 0,
+              transition: "opacity 80ms ease",
+            }}
+          >
+            ×
+          </button>
+        )}
       </BTd>
     </tr>
   );
@@ -5418,6 +5808,7 @@ function SolutionRow({
   onRemove,
   pctOfFinishedText,
   residualMoistureText,
+  showOverageColumn,
   dnd,
 }: {
   row: GummyFormulaIngredient;
@@ -5441,6 +5832,11 @@ function SolutionRow({
    *  pre-cook where the column doesn't exist. Paired with
    *  pctOfFinishedText — the two travel together. */
   residualMoistureText?: string;
+  /** Secondary-Blend-only: when true, the outer <td> colSpan includes
+   *  the Overage % column. Solutions can't be label-claim-sourced (a
+   *  claim always seeds a plain ingredient row) so the Overage cell
+   *  itself just renders an em-dash inside the row's internal grid. */
+  showOverageColumn?: boolean;
   /** Drag-and-drop wiring (same shape as BlendIngredientRow). When
    *  present, the row becomes draggable and renders a ⋮⋮ handle inside
    *  the single spanning <td> at the far left, mirroring the delete-×
@@ -5453,6 +5849,7 @@ function SolutionRow({
 }) {
   const showPctCell = pctOfFinishedText !== undefined;
   const showResidualCell = residualMoistureText !== undefined;
+  const showOverageCell = showOverageColumn === true;
   const [hover, setHover] = useState(false);
   const [saveState, setSaveState] = useState<
     | { kind: "idle" }
@@ -5552,11 +5949,11 @@ function SolutionRow({
     >
       <td
         colSpan={
-          showPctCell && showResidualCell
-            ? 5
-            : showPctCell
-              ? 4
-              : 3
+          // Base columns: Ingredient + Grams + delete = 3.
+          // + Overage column (Secondary Blend only) = +1
+          // + % of finished product (cooked-card subsections) = +1
+          // + Residual Moisture % (cooked-card subsections) = +1
+          3 + (showOverageCell ? 1 : 0) + (showPctCell ? 1 : 0) + (showResidualCell ? 1 : 0)
         }
         style={{ padding: "10px 0", verticalAlign: "top", position: "relative" }}
       >
@@ -5568,21 +5965,27 @@ function SolutionRow({
             gap: 8,
           }}
         >
-          {/* Header row — name, grams, [% of finished product?], remove
-              button. Column widths match the outer ingredient table
-              (grams = 120, % = 120, delete = 40) so every input/value
-              lines up vertically with ingredient rows above and below.
-              The % column only exists on the cooked card (see
+          {/* Header row — name, [Overage?], grams, [% of finished?],
+              [residual?], remove button. Column widths match the outer
+              ingredient table (Overage = 90, grams = 120, % = 120,
+              delete = 40) so every input/value lines up vertically
+              with ingredient rows above and below. Overage only exists
+              on the Secondary Blend subsection; % / residual only
+              exist on cooked-card subsections (see
               renderIngredientsBlock's pctBaseG param). */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns:
-                showPctCell && showResidualCell
-                  ? "1fr 120px 120px 120px 40px"
-                  : showPctCell
-                    ? "1fr 120px 120px 40px"
-                    : "1fr 120px 40px",
+              gridTemplateColumns: [
+                "1fr",
+                showOverageCell ? "90px" : null,
+                "120px",
+                showPctCell ? "120px" : null,
+                showResidualCell ? "120px" : null,
+                "40px",
+              ]
+                .filter((v): v is string => v !== null)
+                .join(" "),
               gap: 0,
               alignItems: "center",
             }}
@@ -5766,6 +6169,21 @@ function SolutionRow({
                 />
               )}
             </div>
+            {/* Overage % cell — mirror ingredient-row layout so the
+                column widths line up. Solutions can't be claim-sourced
+                so this always renders an em-dash. Only present in the
+                Secondary Blend subsection. */}
+            {showOverageCell ? (
+              <div
+                style={{
+                  textAlign: "right",
+                  padding: "0 12px",
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                —
+              </div>
+            ) : null}
             {/* Grams cell — mirrors BTd padding "8px 12px" so the input
                 sits at the same X-coordinate as the grams input in
                 ingredient rows above/below. */}
