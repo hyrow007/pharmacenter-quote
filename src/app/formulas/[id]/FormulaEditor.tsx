@@ -2403,7 +2403,12 @@ function BlendSectionCard({
         // matches per-row computation exactly (waterFraction × NET
         // grams / grandTotal * 100) so the total ties out with the
         // column above by construction.
+        // SOLUTION rows in Primary Blend Carry Over do NOT contribute
+        // residual (only Final Blend does). Water ingredient rows and
+        // other non-solution rows continue to contribute via
+        // waterFractionFor.
         const totalResidualPct = carryOverRows.reduce((s, r) => {
+          if (isSolutionRow(r)) return s;
           const wf = waterFractionFor(r);
           if (wf === 0) return s;
           const netG = (Number(r.grams) || 0) * (1 - lossFracFor(r));
@@ -2635,48 +2640,18 @@ function BlendSectionCard({
                             %
                           </span>
                         </BTd>
-                        {/* Residual Moisture % — waterFraction × % of
-                            finished. Solutions can contain water as a
-                            component; if none, waterFractionFor === 0
-                            and the cell renders blank. */}
-                        {(() => {
-                          const solWaterFrac = waterFractionFor(row);
-                          if (solWaterFrac === 0) {
-                            return (
-                              <BTd
-                                style={{
-                                  textAlign: "right",
-                                  fontVariantNumeric: "tabular-nums",
-                                  whiteSpace: "nowrap",
-                                }}
-                              />
-                            );
-                          }
-                          const solPctOfFinished =
-                            grandTotalCookedBlendG > 0
-                              ? (solNetGrams / grandTotalCookedBlendG) * 100
-                              : 0;
-                          const solResidual = solWaterFrac * solPctOfFinished;
-                          return (
-                            <BTd
-                              style={{
-                                textAlign: "right",
-                                fontVariantNumeric: "tabular-nums",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              <span>{formatResidualPct(solResidual)}</span>
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--ink-3, #8a9498)",
-                                }}
-                              >
-                                %
-                              </span>
-                            </BTd>
-                          );
-                        })()}
+                        {/* Residual Moisture % — solutions in Primary Blend
+                            Carry Over do NOT contribute residual (only
+                            Final Blend does). Render a blank cell so the
+                            column width holds; the total row sums only
+                            non-solution rows below. */}
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            whiteSpace: "nowrap",
+                          }}
+                        />
                         <BTd />
                       </tr>
                     );
@@ -3239,6 +3214,7 @@ function BlendSectionCard({
           blockProcessEditing,
           setBlockProcessEditing,
           pctBaseG,
+          includeSolutionsInResidual,
         }: {
           subHeading: string | null;
           blockRows: GummyFormulaIngredient[];
@@ -3257,6 +3233,13 @@ function BlendSectionCard({
            *  (row.grams / pctBaseG) * 100. Pre-cook passes undefined so the
            *  extra column is skipped and its rendering stays unchanged. */
           pctBaseG?: number;
+          /** When true, SOLUTION rows in this block contribute to the
+           *  Residual Moisture % column (Final Blend behaviour). When false
+           *  or undefined, solutions show a blank residual cell and do NOT
+           *  add to the subsection's total residual (Secondary Blend
+           *  behaviour). Water ingredient rows (isWaterRow) continue to
+           *  contribute regardless — this flag only gates SOLUTION rows. */
+          includeSolutionsInResidual?: boolean;
         }) => {
           const totalG = blockRows.reduce(
             (s, r) => s + (Number(r.grams) || 0),
@@ -3274,12 +3257,23 @@ function BlendSectionCard({
             const s = pct.toFixed(2);
             return s.endsWith(".00") ? s.slice(0, -3) : s;
           };
-          // Residual Moisture % for a row: waterFraction × (grams / pctBaseG × 100).
-          // Returns 0 when the base is 0 or the row has no water. Callers
-          // check waterFractionFor === 0 separately to render a blank cell.
+          // Effective water fraction for residual calculation. SOLUTION rows
+          // are gated by includeSolutionsInResidual — when false (Secondary
+          // Blend behaviour) solutions contribute 0 residual regardless of
+          // their water-component content. Water ingredient rows (isWaterRow)
+          // and other ingredient rows continue to use waterFractionFor
+          // directly — this flag only gates SOLUTION rows.
+          const effectiveWaterFracFor = (r: GummyFormulaIngredient): number => {
+            if (isSolutionRow(r) && !includeSolutionsInResidual) return 0;
+            return waterFractionFor(r);
+          };
+          // Residual Moisture % for a row: effectiveWaterFrac × (grams / pctBaseG × 100).
+          // Returns 0 when the base is 0 or the row has no water (or is a
+          // solution excluded by includeSolutionsInResidual). Callers check
+          // effectiveWaterFracFor === 0 separately to render a blank cell.
           const residualPctFor = (r: GummyFormulaIngredient): number => {
             if (!showPctColumn) return 0;
-            const wf = waterFractionFor(r);
+            const wf = effectiveWaterFracFor(r);
             if (wf === 0) return 0;
             const pctOfFinished =
               (Number(r.grams) || 0) / (pctBaseG ?? 1) * 100;
@@ -3571,11 +3565,15 @@ function BlendSectionCard({
                             }
                             // Cooked-only: text shown in the extra
                             // "Residual Moisture %" column. Empty string
-                            // for solutions with no water content so the
-                            // column width holds but no digits render.
+                            // for solutions with no water content, AND for
+                            // solutions in subsections that don't include
+                            // solutions in residual (Secondary Blend, Primary
+                            // Blend Carry Over — gated via
+                            // includeSolutionsInResidual). Column width holds
+                            // but no digits render.
                             residualMoistureText={
                               showPctColumn
-                                ? waterFractionFor(row) === 0
+                                ? effectiveWaterFracFor(row) === 0
                                   ? ""
                                   : formatBlockResidualPct(residualPctFor(row))
                                 : undefined
@@ -3736,12 +3734,15 @@ function BlendSectionCard({
                               </span>
                             </BTd>
                           ) : null}
-                          {/* Residual Moisture % — waterFraction × the
+                          {/* Residual Moisture % — effectiveWaterFrac × the
                               row's % of finished. Blank for non-water
                               ingredients so only water contributions
-                              show up in the column. */}
+                              show up in the column. (Ingredient rows are
+                              non-solution rows, so effectiveWaterFracFor
+                              matches waterFractionFor here — this branch is
+                              untouched by includeSolutionsInResidual.) */}
                           {showPctColumn ? (
-                            waterFractionFor(row) === 0 ? (
+                            effectiveWaterFracFor(row) === 0 ? (
                               <BTd
                                 style={{
                                   textAlign: "right",
@@ -4200,6 +4201,10 @@ function BlendSectionCard({
                   // column. This branch only ever runs on the cooked
                   // card, so no phase guard is needed here.
                   pctBaseG: grandTotalCookedBlendG,
+                  // Final Blend is the only subsection where SOLUTION rows
+                  // contribute to Residual Moisture %. Secondary Blend and
+                  // Primary Blend Carry Over exclude solutions (default).
+                  includeSolutionsInResidual: true,
                 })
               : null}
             {/* Grand Total Cooked Blend — full-width footer that sums the
