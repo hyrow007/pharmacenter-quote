@@ -1418,69 +1418,11 @@ export default function FormulaEditor({
             />
           </Field>
 
-          {/* Piece weight (g). Belongs to the version snapshot (edits
-              trigger a version bump because cost math depends on it),
-              but visually it lives with the identity because it's a
-              physical property of the finished gummy the rep expects
-              to see up top alongside Product Code / shape / flavor. */}
-          <Field label="Piece weight" width={110}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="number"
-                onFocus={(e) => {
-                  // Chrome's <input type="number"> doesn't select on
-                  // focus synchronously — defer one frame so the
-                  // digits are highlighted and any keystroke replaces
-                  // the placeholder 0 instead of prepending to it.
-                  const el = e.currentTarget;
-                  setTimeout(() => {
-                    try { el.select(); } catch {}
-                  }, 0);
-                }}
-                value={Number.isFinite(gummyPieceWeightG) ? gummyPieceWeightG : 0}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  setGummyPieceWeightG(Number.isFinite(n) ? n : 0);
-                }}
-                step="0.1"
-                min={0.1}
-                className="pricing__input"
-                style={{ width: "100%", textAlign: "right", fontVariantNumeric: "tabular-nums" }}
-              />
-              <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
-            </div>
-          </Field>
-
-          {/* Cast weight (wet). Sits next to the finished piece weight
-              because both are per-piece physical properties. Used by the
-              label-claim → Secondary Blend overage math: the bench batch
-              is measured wet, so pieces-per-batch is benchBatchG /
-              wetCastPieceWeightG. Active mass survives drying so the
-              per-piece claim amount is the same wet or dry. Default 3.5 g
-              (higher than the 3.0 g finished default). */}
-          <Field label="Cast weight (wet, g)" width={130}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="number"
-                onFocus={(e) => {
-                  const el = e.currentTarget;
-                  setTimeout(() => {
-                    try { el.select(); } catch {}
-                  }, 0);
-                }}
-                value={Number.isFinite(wetCastPieceWeightG) ? wetCastPieceWeightG : 0}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  setWetCastPieceWeightG(Number.isFinite(n) ? n : 0);
-                }}
-                step="0.1"
-                min={0.1}
-                className="pricing__input"
-                style={{ width: "100%", textAlign: "right", fontVariantNumeric: "tabular-nums" }}
-              />
-              <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
-            </div>
-          </Field>
+          {/* Piece weight and Cast weight (wet) were moved from here to
+              the Bench Top Batch Size card — see BenchTopTab. They're
+              per-batch physical properties, so grouping them with the
+              batch size reads better than keeping them beside the
+              identity fields. */}
 
           <Field label="Shape" width={130}>
             <select
@@ -1593,6 +1535,10 @@ export default function FormulaEditor({
           <BenchTopTab
             benchBatchG={benchBatchG}
             setBenchBatchG={setBenchBatchG}
+            gummyPieceWeightG={gummyPieceWeightG}
+            setGummyPieceWeightG={setGummyPieceWeightG}
+            wetCastPieceWeightG={wetCastPieceWeightG}
+            setWetCastPieceWeightG={setWetCastPieceWeightG}
             primaryBlendG={computeCarryOverPrimaryNetG({
               // Primary blend (cooked) = pre-cook rows net of moisture
               // loss. Mirrors the "Primary Blend Carry Over" total on
@@ -1900,9 +1846,88 @@ function NumberInput({
 
 // --- BenchTop tab ------------------------------------------------------------
 
+// Compact labelled weight input used by the Bench Top Batch Size card.
+// Renders an uppercase label, a number input with a "g" suffix, and an
+// optional hint line beneath. `emphasize` bumps the value's font size
+// (used for the primary Bench top batch size field so it reads as the
+// heading of the card).
+function BenchTopWeightInput({
+  label,
+  value,
+  onChange,
+  hint,
+  min = 0.1,
+  step = 1,
+  emphasize = false,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  hint?: string;
+  min?: number;
+  step?: number;
+  emphasize?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <input
+          type="number"
+          value={Number.isFinite(value) ? value : 0}
+          onFocus={(e) => {
+            // Same Chrome-workaround pattern used by every other
+            // numeric input on this page — defer .select() one tick
+            // so the digits highlight and a keystroke replaces them.
+            const el = e.currentTarget;
+            setTimeout(() => {
+              try { el.select(); } catch {}
+            }, 0);
+          }}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            onChange(Number.isFinite(n) ? n : 0);
+          }}
+          step={step}
+          min={min}
+          className="pricing__input"
+          style={{
+            width: 90,
+            textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
+            fontSize: emphasize ? 20 : 14,
+            fontWeight: emphasize ? 700 : 500,
+          }}
+        />
+        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
+      </div>
+      {hint ? (
+        <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
+          {hint}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function BenchTopTab({
   benchBatchG,
   setBenchBatchG,
+  gummyPieceWeightG,
+  setGummyPieceWeightG,
+  wetCastPieceWeightG,
+  setWetCastPieceWeightG,
   primaryBlendG,
   secondaryBlendG,
   finalBlendG,
@@ -1911,6 +1936,16 @@ function BenchTopTab({
 }: {
   benchBatchG: number;
   setBenchBatchG: (n: number) => void;
+  /** Finished (dried) per-piece weight in g. Moved from Product Details
+   *  to this card because it's a per-piece physical property used by
+   *  the bench-top math (piecesPerBatch, cost/gummy, scale-up yields). */
+  gummyPieceWeightG: number;
+  setGummyPieceWeightG: (n: number) => void;
+  /** Wet cast per-piece weight in g. Used with benchBatchG to compute
+   *  piecesPerBatch = benchBatchG ÷ wetCastPieceWeightG for the label-
+   *  claim → Secondary Blend overage math. */
+  wetCastPieceWeightG: number;
+  setWetCastPieceWeightG: (n: number) => void;
   /** Sum of pre-cook grams AFTER moisture loss. Matches the total on the
    *  Cooked card's "Primary Blend Carry Over" subsection. */
   primaryBlendG: number;
@@ -1956,31 +1991,37 @@ function BenchTopTab({
         flexWrap: "wrap",
       }}
     >
-      {/* Left card — Bench top batch size only. Sized to its content
-          so the right card gets the remaining width for the equation. */}
+      {/* Left card — Bench top batch size plus per-piece physical
+          weights. All three inputs stack vertically inside a single
+          card because they describe "how the batch is measured and
+          what it produces": the total wet blend weight, the wet cast
+          weight per piece, and the finished dry piece weight.
+          Sized to its content so the right (Key Indicators) card
+          gets the remaining width for the equation. */}
       <div style={{ ...cardStyle, display: "flex", alignItems: "center" }}>
-        <div>
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "var(--ink-3, #8a9498)",
-              marginBottom: 4,
-            }}
-          >
-            Bench top batch size
-          </div>
-          <NumberInput
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <BenchTopWeightInput
+            label="Bench top batch size"
             value={benchBatchG}
             onChange={setBenchBatchG}
-            suffix="g"
+            hint="please set the batch size"
             min={1}
+            emphasize
           />
-          <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
-            please set the batch size
-          </div>
+          <BenchTopWeightInput
+            label="Cast weight (wet)"
+            value={wetCastPieceWeightG}
+            onChange={setWetCastPieceWeightG}
+            min={0.1}
+            step={0.1}
+          />
+          <BenchTopWeightInput
+            label="Dry piece weight"
+            value={gummyPieceWeightG}
+            onChange={setGummyPieceWeightG}
+            min={0.1}
+            step={0.1}
+          />
         </div>
       </div>
       {/* Right card — Key Indicators equation + % of bench batch.
