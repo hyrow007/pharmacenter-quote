@@ -1230,10 +1230,23 @@ h1 {
   border: none;
   background: transparent;
   font-family: inherit;
+  /* Bumped from 14px to 15px so numeric input digits read comfortably
+     for the primary user (60s+). Tabular-nums enforced on numeric
+     variants so columns of digits line up under readout labels. */
   font-size: 15px;
   color: var(--ink-1);
   outline: none;
   padding: 0;
+}
+
+/* Standalone (unwrapped) .pricing__input — e.g. inside a raw <div> in
+   FormulaEditor's identity header — needs its own focus ring since the
+   .pricing__input-wrap:focus-within rule doesn't apply. Landed here so
+   older users get a clear "you're editing this field" cue.  */
+.pricing__input:focus {
+  outline: 2px solid var(--teal-700);
+  outline-offset: 1px;
+  border-radius: 8px;
 }
 .pricing__input::placeholder {
   color: var(--ink-3);

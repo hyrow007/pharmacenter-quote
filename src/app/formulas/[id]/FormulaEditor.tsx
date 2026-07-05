@@ -109,6 +109,33 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   return 0;
 }
 
+// Format — shared number formatters used across the editor so grams,
+// percentages, and signed overages read identically wherever they appear.
+// Each helper falls back to "—" on non-finite input so a bad computation
+// never surfaces as "NaN" in the UI.
+const Format = {
+  // Grams — 2 dp default (blend totals, target g, row totals), 3 dp opt-in
+  // for scale-up kg columns.
+  grams: (n: number, dec: 2 | 3 = 2): string =>
+    Number.isFinite(n) ? n.toFixed(dec) : "—",
+  // Percentages — always 2 dp (residual moisture, sugar/syrup, overage,
+  // % of finished).
+  pct: (n: number, dec: 2 = 2): string =>
+    Number.isFinite(n) ? n.toFixed(dec) : "—",
+  // Signed percentages (Overage %) — always shows a "+" for positives so
+  // "+5.00%" and "-5.00%" balance visually.
+  pctSigned: (n: number): string => (n > 0 ? "+" : "") + Format.pct(n),
+  // Compact percentages — strips trailing ".00" so "100.00%" reads as
+  // "100%". Used for "% of bench batch", "% of finished product", etc.
+  pctCompact: (n: number): string => {
+    if (!Number.isFinite(n)) return "—";
+    const s = n.toFixed(2);
+    return s.endsWith(".00") ? s.slice(0, -3) : s;
+  },
+  int: (n: number): string =>
+    Number.isFinite(n) ? Math.round(n).toString() : "—",
+};
+
 // Drag-and-drop reorder helper. Rebuilds the flat ingredients array by
 // walking it once and, on each row that belongs to `phase`, emitting the
 // next id from the newly-ordered phase list. Non-`phase` rows keep their
@@ -1308,7 +1335,7 @@ export default function FormulaEditor({
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: 12,
+            gap: 16,
             alignItems: "flex-end",
           }}
         >
@@ -1415,7 +1442,7 @@ export default function FormulaEditor({
                     </span>
                     <span
                       style={{
-                        fontSize: 10.5,
+                        fontSize: 11.5,
                         fontWeight: 700,
                         letterSpacing: "0.08em",
                         textTransform: "uppercase",
@@ -1943,9 +1970,9 @@ function Field({
     >
       <span
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
         }}
@@ -2062,9 +2089,9 @@ function BenchTopWeightInput({
     <div>
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           marginBottom: 4,
@@ -2096,14 +2123,14 @@ function BenchTopWeightInput({
             width: 90,
             textAlign: "right",
             fontVariantNumeric: "tabular-nums",
-            fontSize: emphasize ? 20 : 14,
+            fontSize: emphasize ? 20 : 15,
             fontWeight: emphasize ? 700 : 500,
           }}
         />
         <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
       </div>
       {hint ? (
-        <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
           {hint}
         </div>
       ) : null}
@@ -2129,9 +2156,9 @@ function BenchTopReadout({
     <div>
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           marginBottom: 4,
@@ -2158,7 +2185,7 @@ function BenchTopReadout({
         >
           <div
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 500,
               color: "var(--teal-900, #0f4a56)",
               fontVariantNumeric: "tabular-nums",
@@ -2167,7 +2194,7 @@ function BenchTopReadout({
           >
             {valueText}
           </div>
-          <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
+          <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
             {suffix}
           </span>
         </div>
@@ -2233,8 +2260,9 @@ function BenchTopTab({
   const totalOk = Math.abs(pctOfBench - 100) < 0.01;
   // Shared card chrome — extracted so the two cards below share the
   // same border/background/radius without repeating the style props.
+  // Padding bumped 14→18 as part of the calmer, breathier spacing pass.
   const cardStyle: React.CSSProperties = {
-    padding: 14,
+    padding: 18,
     border: "1px solid var(--line, #e3dcc9)",
     borderRadius: 8,
     background: "var(--paper, #fffdf8)",
@@ -2242,10 +2270,11 @@ function BenchTopTab({
   return (
     // Two side-by-side cards separated by a small gap. Wraps to two
     // rows on narrow viewports so the batch input stays reachable
-    // even when the equation can't fit on one line.
+    // even when the equation can't fit on one line. Vertical gap
+    // between cards bumped 14→18 for calmer breathing.
     <div
       style={{
-        marginBottom: 14,
+        marginBottom: 18,
         display: "flex",
         gap: 12,
         alignItems: "stretch",
@@ -2312,8 +2341,8 @@ function BenchTopTab({
         <div>
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 800,
+              fontSize: 14.5,
+              fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
@@ -2403,12 +2432,12 @@ function BenchTopTab({
               label="Sugar to Syrup Ratio (dry)"
               sugarText={
                 sugarSyrupRatio
-                  ? `${sugarSyrupRatio.sugarPct.toFixed(2)}%`
+                  ? `${Format.pct(sugarSyrupRatio.sugarPct)}%`
                   : "—"
               }
               syrupText={
                 sugarSyrupRatio
-                  ? `${sugarSyrupRatio.syrupPct.toFixed(2)}%`
+                  ? `${Format.pct(sugarSyrupRatio.syrupPct)}%`
                   : "—"
               }
             />
@@ -2448,9 +2477,9 @@ function KeyIndicatorStat({
     >
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           whiteSpace: "nowrap",
@@ -2470,7 +2499,7 @@ function KeyIndicatorStat({
           textAlign: "center",
         }}
       >
-        {value.toFixed(2)}
+        {Format.grams(value)}
         <span
           style={{
             fontSize: 12,
@@ -2499,9 +2528,9 @@ function KeyIndicatorPctStat({
   value: number;
   ok: boolean;
 }) {
-  // Drop trailing ".00" so 100% reads as "100%" not "100.00%".
-  const s = value.toFixed(2);
-  const display = s.endsWith(".00") ? s.slice(0, -3) : s;
+  // Drop trailing ".00" so 100% reads as "100%" not "100.00%" — via
+  // the shared Format.pctCompact helper.
+  const display = Format.pctCompact(value);
   return (
     <div
       style={{
@@ -2516,9 +2545,9 @@ function KeyIndicatorPctStat({
     >
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           whiteSpace: "nowrap",
@@ -2569,9 +2598,9 @@ function KeyIndicatorRatioStat({
     >
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           whiteSpace: "nowrap",
@@ -2597,9 +2626,9 @@ function RatioSubValue({ caption, text }: { caption: string; text: string }) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div
         style={{
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           lineHeight: 1,
@@ -2720,7 +2749,7 @@ function ScaleUpTab({
         <ReadOnly>{totalDailyKg.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg</ReadOnly>
       </ParamBlock>
       <ParamBlock label="Effective daily yield">
-        <ReadOnly>{(effectiveYield * 100).toFixed(2)}%</ReadOnly>
+        <ReadOnly>{Format.pct(effectiveYield * 100)}%</ReadOnly>
       </ParamBlock>
       <ParamBlock label="Gummies / batch">
         <ReadOnly>
@@ -2736,9 +2765,9 @@ function ParamBlock({ label, children }: { label: string; children: React.ReactN
     <div>
       <div
         style={{
-          fontSize: 10.5,
+          fontSize: 11.5,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.09em",
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           marginBottom: 4,
@@ -2972,12 +3001,12 @@ function IngredientTable({
                 </ITd>
                 {tab === "bench" ? (
                   <ITd style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {(benchGramById.get(row.id) ?? 0).toFixed(2)} g
+                    {Format.grams(benchGramById.get(row.id) ?? 0)} g
                   </ITd>
                 ) : null}
                 {tab === "scale" ? (
                   <ITd style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {(scaleKgById.get(row.id) ?? 0).toFixed(3)} kg
+                    {Format.grams(scaleKgById.get(row.id) ?? 0, 3)} kg
                   </ITd>
                 ) : null}
                 {tab === "cost" ? (
@@ -3059,9 +3088,9 @@ function ITh({ children, style }: { children?: React.ReactNode; style?: React.CS
       style={{
         textAlign: "left",
         padding: "8px 10px",
-        fontSize: 10.5,
+        fontSize: 11.5,
         fontWeight: 700,
-        letterSpacing: "0.1em",
+        letterSpacing: "0.09em",
         textTransform: "uppercase",
         color: "var(--ink-3, #8a9498)",
         borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
@@ -3307,22 +3336,18 @@ function BlendSectionCard({
     primaryNetTotalG + secondaryTotalG + finalTotalG;
   // Formatter for the "% of finished product" cell — mirrors the pctOfBench
   // pattern (2 dp, drop trailing .00 so 12.00% renders as 12%). Returns
-  // "0%" when the base is 0 to avoid divide-by-zero.
+  // "0%" when the base is 0 to avoid divide-by-zero. Uses shared
+  // Format.pctCompact so every subsection's percentage cell reads the same.
   const formatPctOfFinished = (grams: number): string => {
     if (grandTotalCookedBlendG <= 0) return "0";
-    const pct = (grams / grandTotalCookedBlendG) * 100;
-    const s = pct.toFixed(2);
-    return s.endsWith(".00") ? s.slice(0, -3) : s;
+    return Format.pctCompact((grams / grandTotalCookedBlendG) * 100);
   };
   // Formatter for the "Residual Moisture %" column — takes the residual
   // pct directly (already multiplied through waterFraction × pctOfFinished)
   // and mirrors the ".00" trim pattern used by formatPctOfFinished. Used
   // by both the carry-over subsection and renderIngredientsBlock below so
   // every subsection's residual cell formats identically.
-  const formatResidualPct = (residualPct: number): string => {
-    const s = residualPct.toFixed(2);
-    return s.endsWith(".00") ? s.slice(0, -3) : s;
-  };
+  const formatResidualPct = (residualPct: number): string => Format.pctCompact(residualPct);
 
   // Drag-and-drop wiring for a single blend row. Returns the set of
   // <tr>-level HTML5 DnD props plus a JSX drag-handle to render inside
@@ -3545,7 +3570,7 @@ function BlendSectionCard({
               style={{
                 padding: "10px 14px 4px",
                 borderTop: "1px solid var(--line-2, #efe9da)",
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: 700,
                 color: "var(--teal-900, #0f4a56)",
                 letterSpacing: "-0.005em",
@@ -3556,7 +3581,7 @@ function BlendSectionCard({
             <div
               style={{
                 padding: "0 14px 8px",
-                fontSize: 11,
+                fontSize: 12,
                 color: "var(--ink-3, #8a9498)",
               }}
             >
@@ -3640,14 +3665,14 @@ function BlendSectionCard({
                       >
                         <BTd style={{ position: "relative" }}>
                           {rowDnd.renderHandle(false)}
-                          <div style={{ fontWeight: 700, color: "var(--ink, #1f2a2d)" }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink, #1f2a2d)" }}>
                             {row.customName || "Solution"}
                           </div>
                           <div
                             style={{
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: 700,
-                              letterSpacing: "0.1em",
+                              letterSpacing: "0.09em",
                               textTransform: "uppercase",
                               color: "var(--ink-3, #8a9498)",
                               marginTop: 2,
@@ -3835,13 +3860,13 @@ function BlendSectionCard({
                     >
                       <BTd style={{ position: "relative" }}>
                         {rowDnd.renderHandle(false)}
-                        <div style={{ fontWeight: 600, color: "var(--ink, #1f2a2d)" }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink, #1f2a2d)" }}>
                           {displayName}
                         </div>
                         {resolved?.category ? (
                           <div
                             style={{
-                              fontSize: 10.5,
+                              fontSize: 12,
                               color: "var(--ink-3, #8a9498)",
                               marginTop: 2,
                               textTransform: "capitalize",
@@ -4025,9 +4050,9 @@ function BlendSectionCard({
                   <BTd>
                     <strong
                       style={{
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: 700,
-                        letterSpacing: "0.1em",
+                        letterSpacing: "0.09em",
                         textTransform: "uppercase",
                         color: "var(--teal-900, #0f4a56)",
                       }}
@@ -4246,13 +4271,15 @@ function BlendSectionCard({
                     style={{
                       background: "transparent",
                       border: "none",
-                      padding: 0,
-                      fontSize: 10.5,
+                      padding: "2px 6px",
+                      fontSize: 11.5,
                       fontWeight: 700,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
                       color: "var(--teal-700, #1d6c7b)",
                       cursor: "pointer",
+                      borderRadius: 6,
+                      transition: "background 0.12s ease",
                     }}
                   >
                     Reset to default
@@ -4262,16 +4289,17 @@ function BlendSectionCard({
                   type="button"
                   onClick={() => setCookingProcessEditing((v) => !v)}
                   style={{
-                    padding: "4px 10px",
+                    padding: "5px 12px",
                     background: cookingProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
                     color: cookingProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
                     border: "1px solid var(--teal-700, #1d6c7b)",
                     borderRadius: 6,
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     fontWeight: 700,
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     cursor: "pointer",
+                    transition: "background 0.12s ease, color 0.12s ease",
                   }}
                 >
                   {cookingProcessEditing ? "Done editing" : "Edit"}
@@ -4399,9 +4427,7 @@ function BlendSectionCard({
           const showPctColumn = (pctBaseG ?? 0) > 0;
           const formatBlockPct = (grams: number): string => {
             if (!showPctColumn) return "0";
-            const pct = (grams / (pctBaseG ?? 1)) * 100;
-            const s = pct.toFixed(2);
-            return s.endsWith(".00") ? s.slice(0, -3) : s;
+            return Format.pctCompact((grams / (pctBaseG ?? 1)) * 100);
           };
           // Effective water fraction for residual calculation. SOLUTION rows
           // are gated by includeSolutionsInResidual — when false (Secondary
@@ -4425,10 +4451,7 @@ function BlendSectionCard({
               (Number(r.grams) || 0) / (pctBaseG ?? 1) * 100;
             return wf * pctOfFinished;
           };
-          const formatBlockResidualPct = (residualPct: number): string => {
-            const s = residualPct.toFixed(2);
-            return s.endsWith(".00") ? s.slice(0, -3) : s;
-          };
+          const formatBlockResidualPct = (residualPct: number): string => Format.pctCompact(residualPct);
           // Subsection's total residual — the sum of the per-row residual
           // pct across every row. Mirrors the total-row grams computation
           // so the total ties out with the column above by construction.
@@ -4525,16 +4548,17 @@ function BlendSectionCard({
                       type="button"
                       onClick={() => setBlockProcessEditing((v) => !v)}
                       style={{
-                        padding: "4px 10px",
+                        padding: "5px 12px",
                         background: blockProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
                         color: blockProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
                         border: "1px solid var(--teal-700, #1d6c7b)",
                         borderRadius: 6,
-                        fontSize: 10.5,
+                        fontSize: 11.5,
                         fontWeight: 700,
                         letterSpacing: "0.08em",
                         textTransform: "uppercase",
                         cursor: "pointer",
+                        transition: "background 0.12s ease, color 0.12s ease",
                       }}
                     >
                       {blockProcessEditing ? "Done editing" : "Edit"}
@@ -4897,7 +4921,7 @@ function BlendSectionCard({
                               // subtitle styling used elsewhere.
                               <div
                                 style={{
-                                  fontSize: 10.5,
+                                  fontSize: 12,
                                   color: "var(--ink-3, #8a9498)",
                                   marginTop: 2,
                                 }}
@@ -4907,7 +4931,7 @@ function BlendSectionCard({
                             ) : resolved?.category ? (
                               <div
                                 style={{
-                                  fontSize: 10.5,
+                                  fontSize: 12,
                                   color: "var(--ink-3, #8a9498)",
                                   marginTop: 2,
                                   textTransform: "capitalize",
@@ -4962,9 +4986,7 @@ function BlendSectionCard({
                                     : "#8b2f2f";
                                 const label = showDash
                                   ? "—"
-                                  : (rawPct >= 0 ? "+" : "") +
-                                    rawPct.toFixed(2) +
-                                    "%";
+                                  : Format.pctSigned(rawPct) + "%";
                                 return (
                                   <div
                                     style={{
@@ -4986,12 +5008,12 @@ function BlendSectionCard({
                                     </span>
                                     <span
                                       style={{
-                                        fontSize: 10.5,
+                                        fontSize: 12,
                                         color: "var(--ink-3, #8a9498)",
                                         fontWeight: 400,
                                       }}
                                     >
-                                      Claim Baseline: {baseG.toFixed(2)} g
+                                      Claim Baseline: {Format.grams(baseG)} g
                                     </span>
                                   </div>
                                 );
@@ -5139,9 +5161,9 @@ function BlendSectionCard({
                       <BTd>
                         <strong
                           style={{
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: 700,
-                            letterSpacing: "0.1em",
+                            letterSpacing: "0.09em",
                             textTransform: "uppercase",
                             color: "var(--teal-900, #0f4a56)",
                           }}
@@ -5587,10 +5609,10 @@ function BlendSectionCard({
                   // Reuse the shared grandTotalCookedBlendG computed at the
                   // top of the render body so the footer and the new "% of
                   // finished product" column agree by construction.
-                  const s = (grandTotalCookedBlendG * factor).toFixed(2);
-                  // Mirror the pctOfBench trick — drop a trailing ".00" so a
-                  // whole number renders cleanly without visual noise.
-                  const gramsDisplay = s.endsWith(".00") ? s.slice(0, -3) : s;
+                  // Grams display — 2 dp, and mirror the pctOfBench trick
+                  // (drop trailing ".00" for a clean whole-number display)
+                  // via Format.pctCompact which does the same trim.
+                  const gramsDisplay = Format.pctCompact(grandTotalCookedBlendG * factor);
                   // % of finished product — by construction the Grand Total
                   // is 100% of itself. Guard against a degenerate 0/0 case
                   // (nothing entered anywhere) by rendering an empty string.
@@ -5658,10 +5680,7 @@ function BlendSectionCard({
                           100);
                     }
                   }
-                  const residualStr = grandResidualPct.toFixed(2);
-                  const residualDisplay = residualStr.endsWith(".00")
-                    ? residualStr.slice(0, -3)
-                    : residualStr;
+                  const residualDisplay = Format.pctCompact(grandResidualPct);
                   return (
                     <div
                       style={{
@@ -5701,9 +5720,9 @@ function BlendSectionCard({
                             <BTd style={{ padding: "10px 14px" }}>
                               <strong
                                 style={{
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontWeight: 700,
-                                  letterSpacing: "0.1em",
+                                  letterSpacing: "0.09em",
                                   textTransform: "uppercase",
                                   color: "var(--teal-900, #0f4a56)",
                                 }}
@@ -5808,9 +5827,9 @@ function BTh({ children, style }: { children?: React.ReactNode; style?: React.CS
       style={{
         textAlign: "left",
         padding: "8px 12px",
-        fontSize: 10.5,
+        fontSize: 11.5,
         fontWeight: 700,
-        letterSpacing: "0.1em",
+        letterSpacing: "0.09em",
         textTransform: "uppercase",
         color: "var(--ink-3, #8a9498)",
         borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
@@ -5882,11 +5901,12 @@ function CustomerSection(props: {
 
   // Section styles — mirror /start's approach so the picker reads as an
   // obvious sibling of the identity row. Small uppercase label, tab
-  // pills, teal-on-cream inputs.
+  // pills, teal-on-cream inputs. Tab buttons + Change link bumped a
+  // point for the primary user's readability.
   const sectionLabel: React.CSSProperties = {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: 700,
-    letterSpacing: "0.08em",
+    letterSpacing: "0.09em",
     textTransform: "uppercase",
     color: "var(--ink-3, #8a9498)",
     marginBottom: 10,
@@ -5896,7 +5916,7 @@ function CustomerSection(props: {
     padding: "10px 14px",
     border: "1.5px solid #e3dcc9",
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: 15,
     background: "#fff",
     color: "var(--ink-1)",
     boxSizing: "border-box",
@@ -5912,15 +5932,16 @@ function CustomerSection(props: {
     background: "#fffdf8",
   };
   const tabBtn = (active: boolean): React.CSSProperties => ({
-    padding: "6px 16px",
+    padding: "7px 18px",
     border: "none",
     borderRadius: 6,
     background: active ? "var(--teal-900, #0f4a56)" : "transparent",
     color: active ? "#fff" : "var(--teal-700, #1d6c7b)",
     fontWeight: 700,
-    fontSize: 12,
+    fontSize: 13,
     cursor: "pointer",
     fontFamily: "inherit",
+    transition: "background 0.12s ease, color 0.12s ease",
   });
   const selectedRow: React.CSSProperties = {
     display: "flex",
@@ -5937,15 +5958,17 @@ function CustomerSection(props: {
     border: "none",
     color: "var(--teal-700, #1d6c7b)",
     fontWeight: 700,
-    fontSize: 12,
+    fontSize: 13,
     cursor: "pointer",
-    padding: "2px 6px",
+    padding: "4px 8px",
+    borderRadius: 6,
     fontFamily: "inherit",
+    transition: "background 0.12s ease, color 0.12s ease",
   };
   const labelText: React.CSSProperties = {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: 700,
-    letterSpacing: "0.08em",
+    letterSpacing: "0.09em",
     textTransform: "uppercase",
     color: "var(--ink-3, #8a9498)",
   };
@@ -6242,7 +6265,7 @@ function LabelClaimsSection({
           </div>
           <div
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: "var(--ink-3, #8a9498)",
               marginTop: 2,
             }}
@@ -6257,17 +6280,18 @@ function LabelClaimsSection({
           type="button"
           onClick={onAdd}
           style={{
-            padding: "6px 12px",
+            padding: "7px 14px",
             background: "var(--paper, #fffdf8)",
             border: "1px solid var(--teal-700, #1d6c7b)",
             borderRadius: 6,
-            fontSize: 11,
+            fontSize: 11.5,
             fontWeight: 700,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
             color: "var(--teal-900, #0f4a56)",
             cursor: "pointer",
             whiteSpace: "nowrap",
+            transition: "background 0.12s ease",
           }}
         >
           + Add ingredient
@@ -7052,9 +7076,9 @@ function SolutionRow({
                 </span>
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: 700,
-                    letterSpacing: "0.1em",
+                    letterSpacing: "0.09em",
                     textTransform: "uppercase",
                     color: "var(--ink-3, #8a9498)",
                   }}
@@ -7063,7 +7087,7 @@ function SolutionRow({
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     color: "var(--ink-3, #8a9498)",
                   }}
                 >
@@ -7073,7 +7097,7 @@ function SolutionRow({
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     fontVariantNumeric: "tabular-nums",
                     color:
                       Math.abs(totalPct - 100) < 0.01
@@ -7083,7 +7107,7 @@ function SolutionRow({
                   }}
                   title="Component percentages should sum to 100%"
                 >
-                  Total: {totalPct.toFixed(2)}%
+                  Total: {Format.pct(totalPct)}%
                 </span>
               </span>
             </button>
