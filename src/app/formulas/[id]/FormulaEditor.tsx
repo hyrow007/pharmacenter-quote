@@ -1949,32 +1949,43 @@ function BenchTopReadout({
       >
         {label}
       </div>
-      {/* Stack the value and unit vertically so the digits right-align
-          with the numeric inputs above (which are all 90px wide, right-
-          aligned) instead of being pushed left by a wide inline unit
-          label. The unit sits directly beneath the number in the same
-          90px column so it still reads as "N gummies". */}
-      <div
-        style={{
-          width: 90,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-end",
-        }}
-      >
+      {/* Mirror the *exact* horizontal structure of BenchTopWeightInput
+          so the digits right-align with the numeric inputs above:
+          - outer: flex row with the same alignItems/gap as the input row
+          - value column: flex:1 (matches the `flex: 1` on .pricing__input)
+            containing the number stacked over the unit caption
+          - hidden "g" placeholder: preserves the same right-edge offset
+            the input row loses to its visible "g" suffix, so the
+            readout's number ends at the same X as the input's digits. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <div
           style={{
-            fontSize: 14,
-            fontWeight: 500,
-            color: "var(--teal-900, #0f4a56)",
-            fontVariantNumeric: "tabular-nums",
-            lineHeight: 1.15,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
           }}
         >
-          {valueText}
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              color: "var(--teal-900, #0f4a56)",
+              fontVariantNumeric: "tabular-nums",
+              lineHeight: 1.15,
+            }}
+          >
+            {valueText}
+          </div>
+          <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
+            {suffix}
+          </span>
         </div>
-        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
-          {suffix}
+        <span
+          aria-hidden="true"
+          style={{ fontSize: 12, color: "transparent", visibility: "hidden" }}
+        >
+          g
         </span>
       </div>
     </div>
