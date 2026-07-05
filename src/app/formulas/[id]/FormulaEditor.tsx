@@ -1559,9 +1559,19 @@ function BenchTopTab({
             min={1}
           />
           <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
-            Reference size for the R&amp;D lab.
+            please set the batch size
           </div>
         </div>
+        {/* Vertical divider — visually splits the "set your batch size"
+            control from the derived-stats block on its right. */}
+        <div
+          aria-hidden="true"
+          style={{
+            width: 1,
+            alignSelf: "stretch",
+            background: "var(--line, #e3dcc9)",
+          }}
+        />
         {/* Per-phase blend totals + combined total — mirror the
             per-subsection totals inside the blend cards so R&D can
             eyeball the whole pipeline without scrolling. All grams. */}
