@@ -489,6 +489,7 @@ export default function FormulaEditor({
     batchesPerDay: FORMULA_VERSION_DEFAULTS.batchesPerDay,
     fixedLossKgPerDay: FORMULA_VERSION_DEFAULTS.fixedLossKgPerDay,
     gummyPieceWeightG: FORMULA_VERSION_DEFAULTS.gummyPieceWeightG,
+    wetCastPieceWeightG: FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
     yieldPct: FORMULA_VERSION_DEFAULTS.yieldPct,
     ingredients: [emptyIngredient()],
     notes: null,
@@ -504,6 +505,13 @@ export default function FormulaEditor({
   );
   const [gummyPieceWeightG, setGummyPieceWeightG] = useState<number>(
     seedVersion.gummyPieceWeightG,
+  );
+  // Wet cast piece weight — mass of one gummy right out of the depositor,
+  // before drying. Used by claimBaseGramsForBench to convert the wet-
+  // measured bench batch into pieces per batch. Seeded from the version
+  // or from the code default when the version predates the field.
+  const [wetCastPieceWeightG, setWetCastPieceWeightG] = useState<number>(
+    seedVersion.wetCastPieceWeightG ?? FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
   );
   const [yieldPct, setYieldPct] = useState<number>(seedVersion.yieldPct);
   const [ingredients, setIngredients] = useState<GummyFormulaIngredient[]>(
@@ -600,6 +608,7 @@ export default function FormulaEditor({
       batchesPerDay,
       fixedLossKgPerDay,
       gummyPieceWeightG,
+      wetCastPieceWeightG,
       yieldPct,
       ingredients,
       processNotes,
@@ -613,6 +622,11 @@ export default function FormulaEditor({
         batchesPerDay: seed.batchesPerDay,
         fixedLossKgPerDay: seed.fixedLossKgPerDay,
         gummyPieceWeightG: seed.gummyPieceWeightG,
+        // Seed may pre-date the wet cast field — fall back to the code
+        // default so an untouched-since-load formula stays clean.
+        wetCastPieceWeightG:
+          seed.wetCastPieceWeightG ??
+          FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
         yieldPct: seed.yieldPct,
         ingredients: seed.ingredients,
         processNotes: seed.processNotes ?? {},
@@ -628,6 +642,7 @@ export default function FormulaEditor({
     batchesPerDay,
     fixedLossKgPerDay,
     gummyPieceWeightG,
+    wetCastPieceWeightG,
     yieldPct,
     ingredients,
     processNotes,
@@ -834,6 +849,7 @@ export default function FormulaEditor({
               batchesPerDay,
               fixedLossKgPerDay,
               gummyPieceWeightG,
+              wetCastPieceWeightG,
               yieldPct,
               ingredients,
               processNotes,
@@ -969,23 +985,27 @@ export default function FormulaEditor({
     });
   }
 
-  // Label-claim → Secondary Blend auto-sync. Keeps the cooked-phase rows
-  // (which the UI calls "Secondary Blend") in lock-step with the current
-  // labelClaims list:
+  // Label-claim → Secondary Blend auto-sync (identity-only). Keeps the
+  // cooked-phase rows in lock-step with the current labelClaims list:
   //   - For each claim, ensure exactly one ingredient row exists with
   //     sourceLabelClaimId === claim.id and blendPhase === "cooked". If
-  //     missing, INSERT it at the end of the cooked-phase run. The row's
+  //     missing, INSERT it at the end of the cooked-phase run with
+  //     grams = 0 (operator fills it in). The row's
   //     rawMaterialId/rawMaterialFpCode/customName mirror the claim's
-  //     identity; overagePct starts at 0.
+  //     identity.
   //   - For each existing cooked row with sourceLabelClaimId set:
-  //       * If the claim still exists, RE-COMPUTE grams from
-  //         claimBaseGramsForBench × (1 + overagePct/100) and refresh the
-  //         identity fields from the claim. overagePct is preserved.
+  //       * If the claim still exists, REFRESH the identity fields from
+  //         the claim (name / rawMaterialId). GRAMS IS NOT TOUCHED —
+  //         the operator owns it. overagePct is no longer used and is
+  //         intentionally left alone (any legacy value stays on the row
+  //         but the UI reads/writes only `grams`).
   //       * If the claim is gone, REMOVE the row.
   //   - Cooked rows WITHOUT sourceLabelClaimId are untouched (hand-authored).
   //
   // Idempotent — the functional setState returns `prev` unchanged when
-  // nothing changed so React doesn't re-render in a loop.
+  // nothing changed so React doesn't re-render in a loop. The compare
+  // set excludes `grams` and `overagePct` for claim-sourced rows so
+  // typing a new gram value doesn't trip this effect into a fight.
   useEffect(() => {
     setIngredients((prev) => {
       const claimById = new Map<string, LabelClaim>();
@@ -1000,23 +1020,14 @@ export default function FormulaEditor({
         const claim = claimById.get(r.sourceLabelClaimId);
         if (!claim) return null; // claim removed → drop row
         seenClaimIds.add(claim.id);
-        const overagePct = Number.isFinite(Number(r.overagePct))
-          ? Number(r.overagePct)
-          : 0;
-        const baseG = claimBaseGramsForBench(
-          claim,
-          benchBatchG,
-          gummyPieceWeightG,
-        );
-        const newGrams = baseG * (1 + overagePct / 100);
         const nextRow: GummyFormulaIngredient = {
           ...r,
           rawMaterialId: claim.rawMaterialId,
           rawMaterialFpCode: claim.rawMaterialFpCode ?? null,
           customName: claim.customName ?? null,
           blendPhase: "cooked",
-          grams: newGrams,
-          overagePct,
+          // grams intentionally NOT overwritten — operator owns it.
+          // overagePct intentionally NOT overwritten — no longer read.
         };
         return nextRow;
       });
@@ -1038,27 +1049,22 @@ export default function FormulaEditor({
         for (let i = 0; i < kept.length; i++) {
           if (kept[i].blendPhase === "cooked") lastCookedIdx = i;
         }
-        const newRows: GummyFormulaIngredient[] = missingClaims.map((c) => {
-          const baseG = claimBaseGramsForBench(
-            c,
-            benchBatchG,
-            gummyPieceWeightG,
-          );
-          return {
-            id: `ing_${Math.random().toString(36).slice(2, 10)}`,
-            rawMaterialId: c.rawMaterialId,
-            rawMaterialFpCode: c.rawMaterialFpCode ?? null,
-            customName: c.customName ?? null,
-            pctInFinished: 0,
-            grams: baseG,
-            blendPhase: "cooked" as BlendPhase,
-            costPerKgOverride: null,
-            solidsOverride: null,
-            notes: null,
-            sourceLabelClaimId: c.id,
-            overagePct: 0,
-          };
-        });
+        const newRows: GummyFormulaIngredient[] = missingClaims.map((c) => ({
+          id: `ing_${Math.random().toString(36).slice(2, 10)}`,
+          rawMaterialId: c.rawMaterialId,
+          rawMaterialFpCode: c.rawMaterialFpCode ?? null,
+          customName: c.customName ?? null,
+          pctInFinished: 0,
+          // Seed grams at 0 so the operator sees an empty starting
+          // cell — the row is a scaffold; they type the target grams
+          // (or reference the derived overage % as guidance).
+          grams: 0,
+          blendPhase: "cooked" as BlendPhase,
+          costPerKgOverride: null,
+          solidsOverride: null,
+          notes: null,
+          sourceLabelClaimId: c.id,
+        }));
         if (lastCookedIdx === -1) {
           next = [...kept, ...newRows];
         } else {
@@ -1072,30 +1078,39 @@ export default function FormulaEditor({
       // Compare-then-set — bail out with `prev` if the effect produced
       // an identical array so React doesn't re-render / re-fire this
       // effect (prevents render loops when nothing actually changed).
+      // Grams + overagePct are EXCLUDED from the claim-sourced compare
+      // because this effect doesn't touch them anymore — leaving them
+      // in would flag every operator-driven grams edit as a diff and
+      // fight the input.
       if (next.length !== prev.length) return next;
       for (let i = 0; i < next.length; i++) {
         const a = next[i];
         const b = prev[i];
         if (a === b) continue;
-        // Shallow compare the fields this effect can touch. Other
-        // fields don't change here so a reference miss elsewhere would
-        // have been produced by a different setter, not us.
+        const claimSourced =
+          (a.sourceLabelClaimId ?? null) !== null ||
+          (b.sourceLabelClaimId ?? null) !== null;
+        // Identity-only comparison for claim-sourced rows.
         if (
           a.id !== b.id ||
           a.rawMaterialId !== b.rawMaterialId ||
           (a.rawMaterialFpCode ?? null) !== (b.rawMaterialFpCode ?? null) ||
           (a.customName ?? null) !== (b.customName ?? null) ||
           a.blendPhase !== b.blendPhase ||
-          (a.grams ?? null) !== (b.grams ?? null) ||
           (a.sourceLabelClaimId ?? null) !== (b.sourceLabelClaimId ?? null) ||
-          (a.overagePct ?? null) !== (b.overagePct ?? null)
+          // Non-claim rows still compare grams so a hand-authored row
+          // reference change (e.g. after a splice) is caught.
+          (!claimSourced && (a.grams ?? null) !== (b.grams ?? null))
         ) {
           return next;
         }
       }
       return prev;
     });
-  }, [labelClaims, benchBatchG, gummyPieceWeightG]);
+    // Only labelClaims drives this effect now — grams derivation used
+    // to depend on benchBatchG + gummyPieceWeightG, but with grams
+    // manual the sync no longer reads them.
+  }, [labelClaims]);
 
   // Group ingredients by blendPhase for the sectioned bench-top view. Rows
   // without a phase (legacy or explicitly unassigned) stay in the shared
@@ -1436,6 +1451,37 @@ export default function FormulaEditor({
             </div>
           </Field>
 
+          {/* Cast weight (wet). Sits next to the finished piece weight
+              because both are per-piece physical properties. Used by the
+              label-claim → Secondary Blend overage math: the bench batch
+              is measured wet, so pieces-per-batch is benchBatchG /
+              wetCastPieceWeightG. Active mass survives drying so the
+              per-piece claim amount is the same wet or dry. Default 3.5 g
+              (higher than the 3.0 g finished default). */}
+          <Field label="Cast weight (wet, g)" width={130}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="number"
+                onFocus={(e) => {
+                  const el = e.currentTarget;
+                  setTimeout(() => {
+                    try { el.select(); } catch {}
+                  }, 0);
+                }}
+                value={Number.isFinite(wetCastPieceWeightG) ? wetCastPieceWeightG : 0}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setWetCastPieceWeightG(Number.isFinite(n) ? n : 0);
+                }}
+                step="0.1"
+                min={0.1}
+                className="pricing__input"
+                style={{ width: "100%", textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+              />
+              <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>g</span>
+            </div>
+          </Field>
+
           <Field label="Shape" width={130}>
             <select
               value={shape}
@@ -1640,6 +1686,7 @@ export default function FormulaEditor({
             benchBatchG={benchBatchG}
             labelClaims={labelClaims}
             gummyPieceWeightG={gummyPieceWeightG}
+            wetCastPieceWeightG={wetCastPieceWeightG}
           />
         </>
       )}
@@ -2761,6 +2808,7 @@ function BlendSectionCard({
   onSectionUnitChange,
   labelClaims,
   gummyPieceWeightG,
+  wetCastPieceWeightG,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -2835,10 +2883,17 @@ function BlendSectionCard({
    *  claim-sourced row and drive the Overage % column's grams
    *  recomputation. Undefined for cards that don't need it (pre-cook). */
   labelClaims?: LabelClaim[];
-  /** Cooked-only: per-gummy piece weight (grams). Paired with
-   *  benchBatchG + a label claim's amount to derive the base grams for
-   *  a claim-sourced Secondary Blend row via claimBaseGramsForBench. */
+  /** Cooked-only: finished (dried) per-gummy piece weight in grams. Used
+   *  as the fallback when wetCastPieceWeightG is missing / <= 0. Paired
+   *  with benchBatchG + a label claim's amount inside
+   *  claimBaseGramsForBench. */
   gummyPieceWeightG?: number;
+  /** Cooked-only: wet cast per-gummy piece weight in grams. Primary input
+   *  to claimBaseGramsForBench — the bench batch is measured wet, so
+   *  pieces-per-batch = benchBatchG / wetCastPieceWeightG. Active mass
+   *  survives drying so the per-piece claim amount stays the same. Falls
+   *  back to gummyPieceWeightG inside the helper when undefined / <= 0. */
+  wetCastPieceWeightG?: number;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -4545,8 +4600,14 @@ function BlendSectionCard({
                               </div>
                             ) : null}
                           </BTd>
-                          {/* Overage % — Secondary Blend only, and only
-                              live on claim-sourced rows. Non-claim rows
+                          {/* Overage % — Secondary Blend only. Now a
+                              read-only DERIVED display: grams is the
+                              manual input (see next cell) and this cell
+                              shows how far above/below the label-claim
+                              target the operator's grams sits.
+                                overage% = (actualG / baseG - 1) × 100
+                              baseG comes from claimBaseGramsForBench
+                              against the wet cast weight. Non-claim rows
                               show a grey em-dash so the column width
                               still holds. */}
                           {showOverageColumn ? (
@@ -4557,64 +4618,67 @@ function BlendSectionCard({
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {isClaimSourced ? (
-                                <div
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                >
-                                  <input
-                                    type="number"
-                                    onFocus={(e) => {
-                                      const el = e.currentTarget;
-                                      setTimeout(() => {
-                                        try { el.select(); } catch {}
-                                      }, 0);
-                                    }}
-                                    value={
-                                      Number.isFinite(Number(row.overagePct))
-                                        ? Number(row.overagePct)
-                                        : 0
-                                    }
-                                    onChange={(e) => {
-                                      const raw = Number(e.target.value);
-                                      const pct = Number.isFinite(raw) ? raw : 0;
-                                      // Recompute grams from the claim's base
-                                      // amount in a single setIngredients call
-                                      // so React batches the update.
-                                      const baseG = claimBaseGramsForBench(
-                                        claimForRow!,
-                                        benchBatchG ?? 0,
-                                        gummyPieceWeightG ?? 0,
-                                      );
-                                      const newGrams = baseG * (1 + pct / 100);
-                                      onUpdate(row.id, {
-                                        overagePct: pct,
-                                        grams: newGrams,
-                                      });
-                                    }}
-                                    step="0.1"
-                                    min={0}
-                                    className="pricing__input"
+                              {isClaimSourced ? (() => {
+                                const baseG = claimBaseGramsForBench(
+                                  claimForRow!,
+                                  benchBatchG ?? 0,
+                                  wetCastPieceWeightG ?? 0,
+                                  gummyPieceWeightG ?? 0,
+                                );
+                                const actualG = Number(row.grams) || 0;
+                                // Dash guard: no meaningful overage %
+                                // when either side is zero (avoids
+                                // divide-by-zero and hides a spurious
+                                // "-100.00%" on a fresh row).
+                                const showDash =
+                                  !(baseG > 0) || !(actualG > 0);
+                                const rawPct = showDash
+                                  ? 0
+                                  : (actualG / baseG - 1) * 100;
+                                // Soft color band — near-zero stays neutral;
+                                // >0 goes teal; <0 goes muted red.
+                                const near = Math.abs(rawPct) < 0.005;
+                                const color = showDash || near
+                                  ? "var(--ink-2, #415056)"
+                                  : rawPct > 0
+                                    ? "var(--teal-700, #1d6c7b)"
+                                    : "#8b2f2f";
+                                const label = showDash
+                                  ? "—"
+                                  : (rawPct >= 0 ? "+" : "") +
+                                    rawPct.toFixed(2) +
+                                    "%";
+                                return (
+                                  <div
                                     style={{
-                                      width: 60,
-                                      flex: "0 0 60px",
-                                      textAlign: "right",
-                                      fontVariantNumeric: "tabular-nums",
-                                    }}
-                                  />
-                                  <span
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--ink-3, #8a9498)",
+                                      display: "inline-flex",
+                                      flexDirection: "column",
+                                      alignItems: "flex-end",
+                                      gap: 2,
+                                      lineHeight: 1.15,
                                     }}
                                   >
-                                    %
-                                  </span>
-                                </div>
-                              ) : (
+                                    <span
+                                      style={{
+                                        fontWeight: 700,
+                                        color,
+                                        fontVariantNumeric: "tabular-nums",
+                                      }}
+                                    >
+                                      {label}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: 10.5,
+                                        color: "var(--ink-3, #8a9498)",
+                                        fontWeight: 400,
+                                      }}
+                                    >
+                                      target: {baseG.toFixed(2)} g
+                                    </span>
+                                  </div>
+                                );
+                              })() : (
                                 <span
                                   style={{
                                     color: "var(--ink-3, #8a9498)",
@@ -4627,74 +4691,53 @@ function BlendSectionCard({
                           ) : null}
                           <BTd style={{ textAlign: "right" }}>
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                              {isClaimSourced ? (
-                                // Read-only computed grams display —
-                                // matches the input's tabular alignment
-                                // but is styled as static text so
-                                // operators can't type into it directly.
-                                <span
-                                  style={{
-                                    width: 80,
-                                    flex: "0 0 80px",
-                                    textAlign: "right",
-                                    fontVariantNumeric: "tabular-nums",
-                                    color: "var(--ink-2, #415056)",
-                                    padding: "4px 8px",
-                                    background: "var(--cream-soft, #fbf6ec)",
-                                    border: "1px solid var(--line-2, #efe9da)",
-                                    borderRadius: 4,
-                                    boxSizing: "border-box",
-                                  }}
-                                >
-                                  {(
-                                    ((row.grams ?? 0) as number) * factor
-                                  ).toFixed(3)}
-                                </span>
-                              ) : (
-                                <input
-                                  type="number"
-                                  onFocus={(e) => {
-                                    // Chrome's <input type="number"> doesn't select on
-                                    // focus synchronously — defer one frame so the
-                                    // digits are highlighted and any keystroke replaces
-                                    // the placeholder 0 instead of prepending to it.
-                                    const el = e.currentTarget;
-                                    setTimeout(() => {
-                                      try { el.select(); } catch {}
-                                    }, 0);
-                                  }}
-                                  value={
-                                    row.grams !== null && row.grams !== undefined
-                                      ? row.grams * factor
-                                      : 0
-                                  }
-                                  onChange={(e) => {
-                                    const n = Number(e.target.value);
-                                    // Convert the displayed unit back to grams for
-                                    // storage so downstream math stays in one base.
-                                    onUpdate(row.id, {
-                                      grams: Number.isFinite(n) ? n / factor : 0,
-                                    });
-                                  }}
-                                  step="0.1"
-                                  min={0}
-                                  className="pricing__input"
-                                  style={{
-                                    width: 80,
-                                    // Override .pricing__input's `flex: 1` — with
-                                    // that default, the width setting was being
-                                    // ignored inside the inline-flex parent, so the
-                                    // number position drifted from the solution
-                                    // rows' identical input below.
-                                    // 80 (not 90) so input + gap + unit glyph
-                                    // (~92px total) fits inside the 96px cell
-                                    // content area and right-aligns properly.
-                                    flex: "0 0 80px",
-                                    textAlign: "right",
-                                    fontVariantNumeric: "tabular-nums",
-                                  }}
-                                />
-                              )}
+                              {/* Grams is now the manual input for every
+                                  row — including claim-sourced ones. The
+                                  Overage % cell (above) derives from this
+                                  vs. the claim's target base grams. */}
+                              <input
+                                type="number"
+                                onFocus={(e) => {
+                                  // Chrome's <input type="number"> doesn't select on
+                                  // focus synchronously — defer one frame so the
+                                  // digits are highlighted and any keystroke replaces
+                                  // the placeholder 0 instead of prepending to it.
+                                  const el = e.currentTarget;
+                                  setTimeout(() => {
+                                    try { el.select(); } catch {}
+                                  }, 0);
+                                }}
+                                value={
+                                  row.grams !== null && row.grams !== undefined
+                                    ? row.grams * factor
+                                    : 0
+                                }
+                                onChange={(e) => {
+                                  const n = Number(e.target.value);
+                                  // Convert the displayed unit back to grams for
+                                  // storage so downstream math stays in one base.
+                                  onUpdate(row.id, {
+                                    grams: Number.isFinite(n) ? n / factor : 0,
+                                  });
+                                }}
+                                step="0.1"
+                                min={0}
+                                className="pricing__input"
+                                style={{
+                                  width: 80,
+                                  // Override .pricing__input's `flex: 1` — with
+                                  // that default, the width setting was being
+                                  // ignored inside the inline-flex parent, so the
+                                  // number position drifted from the solution
+                                  // rows' identical input below.
+                                  // 80 (not 90) so input + gap + unit glyph
+                                  // (~92px total) fits inside the 96px cell
+                                  // content area and right-aligns properly.
+                                  flex: "0 0 80px",
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              />
                               <span
                                 style={{
                                   fontSize: 12,

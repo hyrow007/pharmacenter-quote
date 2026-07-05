@@ -110,6 +110,7 @@ type PostBody = {
   batchesPerDay?: number;
   fixedLossKgPerDay?: number;
   gummyPieceWeightG?: number;
+  wetCastPieceWeightG?: number;
   yieldPct?: number;
   ingredients?: GummyFormulaIngredient[];
   notes?: string | null;
@@ -177,13 +178,15 @@ export async function POST(request: Request) {
         body.fixedLossKgPerDay ?? FORMULA_VERSION_DEFAULTS.fixedLossKgPerDay,
       gummy_piece_weight_g:
         body.gummyPieceWeightG ?? FORMULA_VERSION_DEFAULTS.gummyPieceWeightG,
+      wet_cast_piece_weight_g:
+        body.wetCastPieceWeightG ?? FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
       yield_pct: body.yieldPct ?? FORMULA_VERSION_DEFAULTS.yieldPct,
       ingredients,
       notes: body.notes ?? null,
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
     )
     .single();
 

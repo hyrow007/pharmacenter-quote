@@ -60,7 +60,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("gummy_formula_versions")
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, notes, created_at, created_by_email",
     )
     .eq("formula_id", id)
     .order("version_num", { ascending: false });
@@ -103,6 +103,7 @@ type PostBody = {
   batchesPerDay?: number;
   fixedLossKgPerDay?: number;
   gummyPieceWeightG?: number;
+  wetCastPieceWeightG?: number;
   yieldPct?: number;
   ingredients?: GummyFormulaIngredient[];
   processNotes?: Record<string, string> | null;
@@ -153,13 +154,14 @@ export async function POST(
     batchesPerDay: number;
     fixedLossKgPerDay: number;
     gummyPieceWeightG: number;
+    wetCastPieceWeightG: number;
     yieldPct: number;
   } = { ...FORMULA_VERSION_DEFAULTS };
   if (formulaRow.latest_version_num > 0) {
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, label_claims",
+        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -168,12 +170,21 @@ export async function POST(
       return NextResponse.json({ ok: false, error: prevErr.message }, { status: 500 });
     }
     if (prev) {
+      // Pre-migration rows may have wet_cast_piece_weight_g as null. Fall
+      // back to the code default so the carry-forward always yields a
+      // valid number for the INSERT below.
+      const prevWetCast =
+        prev.wet_cast_piece_weight_g === null ||
+        prev.wet_cast_piece_weight_g === undefined
+          ? FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG
+          : Number(prev.wet_cast_piece_weight_g);
       currentParams = {
         benchBatchG: Number(prev.bench_batch_g),
         batchKg: Number(prev.batch_kg),
         batchesPerDay: Number(prev.batches_per_day),
         fixedLossKgPerDay: Number(prev.fixed_loss_kg_per_day),
         gummyPieceWeightG: Number(prev.gummy_piece_weight_g),
+        wetCastPieceWeightG: prevWetCast,
         yieldPct: Number(prev.yield_pct),
       };
       currentIngredients = Array.isArray(prev.ingredients) ? prev.ingredients : [];
@@ -198,6 +209,8 @@ export async function POST(
       batches_per_day: body.batchesPerDay ?? currentParams.batchesPerDay,
       fixed_loss_kg_per_day: body.fixedLossKgPerDay ?? currentParams.fixedLossKgPerDay,
       gummy_piece_weight_g: body.gummyPieceWeightG ?? currentParams.gummyPieceWeightG,
+      wet_cast_piece_weight_g:
+        body.wetCastPieceWeightG ?? currentParams.wetCastPieceWeightG,
       yield_pct: body.yieldPct ?? currentParams.yieldPct,
       ingredients: Array.isArray(body.ingredients) ? body.ingredients : currentIngredients,
       process_notes:
@@ -211,7 +224,7 @@ export async function POST(
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
     )
     .single();
 
@@ -236,6 +249,7 @@ export async function POST(
           batchesPerDay: currentParams.batchesPerDay,
           fixedLossKgPerDay: currentParams.fixedLossKgPerDay,
           gummyPieceWeightG: currentParams.gummyPieceWeightG,
+          wetCastPieceWeightG: currentParams.wetCastPieceWeightG,
           yieldPct: currentParams.yieldPct,
           ingredients: currentIngredients,
         }

@@ -158,25 +158,26 @@ export type GummyFormulaIngredient = {
   overagePct?: number | null;
 };
 
-// -----------------------------------------------------------------------------
-// Label-claim → Secondary Blend derivation. Converts a label claim (e.g.
-// "Vitamin D3 25 mcg") to a base gram amount for the current bench batch
-// so an auto-synced Secondary Blend row can carry the correct weight.
-//
-//   perGummyG = amount × (unit → g factor)
-//     unit "mg"  → /1000
-//     unit "mcg" → /1_000_000
-//     unit "g"   → ×1
-//   baseG = perGummyG × (benchBatchG / gummyPieceWeightG)
-//
-// Returns 0 if pieceWeight is 0 or amount is non-finite.
-// -----------------------------------------------------------------------------
+/** Target grams of a claim's active for the current bench batch, computed
+ *  against the WET cast weight (not the finished piece weight) because
+ *  the batch is measured wet. Active mass is preserved through drying,
+ *  so `mass per finished gummy == mass per wet cast piece`.
+ *
+ *    perGummyG = amount × (unit → g factor)
+ *      unit "mg" → /1000, "mcg" → /1_000_000, "g" → ×1
+ *    piecesPerBatch = benchBatchG ÷ wetCastPieceWeightG
+ *    baseG = perGummyG × piecesPerBatch
+ *
+ *  Falls back to `finishedPieceWeightG` when `wetCastPieceWeightG <= 0`. */
 export function claimBaseGramsForBench(
   claim: LabelClaim,
   benchBatchG: number,
-  gummyPieceWeightG: number,
+  wetCastPieceWeightG: number,
+  finishedPieceWeightG: number,
 ): number {
-  if (!(gummyPieceWeightG > 0)) return 0;
+  const pieceWeightG =
+    wetCastPieceWeightG > 0 ? wetCastPieceWeightG : finishedPieceWeightG;
+  if (!(pieceWeightG > 0)) return 0;
   const amount = Number(claim.amount);
   if (!Number.isFinite(amount)) return 0;
   const unitToG: Record<LabelClaimUnit, number> = {
@@ -185,8 +186,8 @@ export function claimBaseGramsForBench(
     mcg: 1 / 1_000_000,
   };
   const perGummyG = amount * unitToG[claim.unit];
-  const gummiesPerBench = benchBatchG / gummyPieceWeightG;
-  return perGummyG * gummiesPerBench;
+  const piecesPerBatch = benchBatchG / pieceWeightG;
+  return perGummyG * piecesPerBatch;
 }
 
 export type SolutionComponent = {
@@ -338,6 +339,20 @@ export type GummyFormulaVersion = {
   batchesPerDay: number;
   fixedLossKgPerDay: number;
   gummyPieceWeightG: number;
+  /**
+   * Wet cast piece weight in grams — the mass of one gummy as it comes
+   * out of the depositor before drying. Higher than the finished/dried
+   * piece weight (`gummyPieceWeightG`) because the wet gummy carries
+   * water that evaporates in the dryer.
+   *
+   * Used by the label-claim → Secondary Blend derivation: the bench
+   * batch is measured wet, so pieces-per-batch is computed against the
+   * wet weight even though active mass is preserved through drying.
+   *
+   * Optional so pre-migration rows load. When undefined / <= 0 the
+   * claim helper falls back to `gummyPieceWeightG`.
+   */
+  wetCastPieceWeightG?: number;
   yieldPct: number;             // 0..100 (before daily loss)
   ingredients: GummyFormulaIngredient[];
   // Per-blend-phase process notes (mixing instructions, pH targets,
@@ -382,6 +397,11 @@ export const FORMULA_VERSION_DEFAULTS = {
   batchesPerDay: 6,
   fixedLossKgPerDay: 20,
   gummyPieceWeightG: 3.0,
+  // Wet cast piece weight defaults higher than the finished-piece weight
+  // because the wet gummy still carries water that evaporates in the
+  // dryer. 3.5 g matches the PC lab convention for typical bear moulds
+  // (finished ~3.0 g, cast ~3.5 g).
+  wetCastPieceWeightG: 3.5,
   yieldPct: 100,
 } as const;
 
@@ -623,6 +643,7 @@ export type VersionDiff = {
       | "batchesPerDay"
       | "fixedLossKgPerDay"
       | "gummyPieceWeightG"
+      | "wetCastPieceWeightG"
       | "yieldPct";
     from: number;
     to: number;
@@ -715,6 +736,7 @@ export function diffVersion(
     | "batchesPerDay"
     | "fixedLossKgPerDay"
     | "gummyPieceWeightG"
+    | "wetCastPieceWeightG"
     | "yieldPct"
     | "ingredients"
   > | null,
@@ -725,6 +747,7 @@ export function diffVersion(
     | "batchesPerDay"
     | "fixedLossKgPerDay"
     | "gummyPieceWeightG"
+    | "wetCastPieceWeightG"
     | "yieldPct"
     | "ingredients"
   >,
@@ -737,11 +760,18 @@ export function diffVersion(
       "batchesPerDay",
       "fixedLossKgPerDay",
       "gummyPieceWeightG",
+      "wetCastPieceWeightG",
       "yieldPct",
     ];
     for (const f of paramFields) {
-      if (Number(previous[f]) !== Number(next[f])) {
-        paramChanges.push({ field: f, from: Number(previous[f]), to: Number(next[f]) });
+      // wetCastPieceWeightG is optional on older rows — coerce
+      // undefined/null to NaN so an actual value change registers, but a
+      // "still undefined" pair reads as unchanged.
+      const pv = previous[f];
+      const nv = next[f];
+      if (pv === undefined && nv === undefined) continue;
+      if (Number(pv) !== Number(nv)) {
+        paramChanges.push({ field: f, from: Number(pv), to: Number(nv) });
       }
     }
   }
@@ -831,6 +861,10 @@ export function versionFromRow(row: {
   batches_per_day: number | string;
   fixed_loss_kg_per_day: number | string;
   gummy_piece_weight_g: number | string;
+  // Optional so pre-migration rows (written before the wet cast weight
+  // column existed) don't blow up TS. Reader defaults to the current
+  // default when null/undefined so the caller always gets a number.
+  wet_cast_piece_weight_g?: number | string | null;
   yield_pct: number | string;
   ingredients: GummyFormulaIngredient[] | null;
   // Optional so pre-migration rows don't blow up TS. Reader coerces
@@ -844,6 +878,11 @@ export function versionFromRow(row: {
   // Supabase returns numerics as strings via postgrest for large-precision
   // safety — coerce here so downstream math is number-typed.
   const n = (v: number | string): number => (typeof v === "string" ? Number(v) : v);
+  const wetRaw = row.wet_cast_piece_weight_g;
+  const wetCastPieceWeightG =
+    wetRaw === null || wetRaw === undefined
+      ? FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG
+      : n(wetRaw);
   return {
     id: row.id,
     formulaId: row.formula_id,
@@ -853,6 +892,7 @@ export function versionFromRow(row: {
     batchesPerDay: n(row.batches_per_day),
     fixedLossKgPerDay: n(row.fixed_loss_kg_per_day),
     gummyPieceWeightG: n(row.gummy_piece_weight_g),
+    wetCastPieceWeightG,
     yieldPct: n(row.yield_pct),
     ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
     processNotes:

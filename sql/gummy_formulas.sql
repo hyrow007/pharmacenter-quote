@@ -106,6 +106,16 @@ create table if not exists public.gummy_formula_versions (
     check (fixed_loss_kg_per_day >= 0),
   gummy_piece_weight_g     numeric not null default 3.0
     check (gummy_piece_weight_g > 0),
+  -- Wet cast piece weight — mass of one gummy right out of the depositor,
+  -- before drying. Higher than the finished (dried) piece weight because
+  -- the wet gummy still carries water. Used to derive per-piece → per-batch
+  -- amounts for label-claim-driven Secondary Blend rows, since the bench
+  -- batch is measured wet even though active mass survives drying.
+  -- Default 3.5 g vs. the 3.0 g finished default reflects typical PC bear
+  -- moulds. Existing rows migrate via the ALTER TABLE at the bottom of
+  -- this file.
+  wet_cast_piece_weight_g  numeric not null default 3.5
+    check (wet_cast_piece_weight_g > 0),
   yield_pct                numeric not null default 100
     check (yield_pct > 0 and yield_pct <= 100),
 
@@ -231,3 +241,47 @@ create policy gummy_formula_versions_insert on public.gummy_formula_versions
 -- trigger above blocks updates for everyone including admins. If we ever
 -- need to fix a version, do it via service-role key with the trigger
 -- disabled for the transaction.
+
+-- ============================================================
+-- 5. Idempotent migrations for existing production databases.
+-- ============================================================
+-- Re-run this file on a fresh DB and these ADDs are no-ops (the columns
+-- already exist above). Re-run on an existing DB and they backfill the
+-- new columns onto rows that predate them, with a safe default so the
+-- NOT NULL constraint can be added.
+--
+-- Adding wet_cast_piece_weight_g (Feb 2026) — the wet cast weight lets
+-- the label-claim → Secondary Blend derivation compute pieces per bench
+-- batch against the wet-measured batch instead of the finished/dried
+-- piece weight. Active mass survives drying, so mass-per-finished-gummy
+-- equals mass-per-wet-cast-piece; the bench math needs the wet piece
+-- weight to convert benchBatchG → piecesPerBatch correctly.
+alter table public.gummy_formula_versions
+  add column if not exists wet_cast_piece_weight_g numeric;
+
+-- Backfill any nulls left over from the ADD (Supabase populates existing
+-- rows with NULL first; we can't add NOT NULL + DEFAULT + CHECK in one
+-- shot without either backfilling first or accepting the default takes).
+update public.gummy_formula_versions
+   set wet_cast_piece_weight_g = 3.5
+ where wet_cast_piece_weight_g is null;
+
+-- Set the default so future INSERTs that omit the field get 3.5.
+alter table public.gummy_formula_versions
+  alter column wet_cast_piece_weight_g set default 3.5;
+
+-- Now enforce NOT NULL now that every row has a value.
+alter table public.gummy_formula_versions
+  alter column wet_cast_piece_weight_g set not null;
+
+-- Add the > 0 check idempotently. The DO block swallows the
+-- duplicate-object error so re-runs are safe.
+do $$
+begin
+  alter table public.gummy_formula_versions
+    add constraint gummy_formula_versions_wet_cast_positive
+    check (wet_cast_piece_weight_g > 0);
+exception
+  when duplicate_object then null;
+end;
+$$;
