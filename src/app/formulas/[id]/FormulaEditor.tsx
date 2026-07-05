@@ -1594,34 +1594,36 @@ function BenchTopTab({
           </div>
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "auto auto auto auto auto auto auto",
-              // Fixed row heights keep the digit baseline consistent
-              // across every value cell so + / = glyphs line up cleanly.
-              gridTemplateRows: "auto auto",
-              columnGap: 12,
-              rowGap: 4,
-              alignItems: "end",
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 14,
+              flexWrap: "wrap",
             }}
           >
-            {/* Row 1: labels — each label pinned above its own value
-                column via explicit gridColumn so the operator columns
-                (2, 4, 6) get no label above them. */}
-            <KeyIndicatorLabel col={1}>Primary Blend (cooked)</KeyIndicatorLabel>
-            <KeyIndicatorLabel col={3}>Secondary Blend</KeyIndicatorLabel>
-            <KeyIndicatorLabel col={5}>Final Blend</KeyIndicatorLabel>
-            <KeyIndicatorLabel col={7}>Total (Sum of all blends)</KeyIndicatorLabel>
-            {/* Row 2: value → operator → value → operator → value →
-                operator → value. Baseline aligned via `alignItems: end`
-                on the grid + shared line-height on the value/operator
-                cells. */}
-            <KeyIndicatorValue value={primaryBlendG} />
-            <KeyIndicatorOp glyph="+" />
-            <KeyIndicatorValue value={secondaryBlendG} />
-            <KeyIndicatorOp glyph="+" />
-            <KeyIndicatorValue value={finalBlendG} />
-            <KeyIndicatorOp glyph="=" />
-            <KeyIndicatorValue value={totalBlendsG} />
+            {/* Each stat cell renders label above value in one column.
+                Subsequent cells prefix their value with an operator
+                glyph (+, =) so the operator sits directly next to the
+                digits rather than being pushed into a wide column gap.
+                Reads as: 223.73 g  +17.90 g  +8.38 g  =250.00 g */}
+            <KeyIndicatorStat
+              label="Primary Blend (cooked)"
+              value={primaryBlendG}
+            />
+            <KeyIndicatorStat
+              label="Secondary Blend"
+              value={secondaryBlendG}
+              op="+"
+            />
+            <KeyIndicatorStat
+              label="Final Blend"
+              value={finalBlendG}
+              op="+"
+            />
+            <KeyIndicatorStat
+              label="Total (Sum of all blends)"
+              value={totalBlendsG}
+              op="="
+            />
           </div>
         </div>
         <div>
@@ -1729,90 +1731,82 @@ function BlendOperator({ glyph }: { glyph: string }) {
   );
 }
 
-// ---- Key Indicators grid cells ----
-// Split the label / value / operator into three tiny helpers so the grid
-// stays legible in the parent. The parent supplies the grid template;
-// these just apply the correct typography and grid-column placement.
-function KeyIndicatorLabel({
-  col,
-  children,
+// ---- Key Indicators stat cell ----
+// Each cell shows a label above a value. When an operator glyph is
+// provided (+, =), it renders INSIDE the value line right before the
+// digits — so the equation reads as a continuous string of "value +
+// value" pairs rather than glyphs floating between wide columns.
+function KeyIndicatorStat({
+  label,
+  value,
+  op,
 }: {
-  col: number;
-  children: React.ReactNode;
+  label: string;
+  value: number;
+  op?: string;
 }) {
   return (
-    <div
-      style={{
-        gridColumn: col,
-        gridRow: 1,
-        // Center the label inside its column so it lines up over the
-        // centered value below (see KeyIndicatorValue).
-        justifySelf: "center",
-        fontSize: 10.5,
-        fontWeight: 700,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        color: "var(--ink-3, #8a9498)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function KeyIndicatorValue({ value }: { value: number }) {
-  return (
-    <div
-      style={{
-        gridRow: 2,
-        // Center the value in its column. Because the column auto-sizes
-        // to the wider label above, this places the digits in the middle
-        // of the column — which means the +/= glyphs in the adjacent
-        // operator columns end up equidistant from the values on both
-        // sides, so the whole thing reads as a proper equation.
-        justifySelf: "center",
-        fontSize: 20,
-        fontWeight: 700,
-        color: "var(--teal-900, #0f4a56)",
-        fontVariantNumeric: "tabular-nums",
-        // Shared line-height so the digit baseline in every value cell
-        // sits at the same y-coord as the +/= glyphs between them.
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {value.toFixed(2)}
-      <span
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* Label centered above the value line so the whole cell reads
+          as a small vertical stack even though the value line may lead
+          with an operator. */}
+      <div
         style={{
-          fontSize: 12,
-          fontWeight: 500,
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
-          marginLeft: 4,
+          whiteSpace: "nowrap",
+          // Center the label over the digits of the value (not over the
+          // leading operator). Using text-align on the flex column
+          // container achieves this while the value stays a single
+          // flex line below.
+          textAlign: "center",
         }}
       >
-        g
-      </span>
-    </div>
-  );
-}
-
-function KeyIndicatorOp({ glyph }: { glyph: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        gridRow: 2,
-        fontSize: 22,
-        fontWeight: 700,
-        color: "var(--ink-3, #8a9498)",
-        // Same line-height as KeyIndicatorValue so the glyph baseline
-        // matches the digit baseline exactly.
-        lineHeight: 1,
-        alignSelf: "end",
-      }}
-    >
-      {glyph}
+        {label}
+      </div>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: 6,
+          fontSize: 20,
+          fontWeight: 700,
+          color: "var(--teal-900, #0f4a56)",
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+          justifyContent: "center",
+        }}
+      >
+        {op ? (
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            {op}
+          </span>
+        ) : null}
+        <span>
+          {value.toFixed(2)}
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: "var(--ink-3, #8a9498)",
+              marginLeft: 4,
+            }}
+          >
+            g
+          </span>
+        </span>
+      </div>
     </div>
   );
 }
