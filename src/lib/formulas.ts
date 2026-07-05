@@ -725,7 +725,7 @@ export type GummyFormulaNote = {
 
 // Field-label lookup used in identity summaries.
 const IDENTITY_FIELD_LABELS: Record<
-  keyof Omit<GummyFormulaRecord, "id" | "latestVersionNum" | "createdAt" | "updatedAt" | "createdByEmail" | "updatedByEmail">,
+  keyof Omit<GummyFormulaRecord, "id" | "formulaNumber" | "latestVersionNum" | "createdAt" | "updatedAt" | "createdByEmail" | "updatedByEmail">,
   string
 > = {
   name: "name",
