@@ -1675,6 +1675,11 @@ function BenchTopTab({
           >
             Key Indicators
           </div>
+          {/* Row 1: the blend equation (Primary + Secondary + Final = Total)
+              on the left, % of bench batch pushed to the right edge via
+              marginLeft: auto on the group wrapper. Nested flex keeps
+              the equation itself compact so operators sit tight against
+              their operands even when the card is wide. */}
           <div
             style={{
               display: "flex",
@@ -1683,52 +1688,56 @@ function BenchTopTab({
               flexWrap: "wrap",
             }}
           >
-            {/* Each stat cell has a fixed min-width so all four cells
-                share the same visual size regardless of value/label
-                length. The +/= operators sit in their own flex items
-                between the stats, so they land equidistant between the
-                two neighbouring value cells and read as a true equation. */}
-            <KeyIndicatorStat
-              label="Primary Blend (cooked)"
-              value={primaryBlendG}
-            />
-            <KeyIndicatorOp glyph="+" />
-            <KeyIndicatorStat
-              label="Secondary Blend"
-              value={secondaryBlendG}
-            />
-            <KeyIndicatorOp glyph="+" />
-            <KeyIndicatorStat
-              label="Final Blend"
-              value={finalBlendG}
-            />
-            <KeyIndicatorOp glyph="=" />
-            <KeyIndicatorStat
-              label="Total (Sum of all blends)"
-              value={totalBlendsG}
-            />
-            {/* % of bench batch — lives inside the same equation row
-                as a final indicator sitting to the right of the Total.
-                Uses the same fixed-width layout as the other stats so
-                the whole row stays visually consistent, but renders
-                a percentage instead of grams and colors red when the
-                blend total doesn't match the bench batch. */}
-            <KeyIndicatorPctStat
-              label="% of bench batch"
-              value={pctOfBench}
-              ok={totalOk}
-            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 16,
+              }}
+            >
+              <KeyIndicatorStat
+                label="Primary Blend (cooked)"
+                value={primaryBlendG}
+              />
+              <KeyIndicatorOp glyph="+" />
+              <KeyIndicatorStat
+                label="Secondary Blend"
+                value={secondaryBlendG}
+              />
+              <KeyIndicatorOp glyph="+" />
+              <KeyIndicatorStat
+                label="Final Blend"
+                value={finalBlendG}
+              />
+              <KeyIndicatorOp glyph="=" />
+              <KeyIndicatorStat
+                label="Total (Sum of all blends)"
+                value={totalBlendsG}
+              />
+            </div>
+            {/* marginLeft: auto flushes % of bench to the far right of
+                the row so it stays visually anchored to the card edge,
+                mirroring the Sugar/Syrup ratio's right-anchor on row 2. */}
+            <div style={{ marginLeft: "auto" }}>
+              <KeyIndicatorPctStat
+                label="% of bench batch"
+                value={pctOfBench}
+                ok={totalOk}
+              />
+            </div>
           </div>
-          {/* Second-row indicators: derived values that supplement the
-              blend equation above. Separated by a thin dashed rule so
-              they read as "additional metrics" rather than more terms
-              in the equation. */}
+          {/* Row 2: supporting indicators. Residual Moisture Total on
+              the left balances the equation group above; the Sugar to
+              Syrup ratio sits on the right under the % of bench. A thin
+              dashed rule separates it from the equation so it reads as
+              a distinct "supporting metrics" band. */}
           <div
             style={{
               display: "flex",
               alignItems: "flex-end",
               gap: 16,
               flexWrap: "wrap",
+              justifyContent: "space-between",
               marginTop: 14,
               paddingTop: 12,
               borderTop: "1px dashed var(--line, #e3dcc9)",
