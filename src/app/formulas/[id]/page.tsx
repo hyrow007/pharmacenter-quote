@@ -262,6 +262,7 @@ export default async function FormulaEditorPage({
             rawMaterials={rawMaterials}
             pcBkProducts={pcBkProducts}
             initialSavedSolutions={savedSolutions}
+            currentUserEmail={user.email!}
           />
         </div>
       </main>

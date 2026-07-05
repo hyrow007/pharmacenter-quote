@@ -31,6 +31,8 @@ alter table public.gummy_formula_notes enable row level security;
 
 drop policy if exists gummy_formula_notes_select on public.gummy_formula_notes;
 drop policy if exists gummy_formula_notes_insert on public.gummy_formula_notes;
+drop policy if exists gummy_formula_notes_update on public.gummy_formula_notes;
+drop policy if exists gummy_formula_notes_delete on public.gummy_formula_notes;
 
 create policy gummy_formula_notes_select on public.gummy_formula_notes
   for select using (
@@ -45,5 +47,19 @@ create policy gummy_formula_notes_insert on public.gummy_formula_notes
     and author_email = auth.email()
   );
 
--- No update / delete policy — notes are append-only from the app. Manual
--- cleanup can be done from the SQL editor as a superuser if ever needed.
+-- Update / delete restricted to the author of the note. Authors can
+-- edit their own text or take a note down; nobody else can touch it.
+-- The API mirrors this check server-side for defense in depth.
+create policy gummy_formula_notes_update on public.gummy_formula_notes
+  for update using (
+    auth.email() is not null
+    and auth.email() like '%@pharmacenterusa.com'
+    and author_email = auth.email()
+  ) with check (author_email = auth.email());
+
+create policy gummy_formula_notes_delete on public.gummy_formula_notes
+  for delete using (
+    auth.email() is not null
+    and auth.email() like '%@pharmacenterusa.com'
+    and author_email = auth.email()
+  );

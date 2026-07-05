@@ -442,6 +442,9 @@ type Props = {
   rawMaterials: RawMaterialOption[];
   pcBkProducts: PcBkProductOption[];
   initialSavedSolutions?: SavedSolution[];
+  // Email of the signed-in operator. Used to gate note edit/delete
+  // affordances (only shown on notes the current user authored).
+  currentUserEmail: string;
 };
 
 type Tab = "bench" | "scale" | "cost";
@@ -465,6 +468,7 @@ export default function FormulaEditor({
   rawMaterials: rawMaterialsProp,
   pcBkProducts,
   initialSavedSolutions = [],
+  currentUserEmail,
 }: Props) {
   const router = useRouter();
 
@@ -1012,6 +1016,68 @@ export default function FormulaEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Edit an existing note (author-only). Returns true on success so the
+  // NoteRow can drop out of edit mode; false on failure so it can display
+  // a retry affordance.
+  async function editNote(noteId: string, body: string): Promise<boolean> {
+    const trimmed = body.trim();
+    if (!trimmed) return false;
+    try {
+      const res = await fetch(
+        `/api/formulas/${initialFormula.id}/notes/${noteId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ body: trimmed }),
+        },
+      );
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        // Optimistic in-place update so the timeline doesn't jump.
+        setNotes((prev) =>
+          prev.map((n) => (n.id === noteId ? { ...n, body: trimmed } : n)),
+        );
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  // Delete an author's own note. Confirmation lives in the row component.
+  async function deleteNote(noteId: string): Promise<boolean> {
+    try {
+      const res = await fetch(
+        `/api/formulas/${initialFormula.id}/notes/${noteId}`,
+        { method: "DELETE" },
+      );
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setNotes((prev) => prev.filter((n) => n.id !== noteId));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  // -- Print / Save PDF -------------------------------------------------------
+  // When the operator clicks Print we (a) flip a state flag that forces all
+  // tabs, notes, and audit to render at once, (b) call window.print() on the
+  // next paint, then (c) revert. CSS below hides interactive chrome (buttons,
+  // tabs, chevrons) so the print output reads like a spec sheet.
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    if (!printing) return;
+    const t = window.setTimeout(() => {
+      window.print();
+      window.setTimeout(() => setPrinting(false), 300);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [printing]);
+
   // -- Save -------------------------------------------------------------------
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<
@@ -1346,7 +1412,70 @@ export default function FormulaEditor({
   }, [ingredients]);
 
   return (
-    <div>
+    <div className={printing ? "fe-print-mode" : undefined}>
+      {/* Print stylesheet — scoped via `@media print` so on-screen editing
+          is unaffected. When the user clicks Print / Save PDF we (a) flip
+          `printing` state so tabs, notes, and audit render expanded, and
+          (b) rely on these rules to strip interactive chrome (buttons,
+          sticky/shadow effects, hover backgrounds), tighten typography,
+          and force a white paper background. The result reads like a
+          one-shot spec sheet without designing a separate view. */}
+      <style>{`
+        @media print {
+          /* Reset app chrome. AppHeader + the sticky nav bar disappear so
+             the print starts with the formula meta strip. */
+          nav, .app-header, header[data-app-header] { display: none !important; }
+
+          body, html {
+            background: #fff !important;
+            color: #000 !important;
+            font-size: 11pt;
+          }
+          @page { margin: 0.5in; }
+
+          /* Kill interactive controls the print copy shouldn't hint at:
+             tabs (we render all three), save/print buttons, back pill,
+             collapse chevrons, note edit/delete actions. */
+          .fe-print-hide, .fe-primary-actions, .fe-note-row__actions {
+            display: none !important;
+          }
+
+          /* Sticky positioning breaks page-break flow; flatten it. */
+          [style*="position: sticky"], [style*="position:sticky"] {
+            position: static !important;
+            box-shadow: none !important;
+          }
+
+          /* Notes/Audit collapsible headers become plain headings while
+             printing. Toggle chevrons + "Show/Hide" labels vanish. */
+          section button[aria-expanded] {
+            pointer-events: none !important;
+            background: transparent !important;
+            border: none !important;
+          }
+          section button[aria-expanded] > span:first-child,
+          section button[aria-expanded] > span:last-child {
+            display: none !important;
+          }
+
+          /* Cards + tables need to be resilient across page breaks. */
+          section, table, .fe-print-block { break-inside: avoid-page; }
+          .fe-note-row { break-inside: avoid; }
+
+          /* Textareas expand to show all content when printed. */
+          textarea {
+            height: auto !important;
+            min-height: 0 !important;
+            border: 1px solid #ccc !important;
+            resize: none !important;
+          }
+          input, select {
+            border: 1px solid #ccc !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
       {/* ============ Identity header (sticky top) ============ */}
       <div
         style={{
@@ -1693,32 +1822,61 @@ export default function FormulaEditor({
             />
           </Field>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !anyDirty}
-              style={{
-                padding: "10px 18px",
-                background: anyDirty ? "var(--teal-700, #1d6c7b)" : "#c7d2d6",
-                color: "#fff",
-                border: "1px solid",
-                borderColor: anyDirty ? "var(--teal-900, #0f4a56)" : "#b6c1c5",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: saving ? "wait" : anyDirty ? "pointer" : "not-allowed",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {saving
-                ? "Saving…"
-                : versionDirty
-                  ? `Save (v${(initialFormula.latestVersionNum || 0) + 1})`
-                  : identityDirty
-                    ? "Save"
-                    : "Saved"}
-            </button>
+          <div
+            className="fe-primary-actions"
+            style={{ display: "flex", flexDirection: "column", gap: 4 }}
+          >
+            <div style={{ display: "flex", gap: 6 }}>
+              {/* Print / Save PDF — expands all collapsible sections
+                  and calls window.print(). Print styles below strip
+                  interactive chrome so the browser's built-in "Save
+                  as PDF" produces a clean spec sheet. */}
+              <button
+                type="button"
+                onClick={() => setPrinting(true)}
+                disabled={printing}
+                title="Print or Save as PDF"
+                style={{
+                  padding: "10px 12px",
+                  background: "transparent",
+                  color: "var(--teal-900, #0f4a56)",
+                  border: "1px solid var(--teal-700, #1d6c7b)",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: printing ? "wait" : "pointer",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {printing ? "Preparing…" : "🖨 Print / PDF"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !anyDirty}
+                style={{
+                  padding: "10px 18px",
+                  background: anyDirty ? "var(--teal-700, #1d6c7b)" : "#c7d2d6",
+                  color: "#fff",
+                  border: "1px solid",
+                  borderColor: anyDirty ? "var(--teal-900, #0f4a56)" : "#b6c1c5",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: saving ? "wait" : anyDirty ? "pointer" : "not-allowed",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {saving
+                  ? "Saving…"
+                  : versionDirty
+                    ? `Save (v${(initialFormula.latestVersionNum || 0) + 1})`
+                    : identityDirty
+                      ? "Save"
+                      : "Saved"}
+              </button>
+            </div>
             {saveStatus ? (
               <span
                 style={{
@@ -1950,14 +2108,10 @@ export default function FormulaEditor({
         />
       )}
 
-      {/* Activity timeline (audit log). Renders below the ingredient
-          table on every tab so users can always see history without
-          leaving what they were editing. */}
-      <AuditTimeline events={auditEvents} loading={auditLoading} />
-
-      {/* Notes — free-form, user-authored. Mirrors the Activity card's
-          visual treatment; positioned directly below so both are in the
-          same "history + collaboration" strip at the bottom of the tab. */}
+      {/* Notes first — user-authored, free-form. Placed above Activity so
+          collaboration content that operators actively use is closer to
+          the ingredient tables and doesn't require scrolling past the
+          audit log. Prints expanded (see forceExpanded). */}
       <NotesCard
         notes={notes}
         loading={notesLoading}
@@ -1965,6 +2119,19 @@ export default function FormulaEditor({
         onDraftChange={setNoteDraft}
         onSubmit={submitNote}
         submitting={submittingNote}
+        currentUserEmail={currentUserEmail}
+        onEdit={editNote}
+        onDelete={deleteNote}
+        forceExpanded={printing}
+      />
+
+      {/* Activity timeline (audit log) below Notes — historical/auxiliary,
+          useful when investigating a change but not part of day-to-day
+          editing flow. */}
+      <AuditTimeline
+        events={auditEvents}
+        loading={auditLoading}
+        forceExpanded={printing}
       />
 
       {/* Version notes (only relevant when writing a new version) */}
@@ -7963,14 +8130,19 @@ function IngredientPicker({
 function AuditTimeline({
   events,
   loading,
+  forceExpanded = false,
 }: {
   events: GummyFormulaAuditRecord[];
   loading: boolean;
+  forceExpanded?: boolean;
 }) {
   // Activity is auxiliary — the audit log is useful when investigating a
   // change but noisy the rest of the time. Collapsed by default; the
   // header is a click target that toggles the events list open.
-  const [expanded, setExpanded] = useState(false);
+  // `forceExpanded` mirrors NotesCard: the print pipeline temporarily
+  // forces every history event visible without stomping user state.
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = forceExpanded || expandedState;
   const countLabel = loading
     ? "loading…"
     : events.length === 0
@@ -8373,6 +8545,10 @@ function NotesCard({
   onDraftChange,
   onSubmit,
   submitting,
+  currentUserEmail,
+  onEdit,
+  onDelete,
+  forceExpanded = false,
 }: {
   notes: GummyFormulaNote[];
   loading: boolean;
@@ -8380,8 +8556,17 @@ function NotesCard({
   onDraftChange: (v: string) => void;
   onSubmit: () => void;
   submitting: boolean;
+  currentUserEmail: string;
+  onEdit: (noteId: string, body: string) => Promise<boolean>;
+  onDelete: (noteId: string) => Promise<boolean>;
+  forceExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  // `forceExpanded` overrides the user's collapse state so the print
+  // pipeline can render every note without the operator manually opening
+  // the card. Doesn't stomp on the state — the card returns to whatever
+  // the user left it at once the print flow flips the flag back off.
+  const expanded = forceExpanded || expandedState;
   const countLabel = loading
     ? "loading…"
     : notes.length === 0
@@ -8541,7 +8726,13 @@ function NotesCard({
           ) : (
             <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {notes.map((n) => (
-                <NoteRow key={n.id} note={n} />
+                <NoteRow
+                  key={n.id}
+                  note={n}
+                  isAuthor={n.authorEmail === currentUserEmail}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
               ))}
             </ol>
           )}
@@ -8551,7 +8742,17 @@ function NotesCard({
   );
 }
 
-function NoteRow({ note }: { note: GummyFormulaNote }) {
+function NoteRow({
+  note,
+  isAuthor,
+  onEdit,
+  onDelete,
+}: {
+  note: GummyFormulaNote;
+  isAuthor: boolean;
+  onEdit: (noteId: string, body: string) => Promise<boolean>;
+  onDelete: (noteId: string) => Promise<boolean>;
+}) {
   const at = new Date(note.createdAt);
   const when = at.toLocaleString("en-US", {
     year: "numeric",
@@ -8561,32 +8762,261 @@ function NoteRow({ note }: { note: GummyFormulaNote }) {
     minute: "2-digit",
   });
   const who = note.authorDisplayName || note.authorEmail;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note.body);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleSave() {
+    if (!draft.trim() || saving) return;
+    setSaving(true);
+    const ok = await onEdit(note.id, draft);
+    setSaving(false);
+    if (ok) {
+      setEditing(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    const ok = await onDelete(note.id);
+    if (!ok) {
+      // Failure — reset so the operator can retry.
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+    // On success the row unmounts, so no state cleanup needed.
+  }
+
   return (
     <li
+      className="fe-note-row"
       style={{
         padding: "10px 14px",
         borderTop: "1px solid var(--line-2, #efe9da)",
       }}
     >
-      <div
-        style={{
-          fontSize: 12.5,
-          color: "var(--ink, #1f2a2d)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {note.body}
-      </div>
-      <div
-        style={{
-          marginTop: 4,
-          fontSize: 11,
-          color: "var(--ink-3, #8a9498)",
-        }}
-      >
-        — <strong>{who}</strong> · {when}
-      </div>
+      {editing ? (
+        <div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                handleSave();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDraft(note.body);
+                setEditing(false);
+              }
+            }}
+            rows={3}
+            className="pricing__input"
+            style={{
+              width: "100%",
+              fontSize: 13,
+              lineHeight: 1.4,
+              padding: "6px 8px",
+              resize: "vertical",
+            }}
+            disabled={saving}
+            autoFocus
+          />
+          <div
+            style={{
+              marginTop: 6,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!draft.trim() || saving}
+              style={{
+                padding: "4px 12px",
+                background:
+                  !draft.trim() || saving
+                    ? "var(--line, #e3dcc9)"
+                    : "var(--teal-700, #1d6c7b)",
+                color:
+                  !draft.trim() || saving
+                    ? "var(--ink-3, #8a9498)"
+                    : "#fff",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                cursor: !draft.trim() || saving ? "not-allowed" : "pointer",
+              }}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(note.body);
+                setEditing(false);
+              }}
+              disabled={saving}
+              style={{
+                padding: "4px 10px",
+                background: "transparent",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--ink-2, #4a5c60)",
+                cursor: saving ? "not-allowed" : "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 10.5,
+                color: "var(--ink-3, #8a9498)",
+              }}
+            >
+              Ctrl/⌘+Enter to save, Esc to cancel
+            </span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              fontSize: 12.5,
+              color: "var(--ink, #1f2a2d)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {note.body}
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 11,
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            <span>
+              — <strong>{who}</strong> · {when}
+            </span>
+            {isAuthor ? (
+              <span
+                className="fe-note-row__actions"
+                style={{
+                  marginLeft: "auto",
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                }}
+              >
+                {confirmingDelete ? (
+                  <>
+                    <span style={{ color: "var(--ink-2, #4a5c60)" }}>
+                      Delete this note?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      style={{
+                        padding: "2px 8px",
+                        background: "#a13a2a",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 4,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        cursor: deleting ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {deleting ? "…" : "Delete"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(false)}
+                      disabled={deleting}
+                      style={{
+                        padding: "2px 8px",
+                        background: "transparent",
+                        color: "var(--ink-2, #4a5c60)",
+                        border: "1px solid var(--line, #e3dcc9)",
+                        borderRadius: 4,
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        cursor: deleting ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft(note.body);
+                        setEditing(true);
+                      }}
+                      style={{
+                        padding: "1px 6px",
+                        background: "transparent",
+                        color: "var(--teal-700, #1d6c7b)",
+                        border: "none",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(true)}
+                      style={{
+                        padding: "1px 6px",
+                        background: "transparent",
+                        color: "#a13a2a",
+                        border: "none",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+              </span>
+            ) : null}
+          </div>
+        </>
+      )}
     </li>
   );
 }
