@@ -4674,7 +4674,7 @@ function BlendSectionCard({
                                         fontWeight: 400,
                                       }}
                                     >
-                                      target: {baseG.toFixed(2)} g
+                                      Claim Baseline: {baseG.toFixed(2)} g
                                     </span>
                                   </div>
                                 );
