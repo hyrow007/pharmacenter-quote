@@ -636,7 +636,11 @@ export default function FormulaEditor({
       ? initialFormula.pcBkCode !== null
       : pcBkCode.trim() !== (initialFormula.pcBkCode ?? "")) ||
     shape !== initialFormula.shape ||
-    (flavor.trim() || null) !== (initialFormula.flavor ?? null);
+    (flavor.trim() || null) !== (initialFormula.flavor ?? null) ||
+    // customerId is part of identity — Save must enable when the operator
+    // changes the picked customer (or clears it) so it can flush the
+    // change even if pickCustomer's inline PUT was skipped or failed.
+    (customerId ?? null) !== (initialFormula.customerId ?? null);
 
   const versionDirty = useMemo(() => {
     // Build a version-shape blob and compare against the loaded snapshot.
@@ -951,6 +955,7 @@ export default function FormulaEditor({
             pcBkCode: pcBkMode === "tbd" ? null : pcBkCode.trim() || null,
             shape,
             flavor: flavor.trim() || null,
+            customerId: customerId ?? null,
           }),
         });
         const json = await res.json();
