@@ -1679,13 +1679,15 @@ function BenchTopTab({
               on the left, % of bench batch pushed to the right edge via
               marginLeft: auto on the group wrapper. Nested flex keeps
               the equation itself compact so operators sit tight against
-              their operands even when the card is wide. */}
+              their operands even when the card is wide. flexWrap: nowrap
+              keeps % of bench on the same line as the equation instead
+              of dropping to its own row when the card is narrow. */}
           <div
             style={{
               display: "flex",
               alignItems: "flex-end",
               gap: 16,
-              flexWrap: "wrap",
+              flexWrap: "nowrap",
             }}
           >
             <div
@@ -1781,8 +1783,10 @@ function KeyIndicatorStat({
         gap: 4,
         // Fixed min-width sized to comfortably fit the widest label
         // ("TOTAL (SUM OF ALL BLENDS)"). All four cells share this so
-        // the operators land equidistant between them.
-        minWidth: 190,
+        // the operators land equidistant between them. 155 keeps the
+        // whole equation + % of bench on a single row for typical card
+        // widths without truncating any label.
+        minWidth: 155,
       }}
     >
       <div
@@ -1848,7 +1852,9 @@ function KeyIndicatorPctStat({
         flexDirection: "column",
         alignItems: "center",
         gap: 4,
-        minWidth: 190,
+        // Same 155 min-width as KeyIndicatorStat so this pill lines up
+        // with the equation cells on row 1 and stays on the same line.
+        minWidth: 155,
       }}
     >
       <div
