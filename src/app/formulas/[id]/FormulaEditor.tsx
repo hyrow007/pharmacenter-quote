@@ -3764,6 +3764,80 @@ function BlendSectionCard({
                   setBlockProcessEditing: setFinalProcessEditing,
                 })
               : null}
+            {/* Grand Total Cooked Blend — full-width footer that sums the
+                three cooked-card subsections (Primary Blend Carry Over net
+                + Secondary Blend + Final Blend). Only rendered on the
+                cooked card when a carry-over section is present, so the
+                pre-cook card and cooked cards without a carry-over don't
+                get a grand total row. */}
+            {phase === "cooked" && carryOverRows && carryOverRows.length > 0
+              ? (() => {
+                  const secondaryG = rows.reduce(
+                    (s, r) => s + (Number(r.grams) || 0),
+                    0,
+                  );
+                  const finalG = (finalRows ?? []).reduce(
+                    (s, r) => s + (Number(r.grams) || 0),
+                    0,
+                  );
+                  const primaryNetG = computeCarryOverPrimaryNetG({
+                    preCookRows: carryOverRows,
+                    benchBatchG: benchBatchG ?? 0,
+                    secondaryG,
+                    finalG,
+                  });
+                  const grandTotalG = primaryNetG + secondaryG + finalG;
+                  const s = (grandTotalG * factor).toFixed(2);
+                  // Mirror the pctOfBench trick — drop a trailing ".00" so a
+                  // whole number renders cleanly without visual noise.
+                  const display = s.endsWith(".00") ? s.slice(0, -3) : s;
+                  return (
+                    <div
+                      style={{
+                        borderTop: "2px solid var(--teal-700, #1d6c7b)",
+                        background: "var(--cream-soft, #fbf6ec)",
+                        padding: "10px 14px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          color: "var(--teal-900, #0f4a56)",
+                        }}
+                      >
+                        Grand Total Cooked Blend
+                      </strong>
+                      <span
+                        style={{
+                          fontVariantNumeric: "tabular-nums",
+                          fontWeight: 700,
+                          color: "var(--teal-900, #0f4a56)",
+                          whiteSpace: "nowrap",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span>{display}</span>
+                        <span
+                          style={{
+                            color: "var(--ink-3, #8a9498)",
+                            fontWeight: 400,
+                          }}
+                        >
+                          {effectiveSectionUnit}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })()
+              : null}
           </>
         );
       })()}
