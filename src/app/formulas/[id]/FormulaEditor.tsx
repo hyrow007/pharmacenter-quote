@@ -1572,16 +1572,44 @@ function BenchTopTab({
             background: "var(--line, #e3dcc9)",
           }}
         />
-        {/* Per-phase blend totals + combined total — mirror the
+        {/* Key Indicators — per-phase blend totals wired together with
+            plus/equals glyphs so the operator can read the summation
+            visually: Primary + Secondary + Final = Total. Mirrors the
             per-subsection totals inside the blend cards so R&D can
             eyeball the whole pipeline without scrolling. All grams. */}
-        <BlendTotalStat label="Primary Blend (cooked)" value={primaryBlendG} />
-        <BlendTotalStat label="Secondary Blend" value={secondaryBlendG} />
-        <BlendTotalStat label="Final Blend" value={finalBlendG} />
-        <BlendTotalStat
-          label="Total (Sum of all blends)"
-          value={totalBlendsG}
-        />
+        <div>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              marginBottom: 6,
+            }}
+          >
+            Key Indicators
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <BlendTotalStat label="Primary Blend (cooked)" value={primaryBlendG} />
+            <BlendOperator glyph="+" />
+            <BlendTotalStat label="Secondary Blend" value={secondaryBlendG} />
+            <BlendOperator glyph="+" />
+            <BlendTotalStat label="Final Blend" value={finalBlendG} />
+            <BlendOperator glyph="=" />
+            <BlendTotalStat
+              label="Total (Sum of all blends)"
+              value={totalBlendsG}
+            />
+          </div>
+        </div>
         <div>
           <div
             style={{
@@ -1662,6 +1690,27 @@ function BlendTotalStat({ label, value }: { label: string; value: number }) {
           g
         </span>
       </div>
+    </div>
+  );
+}
+
+// Inline operator glyph (+ / =) used between BlendTotalStat entries in the
+// Bench Top card's Key Indicators row. Vertically aligned to the numeric
+// value line rather than the label line so the equation reads naturally.
+function BlendOperator({ glyph }: { glyph: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        fontSize: 20,
+        fontWeight: 700,
+        color: "var(--ink-3, #8a9498)",
+        // Nudge down so the operator lines up with the digit baseline,
+        // not the label above.
+        paddingBottom: 2,
+      }}
+    >
+      {glyph}
     </div>
   );
 }
