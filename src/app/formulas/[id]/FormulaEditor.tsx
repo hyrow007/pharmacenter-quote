@@ -1847,12 +1847,12 @@ function BenchTopTab({
               label="Sugar to Syrup Ratio (dry)"
               sugarText={
                 sugarSyrupRatio
-                  ? `${sugarSyrupRatio.sugarPct.toFixed(1)}%`
+                  ? `${sugarSyrupRatio.sugarPct.toFixed(2)}%`
                   : "—"
               }
               syrupText={
                 sugarSyrupRatio
-                  ? `${sugarSyrupRatio.syrupPct.toFixed(1)}%`
+                  ? `${sugarSyrupRatio.syrupPct.toFixed(2)}%`
                   : "—"
               }
             />
