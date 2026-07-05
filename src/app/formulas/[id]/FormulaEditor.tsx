@@ -2395,17 +2395,47 @@ function BenchTopTab({
                 value={totalBlendsG}
               />
             </div>
-            {/* marginLeft: auto flushes % of bench to the far right of
-                the row. flex-shrink: 0 keeps the cell at its natural
-                size so the label never clips against the card edge.
-                paddingRight: 4 gives the label a hair of breathing room
-                inside the card's inner padding. */}
-            <div style={{ marginLeft: "auto", flexShrink: 0, paddingRight: 4 }}>
-              <KeyIndicatorPctStat
-                label="% of bench batch"
-                value={pctOfBench}
-                ok={totalOk}
-              />
+            {/* marginLeft: auto anchors % of bench batch to the far
+                right of the row. This cell is a bespoke inline layout
+                (rather than <KeyIndicatorPctStat>) so the label + value
+                can BOTH right-align — that way, if the label happens to
+                be wider than the numeric column below it, the overflow
+                sits on the LEFT (in the equation-group gap) instead of
+                clipping past the card's right edge. */}
+            <div
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: 4,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.09em",
+                  textTransform: "uppercase",
+                  color: "var(--ink-3, #8a9498)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                % of bench batch
+              </div>
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  color: totalOk ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
+                  fontVariantNumeric: "tabular-nums",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {Format.pctCompact(pctOfBench)}%
+              </div>
             </div>
           </div>
           {/* Row 2: two grouped indicators — Residual Moisture Total on
@@ -2577,13 +2607,12 @@ function KeyIndicatorPctStat({
         flexDirection: "column",
         alignItems: "center",
         gap: 4,
-        // 190px min-width — the polish pass label bump made
-        // "% OF BENCH BATCH" and "RESIDUAL MOISTURE TOTAL" wider than
-        // the old 155px cell, so their centered/nowrap labels
-        // overflowed and the right side clipped past the card edge
-        // (since row 1's cell is right-anchored via marginLeft:auto).
-        // 190 gives even the widest label ~15px of side padding.
-        minWidth: 190,
+        // 155 min-width matches KeyIndicatorStat so row 2's cells
+        // line up under row 1's equation. Row 1's % of bench batch
+        // no longer uses this component (it's inlined so it can
+        // right-align its label without overflowing the card edge),
+        // so this width now only affects row 2 stats.
+        minWidth: 155,
       }}
     >
       <div
