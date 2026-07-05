@@ -308,6 +308,12 @@ export function isKnownShape(s: string): s is GummyFormulaShape {
 // -----------------------------------------------------------------------------
 export type GummyFormulaRecord = {
   id: string;
+  // Sequential public identifier — assigned by the DB sequence
+  // gummy_formulas_formula_number_seq on insert and displayed as
+  // "F0001", "F0002", ... in the editor header + catalog listing.
+  // The DB primary key stays `id` (UUID); this is a display-only
+  // number so operators have a scannable handle for each formula.
+  formulaNumber: number;
   pcBkCode: string | null;      // null = TBD (R&D-stage design, no Fishbowl code yet)
   name: string;
   shape: string;                // canonical picklist enforced client-side
@@ -581,6 +587,12 @@ export function emptyIngredient(): GummyFormulaIngredient {
 // -----------------------------------------------------------------------------
 export function recordFromRow(row: {
   id: string;
+  // Optional so pre-migration rows and SELECTs that predate the column
+  // still map cleanly. Reader coerces missing values to 0 (the "not yet
+  // numbered" sentinel — every row that survives the migration has a
+  // real number). Comes back as a number from postgrest, but string is
+  // permitted defensively in case Supabase returns a numeric-as-string.
+  formula_number?: number | string | null;
   pc_bk_code: string | null;
   name: string;
   shape: string;
@@ -595,8 +607,14 @@ export function recordFromRow(row: {
   created_by_email: string | null;
   updated_by_email: string | null;
 }): GummyFormulaRecord {
+  const rawFormulaNumber = row.formula_number;
+  const formulaNumber =
+    rawFormulaNumber === null || rawFormulaNumber === undefined
+      ? 0
+      : Number(rawFormulaNumber);
   return {
     id: row.id,
+    formulaNumber: Number.isFinite(formulaNumber) ? formulaNumber : 0,
     pcBkCode: row.pc_bk_code,
     name: row.name,
     shape: row.shape,

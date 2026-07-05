@@ -57,7 +57,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("gummy_formulas")
     .select(
-      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .order("updated_at", { ascending: false });
 
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
       updated_by_email: user.email,
     })
     .select(
-      "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .single();
 

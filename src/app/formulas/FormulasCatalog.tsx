@@ -170,6 +170,9 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
         >
           <thead>
             <tr style={{ background: "var(--cream, #f6efe3)" }}>
+              {/* Sequential formula identifier ("F0001") — DB-assigned so
+                  operators have a scannable, catalog-stable handle. */}
+              <Th>Formula</Th>
               <Th>PC-BK</Th>
               <Th>Name</Th>
               <Th>Shape</Th>
@@ -194,6 +197,18 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
                   (e.currentTarget.style.background = "transparent")
                 }
               >
+                <Td>
+                  <code
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    F{String(f.formulaNumber).padStart(4, "0")}
+                  </code>
+                </Td>
                 <Td>
                   {f.pcBkCode ? (
                     <code

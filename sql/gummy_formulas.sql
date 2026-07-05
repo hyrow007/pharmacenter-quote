@@ -25,6 +25,12 @@
 -- ============================================================
 create table if not exists public.gummy_formulas (
   id                   uuid primary key default gen_random_uuid(),
+  -- Sequential public identifier ("F0001", "F0002", ...). Populated by
+  -- the migration block at the bottom of this file — a dedicated sequence
+  -- (gummy_formulas_formula_number_seq) assigns the next number on INSERT.
+  -- Fresh DBs pick it up via the ALTER TABLE at the bottom; the column
+  -- lives here so the create-table shape is self-documenting.
+  formula_number       integer,
   -- Fishbowl FP code — the PC-BK-{n} pattern. Nullable so an R&D formula
   -- can live in the catalog before a Fishbowl code is assigned. When the
   -- code is filled, it must be unique.
@@ -307,3 +313,48 @@ alter table public.gummy_formulas
 -- "formulas designed for this customer" without a seq scan.
 create index if not exists gummy_formulas_customer_id_idx
   on public.gummy_formulas (customer_id);
+
+-- Add sequential formula_number column so every gummy formula gets a
+-- stable public identifier ("F0001", "F0002", ...) shown in the header
+-- next to the version number. Uses a dedicated sequence so the numbers
+-- stay dense even when rows are deleted.
+create sequence if not exists public.gummy_formulas_formula_number_seq;
+
+alter table public.gummy_formulas
+  add column if not exists formula_number integer;
+
+-- Backfill any nulls (existing rows created before this column) in
+-- created_at order so the earliest formula becomes 1. Only touches rows
+-- with a null formula_number so re-runs are no-ops.
+do $$
+declare
+  r record;
+  n integer := coalesce(
+    (select max(formula_number) from public.gummy_formulas), 0
+  );
+begin
+  for r in
+    select id from public.gummy_formulas
+    where formula_number is null
+    order by created_at asc
+  loop
+    n := n + 1;
+    update public.gummy_formulas set formula_number = n where id = r.id;
+  end loop;
+  -- Advance the sequence past the highest assigned value so future
+  -- INSERTs don't collide with the backfill. Skip when n = 0 (fresh DB
+  -- with no rows yet) — setval with is_called=true requires a positive
+  -- value; the sequence's own start value (1) is already correct.
+  if n > 0 then
+    perform setval('public.gummy_formulas_formula_number_seq', n, true);
+  end if;
+end $$;
+
+alter table public.gummy_formulas
+  alter column formula_number set default nextval('public.gummy_formulas_formula_number_seq');
+
+alter table public.gummy_formulas
+  alter column formula_number set not null;
+
+create unique index if not exists gummy_formulas_formula_number_key
+  on public.gummy_formulas (formula_number);

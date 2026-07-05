@@ -46,7 +46,7 @@ export default async function FormulaEditorPage({
     supabase
       .from("gummy_formulas")
       .select(
-        "id, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+        "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -222,6 +222,17 @@ export default async function FormulaEditorPage({
               color: "var(--ink-3, #8a9498)",
             }}
           >
+            {/* Sequential formula identifier ("F0001"). Assigned by the DB
+                sequence on insert (see sql/gummy_formulas.sql). Left-most
+                in the meta strip so operators have a scannable handle for
+                each formula in addition to the version + updated-by info. */}
+            <span>
+              Formula{" "}
+              <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
+                F{String(formula.formulaNumber).padStart(4, "0")}
+              </strong>
+            </span>
+            <span aria-hidden="true">·</span>
             <span>
               Version{" "}
               <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
