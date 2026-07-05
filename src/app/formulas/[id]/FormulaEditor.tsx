@@ -4774,7 +4774,6 @@ function SolutionRow({
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
                 gap: 8,
                 width: "100%",
                 padding: "4px 6px",
@@ -4785,6 +4784,10 @@ function SolutionRow({
                 color: "var(--teal-900, #0f4a56)",
               }}
             >
+              {/* All composition-summary bits sit inline on the left:
+                  chevron → "Composition" label → "N components" hint →
+                  "Total: %" pill. Keeps the running total right next to
+                  the count instead of pushed to the far right edge. */}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <span
                   aria-hidden="true"
@@ -4820,20 +4823,20 @@ function SolutionRow({
                     ? "empty"
                     : `${components.length} component${components.length === 1 ? "" : "s"}`}
                 </span>
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontVariantNumeric: "tabular-nums",
-                  color:
-                    Math.abs(totalPct - 100) < 0.01
-                      ? "var(--teal-700, #1d6c7b)"
-                      : "#8b2f2f",
-                  fontWeight: 700,
-                }}
-                title="Component percentages should sum to 100%"
-              >
-                Total: {totalPct.toFixed(2)}%
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontVariantNumeric: "tabular-nums",
+                    color:
+                      Math.abs(totalPct - 100) < 0.01
+                        ? "var(--teal-700, #1d6c7b)"
+                        : "#8b2f2f",
+                    fontWeight: 700,
+                  }}
+                  title="Component percentages should sum to 100%"
+                >
+                  Total: {totalPct.toFixed(2)}%
+                </span>
               </span>
             </button>
             {expanded ? (
