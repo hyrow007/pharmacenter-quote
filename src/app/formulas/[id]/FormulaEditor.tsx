@@ -1556,18 +1556,51 @@ export default function FormulaEditor({
               batch size reads better than keeping them beside the
               identity fields. */}
 
-          <Field label="Shape" width={130}>
-            <select
-              value={shape}
-              onChange={(e) => setShape(e.target.value)}
-              className="pricing__input"
-            >
-              {FORMULA_SHAPES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+          <Field label="Shape" width={110}>
+            {/* Wrap the native <select> so we can (a) hide the native
+                chrome (which showed a browser-styled border + double
+                chevron next to the arrow the user saw), and (b) render
+                a small custom chevron that matches the visual weight of
+                the plain text inputs in the same row. Keeps the select
+                keyboard-accessible; only the appearance is customised. */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <select
+                value={shape}
+                onChange={(e) => setShape(e.target.value)}
+                className="pricing__input"
+                style={{
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  paddingRight: 18,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  width: "100%",
+                }}
+              >
+                {FORMULA_SHAPES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 2,
+                  top: "50%",
+                  transform: "translateY(-55%)",
+                  fontSize: 11,
+                  lineHeight: 1,
+                  color: "var(--ink-3, #8a9498)",
+                  pointerEvents: "none",
+                }}
+              >
+                ▾
+              </span>
+            </div>
           </Field>
 
           <Field label="Flavor" grow>
