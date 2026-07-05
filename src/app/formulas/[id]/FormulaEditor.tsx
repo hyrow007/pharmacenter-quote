@@ -1572,42 +1572,56 @@ function BenchTopTab({
             background: "var(--line, #e3dcc9)",
           }}
         />
-        {/* Key Indicators — per-phase blend totals wired together with
-            plus/equals glyphs so the operator can read the summation
-            visually: Primary + Secondary + Final = Total. Mirrors the
-            per-subsection totals inside the blend cards so R&D can
-            eyeball the whole pipeline without scrolling. All grams. */}
+        {/* Key Indicators — per-phase blend totals wired together as a
+            visible equation: Primary + Secondary + Final = Total. The
+            block is laid out on a CSS grid with two rows so each label
+            (row 1) always sits directly above its value (row 2), and the
+            +/= operator glyphs (row 2 only) land on the digit baseline. */}
         <div>
           <div
             style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              letterSpacing: "0.1em",
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: "0.06em",
               textTransform: "uppercase",
-              color: "var(--ink-3, #8a9498)",
-              marginBottom: 6,
+              color: "var(--teal-900, #0f4a56)",
+              marginBottom: 8,
+              paddingBottom: 4,
+              borderBottom: "1px solid var(--line, #e3dcc9)",
             }}
           >
             Key Indicators
           </div>
           <div
             style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: 14,
-              flexWrap: "wrap",
+              display: "grid",
+              gridTemplateColumns: "auto auto auto auto auto auto auto",
+              // Fixed row heights keep the digit baseline consistent
+              // across every value cell so + / = glyphs line up cleanly.
+              gridTemplateRows: "auto auto",
+              columnGap: 12,
+              rowGap: 4,
+              alignItems: "end",
             }}
           >
-            <BlendTotalStat label="Primary Blend (cooked)" value={primaryBlendG} />
-            <BlendOperator glyph="+" />
-            <BlendTotalStat label="Secondary Blend" value={secondaryBlendG} />
-            <BlendOperator glyph="+" />
-            <BlendTotalStat label="Final Blend" value={finalBlendG} />
-            <BlendOperator glyph="=" />
-            <BlendTotalStat
-              label="Total (Sum of all blends)"
-              value={totalBlendsG}
-            />
+            {/* Row 1: labels — each label pinned above its own value
+                column via explicit gridColumn so the operator columns
+                (2, 4, 6) get no label above them. */}
+            <KeyIndicatorLabel col={1}>Primary Blend (cooked)</KeyIndicatorLabel>
+            <KeyIndicatorLabel col={3}>Secondary Blend</KeyIndicatorLabel>
+            <KeyIndicatorLabel col={5}>Final Blend</KeyIndicatorLabel>
+            <KeyIndicatorLabel col={7}>Total (Sum of all blends)</KeyIndicatorLabel>
+            {/* Row 2: value → operator → value → operator → value →
+                operator → value. Baseline aligned via `alignItems: end`
+                on the grid + shared line-height on the value/operator
+                cells. */}
+            <KeyIndicatorValue value={primaryBlendG} />
+            <KeyIndicatorOp glyph="+" />
+            <KeyIndicatorValue value={secondaryBlendG} />
+            <KeyIndicatorOp glyph="+" />
+            <KeyIndicatorValue value={finalBlendG} />
+            <KeyIndicatorOp glyph="=" />
+            <KeyIndicatorValue value={totalBlendsG} />
           </div>
         </div>
         <div>
@@ -1708,6 +1722,85 @@ function BlendOperator({ glyph }: { glyph: string }) {
         // Nudge down so the operator lines up with the digit baseline,
         // not the label above.
         paddingBottom: 2,
+      }}
+    >
+      {glyph}
+    </div>
+  );
+}
+
+// ---- Key Indicators grid cells ----
+// Split the label / value / operator into three tiny helpers so the grid
+// stays legible in the parent. The parent supplies the grid template;
+// these just apply the correct typography and grid-column placement.
+function KeyIndicatorLabel({
+  col,
+  children,
+}: {
+  col: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        gridColumn: col,
+        gridRow: 1,
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: "var(--ink-3, #8a9498)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function KeyIndicatorValue({ value }: { value: number }) {
+  return (
+    <div
+      style={{
+        gridRow: 2,
+        fontSize: 20,
+        fontWeight: 700,
+        color: "var(--teal-900, #0f4a56)",
+        fontVariantNumeric: "tabular-nums",
+        // Shared line-height so the digit baseline in every value cell
+        // sits at the same y-coord as the +/= glyphs between them.
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {value.toFixed(2)}
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 500,
+          color: "var(--ink-3, #8a9498)",
+          marginLeft: 4,
+        }}
+      >
+        g
+      </span>
+    </div>
+  );
+}
+
+function KeyIndicatorOp({ glyph }: { glyph: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        gridRow: 2,
+        fontSize: 22,
+        fontWeight: 700,
+        color: "var(--ink-3, #8a9498)",
+        // Same line-height as KeyIndicatorValue so the glyph baseline
+        // matches the digit baseline exactly.
+        lineHeight: 1,
+        alignSelf: "end",
       }}
     >
       {glyph}
