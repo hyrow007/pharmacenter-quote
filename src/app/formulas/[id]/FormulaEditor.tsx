@@ -274,6 +274,87 @@ function computeGrandResidualPct(params: {
   return residualPct;
 }
 
+// Resolve a row's display name: prefer customName, fall back to the
+// raw-material's canonical name via rmById. Empty string when neither
+// is set. Used by name-based classifiers (sugar/syrup, tapioca, etc.)
+// that need the human-readable name regardless of whether the row was
+// picked from the raw_materials list or hand-typed as a custom.
+function resolveRowName(
+  r: GummyFormulaIngredient,
+  rmById: Map<string, RawMaterialOption>,
+): string {
+  const custom = (r.customName ?? "").trim();
+  if (custom) return custom;
+  if (r.rawMaterialId) {
+    const hit = rmById.get(r.rawMaterialId);
+    if (hit) return (hit.name ?? "").trim();
+  }
+  return "";
+}
+
+// Classify a Primary Blend Carry Over row as sugar vs syrup by name.
+// - Syrup: name contains "syrup" OR "tapioca" (case-insensitive) —
+//   covers Corn Syrup, Rice Syrup, Tapioca Syrup, Tapioca Solids, etc.
+// - Sugar: name contains "sugar" and does NOT match the syrup rule
+//   (so "Sugar Syrup" is classified as syrup, not sugar).
+// Returns null for rows that are neither.
+function classifySugarSyrup(
+  r: GummyFormulaIngredient,
+  rmById: Map<string, RawMaterialOption>,
+): "sugar" | "syrup" | null {
+  const lower = resolveRowName(r, rmById).toLowerCase();
+  if (!lower) return null;
+  if (lower.includes("syrup") || lower.includes("tapioca")) return "syrup";
+  if (lower.includes("sugar")) return "sugar";
+  return null;
+}
+
+// Compute the Sugar to Syrup Ratio (dry/dry) shown in the Key Indicators
+// card. Mirrors the Excel formula on the source sheet:
+//     G14 = D14 / (D14 + D15) * 100   (sugar share)
+//     G15 = D15 / (D14 + D15) * 100   (syrup share)
+// D14/D15 in the sheet are already the DRY contributions of sugar and
+// syrup (column C multiplies by solids% before D divides by C29). Here
+// we replicate that by computing per-row NET grams = grams × (1 −
+// moistureLossPct/100), which is the same value the Primary Blend
+// Carry Over subsection shows.
+//
+// Returns null when either ingredient class is missing from the pre-cook
+// rows, so the UI can fall back to "—" placeholders.
+function computeSugarSyrupRatio(params: {
+  preCookRows: GummyFormulaIngredient[];
+  rmById: Map<string, RawMaterialOption>;
+}): { sugarPct: number; syrupPct: number } | null {
+  const { preCookRows, rmById } = params;
+  let sugarDry = 0;
+  let syrupDry = 0;
+  let sawSugar = false;
+  let sawSyrup = false;
+  for (const r of preCookRows) {
+    const kind = classifySugarSyrup(r, rmById);
+    if (!kind) continue;
+    const g = Number(r.grams) || 0;
+    const raw = Number(r.moistureLossPct);
+    const pct = Number.isFinite(raw) ? raw : carryOverDefaultMoisturePct(r);
+    const frac = Math.max(0, Math.min(100, pct)) / 100;
+    const netG = g * (1 - frac);
+    if (kind === "sugar") {
+      sugarDry += netG;
+      sawSugar = true;
+    } else {
+      syrupDry += netG;
+      sawSyrup = true;
+    }
+  }
+  if (!sawSugar || !sawSyrup) return null;
+  const denom = sugarDry + syrupDry;
+  if (denom <= 0) return null;
+  return {
+    sugarPct: (sugarDry / denom) * 100,
+    syrupPct: (syrupDry / denom) * 100,
+  };
+}
+
 // PC-BK Fishbowl product option, powering the "Existing" branch of the
 // identity header's PC-BK code picker. Selecting one auto-fills Name.
 export type PcBkProductOption = {
@@ -1310,6 +1391,13 @@ export default function FormulaEditor({
               finalRows: phaseIngredients.groups["final"],
               benchBatchG,
             })}
+            sugarSyrupRatio={computeSugarSyrupRatio({
+              // Match Excel column G: dry/dry ratio computed off the
+              // Primary Blend Carry Over rows. Sugar row = name contains
+              // "sugar"; Syrup row = name contains "syrup" or "tapioca".
+              preCookRows: phaseIngredients.groups["pre-cook"],
+              rmById,
+            })}
           />
           {/* Blend-phase sections. Currently only Pre-cook is rendered;
               Secondary + Final will drop in the same way as the recipe
@@ -1580,6 +1668,7 @@ function BenchTopTab({
   secondaryBlendG,
   finalBlendG,
   residualMoistureTotalPct,
+  sugarSyrupRatio,
 }: {
   benchBatchG: number;
   setBenchBatchG: (n: number) => void;
@@ -1595,6 +1684,10 @@ function BenchTopTab({
   /** Grand-total Residual Moisture % across the whole Cooked blend card.
    *  Mirrors the value in the Grand Total Cooked Blend footer row. */
   residualMoistureTotalPct: number;
+  /** Sugar/Syrup ratio (dry/dry) computed from Primary Blend Carry Over
+   *  rows. null when either a sugar row or a syrup/tapioca row is
+   *  missing — the UI shows "—" placeholders in that case. */
+  sugarSyrupRatio: { sugarPct: number; syrupPct: number } | null;
 }) {
   // Combined batch weight across all three blends. Compared against the
   // bench top batch so the rep can see at a glance how close the recipe
@@ -1752,8 +1845,16 @@ function BenchTopTab({
             />
             <KeyIndicatorRatioStat
               label="Sugar to Syrup Ratio (dry)"
-              sugarText="—"
-              syrupText="—"
+              sugarText={
+                sugarSyrupRatio
+                  ? `${sugarSyrupRatio.sugarPct.toFixed(1)}%`
+                  : "—"
+              }
+              syrupText={
+                sugarSyrupRatio
+                  ? `${sugarSyrupRatio.syrupPct.toFixed(1)}%`
+                  : "—"
+              }
             />
           </div>
         </div>
