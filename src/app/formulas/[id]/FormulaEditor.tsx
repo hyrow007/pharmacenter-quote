@@ -123,6 +123,28 @@ function isWaterRow(r: GummyFormulaIngredient): boolean {
   return name === "water";
 }
 
+// Fraction of a row's mass that is water — powers the "Residual Moisture %"
+// column on every Cooked blend subsection. Water ingredient → 1. Solution
+// row → sum of its water-component percentages divided by 100 (clamped to
+// [0, 100] first, since operators may enter solutions whose components
+// don't sum exactly to 100 while they're still authoring). Everything
+// else → 0, which renders as a blank cell downstream. Component-level
+// detection mirrors isWaterRow: builtin:water id OR a customName that
+// trims/lowercases to "water".
+function waterFractionFor(r: GummyFormulaIngredient): number {
+  if (isWaterRow(r)) return 1;
+  const comps = r.solutionComponents ?? [];
+  if (comps.length === 0) return 0;
+  let waterPct = 0;
+  for (const c of comps) {
+    const cName = (c.customName ?? "").trim().toLowerCase();
+    if (c.rawMaterialId === "builtin:water" || cName === "water") {
+      waterPct += Number(c.pct) || 0;
+    }
+  }
+  return Math.max(0, Math.min(100, waterPct)) / 100;
+}
+
 // Compute the auto moisture-loss % (0..100, clamped) that must be
 // applied to every water row in the carry-over subsection so the
 // recipe balances to the bench-top batch size. Non-water rows use the
@@ -2266,6 +2288,15 @@ function BlendSectionCard({
     const s = pct.toFixed(2);
     return s.endsWith(".00") ? s.slice(0, -3) : s;
   };
+  // Formatter for the "Residual Moisture %" column — takes the residual
+  // pct directly (already multiplied through waterFraction × pctOfFinished)
+  // and mirrors the ".00" trim pattern used by formatPctOfFinished. Used
+  // by both the carry-over subsection and renderIngredientsBlock below so
+  // every subsection's residual cell formats identically.
+  const formatResidualPct = (residualPct: number): string => {
+    const s = residualPct.toFixed(2);
+    return s.endsWith(".00") ? s.slice(0, -3) : s;
+  };
 
   return (
     <section
@@ -2368,6 +2399,20 @@ function BlendSectionCard({
         // perfectly in sync with the Bench Top card's Primary Blend
         // total and the "% of finished product" column below.
         const totalNetGrams = primaryNetTotalG;
+        // Sum of Residual Moisture % across every carry-over row —
+        // matches per-row computation exactly (waterFraction × NET
+        // grams / grandTotal * 100) so the total ties out with the
+        // column above by construction.
+        const totalResidualPct = carryOverRows.reduce((s, r) => {
+          const wf = waterFractionFor(r);
+          if (wf === 0) return s;
+          const netG = (Number(r.grams) || 0) * (1 - lossFracFor(r));
+          const pctOfFinished =
+            grandTotalCookedBlendG > 0
+              ? (netG / grandTotalCookedBlendG) * 100
+              : 0;
+          return s + wf * pctOfFinished;
+        }, 0);
         return (
           <>
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
@@ -2422,6 +2467,13 @@ function BlendSectionCard({
                       the grams column and the chevron/delete column. */}
                   <BTh style={{ textAlign: "right", width: 120 }}>
                     % of finished product
+                  </BTh>
+                  {/* Residual Moisture % — the water contribution of each
+                      row, expressed as a share of the Grand Total Cooked
+                      Blend (waterFraction × % of finished product). Blank
+                      for rows with no water. */}
+                  <BTh style={{ textAlign: "right", width: 120 }}>
+                    Residual Moisture %
                   </BTh>
                   <BTh style={{ width: 40 }} />
                 </tr>
@@ -2583,6 +2635,48 @@ function BlendSectionCard({
                             %
                           </span>
                         </BTd>
+                        {/* Residual Moisture % — waterFraction × % of
+                            finished. Solutions can contain water as a
+                            component; if none, waterFractionFor === 0
+                            and the cell renders blank. */}
+                        {(() => {
+                          const solWaterFrac = waterFractionFor(row);
+                          if (solWaterFrac === 0) {
+                            return (
+                              <BTd
+                                style={{
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              />
+                            );
+                          }
+                          const solPctOfFinished =
+                            grandTotalCookedBlendG > 0
+                              ? (solNetGrams / grandTotalCookedBlendG) * 100
+                              : 0;
+                          const solResidual = solWaterFrac * solPctOfFinished;
+                          return (
+                            <BTd
+                              style={{
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <span>{formatResidualPct(solResidual)}</span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--ink-3, #8a9498)",
+                                }}
+                              >
+                                %
+                              </span>
+                            </BTd>
+                          );
+                        })()}
                         <BTd />
                       </tr>
                     );
@@ -2760,6 +2854,46 @@ function BlendSectionCard({
                           %
                         </span>
                       </BTd>
+                      {/* Residual Moisture % — waterFraction × % of
+                          finished. Non-water ingredients render blank. */}
+                      {(() => {
+                        const rowWaterFrac = waterFractionFor(row);
+                        if (rowWaterFrac === 0) {
+                          return (
+                            <BTd
+                              style={{
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                whiteSpace: "nowrap",
+                              }}
+                            />
+                          );
+                        }
+                        const rowPctOfFinished =
+                          grandTotalCookedBlendG > 0
+                            ? (rowNetGrams / grandTotalCookedBlendG) * 100
+                            : 0;
+                        const rowResidual = rowWaterFrac * rowPctOfFinished;
+                        return (
+                          <BTd
+                            style={{
+                              textAlign: "right",
+                              fontVariantNumeric: "tabular-nums",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span>{formatResidualPct(rowResidual)}</span>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              %
+                            </span>
+                          </BTd>
+                        );
+                      })()}
                       <BTd />
                     </tr>
                   );
@@ -2839,6 +2973,28 @@ function BlendSectionCard({
                     }}
                   >
                     <span>{formatPctOfFinished(totalNetGrams)}</span>
+                    <span
+                      style={{
+                        color: "var(--ink-3, #8a9498)",
+                        fontWeight: 400,
+                      }}
+                    >
+                      %
+                    </span>
+                  </BTd>
+                  {/* Residual Moisture % — Primary Blend Carry Over's
+                      total water contribution as a share of the Grand
+                      Total Cooked Blend. */}
+                  <BTd
+                    style={{
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span>{formatResidualPct(totalResidualPct)}</span>
                     <span
                       style={{
                         color: "var(--ink-3, #8a9498)",
@@ -3118,6 +3274,28 @@ function BlendSectionCard({
             const s = pct.toFixed(2);
             return s.endsWith(".00") ? s.slice(0, -3) : s;
           };
+          // Residual Moisture % for a row: waterFraction × (grams / pctBaseG × 100).
+          // Returns 0 when the base is 0 or the row has no water. Callers
+          // check waterFractionFor === 0 separately to render a blank cell.
+          const residualPctFor = (r: GummyFormulaIngredient): number => {
+            if (!showPctColumn) return 0;
+            const wf = waterFractionFor(r);
+            if (wf === 0) return 0;
+            const pctOfFinished =
+              (Number(r.grams) || 0) / (pctBaseG ?? 1) * 100;
+            return wf * pctOfFinished;
+          };
+          const formatBlockResidualPct = (residualPct: number): string => {
+            const s = residualPct.toFixed(2);
+            return s.endsWith(".00") ? s.slice(0, -3) : s;
+          };
+          // Subsection's total residual — the sum of the per-row residual
+          // pct across every row. Mirrors the total-row grams computation
+          // so the total ties out with the column above by construction.
+          const totalResidualPct = blockRows.reduce(
+            (s, r) => s + residualPctFor(r),
+            0,
+          );
           // Per-subsection default-detection so Secondary and Final each
           // decide independently whether to show the red placeholder-notice
           // banner and the Reset link.
@@ -3355,6 +3533,13 @@ function BlendSectionCard({
                           % of finished product
                         </BTh>
                       ) : null}
+                      {/* Cooked-only: Residual Moisture % — waterFraction ×
+                          the row's % of finished. Blank for non-water. */}
+                      {showPctColumn ? (
+                        <BTh style={{ textAlign: "right", width: 120 }}>
+                          Residual Moisture %
+                        </BTh>
+                      ) : null}
                       <BTh style={{ width: 40 }} />
                     </tr>
                   </thead>
@@ -3382,6 +3567,17 @@ function BlendSectionCard({
                             pctOfFinishedText={
                               showPctColumn
                                 ? formatBlockPct(Number(row.grams) || 0)
+                                : undefined
+                            }
+                            // Cooked-only: text shown in the extra
+                            // "Residual Moisture %" column. Empty string
+                            // for solutions with no water content so the
+                            // column width holds but no digits render.
+                            residualMoistureText={
+                              showPctColumn
+                                ? waterFractionFor(row) === 0
+                                  ? ""
+                                  : formatBlockResidualPct(residualPctFor(row))
                                 : undefined
                             }
                           />
@@ -3540,6 +3736,41 @@ function BlendSectionCard({
                               </span>
                             </BTd>
                           ) : null}
+                          {/* Residual Moisture % — waterFraction × the
+                              row's % of finished. Blank for non-water
+                              ingredients so only water contributions
+                              show up in the column. */}
+                          {showPctColumn ? (
+                            waterFractionFor(row) === 0 ? (
+                              <BTd
+                                style={{
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              />
+                            ) : (
+                              <BTd
+                                style={{
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                <span>
+                                  {formatBlockResidualPct(residualPctFor(row))}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    color: "var(--ink-3, #8a9498)",
+                                  }}
+                                >
+                                  %
+                                </span>
+                              </BTd>
+                            )
+                          ) : null}
                         </BlendIngredientRow>
                       );
                     })}
@@ -3613,6 +3844,30 @@ function BlendSectionCard({
                           }}
                         >
                           <span>{formatBlockPct(totalG)}</span>
+                          <span
+                            style={{
+                              color: "var(--ink-3, #8a9498)",
+                              fontWeight: 400,
+                            }}
+                          >
+                            %
+                          </span>
+                        </BTd>
+                      ) : null}
+                      {/* Residual Moisture % — this subsection's total
+                          water contribution as a share of the Grand
+                          Total Cooked Blend. */}
+                      {showPctColumn ? (
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            fontWeight: 700,
+                            color: "var(--teal-900, #0f4a56)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span>{formatBlockResidualPct(totalResidualPct)}</span>
                           <span
                             style={{
                               color: "var(--ink-3, #8a9498)",
@@ -4331,6 +4586,7 @@ function SolutionRow({
   onSaveToLibrary,
   onRemove,
   pctOfFinishedText,
+  residualMoistureText,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
@@ -4347,8 +4603,15 @@ function SolutionRow({
    *  grams input and the delete button, matching the outer thead's
    *  "% of finished product" column so the numbers line up vertically. */
   pctOfFinishedText?: string;
+  /** Cooked-only: pre-formatted "Residual Moisture %" for this row.
+   *  Empty string when the solution has no water content (so the
+   *  column width still holds but no digits render). undefined on
+   *  pre-cook where the column doesn't exist. Paired with
+   *  pctOfFinishedText — the two travel together. */
+  residualMoistureText?: string;
 }) {
   const showPctCell = pctOfFinishedText !== undefined;
+  const showResidualCell = residualMoistureText !== undefined;
   const [hover, setHover] = useState(false);
   const [saveState, setSaveState] = useState<
     | { kind: "idle" }
@@ -4445,7 +4708,13 @@ function SolutionRow({
       }}
     >
       <td
-        colSpan={showPctCell ? 4 : 3}
+        colSpan={
+          showPctCell && showResidualCell
+            ? 5
+            : showPctCell
+              ? 4
+              : 3
+        }
         style={{ padding: "10px 0", verticalAlign: "top" }}
       >
         <div
@@ -4464,9 +4733,12 @@ function SolutionRow({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: showPctCell
-                ? "1fr 120px 120px 40px"
-                : "1fr 120px 40px",
+              gridTemplateColumns:
+                showPctCell && showResidualCell
+                  ? "1fr 120px 120px 120px 40px"
+                  : showPctCell
+                    ? "1fr 120px 120px 40px"
+                    : "1fr 120px 40px",
               gap: 0,
               alignItems: "center",
             }}
@@ -4736,6 +5008,34 @@ function SolutionRow({
                 >
                   %
                 </span>
+              </div>
+            ) : null}
+            {/* Residual Moisture % cell — mirrors the % of finished
+                cell's layout. residualMoistureText is empty when the
+                solution has no water content, in which case the cell
+                just holds column width without rendering digits. */}
+            {showResidualCell ? (
+              <div
+                style={{
+                  textAlign: "right",
+                  padding: "0 12px",
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {residualMoistureText ? (
+                  <>
+                    <span>{residualMoistureText}</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      %
+                    </span>
+                  </>
+                ) : null}
               </div>
             ) : null}
             <button
