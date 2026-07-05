@@ -1921,6 +1921,55 @@ function BenchTopWeightInput({
   );
 }
 
+// Read-only counterpart to BenchTopWeightInput — same visual pattern
+// (uppercase label + value + unit) but the value is a computed string
+// instead of a live number input. Used for Theoretical Yield in the
+// Bench Top Batch Size card so the derived piece count reads as part
+// of the same stacked list.
+function BenchTopReadout({
+  label,
+  valueText,
+  suffix,
+}: {
+  label: string;
+  valueText: string;
+  suffix: string;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: "var(--teal-900, #0f4a56)",
+            fontVariantNumeric: "tabular-nums",
+            minWidth: 90,
+            textAlign: "right",
+          }}
+        >
+          {valueText}
+        </div>
+        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
+          {suffix}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function BenchTopTab({
   benchBatchG,
   setBenchBatchG,
@@ -1992,10 +2041,11 @@ function BenchTopTab({
       }}
     >
       {/* Left card — Bench top batch size plus per-piece physical
-          weights. All three inputs stack vertically inside a single
-          card because they describe "how the batch is measured and
-          what it produces": the total wet blend weight, the wet cast
-          weight per piece, and the finished dry piece weight.
+          weights plus the derived theoretical yield. All four rows
+          stack vertically inside a single card because they describe
+          "how the batch is measured and what it produces": the total
+          wet blend weight, the finished (dry) piece weight, the wet
+          cast weight, and the piece count the batch yields.
           Sized to its content so the right (Key Indicators) card
           gets the remaining width for the equation. */}
       <div style={{ ...cardStyle, display: "flex", alignItems: "center" }}>
@@ -2004,9 +2054,15 @@ function BenchTopTab({
             label="Bench top batch size"
             value={benchBatchG}
             onChange={setBenchBatchG}
-            hint="please set the batch size"
             min={1}
             emphasize
+          />
+          <BenchTopWeightInput
+            label="Finished piece weight (Dry)"
+            value={gummyPieceWeightG}
+            onChange={setGummyPieceWeightG}
+            min={0.1}
+            step={0.1}
           />
           <BenchTopWeightInput
             label="Cast weight (wet)"
@@ -2015,12 +2071,20 @@ function BenchTopTab({
             min={0.1}
             step={0.1}
           />
-          <BenchTopWeightInput
-            label="Dry piece weight"
-            value={gummyPieceWeightG}
-            onChange={setGummyPieceWeightG}
-            min={0.1}
-            step={0.1}
+          {/* Theoretical yield — batchSize ÷ castWeight, in gummies.
+              Read-only display in the same visual pattern as the input
+              rows above so the four values read as a stack. Rounded
+              to 1 decimal so operators see e.g. 86.2 gummies without
+              too much precision noise. Falls back to "—" when either
+              side is 0/missing. */}
+          <BenchTopReadout
+            label="Theoretical Yield"
+            valueText={
+              wetCastPieceWeightG > 0 && benchBatchG > 0
+                ? (benchBatchG / wetCastPieceWeightG).toFixed(1)
+                : "—"
+            }
+            suffix="gummies"
           />
         </div>
       </div>
