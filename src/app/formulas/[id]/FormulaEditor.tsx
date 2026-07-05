@@ -1624,42 +1624,17 @@ function BenchTopTab({
               label="Total (Sum of all blends)"
               value={totalBlendsG}
             />
-          </div>
-        </div>
-        <div>
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "var(--ink-3, #8a9498)",
-              marginBottom: 4,
-            }}
-          >
-            % of bench batch
-          </div>
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: totalOk ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {(() => {
-              // Drop the ".00" when the percentage lands on a whole
-              // number so "100.00%" renders as "100%". Any non-zero
-              // decimals still show at full 2dp precision.
-              const s = pctOfBench.toFixed(2);
-              return s.endsWith(".00") ? s.slice(0, -3) : s;
-            })()}
-            %
-          </div>
-          <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
-            {totalOk
-              ? "Blend total matches bench batch."
-              : "Sum of all blends vs. bench top batch."}
+            {/* % of bench batch — lives inside the same equation row
+                as a final indicator sitting to the right of the Total.
+                Uses the same fixed-width layout as the other stats so
+                the whole row stays visually consistent, but renders
+                a percentage instead of grams and colors red when the
+                blend total doesn't match the bench batch. */}
+            <KeyIndicatorPctStat
+              label="% of bench batch"
+              value={pctOfBench}
+              ok={totalOk}
+            />
           </div>
         </div>
       </div>
@@ -1727,6 +1702,62 @@ function KeyIndicatorStat({
         >
           g
         </span>
+      </div>
+    </div>
+  );
+}
+
+// Percentage variant of KeyIndicatorStat used for the "% of bench batch"
+// slot at the end of the Key Indicators row. Same visual box as the
+// gram-value stats so the whole row stays aligned; renders a % instead
+// of grams and turns red when the recipe doesn't balance to bench batch.
+function KeyIndicatorPctStat({
+  label,
+  value,
+  ok,
+}: {
+  label: string;
+  value: number;
+  ok: boolean;
+}) {
+  // Drop trailing ".00" so 100% reads as "100%" not "100.00%".
+  const s = value.toFixed(2);
+  const display = s.endsWith(".00") ? s.slice(0, -3) : s;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+        minWidth: 190,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+          whiteSpace: "nowrap",
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          color: ok ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+          textAlign: "center",
+        }}
+      >
+        {display}%
       </div>
     </div>
   );
