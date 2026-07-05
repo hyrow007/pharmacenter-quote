@@ -2233,6 +2233,40 @@ function BlendSectionCard({
         ? "Milligrams"
         : "Micrograms";
 
+  // Shared grand-total-cooked-blend math — used by the new "% of finished
+  // product" column that appears in every subsection of the cooked card
+  // (Primary Blend Carry Over, Secondary Blend, Final Blend). Each row's
+  // percentage is (row grams / grandTotalCookedBlendG) * 100. Guarded by
+  // phase === "cooked" so the pre-cook card's rendering stays unchanged.
+  const secondaryTotalG =
+    phase === "cooked"
+      ? rows.reduce((s, r) => s + (Number(r.grams) || 0), 0)
+      : 0;
+  const finalTotalG =
+    phase === "cooked"
+      ? (finalRows ?? []).reduce((s, r) => s + (Number(r.grams) || 0), 0)
+      : 0;
+  const primaryNetTotalG =
+    phase === "cooked" && carryOverRows && carryOverRows.length > 0
+      ? computeCarryOverPrimaryNetG({
+          preCookRows: carryOverRows,
+          benchBatchG: benchBatchG ?? 0,
+          secondaryG: secondaryTotalG,
+          finalG: finalTotalG,
+        })
+      : 0;
+  const grandTotalCookedBlendG =
+    primaryNetTotalG + secondaryTotalG + finalTotalG;
+  // Formatter for the "% of finished product" cell — mirrors the pctOfBench
+  // pattern (2 dp, drop trailing .00 so 12.00% renders as 12%). Returns
+  // "0%" when the base is 0 to avoid divide-by-zero.
+  const formatPctOfFinished = (grams: number): string => {
+    if (grandTotalCookedBlendG <= 0) return "0";
+    const pct = (grams / grandTotalCookedBlendG) * 100;
+    const s = pct.toFixed(2);
+    return s.endsWith(".00") ? s.slice(0, -3) : s;
+  };
+
   return (
     <section
       style={{
@@ -2295,19 +2329,14 @@ function BlendSectionCard({
         // Compute once here and reuse for both the water row display and
         // the total. Non-water rows use the per-row explicit
         // moistureLossPct OR carryOverDefaultMoisturePct as a fallback.
-        const secondaryG = rows.reduce(
-          (s, r) => s + (Number(r.grams) || 0),
-          0,
-        );
-        const finalG = (finalRows ?? []).reduce(
-          (s, r) => s + (Number(r.grams) || 0),
-          0,
-        );
+        // Reuses the shared secondaryTotalG/finalTotalG (computed above the
+        // return) so the water auto-balance and the "% of finished product"
+        // column agree by construction.
         const waterPct = computeCarryOverWaterPct({
           preCookRows: carryOverRows,
           benchBatchG: benchBatchG ?? 0,
-          secondaryG,
-          finalG,
+          secondaryG: secondaryTotalG,
+          finalG: finalTotalG,
         });
         // Per-row moisture-loss fraction, clamped to [0, 1]. Water rows
         // always use the auto waterPct — any stored moistureLossPct on a
@@ -2334,15 +2363,11 @@ function BlendSectionCard({
         };
         // Sum of NET grams (post-moisture-loss) across every carry-over
         // row — this is what the operator actually sees carrying into
-        // the pot after the water boils off. Uses the shared helper so
-        // it stays perfectly in sync with the Bench Top card's Primary
-        // Blend total.
-        const totalNetGrams = computeCarryOverPrimaryNetG({
-          preCookRows: carryOverRows,
-          benchBatchG: benchBatchG ?? 0,
-          secondaryG,
-          finalG,
-        });
+        // the pot after the water boils off. Reuses the shared
+        // primaryNetTotalG (computed above the return) so it stays
+        // perfectly in sync with the Bench Top card's Primary Blend
+        // total and the "% of finished product" column below.
+        const totalNetGrams = primaryNetTotalG;
         return (
           <>
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
@@ -2391,6 +2416,12 @@ function BlendSectionCard({
                       unit but isn't interactive from here. */}
                   <BTh style={{ textAlign: "right", width: 120 }}>
                     {carryOverUnitLabel}
+                  </BTh>
+                  {/* % of finished product — each row's NET grams as a
+                      share of the Grand Total Cooked Blend. Sits BETWEEN
+                      the grams column and the chevron/delete column. */}
+                  <BTh style={{ textAlign: "right", width: 120 }}>
+                    % of finished product
                   </BTh>
                   <BTh style={{ width: 40 }} />
                 </tr>
@@ -2531,6 +2562,25 @@ function BlendSectionCard({
                             }}
                           >
                             {carryOverEffectiveUnit}
+                          </span>
+                        </BTd>
+                        {/* % of finished product — solution's NET grams
+                            as a share of the Grand Total Cooked Blend. */}
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span>{formatPctOfFinished(solNetGrams)}</span>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--ink-3, #8a9498)",
+                            }}
+                          >
+                            %
                           </span>
                         </BTd>
                         <BTd />
@@ -2691,6 +2741,25 @@ function BlendSectionCard({
                           {carryOverEffectiveUnit}
                         </span>
                       </BTd>
+                      {/* % of finished product — this row's NET grams
+                          as a share of the Grand Total Cooked Blend. */}
+                      <BTd
+                        style={{
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span>{formatPctOfFinished(rowNetGrams)}</span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--ink-3, #8a9498)",
+                          }}
+                        >
+                          %
+                        </span>
+                      </BTd>
                       <BTd />
                     </tr>
                   );
@@ -2756,6 +2825,27 @@ function BlendSectionCard({
                       >
                         {carryOverEffectiveUnit}
                       </span>
+                    </span>
+                  </BTd>
+                  {/* % of finished product — Primary Blend Carry Over's
+                      NET total as a share of the Grand Total Cooked Blend. */}
+                  <BTd
+                    style={{
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span>{formatPctOfFinished(totalNetGrams)}</span>
+                    <span
+                      style={{
+                        color: "var(--ink-3, #8a9498)",
+                        fontWeight: 400,
+                      }}
+                    >
+                      %
                     </span>
                   </BTd>
                   <BTd style={{ padding: "8px 6px" }}>
@@ -2992,6 +3082,7 @@ function BlendSectionCard({
           blockOnProcessNoteChange,
           blockProcessEditing,
           setBlockProcessEditing,
+          pctBaseG,
         }: {
           subHeading: string | null;
           blockRows: GummyFormulaIngredient[];
@@ -3005,11 +3096,28 @@ function BlendSectionCard({
           blockOnProcessNoteChange: (text: string) => void;
           blockProcessEditing: boolean;
           setBlockProcessEditing: React.Dispatch<React.SetStateAction<boolean>>;
+          /** Cooked-only: when > 0, renders an EXTRA "% of finished product"
+           *  column to the right of the Grams column. Each row's cell shows
+           *  (row.grams / pctBaseG) * 100. Pre-cook passes undefined so the
+           *  extra column is skipped and its rendering stays unchanged. */
+          pctBaseG?: number;
         }) => {
           const totalG = blockRows.reduce(
             (s, r) => s + (Number(r.grams) || 0),
             0,
           );
+          // Show the extra % column only when the caller passes a
+          // non-zero base. Pre-cook omits pctBaseG so this stays false
+          // and the layout is unchanged. When true, the row cell is
+          // (grams / pctBaseG) * 100 formatted to 2dp with the ".00"
+          // trimmed (matches the pctOfBench pattern used elsewhere).
+          const showPctColumn = (pctBaseG ?? 0) > 0;
+          const formatBlockPct = (grams: number): string => {
+            if (!showPctColumn) return "0";
+            const pct = (grams / (pctBaseG ?? 1)) * 100;
+            const s = pct.toFixed(2);
+            return s.endsWith(".00") ? s.slice(0, -3) : s;
+          };
           // Per-subsection default-detection so Secondary and Final each
           // decide independently whether to show the red placeholder-notice
           // banner and the Reset link.
@@ -3238,6 +3346,15 @@ function BlendSectionCard({
                           <option value="mcg">Micrograms</option>
                         </select>
                       </BTh>
+                      {/* Cooked-only: % of finished product — each row's
+                          grams as a share of the Grand Total Cooked Blend.
+                          Only renders when the caller passes pctBaseG > 0
+                          (Secondary/Final on the cooked card). */}
+                      {showPctColumn ? (
+                        <BTh style={{ textAlign: "right", width: 120 }}>
+                          % of finished product
+                        </BTh>
+                      ) : null}
                       <BTh style={{ width: 40 }} />
                     </tr>
                   </thead>
@@ -3258,6 +3375,15 @@ function BlendSectionCard({
                             onUpdate={(patch) => onUpdate(row.id, patch)}
                             onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
                             onRemove={() => onRemoveRow(row.id)}
+                            // Cooked-only: text shown in the extra
+                            // "% of finished product" column so it lines
+                            // up with the ingredient rows above. undefined
+                            // on pre-cook where the column doesn't exist.
+                            pctOfFinishedText={
+                              showPctColumn
+                                ? formatBlockPct(Number(row.grams) || 0)
+                                : undefined
+                            }
                           />
                         );
                       }
@@ -3390,6 +3516,30 @@ function BlendSectionCard({
                               </span>
                             </div>
                           </BTd>
+                          {/* % of finished product — this row's grams
+                              as a share of the Grand Total Cooked Blend.
+                              Only renders on the cooked card (pctBaseG > 0). */}
+                          {showPctColumn ? (
+                            <BTd
+                              style={{
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <span>
+                                {formatBlockPct(Number(row.grams) || 0)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--ink-3, #8a9498)",
+                                }}
+                              >
+                                %
+                              </span>
+                            </BTd>
+                          ) : null}
                         </BlendIngredientRow>
                       );
                     })}
@@ -3449,6 +3599,30 @@ function BlendSectionCard({
                           </span>
                         </span>
                       </BTd>
+                      {/* % of finished product — this subsection's total
+                          grams as a share of the Grand Total Cooked Blend.
+                          Only renders on the cooked card (pctBaseG > 0). */}
+                      {showPctColumn ? (
+                        <BTd
+                          style={{
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            fontWeight: 700,
+                            color: "var(--teal-900, #0f4a56)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span>{formatBlockPct(totalG)}</span>
+                          <span
+                            style={{
+                              color: "var(--ink-3, #8a9498)",
+                              fontWeight: 400,
+                            }}
+                          >
+                            %
+                          </span>
+                        </BTd>
+                      ) : null}
                       <BTd style={{ padding: "8px 6px" }}>
                         {/* Two chevron buttons — tighter than a dropdown pill.
                             < decreases decimal places (min 0), > increases (max 4).
@@ -3739,6 +3913,11 @@ function BlendSectionCard({
               blockOnProcessNoteChange: onProcessNoteChange,
               blockProcessEditing: processEditing,
               setBlockProcessEditing: setProcessEditing,
+              // Cooked-only: base for the "% of finished product"
+              // column. Pre-cook passes undefined so the column is
+              // skipped and pre-cook rendering stays unchanged.
+              pctBaseG:
+                phase === "cooked" ? grandTotalCookedBlendG : undefined,
             })}
             {/* Cooked-only Final Blend subsection — same structure as
                 Secondary but wired to phase="final" state on the parent.
@@ -3762,6 +3941,10 @@ function BlendSectionCard({
                   blockOnProcessNoteChange: onFinalProcessNoteChange ?? (() => {}),
                   blockProcessEditing: finalProcessEditing,
                   setBlockProcessEditing: setFinalProcessEditing,
+                  // Cooked-only: base for the "% of finished product"
+                  // column. This branch only ever runs on the cooked
+                  // card, so no phase guard is needed here.
+                  pctBaseG: grandTotalCookedBlendG,
                 })
               : null}
             {/* Grand Total Cooked Blend — full-width footer that sums the
@@ -3772,22 +3955,10 @@ function BlendSectionCard({
                 get a grand total row. */}
             {phase === "cooked" && carryOverRows && carryOverRows.length > 0
               ? (() => {
-                  const secondaryG = rows.reduce(
-                    (s, r) => s + (Number(r.grams) || 0),
-                    0,
-                  );
-                  const finalG = (finalRows ?? []).reduce(
-                    (s, r) => s + (Number(r.grams) || 0),
-                    0,
-                  );
-                  const primaryNetG = computeCarryOverPrimaryNetG({
-                    preCookRows: carryOverRows,
-                    benchBatchG: benchBatchG ?? 0,
-                    secondaryG,
-                    finalG,
-                  });
-                  const grandTotalG = primaryNetG + secondaryG + finalG;
-                  const s = (grandTotalG * factor).toFixed(2);
+                  // Reuse the shared grandTotalCookedBlendG computed at the
+                  // top of the render body so the footer and the new "% of
+                  // finished product" column agree by construction.
+                  const s = (grandTotalCookedBlendG * factor).toFixed(2);
                   // Mirror the pctOfBench trick — drop a trailing ".00" so a
                   // whole number renders cleanly without visual noise.
                   const display = s.endsWith(".00") ? s.slice(0, -3) : s;
@@ -4159,6 +4330,7 @@ function SolutionRow({
   onUpdate,
   onSaveToLibrary,
   onRemove,
+  pctOfFinishedText,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
@@ -4170,7 +4342,13 @@ function SolutionRow({
     { ok: true; solution: SavedSolution } | { ok: false; error: string }
   >;
   onRemove: () => void;
+  /** Cooked-only: pre-formatted "% of finished product" for this row's
+   *  grams. When provided, the row renders an extra column between the
+   *  grams input and the delete button, matching the outer thead's
+   *  "% of finished product" column so the numbers line up vertically. */
+  pctOfFinishedText?: string;
 }) {
+  const showPctCell = pctOfFinishedText !== undefined;
   const [hover, setHover] = useState(false);
   const [saveState, setSaveState] = useState<
     | { kind: "idle" }
@@ -4266,7 +4444,10 @@ function SolutionRow({
         transition: "background 80ms ease",
       }}
     >
-      <td colSpan={3} style={{ padding: "10px 0", verticalAlign: "top" }}>
+      <td
+        colSpan={showPctCell ? 4 : 3}
+        style={{ padding: "10px 0", verticalAlign: "top" }}
+      >
         <div
           style={{
             display: "flex",
@@ -4274,14 +4455,18 @@ function SolutionRow({
             gap: 8,
           }}
         >
-          {/* Header row — name, grams, remove button. Column widths
-              match the outer ingredient table (grams = 120, delete = 40)
-              so the grams input lines up vertically with ingredient
-              rows above and below. */}
+          {/* Header row — name, grams, [% of finished product?], remove
+              button. Column widths match the outer ingredient table
+              (grams = 120, % = 120, delete = 40) so every input/value
+              lines up vertically with ingredient rows above and below.
+              The % column only exists on the cooked card (see
+              renderIngredientsBlock's pctBaseG param). */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 120px 40px",
+              gridTemplateColumns: showPctCell
+                ? "1fr 120px 120px 40px"
+                : "1fr 120px 40px",
               gap: 0,
               alignItems: "center",
             }}
@@ -4529,6 +4714,30 @@ function SolutionRow({
                 </span>
               </div>
             </div>
+            {/* % of finished product cell — mirrors BTd padding
+                "8px 12px" so the value sits at the same X as the
+                ingredient rows' % cell above/below. Only rendered
+                when the outer table has the extra % column. */}
+            {showPctCell ? (
+              <div
+                style={{
+                  textAlign: "right",
+                  padding: "0 12px",
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>{pctOfFinishedText}</span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "var(--ink-3, #8a9498)",
+                  }}
+                >
+                  %
+                </span>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onRemove}
