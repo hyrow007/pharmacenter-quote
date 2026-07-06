@@ -1566,11 +1566,11 @@ export default function FormulaEditor({
           /* Cell rows get a tiny bit of vertical air, no more. */
           td, th { padding: 3px 6px !important; }
 
-          /* Inputs and selects render as static-looking chips so the
-             sheet reads as text, not a form. */
+          /* Inputs and selects render as plain static text on the
+             printed page — no borders, no underline, no form-y
+             affordances. The value alone reads cleaner. */
           input, select, textarea {
             border: none !important;
-            border-bottom: 1px solid #ccc !important;
             background: transparent !important;
             color: #000 !important;
             padding: 0 !important;
@@ -1580,6 +1580,17 @@ export default function FormulaEditor({
             appearance: none !important;
             -webkit-appearance: none !important;
           }
+
+          /* Identity row (Product Code · Name · Shape · Flavor) — force
+             everything onto one line for print. On-screen the Product
+             Code column is 260px to fit the TBD/Existing radios plus
+             the picker; on paper radios are hidden so the column can
+             collapse to its content width. */
+          .fe-identity-row {
+            flex-wrap: nowrap !important;
+            gap: 12px !important;
+          }
+          .fe-identity-row > *:first-child { width: auto !important; min-width: 0 !important; }
 
           /* Hint / helper copy hidden — the spec sheet is for people
              who already know the formula. Any element with role="note"
@@ -1711,6 +1722,7 @@ export default function FormulaEditor({
             the small columns; the two long-text columns (Name, Flavor)
             grow to fill remaining space. */}
         <div
+          className="fe-identity-row"
           style={{
             display: "flex",
             flexWrap: "wrap",
@@ -1724,7 +1736,10 @@ export default function FormulaEditor({
               height so switching modes doesn't jiggle the row. */}
           <Field label="Product Code" width={260}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ display: "flex", gap: 10, fontSize: 11, fontWeight: 700 }}>
+              <div
+                className="fe-print-hide"
+                style={{ display: "flex", gap: 10, fontSize: 11, fontWeight: 700 }}
+              >
                 <label
                   style={{
                     display: "inline-flex",
