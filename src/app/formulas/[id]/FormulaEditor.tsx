@@ -1421,22 +1421,51 @@ export default function FormulaEditor({
           and force a white paper background. The result reads like a
           one-shot spec sheet without designing a separate view. */}
       <style>{`
+        /* Show the print-only header only when actually printing so the
+           on-screen view stays as-is. */
+        .fe-print-only { display: none; }
+
         @media print {
-          /* Reset app chrome. AppHeader + the sticky nav bar disappear so
-             the print starts with the formula meta strip. */
-          nav, .app-header, header[data-app-header] { display: none !important; }
+          /* App chrome disappears — AppHeader, nav bar, back-to-formulas
+             pill. Only the formula content prints. */
+          nav, .app-header, header[data-app-header],
+          [class*="BackPill"], a[href^="/formulas"] { display: none !important; }
 
           body, html {
             background: #fff !important;
             color: #000 !important;
-            font-size: 11pt;
+            font-size: 10pt;
           }
-          @page { margin: 0.5in; }
+          @page { margin: 0.4in; size: portrait; }
 
-          /* Kill interactive controls the print copy shouldn't hint at:
-             tabs (we render all three), save/print buttons, back pill,
-             collapse chevrons, note edit/delete actions. */
-          .fe-print-hide, .fe-primary-actions, .fe-note-row__actions {
+          /* Show the print-only meta header. */
+          .fe-print-only { display: block !important; }
+
+          /* Kill everything interactive: tab strip, action buttons, back
+             pills, collapse chevrons, Change/Reset/Edit affordances on
+             ingredient + process rows, +Add buttons, drag handles, and
+             the < > decimal chevrons on totals. */
+          .fe-print-hide,
+          .fe-primary-actions,
+          .fe-note-row__actions {
+            display: none !important;
+          }
+          /* All buttons vanish on print — the sheet is read-only. */
+          button { display: none !important; }
+          /* ...except the collapsible Notes header (we still want the
+             "Notes" label + count printed as a section title). */
+          .fe-notes-card > button[aria-expanded],
+          section > button[aria-expanded] {
+            display: flex !important;
+            pointer-events: none !important;
+            background: transparent !important;
+            border: none !important;
+            padding-left: 0 !important;
+          }
+          /* Hide the toggle chevron and Show/Hide label on the Notes
+             header — keep only the title + count text. */
+          section > button[aria-expanded] > span:first-child,
+          section > button[aria-expanded] > span:last-child {
             display: none !important;
           }
 
@@ -1446,35 +1475,92 @@ export default function FormulaEditor({
             box-shadow: none !important;
           }
 
-          /* Notes/Audit collapsible headers become plain headings while
-             printing. Toggle chevrons + "Show/Hide" labels vanish. */
-          section button[aria-expanded] {
-            pointer-events: none !important;
-            background: transparent !important;
-            border: none !important;
-          }
-          section button[aria-expanded] > span:first-child,
-          section button[aria-expanded] > span:last-child {
-            display: none !important;
-          }
-
-          /* Cards + tables need to be resilient across page breaks. */
+          /* Cards + tables resilient across page breaks. */
           section, table, .fe-print-block { break-inside: avoid-page; }
           .fe-note-row { break-inside: avoid; }
 
-          /* Textareas expand to show all content when printed. */
-          textarea {
+          /* Inputs and selects render as static-looking chips so the
+             sheet reads as text, not a form. */
+          input, select, textarea {
+            border: none !important;
+            border-bottom: 1px solid #ccc !important;
+            background: transparent !important;
+            color: #000 !important;
+            padding: 0 !important;
             height: auto !important;
             min-height: 0 !important;
-            border: 1px solid #ccc !important;
             resize: none !important;
+            appearance: none !important;
+            -webkit-appearance: none !important;
           }
-          input, select {
-            border: 1px solid #ccc !important;
-            background: #fff !important;
-          }
+
+          /* Hint / helper copy hidden — the spec sheet is for people
+             who already know the formula. Any element with role="note"
+             or a class marker gets suppressed. */
+          .fe-hint, .fe-print-hide-hint,
+          [class*="Placeholder"] { display: none !important; }
+
+          /* Anything explicitly marked print-hide is suppressed. Custom
+             class we add to affordance rows and interactive icons. */
         }
       `}</style>
+
+      {/* Print-only meta header — a compact letterhead that only shows
+          up when printing. On-screen the CSS above keeps it hidden. */}
+      <div
+        className="fe-print-only"
+        style={{
+          marginBottom: 12,
+          paddingBottom: 8,
+          borderBottom: "1.5px solid #0f4a56",
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#0f4a56" }}>
+          PharmaCenter — Gummy Formula Spec Sheet
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 10,
+            color: "#333",
+            display: "flex",
+            gap: 14,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>
+            <strong>Formula</strong> F
+            {String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}
+          </span>
+          <span>
+            <strong>Version</strong> v{initialFormula.latestVersionNum}
+          </span>
+          {initialFormula.pcBkCode ? (
+            <span>
+              <strong>Product Code</strong> {initialFormula.pcBkCode}
+            </span>
+          ) : null}
+          <span>
+            <strong>Name</strong> {name || "—"}
+          </span>
+          {flavor ? (
+            <span>
+              <strong>Flavor</strong> {flavor}
+            </span>
+          ) : null}
+          <span>
+            <strong>Shape</strong> {shape}
+          </span>
+          <span style={{ marginLeft: "auto" }}>
+            <strong>Printed</strong>{" "}
+            {new Date().toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        </div>
+      </div>
 
       {/* ============ Identity header (sticky top) ============ */}
       <div
@@ -1938,6 +2024,7 @@ export default function FormulaEditor({
       {/* ============ Tab bar ============ */}
       <div
         role="tablist"
+        className="fe-print-hide"
         style={{
           display: "flex",
           gap: 4,
@@ -1956,8 +2043,10 @@ export default function FormulaEditor({
         </TabButton>
       </div>
 
-      {/* ============ Tab content ============ */}
-      {tab === "bench" && (
+      {/* ============ Tab content ============
+          When `printing` is on we always show the Bench top view — the
+          print output is scoped to bench per the R&D spec-sheet spec. */}
+      {(tab === "bench" || printing) && (
         <>
           <BenchTopTab
             benchBatchG={benchBatchG}
@@ -2063,7 +2152,7 @@ export default function FormulaEditor({
           />
         </>
       )}
-      {tab === "scale" && (
+      {tab === "scale" && !printing && (
         <ScaleUpTab
           batchKg={batchKg}
           setBatchKg={setBatchKg}
@@ -2078,7 +2167,7 @@ export default function FormulaEditor({
           effectiveYield={cost.dailyEffectiveYield}
         />
       )}
-      {tab === "cost" && (
+      {tab === "cost" && !printing && (
         <CostTab
           cost={cost}
           gummyPieceWeightG={gummyPieceWeightG}
@@ -2092,7 +2181,7 @@ export default function FormulaEditor({
           per-blend cards cover ingredients fully. On Scale up + Material
           costing tabs the flat table still shows EVERY row so the rep
           sees production-side totals across all phases in one place. */}
-      {tab === "bench" ? null : (
+      {tab === "bench" || printing ? null : (
         <IngredientTable
           tab={tab}
           ingredients={ingredients}
@@ -2111,28 +2200,31 @@ export default function FormulaEditor({
       {/* Notes first — user-authored, free-form. Placed above Activity so
           collaboration content that operators actively use is closer to
           the ingredient tables and doesn't require scrolling past the
-          audit log. Prints expanded (see forceExpanded). */}
-      <NotesCard
-        notes={notes}
-        loading={notesLoading}
-        draft={noteDraft}
-        onDraftChange={setNoteDraft}
-        onSubmit={submitNote}
-        submitting={submittingNote}
-        currentUserEmail={currentUserEmail}
-        onEdit={editNote}
-        onDelete={deleteNote}
-        forceExpanded={printing}
-      />
+          audit log. Print: only rendered when there are notes to print
+          (empty card is noise on a spec sheet). */}
+      {(!printing || notes.length > 0) && (
+        <NotesCard
+          notes={notes}
+          loading={notesLoading}
+          draft={noteDraft}
+          onDraftChange={setNoteDraft}
+          onSubmit={submitNote}
+          submitting={submittingNote}
+          currentUserEmail={currentUserEmail}
+          onEdit={editNote}
+          onDelete={deleteNote}
+          forceExpanded={printing}
+          hideComposer={printing}
+        />
+      )}
 
       {/* Activity timeline (audit log) below Notes — historical/auxiliary,
           useful when investigating a change but not part of day-to-day
-          editing flow. */}
-      <AuditTimeline
-        events={auditEvents}
-        loading={auditLoading}
-        forceExpanded={printing}
-      />
+          editing flow. Suppressed entirely from print output; the spec
+          sheet doesn't need change history. */}
+      {!printing && (
+        <AuditTimeline events={auditEvents} loading={auditLoading} />
+      )}
 
       {/* Version notes (only relevant when writing a new version) */}
       {versionDirty ? (
@@ -8549,6 +8641,7 @@ function NotesCard({
   onEdit,
   onDelete,
   forceExpanded = false,
+  hideComposer = false,
 }: {
   notes: GummyFormulaNote[];
   loading: boolean;
@@ -8560,6 +8653,7 @@ function NotesCard({
   onEdit: (noteId: string, body: string) => Promise<boolean>;
   onDelete: (noteId: string) => Promise<boolean>;
   forceExpanded?: boolean;
+  hideComposer?: boolean;
 }) {
   const [expandedState, setExpanded] = useState(false);
   // `forceExpanded` overrides the user's collapse state so the print
@@ -8654,7 +8748,10 @@ function NotesCard({
         <div>
           {/* Compose row — small textarea + submit button. Ctrl/Cmd+Enter
               also submits so keyboard-heavy operators can flow without
-              reaching for the mouse. */}
+              reaching for the mouse. Hidden when hideComposer is true
+              (used by the print flow — a printed spec sheet shouldn't
+              show an "Add a note…" prompt). */}
+          {hideComposer ? null : (
           <div
             style={{
               padding: "12px 14px",
@@ -8710,6 +8807,7 @@ function NotesCard({
               {submitting ? "Adding…" : "Add note"}
             </button>
           </div>
+          )}
 
           {/* Notes timeline. Server returns newest first. */}
           {notes.length === 0 && !loading ? (
