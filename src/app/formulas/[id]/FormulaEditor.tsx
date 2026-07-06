@@ -1332,10 +1332,20 @@ export default function FormulaEditor({
           rawMaterialFpCode: c.rawMaterialFpCode ?? null,
           customName: c.customName ?? null,
           pctInFinished: 0,
-          // Seed grams at 0 so the operator sees an empty starting
-          // cell — the row is a scaffold; they type the target grams
-          // (or reference the derived overage % as guidance).
-          grams: 0,
+          // Seed grams at the claim baseline (0% overage) so the row
+          // lands ready-to-formulate. The operator can then either
+          // (a) type an overage % which back-solves a new grams, or
+          // (b) type a new grams which re-derives the overage %. The
+          // baseline snapshot uses the current bench batch + wet cast
+          // piece weight; if either changes later, the operator's
+          // grams is preserved and the overage display updates to
+          // reflect the new baseline.
+          grams: claimBaseGramsForBench(
+            c,
+            benchBatchG,
+            wetCastPieceWeightG,
+            gummyPieceWeightG,
+          ),
           blendPhase: "cooked" as BlendPhase,
           costPerKgOverride: null,
           solidsOverride: null,
@@ -5650,16 +5660,21 @@ function BlendSectionCard({
                               </div>
                             ) : null}
                           </BTd>
-                          {/* Overage % — Secondary Blend only. Now a
-                              read-only DERIVED display: grams is the
-                              manual input (see next cell) and this cell
-                              shows how far above/below the label-claim
-                              target the operator's grams sits.
-                                overage% = (actualG / baseG - 1) × 100
-                              baseG comes from claimBaseGramsForBench
-                              against the wet cast weight. Non-claim rows
-                              show a grey em-dash so the column width
-                              still holds. */}
+                          {/* Overage % — Secondary Blend only. Now an
+                              editable input that BACK-SOLVES the row's
+                              grams from the claim baseline:
+                                overage%  →  grams = baseG × (1 + overage/100)
+                              Symmetric with the Grams input (next cell)
+                              which forward-solves the overage display
+                              from grams:
+                                grams     →  overage% = (grams/baseG - 1) × 100
+                              Whichever cell the operator touches, the
+                              other tracks the same underlying baseG so
+                              the two views stay coherent without any
+                              extra stored state (grams remains the sole
+                              source of truth). Non-claim rows show a
+                              grey em-dash so the column width still
+                              holds. */}
                           {showOverageColumn ? (
                             <BTd
                               style={{
@@ -5676,26 +5691,34 @@ function BlendSectionCard({
                                   gummyPieceWeightG ?? 0,
                                 );
                                 const actualG = Number(row.grams) || 0;
-                                // Dash guard: no meaningful overage %
-                                // when either side is zero (avoids
-                                // divide-by-zero and hides a spurious
-                                // "-100.00%" on a fresh row).
-                                const showDash =
-                                  !(baseG > 0) || !(actualG > 0);
-                                const rawPct = showDash
-                                  ? 0
-                                  : (actualG / baseG - 1) * 100;
-                                // Soft color band — near-zero stays neutral;
-                                // >0 goes teal; <0 goes muted red.
+                                // When baseG isn't computable (piece
+                                // weight or bench batch still 0), we
+                                // can't compute a meaningful overage —
+                                // and can't back-solve grams either.
+                                // Fall through to a plain em-dash.
+                                const canCompute = baseG > 0;
+                                const rawPct = canCompute
+                                  ? (actualG / baseG - 1) * 100
+                                  : 0;
+                                // Soft color band — near-zero stays
+                                // neutral; >0 goes teal; <0 goes muted
+                                // red. Only kicks in once the operator
+                                // has typed grams; before that we sit
+                                // on the neutral color.
                                 const near = Math.abs(rawPct) < 0.005;
-                                const color = showDash || near
-                                  ? "var(--ink-2, #415056)"
-                                  : rawPct > 0
-                                    ? "var(--teal-700, #1d6c7b)"
-                                    : "#8b2f2f";
-                                const label = showDash
-                                  ? "—"
-                                  : Format.pctSigned(rawPct) + "%";
+                                const color =
+                                  !canCompute || near || actualG <= 0
+                                    ? "var(--ink-2, #415056)"
+                                    : rawPct > 0
+                                      ? "var(--teal-700, #1d6c7b)"
+                                      : "#8b2f2f";
+                                // Snap the input's displayed value to
+                                // 2 decimals so tiny float noise from
+                                // grams round-trips doesn't jitter the
+                                // input while the user isn't focused.
+                                const displayPct = canCompute
+                                  ? Math.round(rawPct * 100) / 100
+                                  : 0;
                                 return (
                                   <div
                                     style={{
@@ -5706,15 +5729,51 @@ function BlendSectionCard({
                                       lineHeight: 1.15,
                                     }}
                                   >
-                                    <span
+                                    <div
                                       style={{
-                                        fontWeight: 700,
-                                        color,
-                                        fontVariantNumeric: "tabular-nums",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
                                       }}
                                     >
-                                      {label}
-                                    </span>
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        disabled={!canCompute}
+                                        onFocus={(e) => {
+                                          const el = e.currentTarget;
+                                          setTimeout(() => {
+                                            try { el.select(); } catch {}
+                                          }, 0);
+                                        }}
+                                        value={displayPct}
+                                        onChange={(e) => {
+                                          if (!canCompute) return;
+                                          const nextPct = Number(e.target.value);
+                                          if (!Number.isFinite(nextPct)) return;
+                                          const nextGrams =
+                                            baseG * (1 + nextPct / 100);
+                                          onUpdate(row.id, { grams: nextGrams });
+                                        }}
+                                        className="pricing__input"
+                                        style={{
+                                          width: 72,
+                                          flex: "0 0 72px",
+                                          textAlign: "right",
+                                          fontVariantNumeric: "tabular-nums",
+                                          fontWeight: 700,
+                                          color,
+                                        }}
+                                      />
+                                      <span
+                                        style={{
+                                          fontSize: 12,
+                                          color: "var(--ink-3, #8a9498)",
+                                        }}
+                                      >
+                                        %
+                                      </span>
+                                    </div>
                                     <span
                                       className="fe-print-hide"
                                       style={{
