@@ -1693,15 +1693,29 @@ export default function FormulaEditor({
           [style*="marginBottom: 12"] { margin-bottom: 4px !important; }
           [style*="marginTop: 24"] { margin-top: 8px !important; }
           [style*="marginTop: 18"] { margin-top: 6px !important; }
-          /* Cell rows get a tiny bit of vertical air, no more. Numeric
-             cells (grams / %) never wrap so overage values sit cleanly
-             in their column instead of stacking onto two lines. Empty
-             cells show a dim en-dash instead of visible whitespace. */
+          /* Cell rows get a tiny bit of vertical air, no more. Only
+             right-aligned numeric cells (grams / % columns) get nowrap
+             so overage values sit on one line; the ingredient-name
+             column is free to wrap onto two lines when needed instead
+             of truncating with "…". */
           td, th { padding: 3px 6px !important; }
-          td { white-space: nowrap; }
-          /* Force middle-aligned content in ingredient rows so % / g
-             columns line up with the ingredient name row baseline. */
+          td[style*="text-align: right"], th[style*="text-align: right"] {
+            white-space: nowrap;
+          }
           tbody td { vertical-align: middle !important; }
+          /* The ingredient tables have a delete-× cell at the very
+             right of every row (both <td> and its <th> in the header).
+             We hide the button globally on print but the empty <td>
+             still occupies a phantom column. :has() hides any cell
+             whose only child is a button so the column collapses. */
+          td:has(> button:only-child),
+          th:has(> button:only-child) {
+            display: none !important;
+          }
+          /* Add space between the ingredient-name column and the first
+             numeric column so "0 %" doesn't sit right against "(25 kg
+             boxes)". */
+          tbody td:first-child { padding-right: 12px !important; }
 
           /* Inputs and selects render as plain static text on the
              printed page — no borders, no underline, no form-y
