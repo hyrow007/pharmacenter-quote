@@ -1714,7 +1714,7 @@ export default function FormulaEditor({
           }
           /* The ingredient tables have a delete-× cell at the very
              right of every row. That cell wraps ONLY a button as its
-             direct child. Match `td:has(> button)` — direct-child
+             direct child. Match "td:has(> button)" — direct-child
              only — so ingredient-name cells (which contain buttons
              nested inside pickers / drag handles) aren't collapsed
              along with the delete column. */
