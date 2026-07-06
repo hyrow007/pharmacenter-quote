@@ -406,12 +406,15 @@ export const FORMULA_VERSION_DEFAULTS = {
   batchKg: 100,
   batchesPerDay: 6,
   fixedLossKgPerDay: 20,
-  gummyPieceWeightG: 3.0,
-  // Wet cast piece weight defaults higher than the finished-piece weight
-  // because the wet gummy still carries water that evaporates in the
-  // dryer. 3.5 g matches the PC lab convention for typical bear moulds
-  // (finished ~3.0 g, cast ~3.5 g).
-  wetCastPieceWeightG: 3.5,
+  // Piece weights default to 0 so a brand-new formula starts with the
+  // operator staring at empty Finished / Cast cells they explicitly
+  // have to fill in. Previously we seeded 3.0 g / 3.5 g (typical bear
+  // mould numbers) and operators kept forgetting to update them for
+  // non-bear moulds; the yield readout would read a plausible-looking
+  // number that was actually wrong. Zero forces the operator to enter
+  // the real values before the yield math has any authority.
+  gummyPieceWeightG: 0,
+  wetCastPieceWeightG: 0,
   yieldPct: 100,
 } as const;
 
