@@ -1453,6 +1453,19 @@ export default function FormulaEditor({
              printed spec sheet the floor will read. */
           .fe-process-notes { display: none !important; }
 
+          /* Duplicate meta strip that page.tsx renders above the
+             editor. My print header already carries Formula / Version /
+             Product Code / Name — no need to print both. */
+          .fe-meta-strip-page { display: none !important; }
+
+          /* Key Indicators fit awkwardly at letter width; let the
+             row wrap so % of bench batch drops to its own line
+             instead of clipping off the right edge. Same for the
+             outer bench-batch + indicators row: force vertical stack
+             so each panel gets full print width. */
+          .fe-key-indicators-row { flex-wrap: wrap !important; }
+          .fe-bench-and-indicators { flex-direction: column !important; }
+
           /* Drop card borders + shadows so the print reads as clean
              typography rather than a stack of framed rectangles.
              Targets any inline style using the app's --line palette
@@ -1745,6 +1758,7 @@ export default function FormulaEditor({
                       {pickedPcBkProduct.fpCode}
                     </span>
                     <span
+                      className="fe-print-hide"
                       style={{
                         fontSize: 11.5,
                         fontWeight: 700,
@@ -2633,6 +2647,7 @@ function BenchTopTab({
     // even when the equation can't fit on one line. Vertical gap
     // between cards bumped 14→18 for calmer breathing.
     <div
+      className="fe-bench-and-indicators"
       style={{
         marginBottom: 18,
         display: "flex",
@@ -2721,6 +2736,7 @@ function BenchTopTab({
               keeps % of bench on the same line as the equation instead
               of dropping to its own row when the card is narrow. */}
           <div
+            className="fe-key-indicators-row"
             style={{
               display: "flex",
               alignItems: "flex-end",
@@ -7249,6 +7265,7 @@ function SolutionRow({
                   Solution
                 </span>
                 <span
+                  className="fe-print-hide"
                   style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
                   {isAlreadySaved ? (

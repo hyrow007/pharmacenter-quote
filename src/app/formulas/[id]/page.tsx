@@ -209,6 +209,7 @@ export default async function FormulaEditorPage({
               the sticky identity header so it doesn't scroll away with the
               editor and doesn't clutter the identity card. */}
           <div
+            className="fe-meta-strip-page"
             style={{
               marginBottom: 12,
               display: "flex",
