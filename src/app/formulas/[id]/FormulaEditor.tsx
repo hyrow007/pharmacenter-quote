@@ -5699,193 +5699,20 @@ function BlendSectionCard({
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {isClaimSourced ? (() => {
-                                const baseG = claimBaseGramsForBench(
-                                  claimForRow!,
-                                  benchBatchG ?? 0,
-                                  wetCastPieceWeightG ?? 0,
-                                  gummyPieceWeightG ?? 0,
-                                );
-                                const actualG = Number(row.grams) || 0;
-                                // When baseG isn't computable (piece
-                                // weight or bench batch still 0), we
-                                // can't compute a meaningful overage —
-                                // and can't back-solve grams either.
-                                // Fall through to a plain em-dash.
-                                const canCompute = baseG > 0;
-                                const rawPct = canCompute
-                                  ? (actualG / baseG - 1) * 100
-                                  : 0;
-                                // Soft color band — near-zero stays
-                                // neutral; >0 goes teal; <0 goes muted
-                                // red. Only kicks in once the operator
-                                // has typed grams; before that we sit
-                                // on the neutral color.
-                                const near = Math.abs(rawPct) < 0.005;
-                                const color =
-                                  !canCompute || near || actualG <= 0
-                                    ? "var(--ink-2, #415056)"
-                                    : rawPct > 0
-                                      ? "var(--teal-700, #1d6c7b)"
-                                      : "#8b2f2f";
-                                // Snap the input's displayed value to
-                                // 2 decimals so tiny float noise from
-                                // grams round-trips doesn't jitter the
-                                // input while the user isn't focused.
-                                const displayPct = canCompute
-                                  ? Math.round(rawPct * 100) / 100
-                                  : 0;
-                                // Helper: write a new overage % back into
-                                // grams, rounded to 3 decimals so the two
-                                // inputs display clean numbers instead of
-                                // float-noise like 4.504310.
-                                const writeOverage = (nextPct: number) => {
-                                  if (!canCompute) return;
-                                  if (!Number.isFinite(nextPct)) return;
-                                  const raw = baseG * (1 + nextPct / 100);
-                                  const clean = Math.round(raw * 1000) / 1000;
-                                  onUpdate(row.id, { grams: clean });
-                                };
-                                return (
-                                  <div
-                                    style={{
-                                      display: "inline-flex",
-                                      flexDirection: "column",
-                                      alignItems: "flex-end",
-                                      gap: 2,
-                                      lineHeight: 1.15,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: 4,
-                                      }}
-                                    >
-                                      {/* Nudge chevrons live on the LEFT so
-                                          the browser's native spin-button
-                                          (which sits on the right and
-                                          overlaps the "%" glyph) is out of
-                                          the way. Suppressed on print via
-                                          fe-print-hide. */}
-                                      <span
-                                        className="fe-print-hide"
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: 2,
-                                          marginRight: 2,
-                                        }}
-                                      >
-                                        <button
-                                          type="button"
-                                          disabled={!canCompute}
-                                          onClick={() =>
-                                            writeOverage(displayPct - 0.1)
-                                          }
-                                          title="Decrease overage 0.1%"
-                                          aria-label="Decrease overage"
-                                          style={{
-                                            width: 16,
-                                            height: 18,
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            fontSize: 11,
-                                            fontWeight: 700,
-                                            color: canCompute
-                                              ? "var(--ink-3, #8a9498)"
-                                              : "var(--ink-4, #c7cccf)",
-                                            background: "transparent",
-                                            border: "1px solid var(--line, #e3dcc9)",
-                                            borderRadius: 3,
-                                            padding: 0,
-                                            cursor: canCompute
-                                              ? "pointer"
-                                              : "default",
-                                          }}
-                                        >
-                                          &lt;
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={!canCompute}
-                                          onClick={() =>
-                                            writeOverage(displayPct + 0.1)
-                                          }
-                                          title="Increase overage 0.1%"
-                                          aria-label="Increase overage"
-                                          style={{
-                                            width: 16,
-                                            height: 18,
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            fontSize: 11,
-                                            fontWeight: 700,
-                                            color: canCompute
-                                              ? "var(--ink-3, #8a9498)"
-                                              : "var(--ink-4, #c7cccf)",
-                                            background: "transparent",
-                                            border: "1px solid var(--line, #e3dcc9)",
-                                            borderRadius: 3,
-                                            padding: 0,
-                                            cursor: canCompute
-                                              ? "pointer"
-                                              : "default",
-                                          }}
-                                        >
-                                          &gt;
-                                        </button>
-                                      </span>
-                                      <input
-                                        type="number"
-                                        step="0.1"
-                                        disabled={!canCompute}
-                                        onFocus={(e) => {
-                                          const el = e.currentTarget;
-                                          setTimeout(() => {
-                                            try { el.select(); } catch {}
-                                          }, 0);
-                                        }}
-                                        value={displayPct}
-                                        onChange={(e) => {
-                                          const nextPct = Number(e.target.value);
-                                          writeOverage(nextPct);
-                                        }}
-                                        className="pricing__input fe-overage-input"
-                                        style={{
-                                          width: 64,
-                                          flex: "0 0 64px",
-                                          textAlign: "right",
-                                          fontVariantNumeric: "tabular-nums",
-                                          fontWeight: 700,
-                                          color,
-                                        }}
-                                      />
-                                      <span
-                                        style={{
-                                          fontSize: 12,
-                                          color: "var(--ink-3, #8a9498)",
-                                        }}
-                                      >
-                                        %
-                                      </span>
-                                    </div>
-                                    <span
-                                      className="fe-print-hide"
-                                      style={{
-                                        fontSize: 12,
-                                        color: "var(--ink-3, #8a9498)",
-                                        fontWeight: 400,
-                                      }}
-                                    >
-                                      Claim Baseline: {Format.grams(baseG)} g
-                                    </span>
-                                  </div>
-                                );
-                              })() : (
+                              {isClaimSourced ? (
+                                <OverageInput
+                                  baseG={claimBaseGramsForBench(
+                                    claimForRow!,
+                                    benchBatchG ?? 0,
+                                    wetCastPieceWeightG ?? 0,
+                                    gummyPieceWeightG ?? 0,
+                                  )}
+                                  actualG={Number(row.grams) || 0}
+                                  onCommit={(nextGrams) =>
+                                    onUpdate(row.id, { grams: nextGrams })
+                                  }
+                                />
+                              ) : (
                                 <span
                                   style={{
                                     color: "var(--ink-3, #8a9498)",
@@ -7348,6 +7175,243 @@ function LabelClaimsSection({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// OverageInput — editable Overage % cell for claim-sourced Secondary
+// Blend rows. Keeps a local "draft" string during focus so typing feels
+// like a normal text field (no feedback loop where every keystroke
+// re-derives displayPct from grams and stomps on the operator's
+// half-typed value). Commits on blur / Enter and reverts on Escape.
+//
+// Bidirectional coupling:
+//   grams          (parent state) ← single source of truth
+//   overage %      (display / draft) ← derived from grams
+// Committing an overage back-solves grams via:
+//   grams = baseG × (1 + overage / 100)
+//
+// Legacy safety: if actualG is 0 (rows created before the seed-baseline
+// change landed) we display 0% instead of -100% and let the operator
+// start typing from a sensible baseline. Committing 0% then sets grams
+// to baseG so the row lines up with the claim exactly.
+// -----------------------------------------------------------------------------
+function OverageInput({
+  baseG,
+  actualG,
+  onCommit,
+}: {
+  baseG: number;
+  actualG: number;
+  onCommit: (nextGrams: number) => void;
+}) {
+  const canCompute = baseG > 0;
+  // Legacy rows may have grams = 0 — treat as "unset" and pretend the
+  // operator is starting at the baseline (0%) so they don't have to
+  // clear a "-100" first.
+  const effectiveActualG = actualG > 0 ? actualG : baseG;
+  const rawPct = canCompute
+    ? (effectiveActualG / baseG - 1) * 100
+    : 0;
+  // 2-decimal snap keeps display steady when grams round-trips
+  // through float math.
+  const displayPct = canCompute ? Math.round(rawPct * 100) / 100 : 0;
+  const displayStr = canCompute
+    ? // Trim trailing zeros so "5.00" reads as "5"
+      String(Number(displayPct.toFixed(2)))
+    : "";
+
+  // Draft string state — active only while the input is focused. Null
+  // outside focus so we render the derived display value directly.
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const commit = (raw: string) => {
+    const cleaned = raw.trim();
+    // Empty string commits as "no change" → snap back to derived value.
+    if (cleaned === "" || cleaned === "-" || cleaned === "-.") {
+      setDraft(null);
+      return;
+    }
+    const parsed = Number(cleaned);
+    if (!Number.isFinite(parsed)) {
+      setDraft(null);
+      return;
+    }
+    // Back-solve grams from the operator's overage %, rounded to 3
+    // decimals so paired displays (grams input) don't show float noise.
+    const rawG = baseG * (1 + parsed / 100);
+    const cleanG = Math.round(rawG * 1000) / 1000;
+    onCommit(cleanG);
+    setDraft(null);
+  };
+
+  const bump = (deltaPct: number) => {
+    if (!canCompute) return;
+    const next = Math.round((displayPct + deltaPct) * 100) / 100;
+    const rawG = baseG * (1 + next / 100);
+    const cleanG = Math.round(rawG * 1000) / 1000;
+    onCommit(cleanG);
+  };
+
+  // Color band on the displayed pct — only kicks in when the row has
+  // been formulated. Legacy 0-grams rows sit neutral.
+  const near = Math.abs(rawPct) < 0.005;
+  const color =
+    !canCompute || near || actualG <= 0
+      ? "var(--ink-2, #415056)"
+      : rawPct > 0
+        ? "var(--teal-700, #1d6c7b)"
+        : "#8b2f2f";
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 2,
+        lineHeight: 1.15,
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        {/* Nudge chevrons live on the LEFT so the browser's native
+            spin-button (right side) doesn't fight the "%" glyph. */}
+        <span
+          className="fe-print-hide"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 2,
+            marginRight: 2,
+          }}
+        >
+          <button
+            type="button"
+            disabled={!canCompute}
+            onClick={() => bump(-0.1)}
+            title="Decrease overage 0.1%"
+            aria-label="Decrease overage"
+            style={{
+              width: 16,
+              height: 18,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              color: canCompute
+                ? "var(--ink-3, #8a9498)"
+                : "var(--ink-4, #c7cccf)",
+              background: "transparent",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 3,
+              padding: 0,
+              cursor: canCompute ? "pointer" : "default",
+            }}
+          >
+            &lt;
+          </button>
+          <button
+            type="button"
+            disabled={!canCompute}
+            onClick={() => bump(0.1)}
+            title="Increase overage 0.1%"
+            aria-label="Increase overage"
+            style={{
+              width: 16,
+              height: 18,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              color: canCompute
+                ? "var(--ink-3, #8a9498)"
+                : "var(--ink-4, #c7cccf)",
+              background: "transparent",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 3,
+              padding: 0,
+              cursor: canCompute ? "pointer" : "default",
+            }}
+          >
+            &gt;
+          </button>
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          disabled={!canCompute}
+          value={draft !== null ? draft : displayStr}
+          onFocus={(e) => {
+            // Prime the draft with the current displayed value so the
+            // operator can immediately overwrite it, and select-all so
+            // the first keystroke replaces (rather than prepends to)
+            // whatever's there.
+            setDraft(displayStr);
+            const el = e.currentTarget;
+            setTimeout(() => {
+              try { el.select(); } catch {}
+            }, 0);
+          }}
+          onChange={(e) => {
+            // Free-form editing while focused — commit deferred to
+            // blur / Enter so partial values like "-", "1.", "-." don't
+            // trigger a mid-type re-render fight.
+            setDraft(e.target.value);
+          }}
+          onBlur={(e) => {
+            commit(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit((e.target as HTMLInputElement).value);
+              inputRef.current?.blur();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft(null);
+              inputRef.current?.blur();
+            }
+          }}
+          className="pricing__input fe-overage-input"
+          style={{
+            width: 64,
+            flex: "0 0 64px",
+            textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
+            fontWeight: 700,
+            color,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 12,
+            color: "var(--ink-3, #8a9498)",
+          }}
+        >
+          %
+        </span>
+      </div>
+      <span
+        className="fe-print-hide"
+        style={{
+          fontSize: 12,
+          color: "var(--ink-3, #8a9498)",
+          fontWeight: 400,
+        }}
+      >
+        Claim Baseline: {Format.grams(baseG)} g
+      </span>
     </div>
   );
 }
