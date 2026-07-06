@@ -5725,52 +5725,20 @@ function BlendSectionCard({
                           ) : null}
                           <BTd style={{ textAlign: "right" }}>
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                              {/* Grams is now the manual input for every
-                                  row — including claim-sourced ones. The
-                                  Overage % cell (above) derives from this
-                                  vs. the claim's target base grams. */}
-                              <input
-                                type="number"
-                                onFocus={(e) => {
-                                  // Chrome's <input type="number"> doesn't select on
-                                  // focus synchronously — defer one frame so the
-                                  // digits are highlighted and any keystroke replaces
-                                  // the placeholder 0 instead of prepending to it.
-                                  const el = e.currentTarget;
-                                  setTimeout(() => {
-                                    try { el.select(); } catch {}
-                                  }, 0);
-                                }}
-                                value={
-                                  row.grams !== null && row.grams !== undefined
-                                    ? row.grams * factor
-                                    : 0
+                              {/* Grams input — the operator-facing precision
+                                  is driven by the section's decimals
+                                  chevron (bottom-of-section < >). Storage
+                                  stays at full precision so the Overage %
+                                  cell (above) round-trips cleanly, but
+                                  the operator only ever sees clean 2- or
+                                  3-decimal numbers on screen. */}
+                              <GramsInput
+                                grams={row.grams}
+                                factor={factor}
+                                decimals={totalDecimals}
+                                onCommit={(nextGrams) =>
+                                  onUpdate(row.id, { grams: nextGrams })
                                 }
-                                onChange={(e) => {
-                                  const n = Number(e.target.value);
-                                  // Convert the displayed unit back to grams for
-                                  // storage so downstream math stays in one base.
-                                  onUpdate(row.id, {
-                                    grams: Number.isFinite(n) ? n / factor : 0,
-                                  });
-                                }}
-                                step="0.1"
-                                min={0}
-                                className="pricing__input"
-                                style={{
-                                  width: 80,
-                                  // Override .pricing__input's `flex: 1` — with
-                                  // that default, the width setting was being
-                                  // ignored inside the inline-flex parent, so the
-                                  // number position drifted from the solution
-                                  // rows' identical input below.
-                                  // 80 (not 90) so input + gap + unit glyph
-                                  // (~92px total) fits inside the 96px cell
-                                  // content area and right-aligns properly.
-                                  flex: "0 0 80px",
-                                  textAlign: "right",
-                                  fontVariantNumeric: "tabular-nums",
-                                }}
                               />
                               <span
                                 style={{
@@ -7176,6 +7144,101 @@ function LabelClaimsSection({
         </div>
       )}
     </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// GramsInput — controlled grams input that formats its DISPLAY value to
+// the section's decimals chevron while preserving full precision in
+// state. Solves the "why is grams showing 4.74138?" problem: internally
+// grams round-trips to overage % at 5-decimal precision (so typing
+// "10%" reliably displays "10.00%"), but the input surface only ever
+// shows the operator-friendly precision they've dialed in with the
+// section chevron.
+//
+// While the input is focused the operator sees / edits the raw draft
+// string — no mid-type formatting fights their typing. On blur or
+// Enter we parse and commit; Escape reverts.
+// -----------------------------------------------------------------------------
+function GramsInput({
+  grams,
+  factor,
+  decimals,
+  onCommit,
+}: {
+  /** Raw stored grams; null / undefined treated as 0. */
+  grams: number | null | undefined;
+  /** Unit-conversion factor: displayed = grams × factor. */
+  factor: number;
+  /** Display precision (from section chevron). Draft mode ignores this. */
+  decimals: number;
+  /** Commits a new grams value (in grams, not display units). */
+  onCommit: (nextGrams: number) => void;
+}) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const displayN = (grams ?? 0) * factor;
+  // Snap to the requested decimals then trim trailing zeros so 4.740
+  // reads as 4.74 (no dangling zero) but 4.7 stays as 4.7. Number()
+  // round-trip does the trim automatically.
+  const displayStr = Number.isFinite(displayN)
+    ? String(Number(displayN.toFixed(Math.max(0, Math.min(6, decimals)))))
+    : "0";
+
+  const commit = (raw: string) => {
+    const cleaned = raw.trim();
+    if (cleaned === "" || cleaned === "-" || cleaned === "-.") {
+      setDraft(null);
+      return;
+    }
+    const parsed = Number(cleaned);
+    if (!Number.isFinite(parsed)) {
+      setDraft(null);
+      return;
+    }
+    // Convert the displayed unit back to grams before writing.
+    onCommit(parsed / factor);
+    setDraft(null);
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="decimal"
+      value={draft !== null ? draft : displayStr}
+      onFocus={(e) => {
+        setDraft(displayStr);
+        const el = e.currentTarget;
+        setTimeout(() => {
+          try { el.select(); } catch {}
+        }, 0);
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit((e.target as HTMLInputElement).value);
+          inputRef.current?.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          setDraft(null);
+          inputRef.current?.blur();
+        }
+      }}
+      className="pricing__input"
+      style={{
+        width: 80,
+        // Override .pricing__input's default flex:1 — otherwise the
+        // width prop is ignored inside the parent inline-flex and the
+        // numeric column drifts.
+        flex: "0 0 80px",
+        textAlign: "right",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    />
   );
 }
 
