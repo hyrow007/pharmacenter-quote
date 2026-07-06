@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/auth/server";
+import { isAdmin } from "@/lib/workflows";
 import {
   diffIdentity,
   recordFromRow,
@@ -203,4 +204,35 @@ export async function PUT(
   }
 
   return NextResponse.json({ ok: true, formula: after });
+}
+
+// --- DELETE ------------------------------------------------------------------
+// Admin-only. Hard-deletes the formula row; the versions / audit / notes rows
+// cascade off it via the `on delete cascade` FKs. Non-admins get a 403 so the
+// UI's delete affordance stays admin-gated end-to-end (client hides the
+// button; server rejects even a hand-rolled request).
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const gated = await gatedClient();
+  if (gated.error) return gated.error;
+  const { supabase, user } = gated;
+  const { id } = await params;
+
+  const admin = await isAdmin(supabase, user.email);
+  if (!admin) {
+    return NextResponse.json({ ok: false, error: "not_admin" }, { status: 403 });
+  }
+
+  const { error } = await supabase
+    .from("gummy_formulas")
+    .delete()
+    .eq("id", id);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

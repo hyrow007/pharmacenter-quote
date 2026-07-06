@@ -20,15 +20,46 @@ import {
 
 type Props = {
   initialFormulas: GummyFormulaRecord[];
+  /** id → name lookup used to render the Customer column. */
+  customersById: Record<string, string>;
+  /** Admins see a Delete affordance per row; everyone else sees data only. */
+  isAdmin: boolean;
 };
 
-export default function FormulasCatalog({ initialFormulas }: Props) {
+export default function FormulasCatalog({
+  initialFormulas,
+  customersById,
+  isAdmin,
+}: Props) {
   const router = useRouter();
-  const [formulas] = useState<GummyFormulaRecord[]>(initialFormulas);
+  const [formulas, setFormulas] = useState<GummyFormulaRecord[]>(initialFormulas);
   const [query, setQuery] = useState("");
   const [shapeFilter, setShapeFilter] = useState<string>("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/formulas/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setDeleteError(json.error || `delete_failed_${res.status}`);
+        setDeletingId(null);
+        return;
+      }
+      setFormulas((prev) => prev.filter((f) => f.id !== id));
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "delete_failed");
+      setDeletingId(null);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,7 +115,7 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by PC-BK code, name, or flavor…"
+          placeholder="Search by product code, name, or flavor…"
           className="pricing__input"
           style={{ flex: "1 1 260px", minWidth: 240 }}
           autoComplete="off"
@@ -138,6 +169,22 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
           Couldn&apos;t create formula: {createError}
         </div>
       ) : null}
+      {deleteError ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12,
+            padding: "8px 12px",
+            background: "#fdecec",
+            border: "1px solid #f5c2c2",
+            color: "#8b2f2f",
+            borderRadius: 6,
+            fontSize: 12,
+          }}
+        >
+          Couldn&apos;t delete formula: {deleteError}
+        </div>
+      ) : null}
 
       {/* Table --------------------------------------------------------- */}
       {filtered.length === 0 ? (
@@ -173,12 +220,14 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
               {/* Sequential formula identifier ("F0001") — DB-assigned so
                   operators have a scannable, catalog-stable handle. */}
               <Th>Formula</Th>
-              <Th>PC-BK</Th>
+              <Th>Product Code</Th>
               <Th>Name</Th>
+              <Th>Customer</Th>
               <Th>Shape</Th>
               <Th>Flavor</Th>
               <Th style={{ textAlign: "right" }}>Version</Th>
               <Th>Updated</Th>
+              {isAdmin ? <Th style={{ textAlign: "right", width: 90 }}>Actions</Th> : null}
             </tr>
           </thead>
           <tbody>
@@ -240,6 +289,13 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
                   <span style={{ fontWeight: 600 }}>{f.name}</span>
                 </Td>
                 <Td>
+                  {f.customerId && customersById[f.customerId] ? (
+                    customersById[f.customerId]
+                  ) : (
+                    <em style={{ color: "#8a9498" }}>—</em>
+                  )}
+                </Td>
+                <Td>
                   <span
                     style={{
                       display: "inline-block",
@@ -262,6 +318,75 @@ export default function FormulasCatalog({ initialFormulas }: Props) {
                 <Td style={{ color: "var(--ink-3, #8a9498)", fontSize: 12 }}>
                   {formatDate(f.updatedAt)}
                 </Td>
+                {isAdmin ? (
+                  <Td
+                    style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                    // Stop the row click (which opens the editor) from
+                    // firing when the admin interacts with the delete
+                    // controls in this cell.
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {confirmDeleteId === f.id ? (
+                      <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(f.id)}
+                          disabled={deletingId === f.id}
+                          style={{
+                            padding: "3px 10px",
+                            background: "#a13a2a",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            cursor: deletingId === f.id ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {deletingId === f.id ? "…" : "Delete"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          disabled={deletingId === f.id}
+                          style={{
+                            padding: "3px 10px",
+                            background: "transparent",
+                            color: "var(--ink-2, #4a5c60)",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Keep
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(f.id)}
+                        title="Admin only"
+                        style={{
+                          padding: "3px 8px",
+                          background: "transparent",
+                          color: "#a13a2a",
+                          border: "none",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </Td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -302,12 +427,17 @@ function Th({
 function Td({
   children,
   style,
+  onClick,
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  onClick?: (e: React.MouseEvent) => void;
 }) {
   return (
-    <td style={{ padding: "10px 12px", verticalAlign: "middle", ...style }}>
+    <td
+      style={{ padding: "10px 12px", verticalAlign: "middle", ...style }}
+      onClick={onClick}
+    >
       {children}
     </td>
   );

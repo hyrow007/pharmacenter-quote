@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
+import { isAdmin } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import FormulasCatalog from "./FormulasCatalog";
 import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
@@ -23,6 +24,9 @@ export default async function FormulasPage() {
     redirect("/");
   }
 
+  // Admin flag drives the Delete affordance on each catalog row.
+  const admin = await isAdmin(supabase, user.email);
+
   // Initial list — active rows only, most-recently-touched first. The
   // client can flip an "includeInactive" toggle to see soft-deleted rows
   // when needed.
@@ -37,6 +41,28 @@ export default async function FormulasPage() {
   const initialFormulas: GummyFormulaRecord[] = error
     ? []
     : (data ?? []).map(recordFromRow);
+
+  // Resolve customer names for the catalog's Customer column. We fetch
+  // in a second query rather than a join so we can share the customers
+  // lookup with any future callers on this page. Keyed by id → name so
+  // the client can render the pill without another round trip.
+  const customerIds = Array.from(
+    new Set(
+      initialFormulas
+        .map((f) => f.customerId)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const customersById: Record<string, string> = {};
+  if (customerIds.length > 0) {
+    const { data: customerRows } = await supabase
+      .from("customers")
+      .select("id, name")
+      .in("id", customerIds);
+    (customerRows ?? []).forEach((row) => {
+      if (row.id && row.name) customersById[row.id] = row.name;
+    });
+  }
 
   return (
     <div className="app-shell">
@@ -78,7 +104,11 @@ export default async function FormulasPage() {
             </p>
           </div>
 
-          <FormulasCatalog initialFormulas={initialFormulas} />
+          <FormulasCatalog
+            initialFormulas={initialFormulas}
+            customersById={customersById}
+            isAdmin={admin}
+          />
         </div>
       </main>
     </div>
