@@ -7335,32 +7335,23 @@ function OverageInput({
         : "#8b2f2f";
 
   return (
-    // Fixed-width outer box so both the input row and the caption line
-    // share the same right edge across every row in the column — an
-    // inline-flex shrink-to-fit column would follow whichever child
-    // happened to be widest, and captions like "Claim Baseline: 4.31 g"
-    // vs "Claim Baseline: 1.72 g" can drift by a pixel or two of digit
-    // width, dragging the "%" glyph off column.
+    // Plain block with text-align: right — lets the container size
+    // naturally to the surrounding BTd cell (no overflow into the
+    // Grams column) while both the input row and the Claim Baseline
+    // caption right-anchor to the same edge. The row uses inline-flex
+    // so its chevrons + input + "%" pack tight; the caption is text
+    // that right-aligns via the outer text-align.
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: 2,
+        textAlign: "right",
         lineHeight: 1.15,
-        // Wide enough for [chevrons < >] + 64px input + gap + "%" + a
-        // typical "Claim Baseline: 4.31 g" caption. Right-anchored via
-        // the parent BTd's text-align: right, so the box hugs the
-        // column edge regardless of internal content width.
-        width: 148,
       }}
     >
       <div
         style={{
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           gap: 4,
-          justifyContent: "flex-end",
         }}
       >
         {/* Nudge chevrons live on the LEFT so the browser's native
@@ -7483,16 +7474,20 @@ function OverageInput({
           %
         </span>
       </div>
-      <span
+      {/* Caption on its own line — a <div> forces a new row below the
+          inline-flex input row above so the two lines stack cleanly
+          instead of the caption sliding up to the right of "%". */}
+      <div
         className="fe-print-hide"
         style={{
           fontSize: 12,
           color: "var(--ink-3, #8a9498)",
           fontWeight: 400,
+          marginTop: 2,
         }}
       >
         Claim Baseline: {Format.grams(baseG)} g
-      </span>
+      </div>
     </div>
   );
 }
