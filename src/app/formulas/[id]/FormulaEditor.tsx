@@ -5388,7 +5388,13 @@ function BlendSectionCard({
                           renders in the Secondary Blend subsection; other
                           subsections keep their existing layout. */}
                       {showOverageColumn ? (
-                        <BTh style={{ textAlign: "right", width: 90 }}>
+                        <BTh
+                          style={{
+                            textAlign: "right",
+                            width: 90,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           Overage %
                         </BTh>
                       ) : null}
