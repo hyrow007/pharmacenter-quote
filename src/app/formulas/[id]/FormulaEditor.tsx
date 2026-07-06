@@ -1703,13 +1703,23 @@ export default function FormulaEditor({
             white-space: nowrap;
           }
           tbody td { vertical-align: middle !important; }
+          /* Undo ellipsis truncation on ingredient-name spans so
+             names like "Broccoli Sprout P.E (1% Glucoraphanin)" wrap
+             onto a second line instead of getting cut with "…". */
+          [style*="text-overflow: ellipsis"] {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            min-width: 0 !important;
+          }
           /* The ingredient tables have a delete-× cell at the very
              right of every row (both <td> and its <th> in the header).
-             We hide the button globally on print but the empty <td>
-             still occupies a phantom column. :has() hides any cell
-             whose only child is a button so the column collapses. */
-          td:has(> button:only-child),
-          th:has(> button:only-child) {
+             The button is hidden globally on print; :has() hides the
+             enclosing cell so the phantom column collapses. Broadened
+             from :only-child to any button descendant so whitespace
+             text nodes around the button don't defeat the match. */
+          td:has(button),
+          th:has(button) {
             display: none !important;
           }
           /* Add space between the ingredient-name column and the first
