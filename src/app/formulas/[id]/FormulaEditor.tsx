@@ -1425,6 +1425,11 @@ export default function FormulaEditor({
            on-screen view stays as-is. */
         .fe-print-only { display: none; }
 
+        /* "d line" — dotted section divider used in the printed sheet
+           to separate blocks (e.g. under Label Claims, above Key
+           Indicators). Hidden on-screen so it only shows on paper. */
+        .fe-d-line { display: none; }
+
         @media print {
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
@@ -1481,6 +1486,24 @@ export default function FormulaEditor({
              top-of-page prominence. Hide the inline copy inside the
              Product Details card to avoid printing it twice. */
           .fe-customer-inline { display: none !important; }
+
+          /* d line — shown on print as a thin dotted rule that
+             separates sections. Applied to <hr class="fe-d-line">
+             elements dropped into the JSX (e.g. after Label Claims)
+             and as a top border on the .fe-bench-and-indicators row
+             to separate Product Details from Key Indicators. */
+          .fe-d-line {
+            display: block !important;
+            border: none !important;
+            border-top: 1px dotted #999 !important;
+            margin: 8px 0 !important;
+            height: 0 !important;
+          }
+          .fe-bench-and-indicators {
+            border-top: 1px dotted #999 !important;
+            padding-top: 8px !important;
+            margin-top: 8px !important;
+          }
 
           /* Drop card borders + shadows so the print reads as clean
              typography rather than a stack of framed rectangles.
@@ -2009,6 +2032,7 @@ export default function FormulaEditor({
               </select>
               <span
                 aria-hidden="true"
+                className="fe-print-hide"
                 style={{
                   position: "absolute",
                   right: 2,
@@ -2144,6 +2168,11 @@ export default function FormulaEditor({
           onUpdate={updateLabelClaim}
           onRemove={removeLabelClaim}
         />
+
+        {/* d line — dotted print-only divider under Label Claims, closes
+            out the Product Details section on the printed page. Hidden
+            on-screen via .fe-d-line default in the print stylesheet. */}
+        <hr className="fe-d-line" />
 
         {/* Version / Updated / by meta strip now lives above the identity
             card, inside /formulas/[id]/page.tsx — it renders identically
