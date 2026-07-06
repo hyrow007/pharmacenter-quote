@@ -2781,7 +2781,23 @@ function BenchTopTab({
           cast weight, and the piece count the batch yields.
           Sized to its content so the right (Key Indicators) card
           gets the remaining width for the equation. */}
-      <div style={{ ...cardStyle, display: "flex", alignItems: "center" }}>
+      <div style={{ ...cardStyle }}>
+        {/* Card title mirrors the "Key Indicators" heading on the
+            neighboring card so both panels read as peer sections. */}
+        <div
+          style={{
+            fontSize: 14.5,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+            marginBottom: 8,
+            paddingBottom: 4,
+            borderBottom: "1px solid var(--line, #e3dcc9)",
+          }}
+        >
+          Batch Setup
+        </div>
         <div
           className="fe-bench-stats"
           style={{ display: "flex", flexDirection: "column", gap: 10 }}
