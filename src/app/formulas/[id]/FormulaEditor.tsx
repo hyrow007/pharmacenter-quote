@@ -1519,14 +1519,19 @@ export default function FormulaEditor({
              indicators wrapper, which duplicated the line already sitting
              under Label Claims. Now the outer wrapper has no top border
              and the Key Indicators card carries the line, so it lands
-             where the operator actually needs a section break. */
+             where the operator actually needs a section break.
+             flex-direction: column is REQUIRED here so the two cards
+             stack vertically — otherwise border-top on the KI card puts
+             the line above it (at the top of the row) instead of between. */
           .fe-bench-and-indicators {
+            flex-direction: column !important;
             margin-top: 4px !important;
           }
           .fe-key-indicators-card {
             border-top: 1px dotted #999 !important;
-            padding-top: 8px !important;
-            margin-top: 8px !important;
+            padding-top: 10px !important;
+            margin-top: 10px !important;
+            width: 100% !important;
           }
           /* Kill the dashed divider inside Key Indicators — the user
              asked for the KI panel to read as one block, not split. */
