@@ -1452,9 +1452,11 @@ export default function FormulaEditor({
           }
           /* Zero page margin suppresses browser-generated headers
              (date + page title) on Chrome/Edge/Safari; body padding
-             below gives the content the intended breathing room. */
+             below gives the content the intended breathing room. Top
+             padding is trimmed to 0.2in so the title sits closer to
+             the top edge of the page. */
           @page { margin: 0; size: portrait; }
-          body { padding: 0.4in !important; }
+          body { padding: 0.2in 0.4in 0.4in !important; }
 
           /* Process notes wrappers vanish from print — they're
              editorial background for the R&D bench, not part of a
@@ -1512,11 +1514,31 @@ export default function FormulaEditor({
             margin: 8px 0 !important;
             height: 0 !important;
           }
+          /* d line ONLY between Batch Setup and Key Indicators.
+             Previously we drew it at the top of the whole bench-and-
+             indicators wrapper, which duplicated the line already sitting
+             under Label Claims. Now the outer wrapper has no top border
+             and the Key Indicators card carries the line, so it lands
+             where the operator actually needs a section break. */
           .fe-bench-and-indicators {
+            margin-top: 4px !important;
+          }
+          .fe-key-indicators-card {
             border-top: 1px dotted #999 !important;
             padding-top: 8px !important;
             margin-top: 8px !important;
           }
+          /* Kill the dashed divider inside Key Indicators — the user
+             asked for the KI panel to read as one block, not split. */
+          .fe-ki-row2 { border-top: none !important; margin-top: 6px !important; padding-top: 0 !important; }
+          /* Center the % of bench batch on its own row (rather than
+             margin-left: auto pushing it against the right edge). */
+          .fe-ki-pct-of-bench {
+            margin-left: 0 !important;
+            width: 100% !important;
+            align-items: center !important;
+          }
+          .fe-key-indicators-row { flex-direction: column !important; align-items: center !important; }
 
           /* d line above every blend subheading (Primary Blend, Secondary
              Blend, Final Blend, Primary Blend Carry Over) so ingredient
@@ -1722,7 +1744,7 @@ export default function FormulaEditor({
         <div
           style={{
             marginTop: 4,
-            fontSize: 10,
+            fontSize: 12,
             color: "#333",
             display: "flex",
             gap: 14,
@@ -2915,7 +2937,10 @@ function BenchTopTab({
       {/* Right card — Key Indicators equation + % of bench batch.
           Grows to fill remaining space so the equation stays readable
           without cramping on wider viewports. */}
-      <div style={{ ...cardStyle, flex: 1, minWidth: 0 }}>
+      <div
+        className="fe-key-indicators-card"
+        style={{ ...cardStyle, flex: 1, minWidth: 0 }}
+      >
         {/* Key Indicators — per-phase blend totals wired together as a
             visible equation: Primary + Secondary + Final = Total. The
             block is laid out on a CSS grid with two rows so each label
@@ -2987,6 +3012,7 @@ function BenchTopTab({
                 centered under the label without stretching the cell
                 past the card edge. */}
             <div
+              className="fe-ki-pct-of-bench"
               style={{
                 marginLeft: "auto",
                 display: "flex",
@@ -3029,6 +3055,7 @@ function BenchTopTab({
               instead of two orphan stats. Both groups are centered in
               the row with a comfortable gap so nothing feels stranded. */}
           <div
+            className="fe-ki-row2"
             style={{
               display: "flex",
               alignItems: "center",
