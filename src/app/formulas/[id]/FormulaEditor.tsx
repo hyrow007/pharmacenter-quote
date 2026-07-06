@@ -7186,11 +7186,14 @@ function GramsInput({
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const displayN = (grams ?? 0) * factor;
-  // Snap to the requested decimals then trim trailing zeros so 4.740
-  // reads as 4.74 (no dangling zero) but 4.7 stays as 4.7. Number()
-  // round-trip does the trim automatically.
+  // Snap to the requested decimals AND keep trailing zeros so the
+  // whole column reads as the same precision. 3 decimals with grams
+  // = 2 renders as "2.000" rather than "2" — matches the section
+  // total row (which is `.toFixed(totalDecimals)` too). Draft mode
+  // still uses the operator's raw typing.
+  const clampedDecimals = Math.max(0, Math.min(6, decimals));
   const displayStr = Number.isFinite(displayN)
-    ? String(Number(displayN.toFixed(Math.max(0, Math.min(6, decimals)))))
+    ? displayN.toFixed(clampedDecimals)
     : "0";
 
   const commit = (raw: string) => {
