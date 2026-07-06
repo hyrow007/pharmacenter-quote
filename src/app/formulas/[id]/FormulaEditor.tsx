@@ -1433,8 +1433,11 @@ export default function FormulaEditor({
         @media print {
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
-             elements, and back pills. Only the formula content prints. */
-          nav, header, .app-nav, .app-nav__inner, .app-nav__brand,
+             elements, and back pills. Only the formula content prints.
+             NOTE: we intentionally don't blanket-hide <header> because
+             the BlendSectionCard uses <header> for its "Pre-cook blend"
+             / "Cooked blend" titles, which we DO want on the print. */
+          nav, .app-nav, .app-nav__inner, .app-nav__brand,
           .app-nav__user, .app-nav__email, .app-nav__product,
           .app-nav__logo, .app-nav__divider,
           .app-header, [class*="BackPill"],
@@ -1487,6 +1490,16 @@ export default function FormulaEditor({
              Product Details card to avoid printing it twice. */
           .fe-customer-inline { display: none !important; }
 
+          /* Product Details identity (name / product code / shape /
+             flavor) is already shown in the print header at the top
+             of page 1. Hide the duplicate section title + identity row
+             from print — but keep Label Claims below them, which the
+             floor still needs. */
+          .fe-product-details-title,
+          .fe-identity-row {
+            display: none !important;
+          }
+
           /* d line — shown on print as a thin dotted rule that
              separates sections. Applied to <hr class="fe-d-line">
              elements dropped into the JSX (e.g. after Label Claims)
@@ -1512,6 +1525,64 @@ export default function FormulaEditor({
             border-top: 1px dotted #999 !important;
             padding-top: 6px !important;
             margin-top: 8px !important;
+          }
+
+          /* -------- Dotted-line uniformity --------
+             Anywhere the app draws a dashed line (e.g. Key Indicators
+             row 2's divider) gets normalized to the same dotted style
+             the d lines use, so the printed sheet only shows ONE line
+             treatment. Also full-width so every d line spans identically. */
+          [style*="dashed"] {
+            border-top-style: dotted !important;
+            border-top-color: #999 !important;
+            border-top-width: 1px !important;
+          }
+          hr.fe-d-line,
+          .fe-blend-subheading,
+          .fe-bench-and-indicators {
+            width: 100% !important;
+          }
+
+          /* -------- Font size + weight consistency --------
+             Base body is 10pt; headings step up in fixed increments so
+             the visual hierarchy reads the same across every section
+             instead of each inline style choosing its own size. */
+          body { font-family: sans-serif; font-size: 10pt; font-weight: 400; }
+          /* Big card titles (Product Details, Batch Setup, Key Indicators,
+             Pre-cook blend, Cooked blend) all render at the same 13pt
+             bold teal size. Targets the specific inline patterns those
+             cards use so we don't have to hunt down each site. */
+          [style*="font-size: 20px"],
+          [style*="fontSize: 20"] {
+            font-size: 13pt !important;
+            font-weight: 800 !important;
+          }
+          /* Second-tier titles ("Label claims", "KEY INDICATORS", etc.)
+             render at 11pt bold. */
+          [style*="font-size: 14.5"], [style*="fontSize: 14.5"] {
+            font-size: 11pt !important;
+            font-weight: 700 !important;
+          }
+          /* Third-tier — the small uppercase field labels ("PRODUCT CODE",
+             "BENCH TOP BATCH SIZE", etc.). Normalize letter-spacing +
+             weight so different sites all read the same. */
+          [style*="letter-spacing: 0.14em"],
+          [style*="letter-spacing: 0.08em"],
+          [style*="letter-spacing: 0.09em"],
+          [style*="letter-spacing: 0.06em"] {
+            font-size: 8.5pt !important;
+            letter-spacing: 0.08em !important;
+          }
+          /* Values (numeric grams / percentages) uniform at 10.5pt
+             semibold so every stat reads the same. */
+          [style*="font-size: 22"], [style*="fontSize: 22"],
+          [style*="font-size: 20"] input {
+            font-size: 12pt !important;
+            font-weight: 700 !important;
+          }
+          /* Hint copy is small regular — never bold, never large. */
+          [style*="var(--ink-3"] {
+            font-weight: 400 !important;
           }
 
           /* Drop card borders + shadows so the print reads as clean
@@ -1734,6 +1805,7 @@ export default function FormulaEditor({
         {/* Card title — bold, teal, with a thin teal underline to
             anchor it inside the card without a separate tab shape. */}
         <div
+          className="fe-product-details-title"
           style={{
             fontSize: 20,
             fontWeight: 800,
