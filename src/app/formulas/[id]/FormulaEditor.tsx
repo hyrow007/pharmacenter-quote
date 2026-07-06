@@ -1525,9 +1525,30 @@ export default function FormulaEditor({
             box-shadow: none !important;
           }
 
-          /* Cards + tables resilient across page breaks. */
-          section, table, .fe-print-block { break-inside: avoid-page; }
-          .fe-note-row { break-inside: avoid; }
+          /* Let sections break across pages so the browser can pack
+             page 1 with actual content instead of leaving big dead
+             space at the bottom when the next section wouldn't fit
+             whole. Notes and table rows still stay intact so a single
+             row never straddles a page break. */
+          .fe-note-row, tr { break-inside: avoid; }
+
+          /* Compress vertical spacing so more content fits per page.
+             Every card block on-screen has generous margin/padding for
+             a spacious editor feel — on paper it just wastes room. */
+          section { margin-top: 6px !important; }
+          h1, h2, h3, h4 { margin-top: 4px !important; margin-bottom: 2px !important; }
+          .fe-bench-and-indicators { margin-bottom: 6px !important; }
+          /* Tighten inline paddings on inline-styled card wrappers. */
+          [style*="padding: 18px"] { padding: 8px !important; }
+          [style*="padding: \"14px 16px\""] { padding: 8px 12px !important; }
+          [style*="padding: \"10px 14px 14px\""] { padding: 6px 10px !important; }
+          [style*="marginBottom: 18"] { margin-bottom: 6px !important; }
+          [style*="marginBottom: 14"] { margin-bottom: 5px !important; }
+          [style*="marginBottom: 12"] { margin-bottom: 4px !important; }
+          [style*="marginTop: 24"] { margin-top: 8px !important; }
+          [style*="marginTop: 18"] { margin-top: 6px !important; }
+          /* Cell rows get a tiny bit of vertical air, no more. */
+          td, th { padding: 3px 6px !important; }
 
           /* Inputs and selects render as static-looking chips so the
              sheet reads as text, not a form. */
@@ -1566,7 +1587,7 @@ export default function FormulaEditor({
         }}
       >
         <div style={{ fontSize: 16, fontWeight: 800, color: "#0f4a56" }}>
-          PharmaCenter — Gummy Formula Spec Sheet
+          PharmaCenter — Gummy Formula Sheet (Bench top batch)
         </div>
         <div
           style={{
