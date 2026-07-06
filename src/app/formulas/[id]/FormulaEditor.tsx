@@ -5482,6 +5482,7 @@ function BlendSectionCard({
                             savedSolutions={savedSolutions}
                             sectionUnit={effectiveSectionUnit}
                             unitFactor={factor}
+                            decimals={totalDecimals}
                             onUpdate={(patch) => onUpdate(row.id, patch)}
                             onSaveToLibrary={() => onSaveSolutionToLibrary(row)}
                             onRemove={() => onRemoveRow(row.id)}
@@ -7613,6 +7614,7 @@ function SolutionRow({
   savedSolutions,
   sectionUnit,
   unitFactor,
+  decimals,
   onUpdate,
   onSaveToLibrary,
   onRemove,
@@ -7626,6 +7628,9 @@ function SolutionRow({
   savedSolutions: SavedSolution[];
   sectionUnit: LabelClaimUnit;
   unitFactor: number;
+  /** Section's decimal chevron setting — the solution's grams display
+   *  honors it too so all rows in the section share one precision. */
+  decimals: number;
   onUpdate: (patch: Partial<GummyFormulaIngredient>) => void;
   onSaveToLibrary: () => Promise<
     { ok: true; solution: SavedSolution } | { ok: false; error: string }
@@ -8011,43 +8016,15 @@ function SolutionRow({
                   gap: 4,
                 }}
               >
-                <input
-                  type="number"
-                onFocus={(e) => {
-                  // Chrome's <input type="number"> doesn't select on
-                  // focus synchronously — defer one frame so the
-                  // digits are highlighted and any keystroke replaces
-                  // the placeholder 0 instead of prepending to it.
-                  const el = e.currentTarget;
-                  setTimeout(() => {
-                    try { el.select(); } catch {}
-                  }, 0);
-                }}
-                  value={
-                    row.grams !== null && row.grams !== undefined
-                      ? row.grams * unitFactor
-                      : 0
-                  }
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    // Store as grams regardless of display unit so the
-                    // saved formula scales identically no matter which
-                    // unit the author happened to be viewing.
-                    onUpdate({
-                      grams: Number.isFinite(n) ? n / unitFactor : 0,
-                    });
-                  }}
-                  step="0.1"
-                  min={0}
-                  className="pricing__input"
-                  style={{
-                    width: 80,
-                    // Force literal width (see ingredient grams input
-                    // above for why this override is needed).
-                    flex: "0 0 80px",
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
+                {/* Uses the same GramsInput as ingredient rows so the
+                    section's decimal chevron controls every grams cell
+                    in the table — ingredient rows, solution rows, and
+                    the section total all share one precision. */}
+                <GramsInput
+                  grams={row.grams}
+                  factor={unitFactor}
+                  decimals={decimals}
+                  onCommit={(nextGrams) => onUpdate({ grams: nextGrams })}
                 />
                 <span
                   style={{
