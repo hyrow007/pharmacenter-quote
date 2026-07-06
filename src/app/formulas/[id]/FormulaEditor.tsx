@@ -1505,6 +1505,15 @@ export default function FormulaEditor({
             margin-top: 8px !important;
           }
 
+          /* d line above every blend subheading (Primary Blend, Secondary
+             Blend, Final Blend, Primary Blend Carry Over) so ingredient
+             sections are visually separated on the printed sheet. */
+          .fe-blend-subheading {
+            border-top: 1px dotted #999 !important;
+            padding-top: 6px !important;
+            margin-top: 8px !important;
+          }
+
           /* Drop card borders + shadows so the print reads as clean
              typography rather than a stack of framed rectangles.
              Targets any inline style using the app's --line palette
@@ -5037,6 +5046,7 @@ function BlendSectionCard({
                   null so nothing renders. */}
               {subHeading ? (
                 <div
+                  className="fe-blend-subheading"
                   style={{
                     padding: "10px 14px 4px",
                     borderTop: "1px solid var(--line-2, #efe9da)",
