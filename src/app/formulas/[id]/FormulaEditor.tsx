@@ -7239,10 +7239,16 @@ function OverageInput({
       setDraft(null);
       return;
     }
-    // Back-solve grams from the operator's overage %, rounded to 3
-    // decimals so paired displays (grams input) don't show float noise.
+    // Back-solve grams from the operator's overage %. Rounded to 5
+    // decimals — enough precision that when displayPct re-derives
+    // overage from grams at 2-decimal display precision, the number
+    // the operator typed round-trips cleanly (typing 10% now shows
+    // 10.00%, not 9.99%). For typical bench baselines in the 0.5–10 g
+    // range this leaves the grams input reading like 4.74138 g rather
+    // than 4.7413793103…, which is still clean but preserves the
+    // display invariant.
     const rawG = baseG * (1 + parsed / 100);
-    const cleanG = Math.round(rawG * 1000) / 1000;
+    const cleanG = Math.round(rawG * 100000) / 100000;
     onCommit(cleanG);
     setDraft(null);
   };
@@ -7251,7 +7257,7 @@ function OverageInput({
     if (!canCompute) return;
     const next = Math.round((displayPct + deltaPct) * 100) / 100;
     const rawG = baseG * (1 + next / 100);
-    const cleanG = Math.round(rawG * 1000) / 1000;
+    const cleanG = Math.round(rawG * 100000) / 100000;
     onCommit(cleanG);
   };
 
