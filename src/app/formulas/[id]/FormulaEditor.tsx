@@ -1426,17 +1426,54 @@ export default function FormulaEditor({
         .fe-print-only { display: none; }
 
         @media print {
-          /* App chrome disappears — AppHeader, nav bar, back-to-formulas
-             pill. Only the formula content prints. */
-          nav, .app-header, header[data-app-header],
-          [class*="BackPill"], a[href^="/formulas"] { display: none !important; }
+          /* App chrome disappears — AppHeader (the branded top bar uses
+             .app-nav in this app, plus its inner subclasses), nav
+             elements, and back pills. Only the formula content prints. */
+          nav, header, .app-nav, .app-nav__inner, .app-nav__brand,
+          .app-nav__user, .app-nav__email, .app-nav__product,
+          .app-nav__logo, .app-nav__divider,
+          .app-header, [class*="BackPill"],
+          a[href^="/formulas"], a[href="/workflows"] {
+            display: none !important;
+          }
 
           body, html {
             background: #fff !important;
             color: #000 !important;
             font-size: 10pt;
           }
-          @page { margin: 0.4in; size: portrait; }
+          /* Zero page margin suppresses browser-generated headers
+             (date + page title) on Chrome/Edge/Safari; body padding
+             below gives the content the intended breathing room. */
+          @page { margin: 0; size: portrait; }
+          body { padding: 0.4in !important; }
+
+          /* Process notes wrappers vanish from print — they're
+             editorial background for the R&D bench, not part of a
+             printed spec sheet the floor will read. */
+          .fe-process-notes { display: none !important; }
+
+          /* Drop card borders + shadows so the print reads as clean
+             typography rather than a stack of framed rectangles.
+             Targets any inline style using the app's --line palette
+             (the outer card wrappers) or the sticky-card shadow. */
+          [style*="1px solid var(--line"],
+          [style*="1.5px solid var(--line"],
+          [style*="2px solid var(--line"] {
+            border: none !important;
+          }
+          [style*="box-shadow"] { box-shadow: none !important; }
+          /* Kill the cream-colored card backgrounds so everything sits
+             on white paper. */
+          [style*="var(--cream"], [style*="var(--paper"],
+          [style*="var(--cream-soft"] {
+            background: #fff !important;
+          }
+          /* Tables keep their own borders — restore them (the wildcard
+             rule above would nuke them). */
+          table, th, td {
+            border: 1px solid #ccc !important;
+          }
 
           /* Show the print-only meta header. */
           .fe-print-only { display: block !important; }
@@ -4638,6 +4675,7 @@ function BlendSectionCard({
           currentCookingNote.trim() === currentDefaultCookingNote.trim();
         return (
           <div
+            className="fe-process-notes"
             style={{
               padding: "10px 14px 14px",
               borderBottom: "1px solid var(--line-2, #efe9da)",
@@ -4899,6 +4937,7 @@ function BlendSectionCard({
                   - Once edited, a "Reset to default" link appears to bring
                     it back to the canonical text. */}
               <div
+                className="fe-process-notes"
                 style={{
                   padding: "10px 14px 14px",
                   borderBottom: "1px solid var(--line-2, #efe9da)",
