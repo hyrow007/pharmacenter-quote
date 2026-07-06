@@ -1693,8 +1693,15 @@ export default function FormulaEditor({
           [style*="marginBottom: 12"] { margin-bottom: 4px !important; }
           [style*="marginTop: 24"] { margin-top: 8px !important; }
           [style*="marginTop: 18"] { margin-top: 6px !important; }
-          /* Cell rows get a tiny bit of vertical air, no more. */
+          /* Cell rows get a tiny bit of vertical air, no more. Numeric
+             cells (grams / %) never wrap so overage values sit cleanly
+             in their column instead of stacking onto two lines. Empty
+             cells show a dim en-dash instead of visible whitespace. */
           td, th { padding: 3px 6px !important; }
+          td { white-space: nowrap; }
+          /* Force middle-aligned content in ingredient rows so % / g
+             columns line up with the ingredient name row baseline. */
+          tbody td { vertical-align: middle !important; }
 
           /* Inputs and selects render as plain static text on the
              printed page — no borders, no underline, no form-y
@@ -1779,6 +1786,13 @@ export default function FormulaEditor({
           <span>
             <strong>Shape</strong> {shape}
           </span>
+          {/* Customer inline in the meta strip — no dedicated section
+              below. Renders only when a customer is bound. */}
+          {customerName ? (
+            <span>
+              <strong>Customer</strong> {customerName}
+            </span>
+          ) : null}
           <span style={{ marginLeft: "auto" }}>
             <strong>Printed</strong>{" "}
             {new Date().toLocaleDateString("en-US", {
@@ -1788,31 +1802,6 @@ export default function FormulaEditor({
             })}
           </span>
         </div>
-        {/* Customer block — mirrors the on-screen Customer subsection
-            (name + ship-to) but promoted to the very top of the print
-            for at-a-glance context. Only renders when a customer is
-            actually bound to the formula. */}
-        {customerName ? (
-          <div
-            style={{
-              marginTop: 6,
-              paddingTop: 6,
-              borderTop: "1px solid #ddd",
-              fontSize: 10.5,
-              color: "#333",
-            }}
-          >
-            <div style={{ fontWeight: 700, color: "#0f4a56", fontSize: 11 }}>
-              Customer
-            </div>
-            <div style={{ marginTop: 2, fontWeight: 700 }}>{customerName}</div>
-            {customerShipTo ? (
-              <div style={{ marginTop: 1, color: "#555" }}>
-                {customerShipTo}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       {/* ============ Identity header (sticky top) ============ */}
@@ -5703,6 +5692,7 @@ function BlendSectionCard({
                                       {label}
                                     </span>
                                     <span
+                                      className="fe-print-hide"
                                       style={{
                                         fontSize: 12,
                                         color: "var(--ink-3, #8a9498)",
