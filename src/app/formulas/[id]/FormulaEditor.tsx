@@ -1466,6 +1466,22 @@ export default function FormulaEditor({
           .fe-key-indicators-row { flex-wrap: wrap !important; }
           .fe-bench-and-indicators { flex-direction: column !important; }
 
+          /* Bench-top stats (batch size / piece weight / cast weight /
+             theoretical yield) render vertically on-screen; on paper
+             they read better as a horizontal strip so the card takes
+             one thin row instead of four narrow lines. */
+          .fe-bench-stats {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            gap: 24px !important;
+            width: 100% !important;
+          }
+
+          /* Customer block is duplicated into the print header for
+             top-of-page prominence. Hide the inline copy inside the
+             Product Details card to avoid printing it twice. */
+          .fe-customer-inline { display: none !important; }
+
           /* Drop card borders + shadows so the print reads as clean
              typography rather than a stack of framed rectangles.
              Targets any inline style using the app's --line palette
@@ -1631,6 +1647,31 @@ export default function FormulaEditor({
             })}
           </span>
         </div>
+        {/* Customer block — mirrors the on-screen Customer subsection
+            (name + ship-to) but promoted to the very top of the print
+            for at-a-glance context. Only renders when a customer is
+            actually bound to the formula. */}
+        {customerName ? (
+          <div
+            style={{
+              marginTop: 6,
+              paddingTop: 6,
+              borderTop: "1px solid #ddd",
+              fontSize: 10.5,
+              color: "#333",
+            }}
+          >
+            <div style={{ fontWeight: 700, color: "#0f4a56", fontSize: 11 }}>
+              Customer
+            </div>
+            <div style={{ marginTop: 2, fontWeight: 700 }}>{customerName}</div>
+            {customerShipTo ? (
+              <div style={{ marginTop: 1, color: "#555" }}>
+                {customerShipTo}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* ============ Identity header (sticky top) ============ */}
@@ -2056,24 +2097,26 @@ export default function FormulaEditor({
             an existing customer immediately fires an identity PUT so the
             customer_id persists without waiting for Save. New-customer
             creation is form-only for now — see the TODO below. */}
-        <CustomerSection
-          customerId={customerId}
-          customerName={customerName}
-          customerShipTo={customerShipTo}
-          customerMode={customerMode}
-          editing={editingCustomer}
-          search={customerSearch}
-          results={customerResults}
-          newCustomer={newCustomer}
-          onSetMode={setCustomerMode}
-          onSearchChange={setCustomerSearch}
-          onPick={pickCustomer}
-          onClear={clearCustomer}
-          onStartEdit={() => setEditingCustomer(true)}
-          onNewCustomerChange={(patch) =>
-            setNewCustomer((prev) => ({ ...prev, ...patch }))
-          }
-        />
+        <div className="fe-customer-inline">
+          <CustomerSection
+            customerId={customerId}
+            customerName={customerName}
+            customerShipTo={customerShipTo}
+            customerMode={customerMode}
+            editing={editingCustomer}
+            search={customerSearch}
+            results={customerResults}
+            newCustomer={newCustomer}
+            onSetMode={setCustomerMode}
+            onSearchChange={setCustomerSearch}
+            onPick={pickCustomer}
+            onClear={clearCustomer}
+            onStartEdit={() => setEditingCustomer(true)}
+            onNewCustomerChange={(patch) =>
+              setNewCustomer((prev) => ({ ...prev, ...patch }))
+            }
+          />
+        </div>
 
         {/* Label claims — active-ingredient claim rows under the identity
             row. Each claim pins to a raw material and carries an amount +
@@ -2686,7 +2729,10 @@ function BenchTopTab({
           Sized to its content so the right (Key Indicators) card
           gets the remaining width for the equation. */}
       <div style={{ ...cardStyle, display: "flex", alignItems: "center" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div
+          className="fe-bench-stats"
+          style={{ display: "flex", flexDirection: "column", gap: 10 }}
+        >
           <BenchTopWeightInput
             label="Bench top batch size"
             value={benchBatchG}
