@@ -7335,20 +7335,32 @@ function OverageInput({
         : "#8b2f2f";
 
   return (
+    // Fixed-width outer box so both the input row and the caption line
+    // share the same right edge across every row in the column — an
+    // inline-flex shrink-to-fit column would follow whichever child
+    // happened to be widest, and captions like "Claim Baseline: 4.31 g"
+    // vs "Claim Baseline: 1.72 g" can drift by a pixel or two of digit
+    // width, dragging the "%" glyph off column.
     <div
       style={{
-        display: "inline-flex",
+        display: "flex",
         flexDirection: "column",
         alignItems: "flex-end",
         gap: 2,
         lineHeight: 1.15,
+        // Wide enough for [chevrons < >] + 64px input + gap + "%" + a
+        // typical "Claim Baseline: 4.31 g" caption. Right-anchored via
+        // the parent BTd's text-align: right, so the box hugs the
+        // column edge regardless of internal content width.
+        width: 148,
       }}
     >
       <div
         style={{
-          display: "inline-flex",
+          display: "flex",
           alignItems: "center",
           gap: 4,
+          justifyContent: "flex-end",
         }}
       >
         {/* Nudge chevrons live on the LEFT so the browser's native
