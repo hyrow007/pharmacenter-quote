@@ -1440,6 +1440,22 @@ export default function FormulaEditor({
            Indicators). Hidden on-screen so it only shows on paper. */
         .fe-d-line { display: none; }
 
+        /* Suppress the native number-input spinner on the overage %
+           editor so its own custom < > chevrons (rendered to the LEFT
+           of the input) don't fight the browser's right-side spinner
+           for the same visual real estate. Applies both on screen and
+           on paper — the chevrons are ".fe-print-hide"'d for print. */
+        .fe-overage-input::-webkit-inner-spin-button,
+        .fe-overage-input::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          appearance: none;
+          margin: 0;
+        }
+        .fe-overage-input {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+
         @media print {
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
@@ -5719,6 +5735,17 @@ function BlendSectionCard({
                                 const displayPct = canCompute
                                   ? Math.round(rawPct * 100) / 100
                                   : 0;
+                                // Helper: write a new overage % back into
+                                // grams, rounded to 3 decimals so the two
+                                // inputs display clean numbers instead of
+                                // float-noise like 4.504310.
+                                const writeOverage = (nextPct: number) => {
+                                  if (!canCompute) return;
+                                  if (!Number.isFinite(nextPct)) return;
+                                  const raw = baseG * (1 + nextPct / 100);
+                                  const clean = Math.round(raw * 1000) / 1000;
+                                  onUpdate(row.id, { grams: clean });
+                                };
                                 return (
                                   <div
                                     style={{
@@ -5736,6 +5763,82 @@ function BlendSectionCard({
                                         gap: 4,
                                       }}
                                     >
+                                      {/* Nudge chevrons live on the LEFT so
+                                          the browser's native spin-button
+                                          (which sits on the right and
+                                          overlaps the "%" glyph) is out of
+                                          the way. Suppressed on print via
+                                          fe-print-hide. */}
+                                      <span
+                                        className="fe-print-hide"
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 2,
+                                          marginRight: 2,
+                                        }}
+                                      >
+                                        <button
+                                          type="button"
+                                          disabled={!canCompute}
+                                          onClick={() =>
+                                            writeOverage(displayPct - 0.1)
+                                          }
+                                          title="Decrease overage 0.1%"
+                                          aria-label="Decrease overage"
+                                          style={{
+                                            width: 16,
+                                            height: 18,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            color: canCompute
+                                              ? "var(--ink-3, #8a9498)"
+                                              : "var(--ink-4, #c7cccf)",
+                                            background: "transparent",
+                                            border: "1px solid var(--line, #e3dcc9)",
+                                            borderRadius: 3,
+                                            padding: 0,
+                                            cursor: canCompute
+                                              ? "pointer"
+                                              : "default",
+                                          }}
+                                        >
+                                          &lt;
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={!canCompute}
+                                          onClick={() =>
+                                            writeOverage(displayPct + 0.1)
+                                          }
+                                          title="Increase overage 0.1%"
+                                          aria-label="Increase overage"
+                                          style={{
+                                            width: 16,
+                                            height: 18,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            color: canCompute
+                                              ? "var(--ink-3, #8a9498)"
+                                              : "var(--ink-4, #c7cccf)",
+                                            background: "transparent",
+                                            border: "1px solid var(--line, #e3dcc9)",
+                                            borderRadius: 3,
+                                            padding: 0,
+                                            cursor: canCompute
+                                              ? "pointer"
+                                              : "default",
+                                          }}
+                                        >
+                                          &gt;
+                                        </button>
+                                      </span>
                                       <input
                                         type="number"
                                         step="0.1"
@@ -5748,17 +5851,13 @@ function BlendSectionCard({
                                         }}
                                         value={displayPct}
                                         onChange={(e) => {
-                                          if (!canCompute) return;
                                           const nextPct = Number(e.target.value);
-                                          if (!Number.isFinite(nextPct)) return;
-                                          const nextGrams =
-                                            baseG * (1 + nextPct / 100);
-                                          onUpdate(row.id, { grams: nextGrams });
+                                          writeOverage(nextPct);
                                         }}
-                                        className="pricing__input"
+                                        className="pricing__input fe-overage-input"
                                         style={{
-                                          width: 72,
-                                          flex: "0 0 72px",
+                                          width: 64,
+                                          flex: "0 0 64px",
                                           textAlign: "right",
                                           fontVariantNumeric: "tabular-nums",
                                           fontWeight: 700,
