@@ -1997,18 +1997,19 @@ export default function FormulaEditor({
         </div>
       </div>
 
-      {/* ============ Identity header (sticky top) ============ */}
+      {/* ============ Identity header (scrolls with content) ============
+          Product Details used to be sticky at the top of the viewport so
+          the operator always had the product code / customer / claim
+          rows in view. In practice it hogged vertical space on smaller
+          screens and got in the way of scanning the blend cards below,
+          so it now scrolls off with the rest of the page. */}
       <div
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
           background: "var(--cream-soft, #fbf6ec)",
           border: "1px solid var(--line, #e3dcc9)",
           borderRadius: 10,
           padding: "14px 16px",
           marginBottom: 14,
-          boxShadow: "0 2px 6px rgba(15,74,86,0.06)",
         }}
       >
         {/* Card title — bold, teal, with a thin teal underline to
