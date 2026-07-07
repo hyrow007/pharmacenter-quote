@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/auth/server";
 import { SignInButton } from "./auth-buttons";
 
@@ -12,13 +13,34 @@ export default async function Home({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Signed-in users land on the workflows inbox so they see every
-  // existing quote first. From there, "+ New workflow" → /start?fresh=1
-  // is the explicit blank-slate path; clicking a row resumes/edits.
-  if (user) redirect("/workflows");
+  // Detect the vanity subdomain so we can swap copy + post-sign-in
+  // landing. formula.pharmacenter.app is a standalone entry point for
+  // the gummy formula catalog; quote.pharmacenter.app (and everything
+  // else) still lands on the quoting workflow inbox.
+  const hostHeader = (await headers()).get("host") ?? "";
+  const isFormulaHost = hostHeader.startsWith("formula.");
+
+  if (user) {
+    redirect(isFormulaHost ? "/formulas" : "/workflows");
+  }
 
   const params = await searchParams;
   const showError = params?.auth_error === "1";
+
+  // Sign-in copy — swapped per subdomain so operators landing on
+  // formula.pharmacenter.app see "Formula / Catalog" instead of the
+  // generic quoting-tool language.
+  const copy = isFormulaHost
+    ? {
+        titleTop: "Formula",
+        titleSub: "Catalog",
+        lede: "Internal catalog of PharmaCenter's gummy formulas — bench recipes, scale-up parameters, label claims, and material costing. Sign in with your PharmaCenter Google account to continue.",
+      }
+    : {
+        titleTop: "Quote",
+        titleSub: "Work Flows",
+        lede: "Internal tool for managing quoting work flows and generating customer-facing quote documents. Sign in with your PharmaCenter Google account to continue.",
+      };
 
   // Layout is a 1:1 port of the Packing List sign-in
   // (packing.pharmacenter.app). Exact computed-style values copied from
@@ -70,7 +92,7 @@ export default async function Home({
               margin: "0 0 20px",
             }}
           >
-            Quote
+            {copy.titleTop}
             <span
               style={{
                 display: "block",
@@ -82,13 +104,11 @@ export default async function Home({
                 color: "rgb(110, 124, 128)",
               }}
             >
-              Work Flows
+              {copy.titleSub}
             </span>
           </h1>
           <p className="lede" style={{ marginBottom: 18 }}>
-            Internal tool for managing quoting work flows and generating
-            customer-facing quote documents. Sign in with your PharmaCenter
-            Google account to continue.
+            {copy.lede}
           </p>
           <SignInButton />
           <p className="meta" style={{ marginTop: 22 }}>
