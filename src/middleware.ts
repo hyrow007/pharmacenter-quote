@@ -52,13 +52,24 @@ export async function middleware(request: NextRequest) {
 
   const host = request.headers.get("host");
   if (isFormulaHost(host)) {
-    const { pathname, search } = request.nextUrl;
+    const { pathname, search, searchParams } = request.nextUrl;
+    // Loop-guard: when /formulas discovers there's no valid Supabase
+    // session it redirects to "/?showSignIn=1". Middleware treats that
+    // query flag as "the page below already tried to route you, do
+    // NOT rewrite — let the sign-in card render." This is the safety
+    // valve for the case where sb-*-auth-token cookies exist but are
+    // stale/invalid, which the cookie heuristic below can't detect.
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
     // Anonymous visitor hitting the formula subdomain: skip the
     // rewrite so they land on the sign-in page at "/" instead of
     // bouncing between "/" → "/formulas" → redirect("/") forever. Once
     // they authenticate, the sb-*-auth-token cookie shows up and the
     // rewrite kicks in on the next navigation.
-    if (shouldRewriteToFormulas(pathname) && looksSignedIn(request)) {
+    if (
+      shouldRewriteToFormulas(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/formulas" : `/formulas${pathname}`;

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/auth/server";
 import { isAdmin } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
@@ -21,7 +22,14 @@ export default async function FormulasPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user || !user.email?.endsWith("@pharmacenterusa.com")) {
-    redirect("/");
+    // On the formula.pharmacenter.app subdomain the middleware rewrites
+    // "/" → "/formulas". A naive redirect("/") from here would land
+    // back on this same rewrite, creating an infinite loop with stale
+    // cookies. The "showSignIn=1" query flag tells the middleware to
+    // pass through this request untouched so the sign-in card renders.
+    const hostHeader = (await headers()).get("host") ?? "";
+    const isFormulaHost = hostHeader.startsWith("formula.");
+    redirect(isFormulaHost ? "/?showSignIn=1" : "/");
   }
 
   // Admin flag drives the Delete affordance on each catalog row.
