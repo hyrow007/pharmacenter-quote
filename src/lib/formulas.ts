@@ -83,8 +83,15 @@ export type LabelClaim = {
   rawMaterialId: string | null;          // curated raw_materials row uuid, when picked
   rawMaterialFpCode?: string | null;     // fp_code fallback for Fishbowl-only picks
   customName?: string | null;            // display name when the claim ingredient isn't in Fishbowl or raw_materials
-  amount: number;                        // numeric label-claim quantity
+  amount: number;                        // numeric label-claim quantity ("Claim")
   unit: LabelClaimUnit;                  // mcg / mg / g
+  // Per-claim overage % applied to the label amount to yield the actual
+  // per-piece formulation input. Kept separate from the linked Secondary
+  // Blend row's overage — this one is expressed at the label level so
+  // reg-affairs can dial it in the same section where they author the
+  // claim. Undefined on legacy rows written before this field landed;
+  // read as 0 in that case.
+  overagePct?: number;                   // 0..100+ (percent)
 };
 
 export function newLabelClaimId(): string {
@@ -99,7 +106,19 @@ export function emptyLabelClaim(): LabelClaim {
     customName: null,
     amount: 0,
     unit: DEFAULT_LABEL_CLAIM_UNIT,
+    overagePct: 0,
   };
+}
+
+/**
+ * Per-piece input amount for a label claim = amount × (1 + overage/100).
+ * Read-only convenience for the "Input" column in the Label Claims
+ * section. Missing overagePct is treated as 0 (baseline).
+ */
+export function labelClaimInputAmount(c: LabelClaim): number {
+  const overage = Number.isFinite(c.overagePct) ? (c.overagePct as number) : 0;
+  const amount = Number.isFinite(c.amount) ? c.amount : 0;
+  return amount * (1 + overage / 100);
 }
 
 // -----------------------------------------------------------------------------

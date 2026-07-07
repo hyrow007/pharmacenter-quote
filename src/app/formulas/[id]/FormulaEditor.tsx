@@ -42,6 +42,7 @@ import {
   ingredientGramsForBench,
   ingredientKgForScaleUp,
   isSolutionRow,
+  labelClaimInputAmount,
   type BlendPhase,
   type GummyFormulaAuditRecord,
   type GummyFormulaNote,
@@ -7129,8 +7130,39 @@ function LabelClaimsSection({
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* Column headers — align to the same grid template as each
+              claim row so labels sit directly above their columns. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: LABEL_CLAIM_GRID_TEMPLATE,
+              gap: 8,
+              alignItems: "end",
+              padding: "0 2px 2px",
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            <div>Ingredient</div>
+            <div style={{ textAlign: "right" }}>Claim</div>
+            <div style={{ textAlign: "left" }}>Unit</div>
+            <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+              Overage %
+            </div>
+            <div style={{ textAlign: "right" }}>Input</div>
+            {/* Empty header slot for the row delete column so widths
+                stay perfectly aligned. */}
+            <div aria-hidden="true" />
+          </div>
           {claims.map((c) => {
             const resolved = resolveClaim(c);
+            const overage = Number.isFinite(c.overagePct)
+              ? (c.overagePct as number)
+              : 0;
+            const inputAmt = labelClaimInputAmount(c);
             return (
               <LabelClaimRow key={c.id} onRemove={() => onRemove(c.id)}>
                 <IngredientPicker
@@ -7165,18 +7197,19 @@ function LabelClaimsSection({
                     })
                   }
                 />
+                {/* Claim amount — the label dose per gummy. */}
                 <input
                   type="number"
-                onFocus={(e) => {
-                  // Chrome's <input type="number"> doesn't select on
-                  // focus synchronously — defer one frame so the
-                  // digits are highlighted and any keystroke replaces
-                  // the placeholder 0 instead of prepending to it.
-                  const el = e.currentTarget;
-                  setTimeout(() => {
-                    try { el.select(); } catch {}
-                  }, 0);
-                }}
+                  onFocus={(e) => {
+                    // Chrome's <input type="number"> doesn't select on
+                    // focus synchronously — defer one frame so the
+                    // digits are highlighted and any keystroke replaces
+                    // the placeholder 0 instead of prepending to it.
+                    const el = e.currentTarget;
+                    setTimeout(() => {
+                      try { el.select(); } catch {}
+                    }, 0);
+                  }}
                   value={Number.isFinite(c.amount) ? c.amount : 0}
                   onChange={(e) => {
                     const n = Number(e.target.value);
@@ -7204,6 +7237,60 @@ function LabelClaimsSection({
                     </option>
                   ))}
                 </select>
+                {/* Overage % — editable percentage applied to the claim
+                    to yield the actual per-piece formulation input. */}
+                <input
+                  type="number"
+                  onFocus={(e) => {
+                    const el = e.currentTarget;
+                    setTimeout(() => {
+                      try { el.select(); } catch {}
+                    }, 0);
+                  }}
+                  value={overage}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onUpdate(c.id, {
+                      overagePct: Number.isFinite(n) ? n : 0,
+                    });
+                  }}
+                  step="0.1"
+                  className="pricing__input"
+                  style={{
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                  placeholder="0"
+                  title="Overage %"
+                />
+                {/* Input (read-only) — computed per-piece amount that
+                    accounts for the overage. Same unit as the claim. */}
+                <div
+                  style={{
+                    padding: "6px 8px",
+                    background: "var(--paper, #fffdf8)",
+                    border: "1px dashed var(--line, #e3dcc9)",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--ink-1, #1f2a2d)",
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={`Claim × (1 + Overage %) = ${inputAmt.toFixed(4)} ${c.unit} per gummy`}
+                >
+                  {Number.isFinite(inputAmt) ? inputAmt.toFixed(2) : "0.00"}{" "}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    {c.unit}
+                  </span>
+                </div>
               </LabelClaimRow>
             );
           })}
@@ -8451,6 +8538,14 @@ function SolutionComponentRow({
 // hidden until hover (matches BlendIngredientRow). Expects three children
 // (picker, amount input, unit select) plus the standard row grid.
 // -----------------------------------------------------------------------------
+// Shared grid template for the Label Claims table — used by both the
+// header strip and each data row so columns line up perfectly.
+//   [ingredient picker] [claim amt] [unit] [overage %] [input] [×]
+// Ingredient column flexes; numeric columns are fixed so the digits
+// column-align across every row. Kept in one constant so the header
+// and row can't drift out of sync when we tweak widths.
+const LABEL_CLAIM_GRID_TEMPLATE = "1fr 90px 70px 90px 100px 32px";
+
 function LabelClaimRow({
   onRemove,
   children,
@@ -8465,9 +8560,7 @@ function LabelClaimRow({
       onMouseLeave={() => setHover(false)}
       style={{
         display: "grid",
-        // Picker + amount + unit + delete (delete stays fixed-width so the
-        // other columns don't jiggle when the × fades in).
-        gridTemplateColumns: "1fr 110px 90px 32px",
+        gridTemplateColumns: LABEL_CLAIM_GRID_TEMPLATE,
         gap: 8,
         alignItems: "center",
       }}
