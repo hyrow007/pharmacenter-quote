@@ -628,6 +628,43 @@ export default function FormulaEditor({
     setLabelClaims((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...patch } : c)),
     );
+    // Cross-sync: when overagePct changes on a claim, back-fill the
+    // linked cooked-phase row's grams so the Secondary Blend stays
+    // coherent with the label claim. Grams is the row's stored source
+    // of truth; overagePct on the claim is the operator-facing dial.
+    //   grams = baseG × (1 + overagePct / 100)
+    // The reverse (grams edit → overagePct) is handled in updateRow.
+    if (patch.overagePct !== undefined) {
+      setIngredients((prevRows) => {
+        let changed = false;
+        const next = prevRows.map((r) => {
+          if (r.sourceLabelClaimId !== id) return r;
+          // Look up the pre-patch claim so we can recompute baseG with
+          // the just-patched values; if it's missing (shouldn't happen
+          // in practice) fall through with an empty claim.
+          const prevClaim = labelClaims.find((c) => c.id === id);
+          const nextClaim: LabelClaim = {
+            ...(prevClaim ?? emptyLabelClaim()),
+            ...patch,
+          };
+          const baseG = claimBaseGramsForBench(
+            nextClaim,
+            benchBatchG ?? 0,
+            wetCastPieceWeightG ?? 0,
+            gummyPieceWeightG ?? 0,
+          );
+          const overage = patch.overagePct ?? 0;
+          // Snap to 5 decimals so the % display round-trips cleanly
+          // (matches the precision used elsewhere in the overage math).
+          const nextGrams =
+            Math.round(baseG * (1 + overage / 100) * 100000) / 100000;
+          if ((r.grams ?? 0) === nextGrams) return r;
+          changed = true;
+          return { ...r, grams: nextGrams };
+        });
+        return changed ? next : prevRows;
+      });
+    }
   }
   function removeLabelClaim(id: string) {
     setLabelClaims((prev) => prev.filter((c) => c.id !== id));
@@ -1167,6 +1204,48 @@ export default function FormulaEditor({
     setIngredients((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
     );
+    // Cross-sync: if grams changes on a claim-sourced row, back-solve
+    // the linked label claim's overagePct so the Label Claims section
+    // reflects the same overage the operator just dialed on the row.
+    //   overagePct = (grams / baseG - 1) × 100
+    // The reverse (overagePct edit → row grams) is handled in
+    // updateLabelClaim. This closes the two-way loop so either surface
+    // — Label Claim or Secondary Blend — can drive the same underlying
+    // per-piece dose.
+    if (patch.grams !== undefined) {
+      // We need the row's sourceLabelClaimId to find the linked claim.
+      // Read from the current (pre-patch) list — sourceLabelClaimId is
+      // never patched here.
+      const row = ingredients.find((r) => r.id === id);
+      if (row && row.sourceLabelClaimId) {
+        const claim = labelClaims.find(
+          (c) => c.id === row.sourceLabelClaimId,
+        );
+        if (claim) {
+          const baseG = claimBaseGramsForBench(
+            claim,
+            benchBatchG ?? 0,
+            wetCastPieceWeightG ?? 0,
+            gummyPieceWeightG ?? 0,
+          );
+          if (baseG > 0) {
+            const nextGrams = Number(patch.grams) || 0;
+            // 3-decimal % precision — the LabelClaim column shows the
+            // overage input at 1 decimal step but we store more so
+            // grams round-trips cleanly without display jitter.
+            const nextOverage =
+              Math.round((nextGrams / baseG - 1) * 100 * 1000) / 1000;
+            if ((claim.overagePct ?? 0) !== nextOverage) {
+              setLabelClaims((prev) =>
+                prev.map((c) =>
+                  c.id === claim.id ? { ...c, overagePct: nextOverage } : c,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
   }
   function addRow() {
     setIngredients((prev) => [...prev, emptyIngredient()]);
@@ -1333,20 +1412,24 @@ export default function FormulaEditor({
           rawMaterialFpCode: c.rawMaterialFpCode ?? null,
           customName: c.customName ?? null,
           pctInFinished: 0,
-          // Seed grams at the claim baseline (0% overage) so the row
-          // lands ready-to-formulate. The operator can then either
+          // Seed grams at the claim baseline scaled by the claim's
+          // current overagePct so the row lands ready-to-formulate at
+          // the same overage the reg-affairs team dialed into the
+          // Label Claim. The operator can then either
           // (a) type an overage % which back-solves a new grams, or
-          // (b) type a new grams which re-derives the overage %. The
-          // baseline snapshot uses the current bench batch + wet cast
-          // piece weight; if either changes later, the operator's
-          // grams is preserved and the overage display updates to
-          // reflect the new baseline.
-          grams: claimBaseGramsForBench(
-            c,
-            benchBatchG,
-            wetCastPieceWeightG,
-            gummyPieceWeightG,
-          ),
+          // (b) type a new grams which re-derives the overage %.
+          // The baseline snapshot uses the current bench batch + wet
+          // cast piece weight; if either changes later, the
+          // operator's grams is preserved and the overage display
+          // updates to reflect the new baseline.
+          grams:
+            claimBaseGramsForBench(
+              c,
+              benchBatchG,
+              wetCastPieceWeightG,
+              gummyPieceWeightG,
+            ) *
+            (1 + (Number.isFinite(c.overagePct) ? (c.overagePct as number) : 0) / 100),
           blendPhase: "cooked" as BlendPhase,
           costPerKgOverride: null,
           solidsOverride: null,
