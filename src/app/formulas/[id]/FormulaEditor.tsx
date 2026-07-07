@@ -1646,10 +1646,42 @@ export default function FormulaEditor({
           [style*="var(--cream-soft"] {
             background: #fff !important;
           }
-          /* Tables keep their own borders — restore them (the wildcard
-             rule above would nuke them). */
-          table, th, td {
-            border: 1px solid #ccc !important;
+          /* Print-table treatment (Option A: clean tables).
+             Drop the boxy 1px cell grid — the printed sheet reads much
+             cleaner as a ledger. Header row carries a heavier bottom
+             rule (2px teal) to anchor the column titles; each body row
+             gets a thin light bottom rule to guide the eye across the
+             numbers. Totals row is bold + a slightly heavier bottom
+             rule so it clearly closes the block. */
+          table {
+            border: none !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
+            width: 100% !important;
+            font-variant-numeric: tabular-nums !important;
+          }
+          thead th {
+            border: none !important;
+            border-bottom: 1.5px solid #0f4a56 !important;
+            padding: 4px 6px !important;
+            font-size: 8.5pt !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            color: #4a5c60 !important;
+            background: transparent !important;
+          }
+          tbody td {
+            border: none !important;
+            border-bottom: 0.5px solid #d6d1c2 !important;
+            padding: 5px 6px !important;
+            vertical-align: middle !important;
+          }
+          /* Totals / footer rows land in <tfoot> or on the last <tr>
+             inside <tbody>; they get a heavier closing rule + bold. */
+          tfoot td, tbody tr:last-child td {
+            border-bottom: 1.2px solid #0f4a56 !important;
+            font-weight: 700 !important;
           }
 
           /* Show the print-only meta header. */
@@ -1711,16 +1743,14 @@ export default function FormulaEditor({
           [style*="marginBottom: 12"] { margin-bottom: 4px !important; }
           [style*="marginTop: 24"] { margin-top: 8px !important; }
           [style*="marginTop: 18"] { margin-top: 6px !important; }
-          /* Cell rows get a tiny bit of vertical air, no more. Only
-             right-aligned numeric cells (grams / % columns) get nowrap
+          /* Right-aligned numeric cells (grams / % columns) get nowrap
              so overage values sit on one line; the ingredient-name
              column is free to wrap onto two lines when needed instead
-             of truncating with "…". */
-          td, th { padding: 3px 6px !important; }
+             of truncating with "…". Padding + vertical-align are set
+             above in the print-table treatment block. */
           td[style*="text-align: right"], th[style*="text-align: right"] {
             white-space: nowrap;
           }
-          tbody td { vertical-align: middle !important; }
           /* Undo ellipsis truncation on ingredient-name spans so
              names like "Broccoli Sprout P.E (1% Glucoraphanin)" wrap
              onto a second line instead of getting cut with "…". */
