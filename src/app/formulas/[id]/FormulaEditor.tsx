@@ -1528,33 +1528,23 @@ export default function FormulaEditor({
             display: none !important;
           }
 
-          /* d line — shown on print as a thin dotted rule that
-             separates sections. Applied to <hr class="fe-d-line">
-             elements dropped into the JSX (e.g. after Label Claims)
-             and as a top border on the .fe-bench-and-indicators row
-             to separate Product Details from Key Indicators. */
+          /* d lines removed per operator request — every section break
+             was previously drawn as a 1px dotted rule (under Label
+             Claims, above Key Indicators, above each blend subheading).
+             We keep the .fe-d-line elements in the DOM but suppress
+             them so the printed sheet reads as clean bands of content
+             separated only by whitespace + section titles. */
           .fe-d-line {
-            display: block !important;
-            border: none !important;
-            border-top: 1px dotted #999 !important;
-            margin: 8px 0 !important;
-            height: 0 !important;
+            display: none !important;
           }
-          /* d line ONLY between Batch Setup and Key Indicators.
-             Previously we drew it at the top of the whole bench-and-
-             indicators wrapper, which duplicated the line already sitting
-             under Label Claims. Now the outer wrapper has no top border
-             and the Key Indicators card carries the line, so it lands
-             where the operator actually needs a section break.
-             flex-direction: column is REQUIRED here so the two cards
-             stack vertically — otherwise border-top on the KI card puts
-             the line above it (at the top of the row) instead of between. */
+          /* Keep vertical stack of Batch Setup + Key Indicators (they
+             used to sit side-by-side on-screen); the divider between
+             them is intentionally gone. */
           .fe-bench-and-indicators {
             flex-direction: column !important;
             margin-top: 4px !important;
           }
           .fe-key-indicators-card {
-            border-top: 1px dotted #999 !important;
             padding-top: 10px !important;
             margin-top: 10px !important;
             width: 100% !important;
@@ -1571,27 +1561,29 @@ export default function FormulaEditor({
           }
           .fe-key-indicators-row { flex-direction: column !important; align-items: center !important; }
 
-          /* d line above every blend subheading (Primary Blend, Secondary
-             Blend, Final Blend, Primary Blend Carry Over) so ingredient
-             sections are visually separated on the printed sheet. */
+          /* Blend subheadings no longer carry a top border — the
+             heading text itself + whitespace is enough separation for
+             the printed sheet. */
           .fe-blend-subheading {
-            border-top: 1px dotted #999 !important;
+            border-top: none !important;
             padding-top: 6px !important;
             margin-top: 8px !important;
           }
 
-          /* -------- Dotted-line uniformity --------
-             Anywhere the app draws a dashed line (e.g. Key Indicators
-             row 2's divider) gets normalized to the same dotted style
-             the d lines use, so the printed sheet only shows ONE line
-             treatment. Also full-width so every d line spans identically. */
-          [style*="dashed"] {
-            border-top-style: dotted !important;
-            border-top-color: #999 !important;
-            border-top-width: 1px !important;
+          /* Kill any leftover dashed / dotted rules the on-screen view
+             draws (Key Indicators row divider, inline borders on
+             hand-authored cards, etc.) so the printed sheet has zero
+             horizontal rules of any kind. */
+          [style*="dashed"],
+          [style*="dotted"] {
+            border-top-style: none !important;
+            border-bottom-style: none !important;
+            border-left-style: none !important;
+            border-right-style: none !important;
           }
-          hr.fe-d-line,
-          .fe-blend-subheading,
+          hr {
+            display: none !important;
+          }
           .fe-bench-and-indicators {
             width: 100% !important;
           }
