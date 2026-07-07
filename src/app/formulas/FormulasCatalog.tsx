@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FORMULA_SHAPES,
@@ -8,15 +8,18 @@ import {
 } from "@/lib/formulas";
 
 // Client-side board for the /formulas catalog. Owns:
-//   - free-text search across PC-BK code, name, flavor
+//   - free-text search across Formula #, Product Code, Name, Customer, Flavor, Preparer
 //   - shape filter
+//   - clickable column headers → sort asc/desc with ▲/▼ arrow indicator
+//   - pagination: per-page dropdown + Previous/Next + "Page X of Y"
 //   - "+ New formula" (creates a stub via POST /api/formulas, then navigates
 //     to the editor at /formulas/[id])
 //
 // The list itself just renders the server-fetched initialFormulas —
-// filtering is client-side because the catalog is expected to be small
-// (dozens, not thousands). If it grows past ~500 rows we'll flip to
-// server-side filtering via the existing GET /api/formulas params.
+// filtering / sorting / paging are all client-side because the catalog
+// is expected to be small (dozens, not thousands). If it grows past
+// ~500 rows we'll flip to server-side filtering via the existing
+// GET /api/formulas params.
 
 type Props = {
   initialFormulas: GummyFormulaRecord[];
@@ -25,6 +28,31 @@ type Props = {
   /** Admins see a Delete affordance per row; everyone else sees data only. */
   isAdmin: boolean;
 };
+
+// Sortable columns — keyed to header labels so the header rendering
+// can drive sort state in one place. `label` is what appears in the
+// header cell; `key` is the internal sort discriminator. Any header
+// with `sortable: false` renders without the click behavior + arrow.
+type SortKey =
+  | "formulaNumber"
+  | "pcBkCode"
+  | "name"
+  | "customer"
+  | "shape"
+  | "flavor"
+  | "latestVersionNum"
+  | "updatedAt";
+type SortDir = "asc" | "desc";
+
+type ColumnConfig = {
+  key: SortKey | null;
+  label: string;
+  align?: "left" | "right";
+  width?: number;
+};
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 export default function FormulasCatalog({
   initialFormulas,
@@ -40,6 +68,13 @@ export default function FormulasCatalog({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Sort state — default to most-recently-updated first, matching how
+  // the server hydrates the initial list.
+  const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Pagination state. `page` is 1-indexed for user-facing labels.
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(1);
 
   async function handleDelete(id: string) {
     setDeletingId(id);
@@ -61,17 +96,131 @@ export default function FormulasCatalog({
     }
   }
 
+  // Preparer display — the audit trail carries the creator email; the
+  // catalog uses the local-part as a compact "preparer" identity in
+  // search matches. Falls back to the raw email when a name can't be
+  // parsed. Matches the Packing List behavior where operators search
+  // by their own email prefix.
+  function preparerHandle(f: GummyFormulaRecord): string {
+    const email = (f.createdByEmail ?? "").trim();
+    if (!email) return "";
+    const at = email.indexOf("@");
+    return at > 0 ? email.slice(0, at) : email;
+  }
+
+  function customerName(f: GummyFormulaRecord): string {
+    if (f.customerId && customersById[f.customerId]) {
+      return customersById[f.customerId];
+    }
+    return "";
+  }
+
+  // Filter first (search + shape) — then sort. The search field looks
+  // across every operator-facing string on the row: Formula #, Product
+  // Code, Name, Customer name, Flavor, and Preparer handle.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return formulas.filter((f) => {
       if (shapeFilter && f.shape !== shapeFilter) return false;
       if (!q) return true;
-      const hay = [f.pcBkCode ?? "", f.name, f.flavor ?? ""]
+      const formulaLabel = `F${String(f.formulaNumber).padStart(4, "0")}`;
+      const hay = [
+        formulaLabel,
+        f.pcBkCode ?? "",
+        f.name,
+        customerName(f),
+        f.flavor ?? "",
+        preparerHandle(f),
+      ]
         .join("\n")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [formulas, query, shapeFilter]);
+  }, [formulas, query, shapeFilter, customersById]);
+
+  // Sort — pure comparator over the filtered slice. String columns
+  // compare case-insensitively; the numeric columns (formulaNumber,
+  // latestVersionNum) compare as numbers; updatedAt compares as an
+  // ISO timestamp string (lexicographic works because the ISO format
+  // is stable). Ties fall through to updatedAt desc so the display is
+  // stable across identical-sort-value rows.
+  const sorted = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmpStr = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" });
+    const cmpNum = (a: number, b: number) => a - b;
+    const getVal = (f: GummyFormulaRecord): string | number => {
+      switch (sortKey) {
+        case "formulaNumber":
+          return f.formulaNumber;
+        case "pcBkCode":
+          return f.pcBkCode ?? "";
+        case "name":
+          return f.name;
+        case "customer":
+          return customerName(f);
+        case "shape":
+          return f.shape;
+        case "flavor":
+          return f.flavor ?? "";
+        case "latestVersionNum":
+          return f.latestVersionNum;
+        case "updatedAt":
+          return f.updatedAt;
+      }
+    };
+    const rows = [...filtered];
+    rows.sort((a, b) => {
+      const va = getVal(a);
+      const vb = getVal(b);
+      let base: number;
+      if (typeof va === "number" && typeof vb === "number") {
+        base = cmpNum(va, vb);
+      } else {
+        base = cmpStr(String(va), String(vb));
+      }
+      if (base !== 0) return base * dir;
+      // Stable tie-break: most-recent-first.
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+    return rows;
+  }, [filtered, sortKey, sortDir, customersById]);
+
+  // Pagination — clamp to a valid page whenever the filtered/sorted
+  // list shrinks (e.g. after a search that returns fewer pages than
+  // the current page number).
+  const totalRows = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  // Reset to page 1 when the operator changes search / filter / sort
+  // so they land on the first page of the new result set.
+  useEffect(() => {
+    setPage(1);
+  }, [query, shapeFilter, sortKey, sortDir, pageSize]);
+
+  const pageStart = (page - 1) * pageSize;
+  const pageRows = sorted.slice(pageStart, pageStart + pageSize);
+
+  function handleHeaderClick(key: SortKey) {
+    if (sortKey === key) {
+      // Toggle direction on the same column.
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      // First click on a new column: string columns default to asc,
+      // numeric / date columns default to desc (newest / largest first,
+      // matching what operators usually want).
+      setSortKey(key);
+      setSortDir(
+        key === "updatedAt" ||
+          key === "formulaNumber" ||
+          key === "latestVersionNum"
+          ? "desc"
+          : "asc",
+      );
+    }
+  }
 
   async function handleNewFormula() {
     setCreating(true);
@@ -99,6 +248,19 @@ export default function FormulasCatalog({
     }
   }
 
+  // Header config — order determines the on-screen column order. Add
+  // sortable keys here to include them in the click-to-sort behavior.
+  const columns: ColumnConfig[] = [
+    { key: "formulaNumber", label: "Formula" },
+    { key: "pcBkCode", label: "Product Code" },
+    { key: "name", label: "Name" },
+    { key: "customer", label: "Customer" },
+    { key: "shape", label: "Shape" },
+    { key: "flavor", label: "Flavor" },
+    { key: "latestVersionNum", label: "Version", align: "right" },
+    { key: "updatedAt", label: "Updated" },
+  ];
+
   return (
     <div>
       {/* Toolbar: search, shape filter, + New formula ---------------- */}
@@ -115,7 +277,7 @@ export default function FormulasCatalog({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by product code, name, or flavor…"
+          placeholder="Search customer, product code, name, flavor, or preparer…"
           className="pricing__input"
           style={{ flex: "1 1 260px", minWidth: 240 }}
           autoComplete="off"
@@ -187,7 +349,7 @@ export default function FormulasCatalog({
       ) : null}
 
       {/* Table --------------------------------------------------------- */}
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <div
           style={{
             padding: "32px 16px",
@@ -217,21 +379,23 @@ export default function FormulasCatalog({
         >
           <thead>
             <tr style={{ background: "var(--cream, #f6efe3)" }}>
-              {/* Sequential formula identifier ("F0001") — DB-assigned so
-                  operators have a scannable, catalog-stable handle. */}
-              <Th>Formula</Th>
-              <Th>Product Code</Th>
-              <Th>Name</Th>
-              <Th>Customer</Th>
-              <Th>Shape</Th>
-              <Th>Flavor</Th>
-              <Th style={{ textAlign: "right" }}>Version</Th>
-              <Th>Updated</Th>
+              {columns.map((col) => (
+                <SortableTh
+                  key={col.label}
+                  label={col.label}
+                  colKey={col.key}
+                  activeKey={sortKey}
+                  activeDir={sortDir}
+                  onSort={handleHeaderClick}
+                  align={col.align}
+                  width={col.width}
+                />
+              ))}
               {isAdmin ? <Th style={{ textAlign: "right", width: 90 }}>Actions</Th> : null}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((f) => (
+            {pageRows.map((f) => (
               <tr
                 key={f.id}
                 onClick={() => router.push(`/formulas/${f.id}`)}
@@ -392,11 +556,164 @@ export default function FormulasCatalog({
           </tbody>
         </table>
       )}
+
+      {/* Pagination controls — Per page / Previous / Page X of Y / Next.
+          Mirrors the Packing List catalog so operators moving between
+          apps get the same footer treatment. Only rendered when there
+          are enough rows to warrant paging so an empty catalog stays
+          clean. */}
+      {sorted.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 16,
+            marginTop: 18,
+            fontSize: 13,
+            color: "var(--ink-2, #4a5c60)",
+            flexWrap: "wrap",
+          }}
+        >
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+          >
+            <span>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+              className="pricing__input"
+              style={{ flex: "0 0 auto", minWidth: 72, padding: "6px 8px" }}
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            style={{
+              padding: "6px 14px",
+              background: "transparent",
+              color:
+                page <= 1
+                  ? "var(--ink-3, #8a9498)"
+                  : "var(--teal-900, #0f4a56)",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: page <= 1 ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            &larr; Previous
+          </button>
+          <span
+            style={{
+              fontVariantNumeric: "tabular-nums",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            style={{
+              padding: "6px 14px",
+              background: "transparent",
+              color:
+                page >= totalPages
+                  ? "var(--ink-3, #8a9498)"
+                  : "var(--teal-900, #0f4a56)",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: page >= totalPages ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Next &rarr;
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 // --- helpers ---------------------------------------------------------------
+
+// Clickable header cell — reused for every sortable column. Shows an
+// up/down arrow when it owns the current sort. Non-sortable columns
+// pass colKey={null} and render as a plain <Th>.
+function SortableTh({
+  label,
+  colKey,
+  activeKey,
+  activeDir,
+  onSort,
+  align,
+  width,
+}: {
+  label: string;
+  colKey: SortKey | null;
+  activeKey: SortKey;
+  activeDir: SortDir;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+  width?: number;
+}) {
+  if (colKey === null) {
+    return (
+      <Th style={{ textAlign: align, width }}>{label}</Th>
+    );
+  }
+  const isActive = activeKey === colKey;
+  const arrow = isActive ? (activeDir === "asc" ? "▲" : "▼") : "";
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      style={{
+        textAlign: align ?? "left",
+        padding: "10px 12px",
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: isActive
+          ? "var(--teal-900, #0f4a56)"
+          : "var(--ink-3, #8a9498)",
+        borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        width,
+      }}
+      title={`Sort by ${label}`}
+    >
+      {label}
+      {arrow ? (
+        <span
+          style={{
+            marginLeft: 6,
+            fontSize: 9,
+            color: "var(--teal-700, #1d6c7b)",
+          }}
+          aria-hidden="true"
+        >
+          {arrow}
+        </span>
+      ) : null}
+    </th>
+  );
+}
 
 function Th({
   children,
