@@ -28,6 +28,22 @@ function shouldRewriteToFormulas(pathname: string): boolean {
   return true;
 }
 
+// Cheap "user probably has a session" check without instantiating a
+// full Supabase client. @supabase/ssr writes cookies named
+// `sb-<projectref>-auth-token[.N]`; if any exist we assume the user is
+// signed in for the purposes of routing. If they turn out not to be
+// signed in the /formulas server page redirects them to "/" — this
+// check just prevents that redirect from bouncing back into a rewrite
+// loop for anonymous visitors on the formula subdomain.
+function looksSignedIn(request: NextRequest): boolean {
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function middleware(request: NextRequest) {
   // Always refresh the Supabase auth session cookie first. The
   // response it returns carries any Set-Cookie headers we need to
@@ -37,7 +53,12 @@ export async function middleware(request: NextRequest) {
   const host = request.headers.get("host");
   if (isFormulaHost(host)) {
     const { pathname, search } = request.nextUrl;
-    if (shouldRewriteToFormulas(pathname)) {
+    // Anonymous visitor hitting the formula subdomain: skip the
+    // rewrite so they land on the sign-in page at "/" instead of
+    // bouncing between "/" → "/formulas" → redirect("/") forever. Once
+    // they authenticate, the sb-*-auth-token cookie shows up and the
+    // rewrite kicks in on the next navigation.
+    if (shouldRewriteToFormulas(pathname) && looksSignedIn(request)) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/formulas" : `/formulas${pathname}`;
