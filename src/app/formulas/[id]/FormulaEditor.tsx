@@ -1655,7 +1655,7 @@ export default function FormulaEditor({
              header, and totals rows even at small print type. No
              table-layout algorithm quirks, no vertical rules, no
              vestigial <td> padding. Rows still can't split across a
-             page break (see `break-inside: avoid` further down). */
+             page break (see "break-inside: avoid" further down). */
           table {
             display: block !important;
             border: none !important;
