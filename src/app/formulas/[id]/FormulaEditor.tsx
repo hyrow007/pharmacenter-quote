@@ -1646,41 +1646,78 @@ export default function FormulaEditor({
           [style*="var(--cream-soft"] {
             background: #fff !important;
           }
-          /* Print-table treatment (Option A: clean tables).
-             Drop the boxy 1px cell grid — the printed sheet reads much
-             cleaner as a ledger. Header row carries a heavier bottom
-             rule (2px teal) to anchor the column titles; each body row
-             gets a thin light bottom rule to guide the eye across the
-             numbers. Totals row is bold + a slightly heavier bottom
-             rule so it clearly closes the block. */
+          /* Print-table treatment (Option B: CSS Grid rows).
+             Each <tr> becomes its own CSS grid with a fixed column
+             template — one flexible ingredient column plus up to four
+             numeric tracks. Because every row uses the same template,
+             the numeric columns stay perfectly aligned across body,
+             header, and totals rows even at small print type. No
+             table-layout algorithm quirks, no vertical rules, no
+             vestigial <td> padding. Rows still can't split across a
+             page break (see `break-inside: avoid` further down). */
           table {
+            display: block !important;
             border: none !important;
-            border-collapse: collapse !important;
-            table-layout: fixed !important;
             width: 100% !important;
             font-variant-numeric: tabular-nums !important;
           }
-          thead th {
-            border: none !important;
-            border-bottom: 1.5px solid #0f4a56 !important;
+          thead, tbody, tfoot {
+            display: block !important;
+          }
+          tr {
+            display: grid !important;
+            /* Ingredient column: flex 1fr, can shrink to fit its
+               container. Four numeric tracks at 78px each — wide
+               enough for "-99.99 %" without wrapping. Tables with
+               fewer than 5 columns simply leave the trailing tracks
+               empty; visual alignment stays consistent because every
+               table uses the same template. */
+            grid-template-columns: minmax(0, 1fr) 78px 78px 78px 78px !important;
+            column-gap: 14px !important;
+            align-items: baseline !important;
             padding: 4px 6px !important;
+            border: none !important;
+            border-bottom: 0.5px solid #d6d1c2 !important;
+          }
+          th, td {
+            display: block !important;
+            border: none !important;
+            padding: 0 !important;
+            white-space: nowrap !important;
+          }
+          /* Ingredient / label column (always the first cell in each
+             row) is allowed to wrap onto a second line so long chemical
+             names still fit without truncating. */
+          th:first-child, td:first-child {
+            white-space: normal !important;
+            min-width: 0 !important;
+          }
+          /* Numeric cells right-align inside their track. */
+          th:not(:first-child), td:not(:first-child) {
+            text-align: right !important;
+            justify-self: end !important;
+          }
+          /* Header row: teal underline anchors the column titles. */
+          thead tr {
+            border-bottom: 1.5px solid #0f4a56 !important;
+            padding-bottom: 4px !important;
+            margin-bottom: 1px !important;
+          }
+          thead th {
             font-size: 8.5pt !important;
             font-weight: 700 !important;
             letter-spacing: 0.06em !important;
             text-transform: uppercase !important;
             color: #4a5c60 !important;
-            background: transparent !important;
           }
-          tbody td {
-            border: none !important;
-            border-bottom: 0.5px solid #d6d1c2 !important;
-            padding: 5px 6px !important;
-            vertical-align: middle !important;
-          }
-          /* Totals / footer rows land in <tfoot> or on the last <tr>
-             inside <tbody>; they get a heavier closing rule + bold. */
-          tfoot td, tbody tr:last-child td {
+          /* Totals / footer row: bold + heavier teal rule closes the
+             block. Applies to <tfoot> rows AND the last <tr> in
+             <tbody> (some sections put the total on a plain last
+             body row rather than a semantic <tfoot>). */
+          tfoot tr, tbody tr:last-child {
             border-bottom: 1.2px solid #0f4a56 !important;
+          }
+          tfoot td, tbody tr:last-child td {
             font-weight: 700 !important;
           }
 
