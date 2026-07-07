@@ -3987,6 +3987,285 @@ function ITd({ children, style }: { children: React.ReactNode; style?: React.CSS
 }
 
 // -----------------------------------------------------------------------------
+// ProcessNoteBlock — reusable collapsible container for a process-note
+// section (Cooking, or Process for a specific subsection). Mirrors the
+// chevron-based toggle used by NotesCard / AuditTimeline: the header row
+// is a click target whose ▶ arrow rotates 90° on expand. Collapsed by
+// default so the ingredient table stays visually front-and-center; the
+// operator opens the block when they need to review or edit the notes.
+//
+// forceExpanded flips every block open (used by the Print pipeline so
+// the printed sheet includes the note text without stomping user state).
+// Everything else — default detection, red banner, Reset link, Edit/read
+// toggle, textarea — lives inside so both call sites (cooking + per
+// subsection) share exactly the same visual + behaviour.
+// -----------------------------------------------------------------------------
+function ProcessNoteBlock({
+  label,
+  currentNote,
+  defaultNote,
+  onNoteChange,
+  editing,
+  onEditingChange,
+  editPlaceholder,
+  emptyReadOnlyText,
+  forceExpanded,
+}: {
+  /** Header label — "Cooking" or "Process". Colon is appended by us. */
+  label: string;
+  currentNote: string;
+  defaultNote: string;
+  onNoteChange: (text: string) => void;
+  editing: boolean;
+  onEditingChange: (next: boolean) => void;
+  editPlaceholder: string;
+  emptyReadOnlyText: string;
+  /** When true, forces the block open regardless of local expanded
+   *  state (print pipeline uses this so printed sheets include the
+   *  note text). Local expand/collapse state is untouched. */
+  forceExpanded?: boolean;
+}) {
+  // Collapsed by default — matches Notes / Activity so the card body
+  // reads clean until the operator explicitly opens the block.
+  const [expandedState, setExpanded] = React.useState(false);
+  const expanded = !!forceExpanded || expandedState;
+  const isAtDefault =
+    defaultNote.length > 0 && currentNote.trim() === defaultNote.trim();
+  // Short one-line preview shown next to the chevron when collapsed so
+  // the operator can spot which block is which without opening each
+  // one. Empty / default-only notes show a subdued placeholder instead.
+  const previewText = currentNote
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  const previewLabel = previewText
+    ? previewText
+    : "no notes yet";
+
+  return (
+    <div
+      className="fe-process-notes"
+      style={{
+        borderBottom: "1px solid var(--line-2, #efe9da)",
+        background: "var(--cream-soft, #fbf6ec)",
+      }}
+    >
+      {/* Header — always visible, click to toggle. Placeholder banner
+          renders here when we're at the default so reg-affairs still
+          sees "not reviewed" without expanding. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((s) => !s)}
+        aria-expanded={expanded}
+        style={{
+          width: "100%",
+          padding: "10px 14px",
+          background: "transparent",
+          border: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            fontSize: 10,
+            color: "var(--teal-900, #0f4a56)",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 120ms ease",
+            display: "inline-block",
+            width: 10,
+            flex: "0 0 auto",
+          }}
+        >
+          &#9654;
+        </span>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--teal-900, #0f4a56)",
+            flex: "0 0 auto",
+          }}
+        >
+          {label}:
+        </span>
+        {/* Preview of the current note (collapsed only). Placeholder
+            banner takes precedence — when the note is still the seeded
+            default the red banner replaces the preview so it's clear
+            reg-affairs hasn't reviewed this yet. */}
+        {!expanded ? (
+          isAtDefault ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#b91c1c",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--ink-3, #8a9498)",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {previewLabel}
+            </span>
+          )
+        ) : (
+          // Spacer keeps the Reset / Edit buttons pushed to the right
+          // in the expanded state — same layout as the old inline
+          // header row that this component replaces.
+          <span style={{ flex: 1 }} />
+        )}
+        {/* Reset + Edit actions — only rendered when expanded so
+            collapsed rows stay clean. Placed inside the header button
+            visually but with their own onClick handlers that stop
+            propagation so hitting them doesn't collapse the block. */}
+        {expanded ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 12,
+              flex: "0 0 auto",
+            }}
+          >
+            {defaultNote && !isAtDefault ? (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNoteChange(defaultNote);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onNoteChange(defaultNote);
+                  }
+                }}
+                style={{
+                  padding: "2px 6px",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--teal-700, #1d6c7b)",
+                  cursor: "pointer",
+                  borderRadius: 6,
+                }}
+              >
+                Reset to default
+              </span>
+            ) : null}
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditingChange(!editing);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onEditingChange(!editing);
+                }
+              }}
+              style={{
+                padding: "5px 12px",
+                background: editing ? "var(--teal-700, #1d6c7b)" : "transparent",
+                color: editing ? "#fff" : "var(--teal-900, #0f4a56)",
+                border: "1px solid var(--teal-700, #1d6c7b)",
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                transition: "background 0.12s ease, color 0.12s ease",
+              }}
+            >
+              {editing ? "Done editing" : "Edit"}
+            </span>
+          </span>
+        ) : null}
+      </button>
+      {expanded ? (
+        <div style={{ padding: "0 14px 14px" }}>
+          {isAtDefault ? (
+            <div
+              role="alert"
+              style={{
+                marginBottom: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#b91c1c",
+              }}
+            >
+              {PROCESS_NOTES_PLACEHOLDER_NOTICE}
+            </div>
+          ) : null}
+          {editing ? (
+            <textarea
+              value={currentNote}
+              onChange={(e) => onNoteChange(e.target.value)}
+              rows={6}
+              placeholder={editPlaceholder}
+              className="pricing__input"
+              style={{
+                width: "100%",
+                resize: "vertical",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                lineHeight: 1.5,
+              }}
+              autoFocus
+            />
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                background: "#fff",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 12.5,
+                lineHeight: 1.5,
+                color: currentNote.trim()
+                  ? "var(--ink, #1f2a2d)"
+                  : "var(--ink-3, #8a9498)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                minHeight: 60,
+              }}
+            >
+              {currentNote.trim() || emptyReadOnlyText}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // BlendSectionCard — one card per blend phase (Pre-cook / Secondary / Final).
 // Contains the phase's ingredient table (ingredient picker + grams + cost),
 // a subtotal row, and its own "+ Add ingredient" button. Independent from
@@ -5106,134 +5385,18 @@ function BlendSectionCard({
           per-subsection Process notes blocks inside renderIngredientsBlock,
           just labelled "Cooking:" instead of "Process:" and wired to
           independent cooking* state. */}
-      {phase === "cooked" && onCookingProcessNoteChange ? (() => {
-        const currentCookingNote = cookingProcessNote ?? "";
-        const currentDefaultCookingNote = defaultCookingProcessNote ?? "";
-        const cookingIsAtDefault =
-          currentDefaultCookingNote.length > 0 &&
-          currentCookingNote.trim() === currentDefaultCookingNote.trim();
-        return (
-          <div
-            className="fe-process-notes"
-            style={{
-              padding: "10px 14px 14px",
-              borderBottom: "1px solid var(--line-2, #efe9da)",
-              background: "var(--cream-soft, #fbf6ec)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 6,
-                gap: 8,
-                flexWrap: "wrap",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "var(--teal-900, #0f4a56)",
-                }}
-              >
-                Cooking:
-              </span>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-                {currentDefaultCookingNote && !cookingIsAtDefault ? (
-                  <button
-                    type="button"
-                    onClick={() => onCookingProcessNoteChange(currentDefaultCookingNote)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      padding: "2px 6px",
-                      fontSize: 11.5,
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "var(--teal-700, #1d6c7b)",
-                      cursor: "pointer",
-                      borderRadius: 6,
-                      transition: "background 0.12s ease",
-                    }}
-                  >
-                    Reset to default
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setCookingProcessEditing((v) => !v)}
-                  style={{
-                    padding: "5px 12px",
-                    background: cookingProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
-                    color: cookingProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
-                    border: "1px solid var(--teal-700, #1d6c7b)",
-                    borderRadius: 6,
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    transition: "background 0.12s ease, color 0.12s ease",
-                  }}
-                >
-                  {cookingProcessEditing ? "Done editing" : "Edit"}
-                </button>
-              </div>
-            </div>
-            {cookingIsAtDefault ? (
-              <div
-                role="alert"
-                style={{
-                  marginBottom: 6,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#b91c1c",
-                }}
-              >
-                {PROCESS_NOTES_PLACEHOLDER_NOTICE}
-              </div>
-            ) : null}
-            {cookingProcessEditing ? (
-              <textarea
-                value={currentCookingNote}
-                onChange={(e) => onCookingProcessNoteChange(e.target.value)}
-                rows={6}
-                placeholder="Describe the cooking steps, target temperature, solids, pH, etc."
-                className="pricing__input"
-                style={{
-                  width: "100%",
-                  resize: "vertical",
-                  fontFamily: "inherit",
-                  fontSize: 12.5,
-                  lineHeight: 1.5,
-                }}
-                autoFocus
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  background: "#fff",
-                  border: "1px solid var(--line, #e3dcc9)",
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  lineHeight: 1.5,
-                  color: currentCookingNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  minHeight: 60,
-                }}
-              >
-                {currentCookingNote.trim() || "No cooking notes yet — click Edit to add."}
-              </div>
-            )}
-          </div>
-        );
-      })() : null}
+      {phase === "cooked" && onCookingProcessNoteChange ? (
+        <ProcessNoteBlock
+          label="Cooking"
+          currentNote={cookingProcessNote ?? ""}
+          defaultNote={defaultCookingProcessNote ?? ""}
+          onNoteChange={onCookingProcessNoteChange}
+          editing={cookingProcessEditing}
+          onEditingChange={setCookingProcessEditing}
+          editPlaceholder="Describe the cooking steps, target temperature, solids, pH, etc."
+          emptyReadOnlyText="No cooking notes yet — click Edit to add."
+        />
+      ) : null}
 
       {(() => {
         // Renders one subsection block: optional subheading + ingredients
@@ -5369,133 +5532,18 @@ function BlendSectionCard({
                   instructions for this subsection (pre-blend pectin,
                   hydration times, pH targets, etc.). Persisted on the
                   version's process_notes JSONB column keyed by phase.
-                  - On first render the textarea is seeded with the canonical
-                    DEFAULT_PROCESS_NOTES[phase] via FormulaEditor state init.
-                  - If the current text still equals the default, a red
-                    placeholder-notice banner is shown so the rep knows this
-                    hasn't been reviewed for this specific formula yet.
-                  - Once edited, a "Reset to default" link appears to bring
-                    it back to the canonical text. */}
-              <div
-                className="fe-process-notes"
-                style={{
-                  padding: "10px 14px 14px",
-                  borderBottom: "1px solid var(--line-2, #efe9da)",
-                  background: "var(--cream-soft, #fbf6ec)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 6,
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: "var(--teal-900, #0f4a56)",
-                    }}
-                  >
-                    Process:
-                  </span>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-                    {blockDefaultProcessNote && !blockIsAtDefault ? (
-                      <button
-                        type="button"
-                        onClick={() => blockOnProcessNoteChange(blockDefaultProcessNote)}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          padding: 0,
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                          color: "var(--teal-700, #1d6c7b)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Reset to default
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => setBlockProcessEditing((v) => !v)}
-                      style={{
-                        padding: "5px 12px",
-                        background: blockProcessEditing ? "var(--teal-700, #1d6c7b)" : "transparent",
-                        color: blockProcessEditing ? "#fff" : "var(--teal-900, #0f4a56)",
-                        border: "1px solid var(--teal-700, #1d6c7b)",
-                        borderRadius: 6,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        cursor: "pointer",
-                        transition: "background 0.12s ease, color 0.12s ease",
-                      }}
-                    >
-                      {blockProcessEditing ? "Done editing" : "Edit"}
-                    </button>
-                  </div>
-                </div>
-                {blockIsAtDefault ? (
-                  <div
-                    role="alert"
-                    style={{
-                      marginBottom: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#b91c1c",
-                    }}
-                  >
-                    {PROCESS_NOTES_PLACEHOLDER_NOTICE}
-                  </div>
-                ) : null}
-                {blockProcessEditing ? (
-                  <textarea
-                    value={blockProcessNote}
-                    onChange={(e) => blockOnProcessNoteChange(e.target.value)}
-                    rows={6}
-                    placeholder="Describe the mixing steps, hydration times, pH targets, etc."
-                    className="pricing__input"
-                    style={{
-                      width: "100%",
-                      resize: "vertical",
-                      fontFamily: "inherit",
-                      fontSize: 12.5,
-                      lineHeight: 1.5,
-                    }}
-                    autoFocus
-                  />
-                ) : (
-                  // Read-only view. Whitespace: pre-wrap keeps whatever newlines
-                  // the rep typed in edit mode. Empty state gets a placeholder
-                  // hint since we know the default gets seeded on mount.
-                  <div
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      background: "#fff",
-                      border: "1px solid var(--line, #e3dcc9)",
-                      borderRadius: 6,
-                      fontSize: 12.5,
-                      lineHeight: 1.5,
-                      color: blockProcessNote.trim() ? "var(--ink, #1f2a2d)" : "var(--ink-3, #8a9498)",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      minHeight: 60,
-                    }}
-                  >
-                    {blockProcessNote.trim() || "No process notes yet — click Edit to add."}
-                  </div>
-                )}
-              </div>
+                  Collapsible via chevron so operators can hide the
+                  block when scanning the ingredient table. */}
+              <ProcessNoteBlock
+                label="Process"
+                currentNote={blockProcessNote}
+                defaultNote={blockDefaultProcessNote}
+                onNoteChange={blockOnProcessNoteChange}
+                editing={blockProcessEditing}
+                onEditingChange={(next) => setBlockProcessEditing(next)}
+                editPlaceholder="Describe the mixing steps, hydration times, pH targets, etc."
+                emptyReadOnlyText="No process notes yet — click Edit to add."
+              />
 
               {blockRows.length === 0 ? (
                 <div
