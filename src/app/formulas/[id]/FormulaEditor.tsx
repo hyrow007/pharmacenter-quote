@@ -1627,27 +1627,53 @@ export default function FormulaEditor({
           .fe-d-line {
             display: none !important;
           }
-          /* Batch Setup + Key Indicators are collapsed on print into a
-             single "Label: Value, Label: Value, ..." line (.fe-simple-
-             summary below). The boxed cards, section titles, operator
-             glyphs, and row dividers are all hidden — the sheet keeps
-             the numbers but drops the visual scaffolding. */
-          .fe-bench-and-indicators > div:not(.fe-simple-summary) {
+          /* Batch Setup + Key Indicators collapse on print into a
+             two-column definition list (label ......... value). The
+             boxed cards, section titles, operator glyphs, and row
+             dividers are all hidden — the sheet keeps every number
+             but reads as a clean ledger instead of two panels. */
+          .fe-bench-and-indicators > div:not(.fe-simple-summary),
+          .fe-bench-and-indicators > .fe-bench-stats,
+          .fe-bench-and-indicators > .fe-key-indicators-card {
             display: none !important;
           }
           .fe-simple-summary {
             display: block !important;
-            font-size: 10pt !important;
-            line-height: 1.6 !important;
-            color: #1f2a2d !important;
-            margin: 2px 0 6px !important;
+            margin: 4px 0 8px !important;
             padding: 0 !important;
             border: none !important;
             background: transparent !important;
+            font-size: 10pt !important;
+            color: #1f2a2d !important;
           }
-          .fe-simple-summary span {
-            white-space: normal !important;
+          .fe-simple-summary__row {
+            display: flex !important;
+            align-items: baseline !important;
+            gap: 4px !important;
+            padding: 2px 0 !important;
+            break-inside: avoid !important;
+          }
+          .fe-simple-summary__label {
+            flex: 0 0 auto !important;
+            font-weight: 500 !important;
+            color: #4a5c60 !important;
+            margin: 0 !important;
+          }
+          /* Dotted leader — a flex-1 span that stretches to fill the
+             gap between label and value. The dotted bottom border sits
+             at the baseline so the dots read as a TOC leader. */
+          .fe-simple-summary__leader {
+            flex: 1 1 auto !important;
+            border-bottom: 1px dotted #b8b0a0 !important;
+            transform: translateY(-2px) !important;
+            min-width: 12px !important;
+          }
+          .fe-simple-summary__value {
+            flex: 0 0 auto !important;
+            font-weight: 700 !important;
+            color: #0f4a56 !important;
             font-variant-numeric: tabular-nums !important;
+            margin: 0 !important;
           }
 
           /* Blend subheadings no longer carry a top border — the
@@ -3321,37 +3347,66 @@ function BenchTopTab({
           On-screen we keep the two-card Batch Setup + Key Indicators
           treatment (labelled boxes, colored operator glyphs, the whole
           equation drawn out). On the printed sheet the operator asked
-          for a "just the facts" line: each stat rendered as
-          `Label: Value` comma-separated, no titles, no glyphs, no
-          borders. The browser reflows this naturally at page width so
-          it lands on 1-2 lines with no styling to speak of. Hidden
-          on-screen via CSS in the print stylesheet block above. */}
-      <div className="fe-simple-summary">
-        <span>Bench top batch size: {Format.grams(benchBatchG)} g</span>
-        <span>, Finished piece weight: {Format.grams(gummyPieceWeightG)} g</span>
-        <span>, Cast weight: {Format.grams(wetCastPieceWeightG)} g</span>
-        <span>
-          , Theoretical Yield:{" "}
-          {wetCastPieceWeightG > 0 && benchBatchG > 0
-            ? Math.round(benchBatchG / wetCastPieceWeightG).toString()
-            : "—"}{" "}
-          gummies
-        </span>
-        <span>, Primary Blend: {Format.grams(primaryBlendG)} g</span>
-        <span>, Secondary Blend: {Format.grams(secondaryBlendG)} g</span>
-        <span>, Final Blend: {Format.grams(finalBlendG)} g</span>
-        <span>, Total: {Format.grams(totalBlendsG)} g</span>
-        <span>, % of bench batch: {Format.pctCompact(pctOfBench)}%</span>
-        <span>
-          , Residual Moisture Total: {Format.pctCompact(residualMoistureTotalPct)}%
-        </span>
+          for a plain, cohesive definition-list layout: each row is a
+          label on the left, a dotted leader in the middle, and the
+          value on the right — the ledger/TOC pattern. Hidden on-screen
+          via CSS in the print stylesheet block above. */}
+      <dl className="fe-simple-summary">
+        <SummaryRow label="Bench top batch size" value={`${Format.grams(benchBatchG)} g`} />
+        <SummaryRow
+          label="Finished piece weight (dry)"
+          value={`${Format.grams(gummyPieceWeightG)} g`}
+        />
+        <SummaryRow
+          label="Cast weight (wet)"
+          value={`${Format.grams(wetCastPieceWeightG)} g`}
+        />
+        <SummaryRow
+          label="Theoretical Yield"
+          value={
+            wetCastPieceWeightG > 0 && benchBatchG > 0
+              ? `${Math.round(benchBatchG / wetCastPieceWeightG)} gummies`
+              : "—"
+          }
+        />
+        <SummaryRow label="Primary Blend (cooked)" value={`${Format.grams(primaryBlendG)} g`} />
+        <SummaryRow label="Secondary Blend" value={`${Format.grams(secondaryBlendG)} g`} />
+        <SummaryRow label="Final Blend" value={`${Format.grams(finalBlendG)} g`} />
+        <SummaryRow label="Total (sum of all blends)" value={`${Format.grams(totalBlendsG)} g`} />
+        <SummaryRow label="% of bench batch" value={`${Format.pctCompact(pctOfBench)}%`} />
+        <SummaryRow
+          label="Residual Moisture Total"
+          value={`${Format.pctCompact(residualMoistureTotalPct)}%`}
+        />
         {sugarSyrupRatio ? (
-          <span>
-            , Sugar (dry): {Format.pctCompact(sugarSyrupRatio.sugarPct)}%
-            , Syrup (dry): {Format.pctCompact(sugarSyrupRatio.syrupPct)}%
-          </span>
+          <>
+            <SummaryRow
+              label="Sugar (dry)"
+              value={`${Format.pctCompact(sugarSyrupRatio.sugarPct)}%`}
+            />
+            <SummaryRow
+              label="Syrup (dry)"
+              value={`${Format.pctCompact(sugarSyrupRatio.syrupPct)}%`}
+            />
+          </>
         ) : null}
-      </div>
+      </dl>
+    </div>
+  );
+}
+
+// ---- Print-only summary row ----
+// One label/value pair inside the print-time definition list under
+// Batch Setup + Key Indicators. The middle "leader" span is a flex-1
+// filler with a dotted bottom border, giving the classic TOC look
+// (label ................ value). Semantics use <dt>/<dd> pairs so
+// screen readers still get the label/value relationship.
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="fe-simple-summary__row">
+      <dt className="fe-simple-summary__label">{label}</dt>
+      <span className="fe-simple-summary__leader" aria-hidden="true" />
+      <dd className="fe-simple-summary__value">{value}</dd>
     </div>
   );
 }
