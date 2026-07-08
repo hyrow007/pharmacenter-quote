@@ -1524,6 +1524,12 @@ export default function FormulaEditor({
            Indicators). Hidden on-screen so it only shows on paper. */
         .fe-d-line { display: none; }
 
+        /* Print-only simplified summary. On-screen we render the full
+           boxed Batch Setup + Key Indicators UI; on paper we swap in
+           the plain "Label: Value, ..." block via CSS in the @media
+           print stylesheet further down. */
+        .fe-simple-summary { display: none; }
+
         /* Suppress the native number-input spinner on the overage %
            editor so its own custom < > chevrons (rendered to the LEFT
            of the input) don't fight the browser's right-side spinner
@@ -1621,29 +1627,28 @@ export default function FormulaEditor({
           .fe-d-line {
             display: none !important;
           }
-          /* Keep vertical stack of Batch Setup + Key Indicators (they
-             used to sit side-by-side on-screen); the divider between
-             them is intentionally gone. */
-          .fe-bench-and-indicators {
-            flex-direction: column !important;
-            margin-top: 4px !important;
+          /* Batch Setup + Key Indicators are collapsed on print into a
+             single "Label: Value, Label: Value, ..." line (.fe-simple-
+             summary below). The boxed cards, section titles, operator
+             glyphs, and row dividers are all hidden — the sheet keeps
+             the numbers but drops the visual scaffolding. */
+          .fe-bench-and-indicators > div:not(.fe-simple-summary) {
+            display: none !important;
           }
-          .fe-key-indicators-card {
-            padding-top: 10px !important;
-            margin-top: 10px !important;
-            width: 100% !important;
+          .fe-simple-summary {
+            display: block !important;
+            font-size: 10pt !important;
+            line-height: 1.6 !important;
+            color: #1f2a2d !important;
+            margin: 2px 0 6px !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
           }
-          /* Kill the dashed divider inside Key Indicators — the user
-             asked for the KI panel to read as one block, not split. */
-          .fe-ki-row2 { border-top: none !important; margin-top: 6px !important; padding-top: 0 !important; }
-          /* Center the % of bench batch on its own row (rather than
-             margin-left: auto pushing it against the right edge). */
-          .fe-ki-pct-of-bench {
-            margin-left: 0 !important;
-            width: 100% !important;
-            align-items: center !important;
+          .fe-simple-summary span {
+            white-space: normal !important;
+            font-variant-numeric: tabular-nums !important;
           }
-          .fe-key-indicators-row { flex-direction: column !important; align-items: center !important; }
 
           /* Blend subheadings no longer carry a top border — the
              heading text itself + whitespace is enough separation for
@@ -3311,6 +3316,41 @@ function BenchTopTab({
             </div>
           </div>
         </div>
+      </div>
+      {/* Print-only simplified summary.
+          On-screen we keep the two-card Batch Setup + Key Indicators
+          treatment (labelled boxes, colored operator glyphs, the whole
+          equation drawn out). On the printed sheet the operator asked
+          for a "just the facts" line: each stat rendered as
+          `Label: Value` comma-separated, no titles, no glyphs, no
+          borders. The browser reflows this naturally at page width so
+          it lands on 1-2 lines with no styling to speak of. Hidden
+          on-screen via CSS in the print stylesheet block above. */}
+      <div className="fe-simple-summary">
+        <span>Bench top batch size: {Format.grams(benchBatchG)} g</span>
+        <span>, Finished piece weight: {Format.grams(gummyPieceWeightG)} g</span>
+        <span>, Cast weight: {Format.grams(wetCastPieceWeightG)} g</span>
+        <span>
+          , Theoretical Yield:{" "}
+          {wetCastPieceWeightG > 0 && benchBatchG > 0
+            ? Math.round(benchBatchG / wetCastPieceWeightG).toString()
+            : "—"}{" "}
+          gummies
+        </span>
+        <span>, Primary Blend: {Format.grams(primaryBlendG)} g</span>
+        <span>, Secondary Blend: {Format.grams(secondaryBlendG)} g</span>
+        <span>, Final Blend: {Format.grams(finalBlendG)} g</span>
+        <span>, Total: {Format.grams(totalBlendsG)} g</span>
+        <span>, % of bench batch: {Format.pctCompact(pctOfBench)}%</span>
+        <span>
+          , Residual Moisture Total: {Format.pctCompact(residualMoistureTotalPct)}%
+        </span>
+        {sugarSyrupRatio ? (
+          <span>
+            , Sugar (dry): {Format.pctCompact(sugarSyrupRatio.sugarPct)}%
+            , Syrup (dry): {Format.pctCompact(sugarSyrupRatio.syrupPct)}%
+          </span>
+        ) : null}
       </div>
     </div>
   );
