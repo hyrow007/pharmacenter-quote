@@ -1761,6 +1761,37 @@ export default function FormulaEditor({
           [style*="var(--cream-soft"] {
             background: #fff !important;
           }
+          /* Simplified cards: strip the visual chrome that made each
+             section read as a framed "card" on paper.
+             1. Kill the teal underline under card titles — they still
+                render bold teal (colors are fine) but without the rule
+                they read as inline eyebrows instead of card headers.
+             2. Kill the fixed internal padding on card wrappers so
+                sections sit tight against each other with no wasted
+                inch of margin.
+             3. Tighten the vertical gap between adjacent cards so the
+                whole document takes less vertical real estate. */
+          [style*="borderBottom: \"2px solid var(--teal"],
+          [style*="borderBottom: \"1.5px solid var(--teal"],
+          [style*="border-bottom: 2px solid var(--teal"],
+          [style*="border-bottom: 1.5px solid var(--teal"] {
+            border-bottom: none !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 4px !important;
+          }
+          /* Any element whose inline style declares padding: 18 (the
+             cardStyle used by Batch Setup / Key Indicators / blend
+             cards) gets flattened to zero on print. */
+          [style*="padding: 18"] {
+            padding: 0 !important;
+          }
+          /* Tighten the flex/gap wrappers that stacked cards vertically
+             on print. */
+          .fe-bench-and-indicators,
+          [style*="marginBottom: 18"] {
+            margin-bottom: 8px !important;
+            gap: 6px !important;
+          }
           /* Print-table treatment (Option B: CSS Grid rows).
              Each <tr> becomes its own CSS grid with a fixed column
              template — one flexible ingredient column plus up to four
