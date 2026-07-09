@@ -2738,6 +2738,7 @@ export default function FormulaEditor({
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
             sectionUnitValue={preCookUnit}
             onSectionUnitChange={setPreCookUnit}
+            printing={printing}
           />
           <BlendSectionCard
             phase="cooked"
@@ -2771,6 +2772,7 @@ export default function FormulaEditor({
             labelClaims={labelClaims}
             gummyPieceWeightG={gummyPieceWeightG}
             wetCastPieceWeightG={wetCastPieceWeightG}
+            printing={printing}
           />
         </>
       )}
@@ -4541,6 +4543,7 @@ function BlendSectionCard({
   labelClaims,
   gummyPieceWeightG,
   wetCastPieceWeightG,
+  printing,
 }: {
   phase: BlendPhase;
   rows: GummyFormulaIngredient[];
@@ -4626,6 +4629,11 @@ function BlendSectionCard({
    *  survives drying so the per-piece claim amount stays the same. Falls
    *  back to gummyPieceWeightG inside the helper when undefined / <= 0. */
   wetCastPieceWeightG?: number;
+  /** When true, force every collapsible child (Process notes blocks,
+   *  Solution Composition dropdowns) into an expanded state so the
+   *  printed spec sheet includes their contents. On-screen this stays
+   *  false and each block keeps its own operator-controlled toggle. */
+  printing?: boolean;
 }) {
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
@@ -5632,6 +5640,7 @@ function BlendSectionCard({
           onEditingChange={setCookingProcessEditing}
           editPlaceholder="Describe the cooking steps, target temperature, solids, pH, etc."
           emptyReadOnlyText="No cooking notes yet — click Edit to add."
+          forceExpanded={printing}
         />
       ) : null}
 
@@ -5780,6 +5789,7 @@ function BlendSectionCard({
                 onEditingChange={(next) => setBlockProcessEditing(next)}
                 editPlaceholder="Describe the mixing steps, hydration times, pH targets, etc."
                 emptyReadOnlyText="No process notes yet — click Edit to add."
+                forceExpanded={printing}
               />
 
               {blockRows.length === 0 ? (
@@ -5946,6 +5956,7 @@ function BlendSectionCard({
                             // in other subsections so no cell renders.
                             showOverageColumn={showOverageColumn}
                             dnd={rowDnd}
+                            printing={printing}
                           />
                         );
                       }
@@ -8140,6 +8151,7 @@ function SolutionRow({
   residualMoistureText,
   showOverageColumn,
   dnd,
+  printing,
 }: {
   row: GummyFormulaIngredient;
   rawMaterials: RawMaterialOption[];
@@ -8179,6 +8191,10 @@ function SolutionRow({
     trStyle?: React.CSSProperties;
     renderHandle: (hover: boolean) => React.ReactNode;
   };
+  /** When true, force the Composition dropdown open so the printed
+   *  sheet includes every solution's ingredient breakdown. On-screen
+   *  the operator's own expand/collapse state controls visibility. */
+  printing?: boolean;
 }) {
   const showPctCell = pctOfFinishedText !== undefined;
   const showResidualCell = residualMoistureText !== undefined;
@@ -8248,7 +8264,10 @@ function SolutionRow({
         !c.customName &&
         (Number(c.pct) || 0) === 0,
     );
-  const [expanded, setExpanded] = useState<boolean>(isFresh);
+  const [expandedState, setExpanded] = useState<boolean>(isFresh);
+  // On print, force the composition open so every component ships to
+  // paper. On-screen the operator's toggle owns state.
+  const expanded = printing || expandedState;
 
   function updateComponent(id: string, patch: Partial<SolutionComponent>) {
     onUpdate({
