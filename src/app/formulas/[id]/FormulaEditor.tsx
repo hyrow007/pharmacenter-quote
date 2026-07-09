@@ -2100,13 +2100,22 @@ export default function FormulaEditor({
               <strong>Customer</strong> {customerName}
             </span>
           ) : null}
+          {/* Formula's last-updated timestamp rather than the print
+              wall-clock. Prints of the same version at different times
+              now read the same, so operators can tell at a glance
+              whether a printed copy still matches the current record. */}
           <span style={{ marginLeft: "auto" }}>
-            <strong>Printed</strong>{" "}
-            {new Date().toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            <strong>Updated on:</strong>{" "}
+            {initialFormula.updatedAt
+              ? new Date(initialFormula.updatedAt).toLocaleDateString(
+                  "en-US",
+                  {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  },
+                )
+              : "—"}
           </span>
         </div>
       </div>
