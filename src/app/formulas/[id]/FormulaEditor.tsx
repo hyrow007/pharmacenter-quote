@@ -1792,6 +1792,42 @@ export default function FormulaEditor({
             margin-bottom: 8px !important;
             gap: 6px !important;
           }
+          /* Solution rows on print — the on-screen SolutionRow is a
+             single <td colSpan=N> whose inner grid uses 90 / 120 / 120
+             / 120 / 40 track widths (see SolutionRow render). That
+             mismatched the ingredient-row print grid (1fr + 78×4) so
+             solution amounts landed under the wrong header and the row
+             took multiple visual "rows" of vertical space. On paper we
+             (a) force the outer <td> to span every grid track so the
+             row runs the full width, (b) override the inner grid's
+             template to mirror the ingredient-row template so grams /
+             overage / residual line up with the columns above, and
+             (c) tighten the row's own vertical padding so it reads as
+             one line, not a stacked block. */
+          tr.fe-solution-row {
+            grid-template-columns: minmax(0, 1fr) 78px 78px 78px 78px !important;
+          }
+          .fe-solution-row__cell {
+            grid-column: 1 / -1 !important;
+            padding: 4px 0 !important;
+            display: block !important;
+          }
+          .fe-solution-row__grid {
+            /* Same template as ingredient rows: ingredient (1fr) +
+               four numeric tracks. Solutions don't render an editable
+               overage / residual cell, but the tracks still hold so
+               the grams cell drops under the Grams column header. */
+            grid-template-columns: minmax(0, 1fr) 78px 78px 78px 78px !important;
+            column-gap: 14px !important;
+            align-items: baseline !important;
+          }
+          /* Kill any leftover 40-px delete column left over from the
+             on-screen layout. On paper we hide delete affordances
+             everywhere else too. */
+          .fe-solution-row__grid > *:last-child {
+            display: none !important;
+          }
+
           /* Print-table treatment (Option B: CSS Grid rows).
              Each <tr> becomes its own CSS grid with a fixed column
              template — one flexible ingredient column plus up to four
@@ -8159,6 +8195,7 @@ function SolutionRow({
 
   return (
     <tr
+      className="fe-solution-row"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -8170,6 +8207,7 @@ function SolutionRow({
       {...(dnd?.trProps ?? {})}
     >
       <td
+        className="fe-solution-row__cell"
         colSpan={
           // Base columns: Ingredient + Grams + delete = 3.
           // + Overage column (Secondary Blend only) = +1
@@ -8196,6 +8234,7 @@ function SolutionRow({
               exist on cooked-card subsections (see
               renderIngredientsBlock's pctBaseG param). */}
           <div
+            className="fe-solution-row__grid"
             style={{
               display: "grid",
               gridTemplateColumns: [
