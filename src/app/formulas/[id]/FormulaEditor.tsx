@@ -1109,26 +1109,11 @@ export default function FormulaEditor({
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
     if (!printing) return;
-    // Compute an approximate page count from the current document
-    // height vs. a letter-page content area (letter height 279mm minus
-    // top/bottom margins = ~228mm), then stamp "Page X of Y" into the
-    // fallback footer element. This runs BEFORE window.print() so the
-    // footer text is in the DOM when the print engine paginates.
-    // We can't know the *exact* per-page number without paged.js — the
-    // stamp is the same on every printed page. Good enough as a
-    // fallback for browsers that don't render our @page @bottom-right
-    // margin box (Firefox, Chrome with browser headers/footers enabled).
-    const footer = document.querySelector<HTMLDivElement>(".fe-print-footer");
-    if (footer) {
-      // Rough page count: total scroll height ÷ (viewport height * 0.85).
-      // The 0.85 factor approximates the content ratio of a letter page
-      // after margins so we don't over-count. Minimum 1.
-      const total = Math.max(
-        1,
-        Math.ceil(document.body.scrollHeight / (window.innerHeight * 0.85)),
-      );
-      footer.textContent = `Page 1 of ${total}`;
-    }
+    // Give React a paint before window.print(). The @page @bottom-right
+    // rule in CSS handles per-page numbering natively — no JS
+    // manipulation needed (v34's JS-injected "Page 1 of N" was static
+    // and printed the same text on every page, which is worse than
+    // Chrome's native counter).
     const t = window.setTimeout(() => {
       window.print();
       window.setTimeout(() => setPrinting(false), 300);
@@ -1619,23 +1604,11 @@ export default function FormulaEditor({
             margin: 0 !important;
             padding: 0 !important;
           }
-          /* Fallback page-number footer — some browsers (or Chrome
-             with "Headers and footers" enabled in the print dialog)
-             ignore the @page @bottom-right rule above. This div gets
-             filled in on the beforeprint event with "Page X of Y"
-             text computed from window.innerHeight vs. document
-             height, and sits fixed at the bottom-right of every page
-             so at least one of the two mechanisms always renders. */
-          .fe-print-footer {
-            position: fixed !important;
-            bottom: 0 !important;
-            right: 0 !important;
-            padding: 3mm 8mm !important;
-            font-size: 9pt !important;
-            color: #000 !important;
-            background: #fff !important;
-            z-index: 9999 !important;
-          }
+          /* NOTE: v34 had a JS-injected .fe-print-footer here as a
+             page-count fallback, but position:fixed elements print
+             the same text on every page — you'd see "Page 1 of N"
+             on all pages. Removed in v35; @page @bottom-right above
+             is the correct per-page counter. */
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
              elements, and back pills. Only the formula content prints.
@@ -1655,13 +1628,14 @@ export default function FormulaEditor({
             color: #000 !important;
             font-size: 10pt;
           }
-          /* Zero page margin suppresses browser-generated headers
-             (date + page title) on Chrome/Edge/Safari; body padding
-             below gives the content the intended breathing room. Top
-             padding is trimmed to 0.2in so the title sits closer to
-             the top edge of the page. */
-          @page { margin: 0; size: portrait; }
-          body { padding: 0.2in 0.4in 0.4in !important; }
+          /* NOTE: we intentionally do NOT redeclare @page here with
+             margin: 0 — that would clobber the top @page rule's 34mm
+             top margin AND kill the @bottom-right page counter (a
+             margin box needs actual margin space to render into).
+             The first @page rule above owns page geometry.
+             Body padding stays 0 because @page margins already give
+             the sheet a proper content area. */
+          body { padding: 0 !important; }
 
           /* Process notes wrappers vanish from print — they're
              editorial background for the R&D bench, not part of a
@@ -2183,14 +2157,11 @@ export default function FormulaEditor({
         }
       `}</style>
 
-      {/* Print-only page-number footer — position:fixed at bottom-right
-          on every printed page. Content is stamped by the print
-          useEffect before window.print() so it reads "Page 1 of N".
-          Belt-and-suspenders with the @page @bottom-right counter
-          above (which Chrome sometimes ignores). */}
-      <div className="fe-print-only fe-print-footer" aria-hidden="true">
-        Page
-      </div>
+      {/* v35 removed the JS-injected .fe-print-footer — Chrome's
+          @page @bottom-right counter (declared in the print CSS)
+          handles per-page numbers. If a browser doesn't support @page
+          margin boxes, the print dialog's own "Headers and footers"
+          checkbox is the user's fallback. */}
 
       {/* Print-only meta header — a compact letterhead that only shows
           up when printing. On-screen the CSS above keeps it hidden.
