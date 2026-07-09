@@ -5424,7 +5424,7 @@ function BlendSectionCard({
                         color: "var(--teal-900, #0f4a56)",
                       }}
                     >
-                      Tot primary blend carry over
+                      Total primary blend carry over
                     </strong>
                   </BTd>
                   {/* Total-row moisture-loss placeholder — no aggregate
@@ -6247,7 +6247,7 @@ function BlendSectionCard({
                               (e.g. "Tot secondary blend" / "Tot final
                               blend"). Otherwise fall back to the outer
                               phase label (pre-cook card). */}
-                          Tot {subHeading?.toLowerCase() ?? label.toLowerCase()}
+                          Total {subHeading?.toLowerCase() ?? label.toLowerCase()}
                         </strong>
                       </BTd>
                       {/* Empty Overage cell in the Total row so column
