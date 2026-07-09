@@ -1771,8 +1771,6 @@ export default function FormulaEditor({
                 inch of margin.
              3. Tighten the vertical gap between adjacent cards so the
                 whole document takes less vertical real estate. */
-          [style*="borderBottom: \"2px solid var(--teal"],
-          [style*="borderBottom: \"1.5px solid var(--teal"],
           [style*="border-bottom: 2px solid var(--teal"],
           [style*="border-bottom: 1.5px solid var(--teal"] {
             border-bottom: none !important;
