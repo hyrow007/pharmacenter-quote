@@ -1547,35 +1547,19 @@ export default function FormulaEditor({
         }
 
         @media print {
-          /* Reserve top space for the running header (fixed at
-             top:0 below) and bottom space for the "Page X of Y"
-             margin box. Chrome repaints position:fixed elements on
-             every printed page, so the header appears on all sheets;
-             the @page bottom-right box uses the standard CSS Paged
-             Media counter() to render the page number. */
+          /* Page number in the bottom-right margin of every page.
+             Uses standard CSS Paged Media counter() — supported in
+             Chrome/Chromium and rendered by the print pipeline. Does
+             NOT touch top/bottom margins so browsers use their own
+             defaults (which our earlier attempt at 28mm broke by
+             confusing the content flow with the header). */
           @page {
-            margin: 28mm 12mm 18mm 12mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
               color: #000;
               font-family: sans-serif;
             }
-          }
-          /* Running header — same DOM node used for the on-page-1
-             letterhead, upgraded to a fixed strip that Chrome
-             repeats on every printed page. Sized to slot into the
-             28mm top margin we reserved on @page above. */
-          .fe-print-header {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            margin: 0 !important;
-            padding: 6mm 12mm 3mm !important;
-            border-bottom: 1px solid #000 !important;
-            background: #fff !important;
-            z-index: 9999 !important;
           }
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
@@ -2126,15 +2110,11 @@ export default function FormulaEditor({
 
       {/* Print-only meta header — a compact letterhead that only shows
           up when printing. On-screen the CSS above keeps it hidden.
-          `fe-print-header` upgrades this to a *running* header that
-          Chrome repeats at the top of every printed page (see
-          position: fixed + @page margin-top reserve in the print CSS
-          block above). Every sheet in the printout — Product Details,
-          Pre-cook, Cooked, Secondary, Final — carries the same
-          formula-identity strip, and the @page rule prints
-          "Page X of Y" in the bottom-right margin. */}
+          Renders once on page 1 (normal flow, not repeated); the
+          "Page X of Y" indicator lives in the @page bottom-right
+          margin box on every page via CSS Paged Media counter(). */}
       <div
-        className="fe-print-only fe-print-header"
+        className="fe-print-only"
         style={{
           marginBottom: 12,
           paddingBottom: 8,
