@@ -2101,10 +2101,12 @@ export default function FormulaEditor({
             </span>
           ) : null}
           {/* Formula's last-updated timestamp rather than the print
-              wall-clock. Prints of the same version at different times
-              now read the same, so operators can tell at a glance
-              whether a printed copy still matches the current record. */}
-          <span style={{ marginLeft: "auto" }}>
+              wall-clock. Sits inline with the rest of the meta strip
+              (Formula / Version / Product Code / Name / Flavor / Shape
+              / Customer) — no marginLeft:auto — so the operator reads
+              the header left-to-right as one continuous strip of
+              identity metadata. */}
+          <span>
             <strong>Updated on:</strong>{" "}
             {initialFormula.updatedAt
               ? new Date(initialFormula.updatedAt).toLocaleDateString(
