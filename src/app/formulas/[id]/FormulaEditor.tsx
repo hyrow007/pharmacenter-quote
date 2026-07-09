@@ -2066,6 +2066,26 @@ export default function FormulaEditor({
 
           /* Anything explicitly marked print-hide is suppressed. Custom
              class we add to affordance rows and interactive icons. */
+
+          /* Force every element on the printed sheet to render pure
+             black — no teal accents, no cream lines, no gray hints.
+             Uses the ":not(#nonexistent-id)" specificity trick to bump
+             each selector's specificity above the class-based color
+             rules earlier in this block, so this override wins the
+             cascade regardless of what upstream declarations set.
+             Covers text color, borders, SVG fill/stroke, and any
+             element that has a color inline-style declaration. */
+          :not(#nonexistent) *,
+          :not(#nonexistent) *::before,
+          :not(#nonexistent) *::after {
+            color: #000 !important;
+            border-color: #000 !important;
+          }
+          :not(#nonexistent) svg,
+          :not(#nonexistent) svg * {
+            fill: #000 !important;
+            stroke: #000 !important;
+          }
         }
       `}</style>
 
