@@ -1685,6 +1685,28 @@ export default function FormulaEditor({
             margin-top: 8px !important;
           }
 
+          /* One printed page per blend section. Each blend gets its
+             own dedicated sheet so a bench operator can lay them out
+             side-by-side and work through them independently.
+             Pages laid out:
+               1  Product Details + summary + Label Claims (default flow)
+               2  Pre-cook blend card
+               3  Cooked blend card header + Cooking notes + Primary
+                    Blend Carry Over
+               4  Secondary Blend subsection
+               5  Final Blend subsection
+             We break before both blend cards (pre-cook + cooked) and
+             before each subsequent subheading inside the cooked card
+             (Secondary + Final — both carry the .fe-blend-subheading
+             class via renderIngredientsBlock). Primary Blend Carry Over
+             sits at the top of the cooked card page (no break needed;
+             its subheading isn't a .fe-blend-subheading). */
+          .fe-blend-card,
+          .fe-blend-subheading {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+
           /* Kill any leftover dashed / dotted rules the on-screen view
              draws (Key Indicators row divider, inline borders on
              hand-authored cards, etc.) so the printed sheet has zero
@@ -4788,6 +4810,7 @@ function BlendSectionCard({
 
   return (
     <section
+      className={`fe-blend-card fe-blend-card--${phase}`}
       style={{
         marginBottom: 14,
         border: "1px solid var(--line, #e3dcc9)",
