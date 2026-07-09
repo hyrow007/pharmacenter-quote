@@ -1547,19 +1547,49 @@ export default function FormulaEditor({
         }
 
         @media print {
-          /* Page number in the bottom-right margin of every page.
-             Uses standard CSS Paged Media counter() — supported in
-             Chrome/Chromium and rendered by the print pipeline. Does
-             NOT touch top/bottom margins so browsers use their own
-             defaults (which our earlier attempt at 28mm broke by
-             confusing the content flow with the header). */
+          /* Reserve top+bottom margin on every printed page so the
+             running header (position:fixed below) has a home and the
+             page-count marker at bottom-right doesn't overlap
+             content. Kept modest so we don't waste vertical real
+             estate on paper.
+             Chrome supports both @page margins AND the @bottom-right
+             margin box (Chromium 116+); the counter() call renders
+             "Page 1 of 5" style output on every printed page. */
           @page {
+            margin: 22mm 10mm 15mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
               color: #000;
               font-family: sans-serif;
             }
+          }
+          /* Running header — Chrome repeats position:fixed elements
+             on every printed page, so this letterhead sits at the top
+             of every sheet. Sized to slot into the 22mm reserved
+             margin without overflowing into content. */
+          .fe-print-header {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            margin: 0 !important;
+            padding: 4mm 10mm 2mm !important;
+            border-bottom: 1px solid #000 !important;
+            background: #fff !important;
+            z-index: 9999 !important;
+            max-height: 18mm !important;
+            overflow: hidden !important;
+          }
+          /* Shrink every direct child of the running header to fit
+             the reserved 22mm margin. Title normally renders at ~13pt
+             (via our font-size normalization); here we cap it. */
+          .fe-print-header > div,
+          .fe-print-header > div > * {
+            font-size: 9pt !important;
+            line-height: 1.15 !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
@@ -2110,11 +2140,13 @@ export default function FormulaEditor({
 
       {/* Print-only meta header — a compact letterhead that only shows
           up when printing. On-screen the CSS above keeps it hidden.
-          Renders once on page 1 (normal flow, not repeated); the
-          "Page X of Y" indicator lives in the @page bottom-right
-          margin box on every page via CSS Paged Media counter(). */}
+          The .fe-print-header class in the @media print block turns
+          this into a running header (position:fixed) that Chrome
+          repeats on every printed page, sitting in the 22mm reserved
+          top margin. "Page X of Y" prints separately in the @page
+          bottom-right margin box via CSS Paged Media counter(). */}
       <div
-        className="fe-print-only"
+        className="fe-print-only fe-print-header"
         style={{
           marginBottom: 12,
           paddingBottom: 8,
