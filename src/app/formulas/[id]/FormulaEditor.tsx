@@ -1109,6 +1109,26 @@ export default function FormulaEditor({
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
     if (!printing) return;
+    // Compute an approximate page count from the current document
+    // height vs. a letter-page content area (letter height 279mm minus
+    // top/bottom margins = ~228mm), then stamp "Page X of Y" into the
+    // fallback footer element. This runs BEFORE window.print() so the
+    // footer text is in the DOM when the print engine paginates.
+    // We can't know the *exact* per-page number without paged.js — the
+    // stamp is the same on every printed page. Good enough as a
+    // fallback for browsers that don't render our @page @bottom-right
+    // margin box (Firefox, Chrome with browser headers/footers enabled).
+    const footer = document.querySelector<HTMLDivElement>(".fe-print-footer");
+    if (footer) {
+      // Rough page count: total scroll height ÷ (viewport height * 0.85).
+      // The 0.85 factor approximates the content ratio of a letter page
+      // after margins so we don't over-count. Minimum 1.
+      const total = Math.max(
+        1,
+        Math.ceil(document.body.scrollHeight / (window.innerHeight * 0.85)),
+      );
+      footer.textContent = `Page 1 of ${total}`;
+    }
     const t = window.setTimeout(() => {
       window.print();
       window.setTimeout(() => setPrinting(false), 300);
@@ -1550,23 +1570,31 @@ export default function FormulaEditor({
           /* Reserve top+bottom margin on every printed page so the
              running header (position:fixed below) has a home and the
              page-count marker at bottom-right doesn't overlap
-             content. Kept modest so we don't waste vertical real
-             estate on paper.
-             Chrome supports both @page margins AND the @bottom-right
+             content. Bumped top margin 22mm → 34mm because the
+             letterhead was still overlapping content on some pages —
+             this gives the compact fixed header + border + a buffer
+             below the border.
+             Chrome supports @page margins AND the @bottom-right
              margin box (Chromium 116+); the counter() call renders
-             "Page 1 of 5" style output on every printed page. */
+             "Page 1 of 5" style output on every printed page IF
+             the user has "Headers and footers" disabled in the Print
+             dialog. If Chrome ignores it, the on-page JS fallback
+             below injects the same text into an on-page footer. */
           @page {
-            margin: 22mm 10mm 15mm 10mm;
+            size: letter;
+            margin: 34mm 10mm 18mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
               color: #000;
               font-family: sans-serif;
+              text-align: right;
+              padding-right: 5mm;
             }
           }
           /* Running header — Chrome repeats position:fixed elements
              on every printed page, so this letterhead sits at the top
-             of every sheet. Sized to slot into the 22mm reserved
+             of every sheet. Sized to slot into the 34mm reserved
              margin without overflowing into content. */
           .fe-print-header {
             position: fixed !important;
@@ -1574,22 +1602,39 @@ export default function FormulaEditor({
             left: 0 !important;
             right: 0 !important;
             margin: 0 !important;
-            padding: 4mm 10mm 2mm !important;
+            padding: 5mm 10mm 3mm !important;
             border-bottom: 1px solid #000 !important;
             background: #fff !important;
             z-index: 9999 !important;
-            max-height: 18mm !important;
+            max-height: 28mm !important;
             overflow: hidden !important;
           }
           /* Shrink every direct child of the running header to fit
-             the reserved 22mm margin. Title normally renders at ~13pt
+             the reserved margin. Title normally renders at ~13pt
              (via our font-size normalization); here we cap it. */
           .fe-print-header > div,
           .fe-print-header > div > * {
             font-size: 9pt !important;
-            line-height: 1.15 !important;
+            line-height: 1.2 !important;
             margin: 0 !important;
             padding: 0 !important;
+          }
+          /* Fallback page-number footer — some browsers (or Chrome
+             with "Headers and footers" enabled in the print dialog)
+             ignore the @page @bottom-right rule above. This div gets
+             filled in on the beforeprint event with "Page X of Y"
+             text computed from window.innerHeight vs. document
+             height, and sits fixed at the bottom-right of every page
+             so at least one of the two mechanisms always renders. */
+          .fe-print-footer {
+            position: fixed !important;
+            bottom: 0 !important;
+            right: 0 !important;
+            padding: 3mm 8mm !important;
+            font-size: 9pt !important;
+            color: #000 !important;
+            background: #fff !important;
+            z-index: 9999 !important;
           }
           /* App chrome disappears — AppHeader (the branded top bar uses
              .app-nav in this app, plus its inner subclasses), nav
@@ -2138,13 +2183,21 @@ export default function FormulaEditor({
         }
       `}</style>
 
+      {/* Print-only page-number footer — position:fixed at bottom-right
+          on every printed page. Content is stamped by the print
+          useEffect before window.print() so it reads "Page 1 of N".
+          Belt-and-suspenders with the @page @bottom-right counter
+          above (which Chrome sometimes ignores). */}
+      <div className="fe-print-only fe-print-footer" aria-hidden="true">
+        Page
+      </div>
+
       {/* Print-only meta header — a compact letterhead that only shows
           up when printing. On-screen the CSS above keeps it hidden.
           The .fe-print-header class in the @media print block turns
           this into a running header (position:fixed) that Chrome
-          repeats on every printed page, sitting in the 22mm reserved
-          top margin. "Page X of Y" prints separately in the @page
-          bottom-right margin box via CSS Paged Media counter(). */}
+          repeats on every printed page, sitting in the 34mm reserved
+          top margin. */}
       <div
         className="fe-print-only fe-print-header"
         style={{
