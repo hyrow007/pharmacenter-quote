@@ -1700,9 +1700,14 @@ export default function FormulaEditor({
              (Secondary + Final — both carry the .fe-blend-subheading
              class via renderIngredientsBlock). Primary Blend Carry Over
              sits at the top of the cooked card page (no break needed;
-             its subheading isn't a .fe-blend-subheading). */
+             its subheading isn't a .fe-blend-subheading).
+             CAREFUL: the pre-cook card ALSO renders a "Primary Blend"
+             subheading via renderIngredientsBlock — so we must scope
+             the subheading page-break to descendants of the cooked
+             card only, otherwise the pre-cook card gets split in half
+             (header alone on page 2, ingredients orphaned on page 3). */
           .fe-blend-card,
-          .fe-blend-subheading {
+          .fe-blend-card--cooked .fe-blend-subheading {
             page-break-before: always !important;
             break-before: page !important;
           }
