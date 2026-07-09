@@ -1863,7 +1863,21 @@ export default function FormulaEditor({
             display: block !important;
             border: none !important;
             padding: 0 !important;
+          }
+          /* Body cells stay nowrap so the numeric column reads as a
+             single value. Header cells are allowed to WRAP so a wide
+             label like "% of Finished Product" or "Residual Moisture %"
+             breaks onto two short lines within its 78px track instead
+             of overflowing and colliding with the next column. */
+          tbody td, tfoot td {
             white-space: nowrap !important;
+          }
+          thead th {
+            white-space: normal !important;
+            word-break: break-word !important;
+            hyphens: auto !important;
+            overflow-wrap: break-word !important;
+            line-height: 1.15 !important;
           }
           /* Ingredient / label column (always the first cell in each
              row) is allowed to wrap onto a second line so long chemical
@@ -1877,16 +1891,20 @@ export default function FormulaEditor({
             text-align: right !important;
             justify-self: end !important;
           }
-          /* Header row: teal underline anchors the column titles. */
+          /* Header row: teal underline anchors the column titles.
+             align-items:end so column labels that wrap to two lines
+             baseline-align at their last line — the underline stays
+             flush without dragging the shorter labels upward. */
           thead tr {
             border-bottom: 1.5px solid #0f4a56 !important;
             padding-bottom: 4px !important;
             margin-bottom: 1px !important;
+            align-items: end !important;
           }
           thead th {
-            font-size: 8.5pt !important;
+            font-size: 8pt !important;
             font-weight: 700 !important;
-            letter-spacing: 0.06em !important;
+            letter-spacing: 0.04em !important;
             text-transform: uppercase !important;
             color: #4a5c60 !important;
           }
