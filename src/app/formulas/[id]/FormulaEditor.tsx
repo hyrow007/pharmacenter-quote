@@ -1588,18 +1588,21 @@ export default function FormulaEditor({
              v36: bumped max-height 28→34mm to match the extra room. */
           .fe-print-header {
             position: fixed !important;
-            top: 0 !important;
+            /* v38: Chrome's paged print positions fixed elements
+               relative to the CONTENT AREA top (after @page margins),
+               not the paper edge — so top:0 was landing where the
+               ingredient rows begin, cropping their column headers.
+               Negative top offset = -@page top margin (42mm) sits the
+               header at true paper edge, well above content flow. */
+            top: -42mm !important;
             left: 0 !important;
             right: 0 !important;
             margin: 0 !important;
-            /* v37: header sits closer to paper top — top padding
-               trimmed 4mm → 0.5mm. Content position (dictated by the
-               @page top margin) is unchanged. */
             padding: 0.5mm 10mm 2mm !important;
             border-bottom: 1px solid #000 !important;
             background: #fff !important;
             z-index: 9999 !important;
-            max-height: 34mm !important;
+            max-height: 40mm !important;
             overflow: hidden !important;
           }
           /* Shrink every direct child of the running header to fit
