@@ -1567,7 +1567,11 @@ export default function FormulaEditor({
              below injects the same text into an on-page footer. */
           @page {
             size: letter;
-            margin: 34mm 10mm 18mm 10mm;
+            /* v36: top margin bumped 34→42mm because the 3-line meta
+               strip (title + 2 wrap lines) was punching through the
+               old 34mm limit and cropping "Label claims" underneath.
+               Bottom stays 18mm for the page-counter breathing room. */
+            margin: 42mm 10mm 18mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
@@ -1579,30 +1583,48 @@ export default function FormulaEditor({
           }
           /* Running header — Chrome repeats position:fixed elements
              on every printed page, so this letterhead sits at the top
-             of every sheet. Sized to slot into the 34mm reserved
-             margin without overflowing into content. */
+             of every sheet. Sized to slot into the 42mm reserved
+             margin without overflowing into content.
+             v36: bumped max-height 28→34mm to match the extra room. */
           .fe-print-header {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
             right: 0 !important;
             margin: 0 !important;
-            padding: 5mm 10mm 3mm !important;
+            padding: 4mm 10mm 2mm !important;
             border-bottom: 1px solid #000 !important;
             background: #fff !important;
             z-index: 9999 !important;
-            max-height: 28mm !important;
+            max-height: 34mm !important;
             overflow: hidden !important;
           }
           /* Shrink every direct child of the running header to fit
              the reserved margin. Title normally renders at ~13pt
-             (via our font-size normalization); here we cap it. */
+             (via our font-size normalization); here we cap it.
+             v36: tightened line-height 1.2→1.15 so 3-line strips
+             stay compact. */
           .fe-print-header > div,
           .fe-print-header > div > * {
-            font-size: 9pt !important;
-            line-height: 1.2 !important;
+            font-size: 8.5pt !important;
+            line-height: 1.15 !important;
             margin: 0 !important;
             padding: 0 !important;
+          }
+          /* Title line inside the header — one notch bigger + bolder
+             so the letterhead reads as a title, not just another meta
+             row. */
+          .fe-print-header > div:first-child {
+            font-size: 10pt !important;
+            font-weight: 800 !important;
+            margin-bottom: 2px !important;
+          }
+          /* Meta chips inside header — tighten flex gap so the strip
+             stays on one line when it fits, wraps to at most two when
+             it doesn't. */
+          .fe-print-header > div:nth-child(2) {
+            gap: 10px !important;
+            row-gap: 2px !important;
           }
           /* NOTE: v34 had a JS-injected .fe-print-footer here as a
              page-count fallback, but position:fixed elements print
