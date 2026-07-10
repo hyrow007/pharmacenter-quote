@@ -37,6 +37,14 @@ type VendorMode = "existing" | "new";
 // product cost stays whatever the user types regardless of origin.
 type ShippingOrigin = "usa" | "international";
 
+// Domestic mode v1 (task #157). Parallel to shippingMode (ocean/air) but
+// for USA/domestic shipments. FTL = full truckload (ALG-style broker
+// quotes ~$1,300–$2,675 in the calibration sample). LTL = less-than-
+// truckload (TQL/TForce-style ~$430–$560). Purely informational — the
+// landed-cost math is identical for both modes because the rep types the
+// final freight cost. The mode drives rate-history segmentation.
+type DomesticMode = "ftl" | "ltl";
+
 // Incoterms 2020 for international shipments. Each term flips which cost
 // inputs the buyer is responsible for. The matrix below (INCOTERM_FIELDS)
 // is the source of truth — change there to update the visible inputs.
@@ -1177,6 +1185,13 @@ type TabState = {
   shippingMode: "ocean" | "air";
   otherCosts: string;
   deliveryOverride: string;
+  // Domestic v1 model (task #157). See PricingSnapshot for field docs.
+  domesticMode: DomesticMode;
+  originState: string;
+  shipmentWeightLb: string;
+  palletCount: string;
+  freightClass: string;
+  accessorials: string;
 };
 
 function newTabId(): string {
@@ -1216,6 +1231,15 @@ function blankTab(): TabState {
     shippingMode: DEFAULT_SHIPPING_MODE,
     otherCosts: String(DEFAULT_OTHER_COSTS),
     deliveryOverride: "",
+    // Domestic v1 defaults (task #157). FTL because most raw material
+    // inbound loads we've calibrated against are truckload from CA/TX.
+    // Fields are blank so the rep is nudged to fill them explicitly.
+    domesticMode: "ftl",
+    originState: "",
+    shipmentWeightLb: "",
+    palletCount: "",
+    freightClass: "",
+    accessorials: "",
   };
 }
 
@@ -1254,6 +1278,14 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
     shippingMode: snap.shippingMode ?? DEFAULT_SHIPPING_MODE,
     otherCosts: snap.otherCosts ?? String(DEFAULT_OTHER_COSTS),
     deliveryOverride: snap.deliveryOverride ?? "",
+    // Domestic v1 fields (task #157) — default to blank/FTL for
+    // pre-domestic snapshots so nothing surprising renders.
+    domesticMode: snap.domesticMode ?? "ftl",
+    originState: snap.originState ?? "",
+    shipmentWeightLb: snap.shipmentWeightLb ?? "",
+    palletCount: snap.palletCount ?? "",
+    freightClass: snap.freightClass ?? "",
+    accessorials: snap.accessorials ?? "",
   };
 }
 
@@ -1308,6 +1340,12 @@ function computeResults(input: {
   // to auto-compute shipment weight for the delivery tier lookup. When the
   // form is unknown, we fall back to 1 g/unit (see unitWeightForForm).
   unitWeightG?: number;
+  // Domestic v1 (task #157). Only accessorials feeds the math today —
+  // domesticMode, originState, shipmentWeightLb, palletCount, freightClass
+  // are captured on the tab state and persisted to the snapshot but
+  // don't affect landed cost. They're metadata for the lane-history table
+  // that will drive rate-suggestion in a later phase.
+  accessorials?: string;
 }) {
   const u = num(input.unitCost);
   const q = num(input.quantity);
@@ -1322,12 +1360,16 @@ function computeResults(input: {
   const ins = visibility.insurance ? num(input.insurance) : 0;
   const ts = num(input.testing);
   const otherCosts = num(input.otherCosts ?? "");
+  const accessorials = num(input.accessorials ?? "");
 
   const productCost = u * q;
 
-  // ---------- USA / domestic: minimal old-model math ----------
+  // ---------- USA / domestic: v1 model (task #157) ----------
+  // landed = productCost + freight + accessorials + testing + otherCosts.
+  // No CBP fees, no broker baseline — domestic broker rates already roll
+  // fuel surcharge into the flat quote and there's no border to cross.
   if (isUsa) {
-    const landedTotal = productCost + fr + ts + otherCosts;
+    const landedTotal = productCost + fr + accessorials + ts + otherCosts;
     const landedPerUnit = q > 0 ? landedTotal / q : 0;
     let salePerUnit = 0;
     if (landedPerUnit > 0) {
@@ -1687,6 +1729,26 @@ export default function PricingCalculator({
   const [deliveryOverride, setDeliveryOverride] = useState<string>(
     () => tabs[0]?.deliveryOverride ?? "",
   );
+  // Domestic v1 state (task #157). Only accessorials feeds landed cost;
+  // the rest is metadata for the lane-history phase.
+  const [domesticMode, setDomesticMode] = useState<DomesticMode>(
+    () => tabs[0]?.domesticMode ?? "ftl",
+  );
+  const [originState, setOriginState] = useState<string>(
+    () => tabs[0]?.originState ?? "",
+  );
+  const [shipmentWeightLb, setShipmentWeightLb] = useState<string>(
+    () => tabs[0]?.shipmentWeightLb ?? "",
+  );
+  const [palletCount, setPalletCount] = useState<string>(
+    () => tabs[0]?.palletCount ?? "",
+  );
+  const [freightClass, setFreightClass] = useState<string>(
+    () => tabs[0]?.freightClass ?? "",
+  );
+  const [accessorials, setAccessorials] = useState<string>(
+    () => tabs[0]?.accessorials ?? "",
+  );
 
   // Per-unit weight in grams — driven by the workflow's dosage form (bulk
   // uses state.form, contract-packaging uses state.dosage). Falls back to a
@@ -1757,6 +1819,10 @@ export default function PricingCalculator({
         otherCosts: isStockProduct ? "" : otherCosts,
         deliveryOverride: isStockProduct ? "" : deliveryOverride,
         unitWeightG,
+        // Domestic v1 (task #157): accessorials feeds the USA landed
+        // cost; the metadata fields don't affect math but are still
+        // captured on the tab state / snapshot.
+        accessorials: isStockProduct ? "" : accessorials,
       }),
     [
       unitCost, quantity,
@@ -1764,6 +1830,7 @@ export default function PricingCalculator({
       margin, marginMode,
       shippingOrigin, incoterm,
       shippingMode, otherCosts, deliveryOverride, unitWeightG,
+      accessorials,
       isStockProduct,
     ],
   );
@@ -1800,6 +1867,13 @@ export default function PricingCalculator({
       shippingMode,
       otherCosts,
       deliveryOverride,
+      // Domestic v1 fields (task #157).
+      domesticMode,
+      originState,
+      shipmentWeightLb,
+      palletCount,
+      freightClass,
+      accessorials,
     };
   }
 
@@ -1832,6 +1906,13 @@ export default function PricingCalculator({
     setShippingMode(t.shippingMode);
     setOtherCosts(t.otherCosts);
     setDeliveryOverride(t.deliveryOverride);
+    // Domestic v1 fields (task #157).
+    setDomesticMode(t.domesticMode);
+    setOriginState(t.originState);
+    setShipmentWeightLb(t.shipmentWeightLb);
+    setPalletCount(t.palletCount);
+    setFreightClass(t.freightClass);
+    setAccessorials(t.accessorials);
   }
 
   function switchTab(newIndex: number) {
@@ -1942,6 +2023,8 @@ export default function PricingCalculator({
       otherCosts: t.otherCosts,
       deliveryOverride: t.deliveryOverride,
       unitWeightG,
+      // Domestic v1 (task #157) — accessorials feeds USA landed cost.
+      accessorials: t.accessorials,
     });
     const vendorLabel =
       t.vendorMode === "existing" ? t.vendorName : t.newVendorName.trim() || null;
@@ -1969,6 +2052,14 @@ export default function PricingCalculator({
       shippingMode: t.shippingMode,
       otherCosts: t.otherCosts,
       deliveryOverride: t.deliveryOverride,
+      // Domestic v1 fields (task #157). All optional on the snapshot,
+      // so pre-v1 tabs round-trip cleanly.
+      domesticMode: t.domesticMode,
+      originState: t.originState,
+      shipmentWeightLb: t.shipmentWeightLb,
+      palletCount: t.palletCount,
+      freightClass: t.freightClass,
+      accessorials: t.accessorials,
       result: {
         landedTotal: r.landedTotal,
         landedPerUnit: r.landedPerUnit,
@@ -2263,6 +2354,13 @@ export default function PricingCalculator({
     setShippingMode(DEFAULT_SHIPPING_MODE);
     setOtherCosts(String(DEFAULT_OTHER_COSTS));
     setDeliveryOverride("");
+    // Domestic v1 fields (task #157) — blank/FTL default.
+    setDomesticMode("ftl");
+    setOriginState("");
+    setShipmentWeightLb("");
+    setPalletCount("");
+    setFreightClass("");
+    setAccessorials("");
     resetVendor();
     setNewVendorName("");
     setVendorMode("existing");
@@ -2831,6 +2929,99 @@ export default function PricingCalculator({
               </div>
             </>
           ) : null}
+          {/* Domestic v1 (task #157). Mirrors the international Ocean/Air
+              toggle: FTL vs LTL is informational for now (rate-history
+              lane keying), no math change. Origin state, weight, pallets,
+              and freight class are metadata captured for the same
+              rate-history table. */}
+          {shippingOrigin === "usa" && !isStockProduct ? (
+            <>
+              <div className="pricing__field">
+                <span className="pricing__label">Freight mode</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Freight mode"
+                  className="pricing__mode-group"
+                  style={{ display: "flex", gap: 6 }}
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={domesticMode === "ftl"}
+                    className={`pricing__mode ${domesticMode === "ftl" ? "pricing__mode--active" : ""}`}
+                    onClick={() => setDomesticMode("ftl")}
+                    title="Full truckload — typical for 5,000+ lb loads"
+                  >
+                    FTL
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={domesticMode === "ltl"}
+                    className={`pricing__mode ${domesticMode === "ltl" ? "pricing__mode--active" : ""}`}
+                    onClick={() => setDomesticMode("ltl")}
+                    title="Less-than-truckload — priced by NMFC class + density"
+                  >
+                    LTL
+                  </button>
+                </div>
+              </div>
+              <label className="pricing__field">
+                <span className="pricing__label">Origin state</span>
+                <input
+                  type="text"
+                  className="pricing__input"
+                  value={originState}
+                  onChange={(e) => setOriginState(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="CA"
+                  maxLength={2}
+                  autoComplete="off"
+                  style={{ maxWidth: 80 }}
+                />
+              </label>
+              <label className="pricing__field">
+                <span className="pricing__label">Weight (lb)</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input"
+                  value={shipmentWeightLb}
+                  onChange={(e) => setShipmentWeightLb(formatValueInput(e.target.value))}
+                  placeholder="0"
+                  autoComplete="off"
+                  style={{ maxWidth: 120 }}
+                />
+              </label>
+              <label className="pricing__field">
+                <span className="pricing__label">Pallets</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="pricing__input"
+                  value={palletCount}
+                  onChange={(e) => setPalletCount(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                  placeholder="0"
+                  autoComplete="off"
+                  style={{ maxWidth: 80 }}
+                />
+              </label>
+              {domesticMode === "ltl" ? (
+                <label className="pricing__field">
+                  <span className="pricing__label">NMFC class</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="pricing__input"
+                    value={freightClass}
+                    onChange={(e) => setFreightClass(e.target.value.replace(/[^0-9.]/g, "").slice(0, 6))}
+                    placeholder="70"
+                    autoComplete="off"
+                    style={{ maxWidth: 90 }}
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
         </div>
 
         <div className="pricing__row" style={{ marginTop: 4 }}>
@@ -2941,6 +3132,32 @@ export default function PricingCalculator({
                   className="pricing__input pricing__input--money"
                   value={handling}
                   onChange={(e) => setHandling(formatValueInput(e.target.value))}
+                  placeholder="0.00"
+                  autoComplete="off"
+                />
+              </div>
+            </label>
+          ) : null}
+          {/* Domestic v1 (task #157): accessorials line captures the
+              detention / liftgate / late-delivery-credit adjustments
+              broker invoices show separately from the base freight.
+              Feeds landed cost like the freight input does. */}
+          {shippingOrigin === "usa" && !isStockProduct ? (
+            <label className="pricing__field">
+              <span className="pricing__label">
+                Accessorials{" "}
+                <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>
+                  (detention, liftgate, credits)
+                </span>
+              </span>
+              <div className="pricing__input-wrap">
+                <span className="pricing__input-prefix">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input pricing__input--money"
+                  value={accessorials}
+                  onChange={(e) => setAccessorials(formatValueInput(e.target.value))}
                   placeholder="0.00"
                   autoComplete="off"
                 />

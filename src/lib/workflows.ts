@@ -95,6 +95,31 @@ export type PricingSnapshot = {
   otherCosts?: string;
   deliveryOverride?: string;
 
+  // Domestic landed-cost model v1 (task #157) — mirrors the international
+  // v2 model for USA shipments. Fields are optional so pre-v1 snapshots
+  // still parse; defaults get applied on hydrate.
+  //   domesticMode:    FTL (full truckload — ALG-style broker quote) or
+  //                    LTL (less-than-truckload — TQL/TForce-style). Parallels
+  //                    ocean/air. Purely informational today; drives the
+  //                    lane-history table once we start logging.
+  //   originState:     2-letter US state code of the shipment origin. Used
+  //                    to key rate history for lane-level suggestions.
+  //   shipmentWeightLb: total shipment weight in pounds — auto-computed from
+  //                    unitWeightG × qty when known, or rep-typed.
+  //   palletCount:     # of pallets on the shipment (metadata; helps rate
+  //                    lookup and freight-class inference).
+  //   freightClass:    NMFC class for LTL shipments (65, 70, 85, etc.).
+  //                    Ignored for FTL. Optional even for LTL.
+  //   accessorials:    Detention, liftgate, notification, late-delivery
+  //                    credits, etc. Separate from the base freight so
+  //                    the rep can capture the negotiated final total.
+  domesticMode?: "ftl" | "ltl";
+  originState?: string;
+  shipmentWeightLb?: string;
+  palletCount?: string;
+  freightClass?: string;
+  accessorials?: string;
+
   // Snapshot of computed results at the moment of save. Stored as plain
   // numbers in dollars — useful for the workflow listing summary so it
   // doesn't have to redo arithmetic.
