@@ -1592,7 +1592,10 @@ export default function FormulaEditor({
             left: 0 !important;
             right: 0 !important;
             margin: 0 !important;
-            padding: 4mm 10mm 2mm !important;
+            /* v37: header sits closer to paper top — top padding
+               trimmed 4mm → 0.5mm. Content position (dictated by the
+               @page top margin) is unchanged. */
+            padding: 0.5mm 10mm 2mm !important;
             border-bottom: 1px solid #000 !important;
             background: #fff !important;
             z-index: 9999 !important;
