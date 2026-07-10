@@ -1567,11 +1567,11 @@ export default function FormulaEditor({
              below injects the same text into an on-page footer. */
           @page {
             size: letter;
-            /* v36: top margin bumped 34→42mm because the 3-line meta
-               strip (title + 2 wrap lines) was punching through the
-               old 34mm limit and cropping "Label claims" underneath.
-               Bottom stays 18mm for the page-counter breathing room. */
-            margin: 42mm 10mm 18mm 10mm;
+            /* v39: bumped top margin 42→52mm because the running
+               header + column-header row were still colliding on
+               continuation pages. Bottom stays 18mm for the
+               page-counter breathing room. */
+            margin: 52mm 10mm 18mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
@@ -1588,13 +1588,11 @@ export default function FormulaEditor({
              v36: bumped max-height 28→34mm to match the extra room. */
           .fe-print-header {
             position: fixed !important;
-            /* v38: Chrome's paged print positions fixed elements
-               relative to the CONTENT AREA top (after @page margins),
-               not the paper edge — so top:0 was landing where the
-               ingredient rows begin, cropping their column headers.
-               Negative top offset = -@page top margin (42mm) sits the
-               header at true paper edge, well above content flow. */
-            top: -42mm !important;
+            /* v39: reverted -42mm experiment (that made the header
+               land at page BOTTOM). Back to top:0. With the @page
+               top margin now 52mm, header at top:0 has 40mm of
+               working space before content — no more overlap. */
+            top: 0 !important;
             left: 0 !important;
             right: 0 !important;
             margin: 0 !important;
@@ -1602,7 +1600,7 @@ export default function FormulaEditor({
             border-bottom: 1px solid #000 !important;
             background: #fff !important;
             z-index: 9999 !important;
-            max-height: 40mm !important;
+            max-height: 45mm !important;
             overflow: hidden !important;
           }
           /* Shrink every direct child of the running header to fit
