@@ -22,6 +22,7 @@ import {
   HMF_RATE,
   MPF_MAX,
   MPF_RATE,
+  suggestDomesticFreight,
   unitWeightForForm,
 } from "@/lib/pricing-defaults";
 
@@ -1750,6 +1751,32 @@ export default function PricingCalculator({
     () => tabs[0]?.accessorials ?? "",
   );
 
+  // Domestic freight auto-calc (task #339). We compute a suggested $ from
+  // the zone-based rate table whenever mode / origin / weight change, and
+  // stamp it into the freight field. We remember the last suggestion so
+  // that if the rep manually overwrites it, we back off — subsequent
+  // auto-suggestions only replace the freight when it still matches the
+  // previous auto-fill or is empty. That way, the rep never has to fight
+  // us for control of the field.
+  const domesticSuggestion = useMemo(() => {
+    if (shippingOrigin !== "usa") return null;
+    return suggestDomesticFreight(domesticMode, originState, num(shipmentWeightLb));
+  }, [shippingOrigin, domesticMode, originState, shipmentWeightLb]);
+  const lastAutoFilledFreightRef = useRef<string>("");
+  useEffect(() => {
+    if (!domesticSuggestion) return;
+    const suggestionStr = String(domesticSuggestion.total.toFixed(2));
+    // Only auto-fill when freight is blank OR was previously stamped by us
+    // (matches our last remembered suggestion). Once the rep types anything
+    // else, `freight !== lastAutoFilledFreightRef.current` and we bail.
+    const freightIsEmpty = !freight || freight.trim() === "";
+    const freightMatchesLast = freight === lastAutoFilledFreightRef.current;
+    if (freightIsEmpty || freightMatchesLast) {
+      setFreight(suggestionStr);
+      lastAutoFilledFreightRef.current = suggestionStr;
+    }
+  }, [domesticSuggestion]);
+
   // Per-unit weight in grams — driven by the workflow's dosage form (bulk
   // uses state.form, contract-packaging uses state.dosage). Falls back to a
   // conservative 1 g when the form isn't set yet so the delivery tier check
@@ -3042,6 +3069,22 @@ export default function PricingCalculator({
                   autoComplete="off"
                 />
               </div>
+              {/* Domestic v1 auto-calc hint (task #339). Shows the current
+                  zone-based rate breakdown so the rep can see how the
+                  suggestion was derived. Overriding the freight silences
+                  the auto-fill on subsequent metadata edits. */}
+              {shippingOrigin === "usa" && domesticSuggestion ? (
+                <span
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    color: "var(--ink-3, #6b7280)",
+                  }}
+                >
+                  Auto: {num(shipmentWeightLb).toLocaleString()} lb × ${domesticSuggestion.ratePerLb.toFixed(2)}/lb (
+                  {domesticMode.toUpperCase()} {domesticSuggestion.zone}) = ${domesticSuggestion.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              ) : null}
             </label>
           ) : null}
           {visibility.insurance ? (
