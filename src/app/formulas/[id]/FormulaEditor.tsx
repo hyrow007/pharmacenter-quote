@@ -1107,19 +1107,45 @@ export default function FormulaEditor({
   // next paint, then (c) revert. CSS below hides interactive chrome (buttons,
   // tabs, chevrons) so the print output reads like a spec sheet.
   const [printing, setPrinting] = useState(false);
+  // v40 prototype: two print modes.
+  //   "full"    → current per-section-per-page layout (portrait letter)
+  //   "onepage" → landscape letter, two-column flow, everything on 1 sheet
+  const [printMode, setPrintMode] = useState<"full" | "onepage">("full");
   useEffect(() => {
     if (!printing) return;
-    // Give React a paint before window.print(). The @page @bottom-right
-    // rule in CSS handles per-page numbering natively — no JS
-    // manipulation needed (v34's JS-injected "Page 1 of N" was static
-    // and printed the same text on every page, which is worse than
-    // Chrome's native counter).
+    // One-page mode needs a landscape @page rule — @page can't be
+    // scoped via class, so inject a <style> tag with the landscape
+    // declaration for the duration of the print and pull it back out
+    // after. Also add a body class so the CSS below can gate the
+    // 2-column layout, static (non-fixed) header, and compressed type.
+    let injectedStyle: HTMLStyleElement | null = null;
+    if (printMode === "onepage") {
+      document.body.classList.add("fe-print-onepage-mode");
+      injectedStyle = document.createElement("style");
+      injectedStyle.id = "fe-print-onepage-style";
+      injectedStyle.textContent = `@media print { @page { size: letter landscape !important; margin: 8mm 8mm 12mm 8mm !important; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; padding-right: 5mm; color: #000; } } }`;
+      document.head.appendChild(injectedStyle);
+    }
+    const cleanup = () => {
+      if (printMode === "onepage") {
+        document.body.classList.remove("fe-print-onepage-mode");
+        if (injectedStyle && injectedStyle.parentNode) {
+          injectedStyle.parentNode.removeChild(injectedStyle);
+        }
+      }
+    };
     const t = window.setTimeout(() => {
       window.print();
-      window.setTimeout(() => setPrinting(false), 300);
+      window.setTimeout(() => {
+        cleanup();
+        setPrinting(false);
+      }, 300);
     }, 120);
-    return () => window.clearTimeout(t);
-  }, [printing]);
+    return () => {
+      window.clearTimeout(t);
+      cleanup();
+    };
+  }, [printing, printMode]);
 
   // -- Save -------------------------------------------------------------------
   const [saving, setSaving] = useState(false);
@@ -2180,6 +2206,85 @@ export default function FormulaEditor({
             fill: #000 !important;
             stroke: #000 !important;
           }
+
+          /* ============================================================
+             v40 PROTOTYPE — landscape one-page mode.
+             Applies only when body.fe-print-onepage-mode is set (the
+             one-page Print button toggles this before window.print()).
+             The @page landscape rule itself is injected as a separate
+             <style> tag from the print useEffect (see printing effect
+             above) because @page can't be scoped by class.
+             ============================================================ */
+
+          /* Static (non-fixed) header on the one page. Running-header
+             behavior isn't needed when there's only one page. */
+          body.fe-print-onepage-mode .fe-print-header {
+            position: static !important;
+            top: auto !important;
+            max-height: none !important;
+            border-bottom: 1.5px solid #000 !important;
+            padding: 0 0 3mm !important;
+            margin: 0 0 4mm !important;
+            overflow: visible !important;
+          }
+
+          /* Kill per-section page breaks — everything flows in one
+             pass so multi-column layout can distribute it. */
+          body.fe-print-onepage-mode .fe-blend-card,
+          body.fe-print-onepage-mode .fe-blend-card--cooked .fe-blend-subheading {
+            page-break-before: auto !important;
+            break-before: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          /* Two-column flow on the main editor body. CSS multi-column
+             lays out children top-to-bottom in column 1, then
+             continues into column 2 when column 1 fills. Cards stay
+             intact via break-inside: avoid (rule above). */
+          body.fe-print-onepage-mode .fe-editor-flow {
+            column-count: 2 !important;
+            column-gap: 8mm !important;
+            column-fill: balance !important;
+          }
+          /* Fall back: if we don't have an explicit .fe-editor-flow
+             wrapper, target the immediate main content region. */
+          body.fe-print-onepage-mode > div,
+          body.fe-print-onepage-mode main {
+            column-count: 2 !important;
+            column-gap: 8mm !important;
+            column-fill: balance !important;
+          }
+
+          /* Compress type — landscape letter is 279mm wide but content
+             density needs 8.5pt to fit typical formulas. */
+          body.fe-print-onepage-mode {
+            font-size: 8.5pt !important;
+            line-height: 1.2 !important;
+          }
+
+          /* Kill card margins between blend sections so vertical
+             density is maximized. */
+          body.fe-print-onepage-mode .fe-blend-card {
+            margin: 0 0 4mm !important;
+            padding: 0 !important;
+            border: none !important;
+          }
+          body.fe-print-onepage-mode section,
+          body.fe-print-onepage-mode .fe-bench-batch-card,
+          body.fe-print-onepage-mode .fe-key-indicators-card {
+            margin: 0 0 3mm !important;
+            padding: 0 !important;
+            border: none !important;
+          }
+
+          /* Tighten grid rows in tables. */
+          body.fe-print-onepage-mode tr {
+            padding: 2px 4px !important;
+          }
+          body.fe-print-onepage-mode thead th {
+            font-size: 7pt !important;
+          }
         }
       `}</style>
 
@@ -2627,15 +2732,16 @@ export default function FormulaEditor({
             style={{ display: "flex", flexDirection: "column", gap: 4 }}
           >
             <div style={{ display: "flex", gap: 6 }}>
-              {/* Print / Save PDF — expands all collapsible sections
-                  and calls window.print(). Print styles below strip
-                  interactive chrome so the browser's built-in "Save
-                  as PDF" produces a clean spec sheet. */}
+              {/* Print / Save PDF (full, multi-page portrait) — expands
+                  all collapsible sections and calls window.print(). */}
               <button
                 type="button"
-                onClick={() => setPrinting(true)}
+                onClick={() => {
+                  setPrintMode("full");
+                  setPrinting(true);
+                }}
                 disabled={printing}
-                title="Print or Save as PDF"
+                title="Print full sheet (multi-page portrait)"
                 style={{
                   padding: "10px 12px",
                   background: "transparent",
@@ -2649,7 +2755,32 @@ export default function FormulaEditor({
                   letterSpacing: "0.03em",
                 }}
               >
-                {printing ? "Preparing…" : "🖨 Print / PDF"}
+                {printing && printMode === "full" ? "Preparing…" : "🖨 Print / PDF"}
+              </button>
+              {/* v40 prototype: one-page landscape print. Toggles the
+                  body class + injects the landscape @page rule. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintMode("onepage");
+                  setPrinting(true);
+                }}
+                disabled={printing}
+                title="Print everything on a single landscape page"
+                style={{
+                  padding: "10px 12px",
+                  background: "transparent",
+                  color: "var(--teal-900, #0f4a56)",
+                  border: "1px dashed var(--teal-700, #1d6c7b)",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: printing ? "wait" : "pointer",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {printing && printMode === "onepage" ? "Preparing…" : "🖨 One page"}
               </button>
               <button
                 type="button"
