@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if ("error" in g) return g.error;
   const { supabase, user } = g;
 
-  let body: { body?: string };
+  let body: { body?: string; app?: string };
   try {
     body = (await request.json()) as { body?: string };
   } catch {
@@ -49,11 +49,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "body_too_long" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  // v49.1: tag the post with the app it came from. Allowlisted so the
+  // client can't write arbitrary strings. Falls back to an app-less
+  // insert while sql/feedback_app_column.sql hasn't been applied yet.
+  const KNOWN_APPS = ["quote", "formulas", "packing-list"];
+  const app = KNOWN_APPS.includes((body.app ?? "").toLowerCase())
+    ? (body.app as string).toLowerCase()
+    : "quote";
+
+  let { data, error } = await supabase
     .from("feedback")
-    .insert({ author_email: user.email, body: text })
+    .insert({ author_email: user.email, body: text, app })
     .select("id, created_at, author_email, body")
     .single();
+  if (error && /app/.test(error.message)) {
+    ({ data, error } = await supabase
+      .from("feedback")
+      .insert({ author_email: user.email, body: text })
+      .select("id, created_at, author_email, body")
+      .single());
+  }
   if (error || !data) {
     console.error("feedback insert failed:", error?.message);
     return NextResponse.json(

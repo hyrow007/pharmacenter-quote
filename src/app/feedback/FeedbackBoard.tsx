@@ -11,6 +11,8 @@ export type FeedbackDisplayRow = {
   id: string;
   createdAt: string;
   body: string;
+  /** v49.1: which app the post came from — 'quote' | 'formulas' | 'packing-list'. */
+  app: string;
   authorEmail: string;
   authorName: string;
   canDelete: boolean;
@@ -19,6 +21,15 @@ export type FeedbackDisplayRow = {
 type Props = {
   initialRows: FeedbackDisplayRow[];
   currentUserEmail: string;
+  /** v49.1: app tag applied to new posts (derived from ?from= on the server). */
+  postApp: string;
+};
+
+// Small human label for the app tag under each comment.
+const APP_LABELS: Record<string, string> = {
+  quote: "Quote — Work Flows",
+  formulas: "Formulas",
+  "packing-list": "Packing List",
 };
 
 function formatDate(iso: string): string {
@@ -31,7 +42,7 @@ function formatDate(iso: string): string {
   });
 }
 
-export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) {
+export default function FeedbackBoard({ initialRows, currentUserEmail, postApp }: Props) {
   const [rows, setRows] = useState<FeedbackDisplayRow[]>(initialRows);
   const [body, setBody] = useState("");
   const [posting, setPosting] = useState(false);
@@ -47,7 +58,7 @@ export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) 
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({ body: text, app: postApp }),
       });
       const data = (await res.json().catch(() => null)) as {
         ok?: boolean;
@@ -76,6 +87,7 @@ export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) 
         // instead of "Josorno". Fall back to local-part if the directory
         // lookup came back empty.
         authorName: data.authorName || localFallback(data.feedback.author_email),
+        app: postApp,
         canDelete: true,
       };
       setRows((prev) => [fresh, ...prev]);
@@ -246,6 +258,17 @@ export default function FeedbackBoard({ initialRows, currentUserEmail }: Props) 
               >
                 {r.body}
               </p>
+              {/* v49.1: origin note — which app this post came from. */}
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 11,
+                  color: "var(--ink-3, #8a9498)",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                via {APP_LABELS[r.app] ?? APP_LABELS.quote}
+              </div>
             </article>
           ))}
         </div>

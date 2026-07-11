@@ -31,9 +31,20 @@ type FeedbackRow = {
   created_at: string;
   author_email: string;
   body: string;
+  app?: string | null;
 };
 
-export default async function FeedbackPage() {
+// v49.1: the merged inbox tags every post with the app it came from.
+// Origin arrives as ?from=<app> on the nav links of the other apps
+// (formula + packing list navs link here absolutely); anything else
+// defaults to "quote".
+const KNOWN_APPS = ["quote", "formulas", "packing-list"] as const;
+
+export default async function FeedbackPage({
+  searchParams,
+}: {
+  searchParams?: { from?: string };
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -44,11 +55,30 @@ export default async function FeedbackPage() {
 
   const admin = await checkIsAdmin(supabase, user.email);
 
-  const { data: rawRows } = await supabase
-    .from("feedback")
-    .select("id, created_at, author_email, body")
-    .order("created_at", { ascending: false });
-  const rows = (rawRows ?? []) as FeedbackRow[];
+  // Select includes the v49.1 app column, with a fallback for the window
+  // before sql/feedback_app_column.sql has been applied in prod.
+  let rawRows: FeedbackRow[] | null = null;
+  {
+    const res = await supabase
+      .from("feedback")
+      .select("id, created_at, author_email, body, app")
+      .order("created_at", { ascending: false });
+    if (res.error) {
+      const legacy = await supabase
+        .from("feedback")
+        .select("id, created_at, author_email, body")
+        .order("created_at", { ascending: false });
+      rawRows = (legacy.data ?? null) as FeedbackRow[] | null;
+    } else {
+      rawRows = (res.data ?? null) as FeedbackRow[] | null;
+    }
+  }
+  const rows = rawRows ?? [];
+
+  const fromParam = (searchParams?.from ?? "").toLowerCase();
+  const postApp = (KNOWN_APPS as readonly string[]).includes(fromParam)
+    ? fromParam
+    : "quote";
 
   // Resolve display names from user_directory (Google SSO full_name view).
   // Fallback to a title-cased local-part of the email when the directory
@@ -69,6 +99,7 @@ export default async function FeedbackPage() {
     id: r.id,
     createdAt: r.created_at,
     body: r.body,
+    app: r.app || "quote",
     authorEmail: r.author_email,
     authorName:
       displayMap[r.author_email] || titleCase(localPart(r.author_email).replace(/[._-]+/g, " ")),
@@ -89,7 +120,11 @@ export default async function FeedbackPage() {
             </p>
           </div>
 
-          <FeedbackBoard initialRows={display} currentUserEmail={user.email!} />
+          <FeedbackBoard
+            initialRows={display}
+            currentUserEmail={user.email!}
+            postApp={postApp}
+          />
         </div>
       </main>
     </div>

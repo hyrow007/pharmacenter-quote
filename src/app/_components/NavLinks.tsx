@@ -54,7 +54,7 @@ export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) 
           From the formula subdomain they're absolute URLs — a relative
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
-        href={onFormulaHost ? "https://quote.pharmacenter.app/feedback" : "/feedback"}
+        href={onFormulaHost ? "https://quote.pharmacenter.app/feedback?from=formulas" : "/feedback"}
         className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}
       >
         Feedback
