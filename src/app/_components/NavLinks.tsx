@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffectiveAdmin } from "@/lib/access";
+import { makeT, type Lang } from "@/lib/i18n/dict";
 
 // Client-side child of <AppHeader/>. Pulls the current pathname so we can
 // underline the active nav link. Kept tiny on purpose — the rest of the
@@ -24,12 +25,15 @@ import { useEffectiveAdmin } from "@/lib/access";
 export default function NavLinks({
   onFormulaHost,
   appContext,
+  lang,
 }: {
   onFormulaHost: boolean;
   appContext: "quote" | "formulas" | "packing-list";
+  lang: Lang;
 }) {
   const pathname = usePathname() || "";
   const { effectiveAdmin } = useEffectiveAdmin();
+  const t = makeT(lang);
 
   const isWorkflows =
     pathname === "/workflows" || pathname.startsWith("/workflow/") || pathname === "/start";
@@ -47,7 +51,7 @@ export default function NavLinks({
           href="/workflows"
           className={`app-nav__link${isWorkflows ? " app-nav__link--active" : ""}`}
         >
-          Workflows
+          {t("navWorkflows")}
         </Link>
       ) : null}
       {appContext === "formulas" ? (
@@ -55,12 +59,12 @@ export default function NavLinks({
           href={onFormulaHost ? "/formulas" : "https://formula.pharmacenter.app/formulas"}
           className={`app-nav__link${isFormulas ? " app-nav__link--active" : ""}`}
         >
-          Formulas
+          {t("navFormulas")}
         </Link>
       ) : null}
       {appContext === "packing-list" ? (
         <a href="https://packing.pharmacenter.app/lists" className="app-nav__link">
-          Lists
+          {t("navLists")}
         </a>
       ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and
@@ -77,7 +81,7 @@ export default function NavLinks({
         }
         className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}
       >
-        Feedback
+        {t("navFeedback")}
       </Link>
       {effectiveAdmin ? (
         <Link
@@ -94,7 +98,7 @@ export default function NavLinks({
           >
             <path d="M12 2l2.9 6.9L22 10l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.2L2 10l7.1-1.1L12 2z" />
           </svg>
-          Admin
+          {t("navAdmin")}
         </Link>
       ) : null}
     </nav>

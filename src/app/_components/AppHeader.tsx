@@ -5,6 +5,8 @@ import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { SignOutButton } from "../auth-buttons";
 import AdminToggle from "./AdminToggle";
 import NavLinks from "./NavLinks";
+import LangToggle from "./LangToggle";
+import { getLangFromCookie } from "@/lib/i18n/server";
 
 // Top navigation bar — sits flush on every signed-in page. Mirrors the look
 // of the sister Packing List app: real PharmaCenter wordmark on the left,
@@ -39,6 +41,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   // passed down so the client nav renders the right set on first paint.
   const host = (await headers()).get("host") ?? "";
   const onFormulaHost = host.startsWith("formula.");
+  const lang = await getLangFromCookie();
 
   // Effective identity: explicit context from the page wins (used by the
   // shared feedback page), otherwise derived from the host.
@@ -79,9 +82,11 @@ export default async function AppHeader({ user, appContext }: Props) {
           </span>
         </Link>
 
-        <NavLinks onFormulaHost={onFormulaHost} appContext={ctx} />
+        <NavLinks onFormulaHost={onFormulaHost} appContext={ctx} lang={lang} />
 
         <div className="app-nav__user">
+          {/* v50: EN/ES pill — same placement as the packing list. */}
+          <LangToggle lang={lang} />
           {admin ? <AdminToggle /> : null}
           <span className="app-nav__email" title={user.email}>
             {user.email}
