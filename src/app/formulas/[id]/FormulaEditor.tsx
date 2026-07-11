@@ -1588,33 +1588,9 @@ export default function FormulaEditor({
             max-height: none !important;
             overflow: visible !important;
           }
-          /* Shrink every direct child of the running header to fit
-             the reserved margin. Title normally renders at ~13pt
-             (via our font-size normalization); here we cap it.
-             v36: tightened line-height 1.2→1.15 so 3-line strips
-             stay compact. */
-          .fe-print-header > div,
-          .fe-print-header > div > * {
-            font-size: 8.5pt !important;
-            line-height: 1.15 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          /* Title line inside the header — one notch bigger + bolder
-             so the letterhead reads as a title, not just another meta
-             row. */
-          .fe-print-header > div:first-child {
-            font-size: 10pt !important;
-            font-weight: 800 !important;
-            margin-bottom: 2px !important;
-          }
-          /* Meta chips inside header — tighten flex gap so the strip
-             stays on one line when it fits, wraps to at most two when
-             it doesn't. */
-          .fe-print-header > div:nth-child(2) {
-            gap: 10px !important;
-            row-gap: 2px !important;
-          }
+          /* v41 header redesign (Option D) uses inline styles to size
+             the logo, title, subtitle, and two-row meta strip. No CSS
+             overrides on the header children — the JSX handles it. */
           /* NOTE: v34 had a JS-injected .fe-print-footer here as a
              page-count fallback, but position:fixed elements print
              the same text on every page — you'd see "Page 1 of N"
@@ -2165,6 +2141,17 @@ export default function FormulaEditor({
             fill: #000 !important;
             stroke: #000 !important;
           }
+          /* v41: preserve teal accents inside the letterhead (title
+             + label-bold). Only re-applies to the print header, not
+             the body content. */
+          .fe-print-header,
+          .fe-print-header * {
+            color: revert !important;
+            border-color: revert !important;
+          }
+          .fe-print-header img {
+            filter: none !important;
+          }
 
           /* v41 dropped the landscape one-page prototype — all
              body.fe-print-onepage-mode rules removed. The remaining
@@ -2179,82 +2166,126 @@ export default function FormulaEditor({
           margin boxes, the print dialog's own "Headers and footers"
           checkbox is the user's fallback. */}
 
-      {/* Print-only meta header — a compact letterhead that only shows
-          up when printing. On-screen the CSS above keeps it hidden.
-          The .fe-print-header class in the @media print block turns
-          this into a running header (position:fixed) that Chrome
-          repeats on every printed page, sitting in the 34mm reserved
-          top margin. */}
+      {/* v41 print header redesign (Option D): logo on the left,
+          title next to it, meta strip below in two rows.
+          Only renders on print (page 1 only — no longer position:fixed
+          per v41). On-screen the .fe-print-only class hides it. */}
       <div
         className="fe-print-only fe-print-header"
         style={{
-          marginBottom: 12,
+          marginBottom: 14,
           paddingBottom: 8,
           borderBottom: "1.5px solid #0f4a56",
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#0f4a56" }}>
-          PharmaCenter — Gummy Formula Sheet (Bench top batch)
-        </div>
+        {/* Top row: logo + title stacked. Logo sits left, title runs
+            to its right with more generous 18pt weight. */}
         <div
           style={{
-            marginTop: 4,
-            fontSize: 12,
-            color: "#333",
             display: "flex",
+            alignItems: "center",
             gap: 14,
-            flexWrap: "wrap",
           }}
         >
-          <span>
-            <strong>Formula</strong> F
-            {String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}
-          </span>
-          <span>
-            <strong>Version</strong> v{initialFormula.latestVersionNum}
-          </span>
-          {initialFormula.pcBkCode ? (
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="PharmaCenter"
+            style={{
+              height: 40,
+              width: "auto",
+              objectFit: "contain",
+              flex: "0 0 auto",
+            }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 800,
+                color: "#0f4a56",
+                letterSpacing: "-0.01em",
+                lineHeight: 1.1,
+              }}
+            >
+              Gummy Formula Sheet
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#4a5c60",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              Bench top batch
+            </div>
+          </div>
+        </div>
+
+        {/* Meta strip below — two rows for readability with generous
+            gap. Row 1: product identity (Formula / Version / Product
+            Code / Name / Flavor / Shape). Row 2: production context
+            (Customer / Updated on). */}
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            fontSize: 11,
+            color: "#333",
+          }}
+        >
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             <span>
-              <strong>Product Code</strong> {initialFormula.pcBkCode}
+              <strong style={{ color: "#0f4a56" }}>Formula</strong> F
+              {String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}
             </span>
-          ) : null}
-          <span>
-            <strong>Name</strong> {name || "—"}
-          </span>
-          {flavor ? (
             <span>
-              <strong>Flavor</strong> {flavor}
+              <strong style={{ color: "#0f4a56" }}>Version</strong> v
+              {initialFormula.latestVersionNum}
             </span>
-          ) : null}
-          <span>
-            <strong>Shape</strong> {shape}
-          </span>
-          {/* Customer inline in the meta strip — no dedicated section
-              below. Renders only when a customer is bound. */}
-          {customerName ? (
+            {initialFormula.pcBkCode ? (
+              <span>
+                <strong style={{ color: "#0f4a56" }}>Product Code</strong>{" "}
+                {initialFormula.pcBkCode}
+              </span>
+            ) : null}
             <span>
-              <strong>Customer</strong> {customerName}
+              <strong style={{ color: "#0f4a56" }}>Name</strong> {name || "—"}
             </span>
-          ) : null}
-          {/* Formula's last-updated timestamp rather than the print
-              wall-clock. Sits inline with the rest of the meta strip
-              (Formula / Version / Product Code / Name / Flavor / Shape
-              / Customer) — no marginLeft:auto — so the operator reads
-              the header left-to-right as one continuous strip of
-              identity metadata. */}
-          <span>
-            <strong>Updated on:</strong>{" "}
-            {initialFormula.updatedAt
-              ? new Date(initialFormula.updatedAt).toLocaleDateString(
-                  "en-US",
-                  {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  },
-                )
-              : "—"}
-          </span>
+            {flavor ? (
+              <span>
+                <strong style={{ color: "#0f4a56" }}>Flavor</strong> {flavor}
+              </span>
+            ) : null}
+            <span>
+              <strong style={{ color: "#0f4a56" }}>Shape</strong> {shape}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            {customerName ? (
+              <span>
+                <strong style={{ color: "#0f4a56" }}>Customer</strong>{" "}
+                {customerName}
+              </span>
+            ) : null}
+            <span>
+              <strong style={{ color: "#0f4a56" }}>Updated on:</strong>{" "}
+              {initialFormula.updatedAt
+                ? new Date(initialFormula.updatedAt).toLocaleDateString(
+                    "en-US",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    },
+                  )
+                : "—"}
+            </span>
+          </div>
         </div>
       </div>
 
