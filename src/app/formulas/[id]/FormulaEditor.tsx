@@ -5082,6 +5082,11 @@ function BlendSectionCard({
       {/* Card header — cream band across the top of the card with a
           teal divider underneath. The bold title reads as the card's
           identity without introducing a floating tab shape. */}
+      {/* v48.1: header + Primary Blend Carry Over form one
+          keep-together print unit — the carry-over table is hand-
+          rendered (not via renderIngredientsBlock), so it missed the
+          .fe-blend-unit wrapper in v48 and split across pages. */}
+      <div className="fe-blend-unit">
       <header
         style={{
           padding: "14px 18px 12px",
@@ -5846,6 +5851,7 @@ function BlendSectionCard({
           </>
         );
       })() : null}
+      </div>
 
       {/* Cooked-only: top-level "Cooking" Process notes block. Rendered
           right below the card header, above the Secondary Blend and
