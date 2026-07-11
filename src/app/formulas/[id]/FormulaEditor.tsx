@@ -1947,6 +1947,18 @@ export default function FormulaEditor({
             border-bottom: 3px double #000 !important;
             padding: 6px 6px !important;
           }
+          /* v47.7: the GT row's 2nd cell is an empty placeholder that
+             exists only so the on-screen colgroup lines up with the
+             Secondary Blend's Overage % column. On print every row
+             shares one 5-track grid, so that invisible cell occupied
+             track 2 and shoved grams / % / moisture one column right
+             of the Final Blend headers above (and wrapped the 6th
+             chevron cell onto a phantom second grid row). Hiding it
+             puts the five remaining cells back on the same tracks as
+             the Final Blend table. */
+          tr.fe-grand-total-row > td:nth-child(2) {
+            display: none !important;
+          }
           tr.fe-grand-total-row,
           tr.fe-grand-total-row * {
             font-size: 11pt !important;
