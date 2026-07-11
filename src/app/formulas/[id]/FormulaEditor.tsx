@@ -1107,45 +1107,14 @@ export default function FormulaEditor({
   // next paint, then (c) revert. CSS below hides interactive chrome (buttons,
   // tabs, chevrons) so the print output reads like a spec sheet.
   const [printing, setPrinting] = useState(false);
-  // v40 prototype: two print modes.
-  //   "full"    → current per-section-per-page layout (portrait letter)
-  //   "onepage" → landscape letter, two-column flow, everything on 1 sheet
-  const [printMode, setPrintMode] = useState<"full" | "onepage">("full");
   useEffect(() => {
     if (!printing) return;
-    // One-page mode needs a landscape @page rule — @page can't be
-    // scoped via class, so inject a <style> tag with the landscape
-    // declaration for the duration of the print and pull it back out
-    // after. Also add a body class so the CSS below can gate the
-    // 2-column layout, static (non-fixed) header, and compressed type.
-    let injectedStyle: HTMLStyleElement | null = null;
-    if (printMode === "onepage") {
-      document.body.classList.add("fe-print-onepage-mode");
-      injectedStyle = document.createElement("style");
-      injectedStyle.id = "fe-print-onepage-style";
-      injectedStyle.textContent = `@media print { @page { size: letter landscape !important; margin: 8mm 8mm 12mm 8mm !important; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; padding-right: 5mm; color: #000; } } }`;
-      document.head.appendChild(injectedStyle);
-    }
-    const cleanup = () => {
-      if (printMode === "onepage") {
-        document.body.classList.remove("fe-print-onepage-mode");
-        if (injectedStyle && injectedStyle.parentNode) {
-          injectedStyle.parentNode.removeChild(injectedStyle);
-        }
-      }
-    };
     const t = window.setTimeout(() => {
       window.print();
-      window.setTimeout(() => {
-        cleanup();
-        setPrinting(false);
-      }, 300);
+      window.setTimeout(() => setPrinting(false), 300);
     }, 120);
-    return () => {
-      window.clearTimeout(t);
-      cleanup();
-    };
-  }, [printing, printMode]);
+    return () => window.clearTimeout(t);
+  }, [printing]);
 
   // -- Save -------------------------------------------------------------------
   const [saving, setSaving] = useState(false);
@@ -1593,11 +1562,10 @@ export default function FormulaEditor({
              below injects the same text into an on-page footer. */
           @page {
             size: letter;
-            /* v39: bumped top margin 42→52mm because the running
-               header + column-header row were still colliding on
-               continuation pages. Bottom stays 18mm for the
-               page-counter breathing room. */
-            margin: 52mm 10mm 18mm 10mm;
+            /* v41: header is no longer position:fixed (only page 1),
+               so we don't need to reserve a huge top margin for a
+               running letterhead. Back to a normal 12mm margin. */
+            margin: 12mm 10mm 18mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
@@ -1607,27 +1575,18 @@ export default function FormulaEditor({
               padding-right: 5mm;
             }
           }
-          /* Running header — Chrome repeats position:fixed elements
-             on every printed page, so this letterhead sits at the top
-             of every sheet. Sized to slot into the 42mm reserved
-             margin without overflowing into content.
-             v36: bumped max-height 28→34mm to match the extra room. */
+          /* v41: header is now an in-flow block that only appears on
+             page 1 — no more position:fixed running header on every
+             page. The block flows naturally at the top of content and
+             pushes the rest of the sheet down normally. */
           .fe-print-header {
-            position: fixed !important;
-            /* v39: reverted -42mm experiment (that made the header
-               land at page BOTTOM). Back to top:0. With the @page
-               top margin now 52mm, header at top:0 has 40mm of
-               working space before content — no more overlap. */
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            margin: 0 !important;
-            padding: 0.5mm 10mm 2mm !important;
+            position: static !important;
+            margin: 0 0 4mm !important;
+            padding: 0 0 2mm !important;
             border-bottom: 1px solid #000 !important;
-            background: #fff !important;
-            z-index: 9999 !important;
-            max-height: 45mm !important;
-            overflow: hidden !important;
+            background: transparent !important;
+            max-height: none !important;
+            overflow: visible !important;
           }
           /* Shrink every direct child of the running header to fit
              the reserved margin. Title normally renders at ~13pt
@@ -2207,84 +2166,10 @@ export default function FormulaEditor({
             stroke: #000 !important;
           }
 
-          /* ============================================================
-             v40 PROTOTYPE — landscape one-page mode.
-             Applies only when body.fe-print-onepage-mode is set (the
-             one-page Print button toggles this before window.print()).
-             The @page landscape rule itself is injected as a separate
-             <style> tag from the print useEffect (see printing effect
-             above) because @page can't be scoped by class.
-             ============================================================ */
-
-          /* Static (non-fixed) header on the one page. Running-header
-             behavior isn't needed when there's only one page. */
-          body.fe-print-onepage-mode .fe-print-header {
-            position: static !important;
-            top: auto !important;
-            max-height: none !important;
-            border-bottom: 1.5px solid #000 !important;
-            padding: 0 0 3mm !important;
-            margin: 0 0 4mm !important;
-            overflow: visible !important;
-          }
-
-          /* Kill per-section page breaks — everything flows in one
-             pass so multi-column layout can distribute it. */
-          body.fe-print-onepage-mode .fe-blend-card,
-          body.fe-print-onepage-mode .fe-blend-card--cooked .fe-blend-subheading {
-            page-break-before: auto !important;
-            break-before: auto !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          /* Two-column flow on the main editor body. CSS multi-column
-             lays out children top-to-bottom in column 1, then
-             continues into column 2 when column 1 fills. Cards stay
-             intact via break-inside: avoid (rule above). */
-          body.fe-print-onepage-mode .fe-editor-flow {
-            column-count: 2 !important;
-            column-gap: 8mm !important;
-            column-fill: balance !important;
-          }
-          /* Fall back: if we don't have an explicit .fe-editor-flow
-             wrapper, target the immediate main content region. */
-          body.fe-print-onepage-mode > div,
-          body.fe-print-onepage-mode main {
-            column-count: 2 !important;
-            column-gap: 8mm !important;
-            column-fill: balance !important;
-          }
-
-          /* Compress type — landscape letter is 279mm wide but content
-             density needs 8.5pt to fit typical formulas. */
-          body.fe-print-onepage-mode {
-            font-size: 8.5pt !important;
-            line-height: 1.2 !important;
-          }
-
-          /* Kill card margins between blend sections so vertical
-             density is maximized. */
-          body.fe-print-onepage-mode .fe-blend-card {
-            margin: 0 0 4mm !important;
-            padding: 0 !important;
-            border: none !important;
-          }
-          body.fe-print-onepage-mode section,
-          body.fe-print-onepage-mode .fe-bench-batch-card,
-          body.fe-print-onepage-mode .fe-key-indicators-card {
-            margin: 0 0 3mm !important;
-            padding: 0 !important;
-            border: none !important;
-          }
-
-          /* Tighten grid rows in tables. */
-          body.fe-print-onepage-mode tr {
-            padding: 2px 4px !important;
-          }
-          body.fe-print-onepage-mode thead th {
-            font-size: 7pt !important;
-          }
+          /* v41 dropped the landscape one-page prototype — all
+             body.fe-print-onepage-mode rules removed. The remaining
+             print CSS above handles the standard multi-page portrait
+             layout with header on page 1 only. */
         }
       `}</style>
 
@@ -2732,16 +2617,13 @@ export default function FormulaEditor({
             style={{ display: "flex", flexDirection: "column", gap: 4 }}
           >
             <div style={{ display: "flex", gap: 6 }}>
-              {/* Print / Save PDF (full, multi-page portrait) — expands
-                  all collapsible sections and calls window.print(). */}
+              {/* Print / Save PDF — v41: single button, drops the
+                  v40 One page landscape prototype. */}
               <button
                 type="button"
-                onClick={() => {
-                  setPrintMode("full");
-                  setPrinting(true);
-                }}
+                onClick={() => setPrinting(true)}
                 disabled={printing}
-                title="Print full sheet (multi-page portrait)"
+                title="Print or Save as PDF"
                 style={{
                   padding: "10px 12px",
                   background: "transparent",
@@ -2755,32 +2637,7 @@ export default function FormulaEditor({
                   letterSpacing: "0.03em",
                 }}
               >
-                {printing && printMode === "full" ? "Preparing…" : "🖨 Print / PDF"}
-              </button>
-              {/* v40 prototype: one-page landscape print. Toggles the
-                  body class + injects the landscape @page rule. */}
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintMode("onepage");
-                  setPrinting(true);
-                }}
-                disabled={printing}
-                title="Print everything on a single landscape page"
-                style={{
-                  padding: "10px 12px",
-                  background: "transparent",
-                  color: "var(--teal-900, #0f4a56)",
-                  border: "1px dashed var(--teal-700, #1d6c7b)",
-                  borderRadius: 8,
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: printing ? "wait" : "pointer",
-                  whiteSpace: "nowrap",
-                  letterSpacing: "0.03em",
-                }}
-              >
-                {printing && printMode === "onepage" ? "Preparing…" : "🖨 One page"}
+                {printing ? "Preparing…" : "🖨 Print / PDF"}
               </button>
               <button
                 type="button"
