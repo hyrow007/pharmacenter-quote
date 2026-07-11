@@ -108,7 +108,10 @@ export default async function FeedbackPage({
 
   return (
     <div className="app-shell">
-      <AppHeader user={{ email: user.email! }} />
+      <AppHeader
+        user={{ email: user.email! }}
+        appContext={postApp as "quote" | "formulas" | "packing-list"}
+      />
       <main className="page">
         <div className="page__inner--narrow">
           <div style={{ marginBottom: 18 }}>

@@ -21,7 +21,13 @@ import { useEffectiveAdmin } from "@/lib/access";
 // v48.7: `onFormulaHost` comes from AppHeader (server-side host read).
 // The formula site hides the Workflows link, the quote site hides the
 // Formulas link — each subdomain presents as its own product.
-export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) {
+export default function NavLinks({
+  onFormulaHost,
+  appContext,
+}: {
+  onFormulaHost: boolean;
+  appContext: "quote" | "formulas" | "packing-list";
+}) {
   const pathname = usePathname() || "";
   const { effectiveAdmin } = useEffectiveAdmin();
 
@@ -33,7 +39,10 @@ export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) 
 
   return (
     <nav className="app-nav__links" aria-label="Primary">
-      {!onFormulaHost ? (
+      {/* v49.2: the primary link matches the app the visitor is in or
+          arrived from — quote gets Workflows, formulas gets Formulas,
+          packing list gets Lists. */}
+      {appContext === "quote" ? (
         <Link
           href="/workflows"
           className={`app-nav__link${isWorkflows ? " app-nav__link--active" : ""}`}
@@ -41,20 +50,31 @@ export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) 
           Workflows
         </Link>
       ) : null}
-      {onFormulaHost ? (
+      {appContext === "formulas" ? (
         <Link
-          href="/formulas"
+          href={onFormulaHost ? "/formulas" : "https://formula.pharmacenter.app/formulas"}
           className={`app-nav__link${isFormulas ? " app-nav__link--active" : ""}`}
         >
           Formulas
         </Link>
+      ) : null}
+      {appContext === "packing-list" ? (
+        <a href="https://packing.pharmacenter.app/lists" className="app-nav__link">
+          Lists
+        </a>
       ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and
           shared by all PharmaCenter apps (packing list links here too).
           From the formula subdomain they're absolute URLs — a relative
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
-        href={onFormulaHost ? "https://quote.pharmacenter.app/feedback?from=formulas" : "/feedback"}
+        href={
+          onFormulaHost
+            ? "https://quote.pharmacenter.app/feedback?from=formulas"
+            : appContext === "quote"
+              ? "/feedback"
+              : `/feedback?from=${appContext}`
+        }
         className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}
       >
         Feedback

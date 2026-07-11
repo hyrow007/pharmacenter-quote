@@ -18,11 +18,17 @@ import NavLinks from "./NavLinks";
 // We also resolve `isAdmin` here so the AdminToggle can be rendered for
 // admins on every page without each page having to pass the flag in.
 
+export type AppContext = "quote" | "formulas" | "packing-list";
+
 type Props = {
   user: { email: string };
+  /** v49.2: shared pages (feedback, and eventually the admin hub) can
+   *  pass the app the visitor arrived from (?from=) so the header keeps
+   *  that app's identity instead of defaulting to quote chrome. */
+  appContext?: AppContext;
 };
 
-export default async function AppHeader({ user }: Props) {
+export default async function AppHeader({ user, appContext }: Props) {
   const supabase = await createClient();
   const admin = await checkIsAdmin(supabase, user.email);
 
@@ -34,10 +40,26 @@ export default async function AppHeader({ user }: Props) {
   const host = (await headers()).get("host") ?? "";
   const onFormulaHost = host.startsWith("formula.");
 
+  // Effective identity: explicit context from the page wins (used by the
+  // shared feedback page), otherwise derived from the host.
+  const ctx: AppContext = appContext ?? (onFormulaHost ? "formulas" : "quote");
+  const brandHref =
+    ctx === "formulas"
+      ? onFormulaHost
+        ? "/"
+        : "https://formula.pharmacenter.app/"
+      : ctx === "packing-list"
+        ? "https://packing.pharmacenter.app/lists"
+        : "/workflows";
+  const productMain =
+    ctx === "formulas" ? "Formulas" : ctx === "packing-list" ? "Packing List" : "Quote";
+  const productSub =
+    ctx === "formulas" ? "Catalog" : ctx === "packing-list" ? "Generator" : "Work Flows";
+
   return (
     <header className="app-nav">
       <div className="app-nav__inner">
-        <Link href={onFormulaHost ? "/" : "/workflows"} className="app-nav__brand">
+        <Link href={brandHref} className="app-nav__brand">
           {/* The wordmark itself carries "PharmaCenter" + tagline, so we don't
               repeat "PharmaCenter" in text next to it. The product name
               ("Quote / Generator") sits beside the mark with a divider. */}
@@ -50,17 +72,14 @@ export default async function AppHeader({ user }: Props) {
           />
           <span className="app-nav__divider" aria-hidden="true" />
           <span className="app-nav__product">
-            {/* v48.8: each subdomain wears its own product name. */}
-            <span className="app-nav__product-main">
-              {onFormulaHost ? "Formulas" : "Quote"}
-            </span>
-            <span className="app-nav__product-sub">
-              {onFormulaHost ? "Catalog" : "Work Flows"}
-            </span>
+            {/* v48.8/v49.2: the header wears the identity of the app the
+                visitor is in (or arrived from, on shared pages). */}
+            <span className="app-nav__product-main">{productMain}</span>
+            <span className="app-nav__product-sub">{productSub}</span>
           </span>
         </Link>
 
-        <NavLinks onFormulaHost={onFormulaHost} />
+        <NavLinks onFormulaHost={onFormulaHost} appContext={ctx} />
 
         <div className="app-nav__user">
           {admin ? <AdminToggle /> : null}
