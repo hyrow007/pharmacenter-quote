@@ -50,8 +50,13 @@ export default async function AppHeader({ user }: Props) {
           />
           <span className="app-nav__divider" aria-hidden="true" />
           <span className="app-nav__product">
-            <span className="app-nav__product-main">Quote</span>
-            <span className="app-nav__product-sub">Work Flows</span>
+            {/* v48.8: each subdomain wears its own product name. */}
+            <span className="app-nav__product-main">
+              {onFormulaHost ? "Formulas" : "Quote"}
+            </span>
+            <span className="app-nav__product-sub">
+              {onFormulaHost ? "Catalog" : "Work Flows"}
+            </span>
           </span>
         </Link>
 
