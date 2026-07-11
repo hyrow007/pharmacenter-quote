@@ -1772,31 +1772,26 @@ export default function FormulaEditor({
             margin-top: 8px !important;
           }
 
-          /* One printed page per blend section. Each blend gets its
-             own dedicated sheet so a bench operator can lay them out
-             side-by-side and work through them independently.
-             Pages laid out:
-               1  Product Details + summary + Label Claims (default flow)
-               2  Pre-cook blend card
-               3  Cooked blend card header + Cooking notes + Primary
-                    Blend Carry Over
-               4  Secondary Blend subsection
-               5  Final Blend subsection
-             We break before both blend cards (pre-cook + cooked) and
-             before each subsequent subheading inside the cooked card
-             (Secondary + Final — both carry the .fe-blend-subheading
-             class via renderIngredientsBlock). Primary Blend Carry Over
-             sits at the top of the cooked card page (no break needed;
-             its subheading isn't a .fe-blend-subheading).
-             CAREFUL: the pre-cook card ALSO renders a "Primary Blend"
-             subheading via renderIngredientsBlock — so we must scope
-             the subheading page-break to descendants of the cooked
-             card only, otherwise the pre-cook card gets split in half
-             (header alone on page 2, ingredients orphaned on page 3). */
-          .fe-blend-card,
-          .fe-blend-card--cooked .fe-blend-subheading {
-            page-break-before: always !important;
-            break-before: page !important;
+          /* v48: blend sections PACK onto pages instead of each
+             forcing its own sheet. Every section is a keep-together
+             unit: it stays on the current page when it fits whole,
+             and jumps to a fresh page when it doesn't — Chromium's
+             break-inside: avoid gives exactly that greedy packing.
+             A unit taller than one full page still splits (the only
+             possible fallback); row-level break-inside: avoid below
+             keeps individual rows intact when that happens.
+             Units:
+               - the whole pre-cook card (header + Primary Blend)
+               - each renderIngredientsBlock subsection on the cooked
+                 card (Secondary Blend, Final Blend) via .fe-blend-unit
+               - the Grand Total block, so it can't strand alone
+             Primary Blend Carry Over + the cooked-card header flow at
+             the top of the cooked card as before. */
+          .fe-blend-card--pre-cook,
+          .fe-blend-card--cooked .fe-blend-unit,
+          .fe-grand-total-block {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
 
           /* Kill any leftover dashed / dotted rules the on-screen view
@@ -5980,7 +5975,7 @@ function BlendSectionCard({
             blockDefaultProcessNote.length > 0 &&
             blockProcessNote.trim() === blockDefaultProcessNote.trim();
           return (
-            <>
+            <div className="fe-blend-unit">
               {/* Optional sub-heading — e.g. "Secondary Blend" or
                   "Final Blend" on the cooked card. Other subsections pass
                   null so nothing renders. */}
@@ -6866,7 +6861,7 @@ function BlendSectionCard({
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           );
         };
 
@@ -7028,6 +7023,7 @@ function BlendSectionCard({
                   );
                   return (
                     <div
+                      className="fe-grand-total-block"
                       style={{
                         borderTop: "2px solid var(--teal-700, #1d6c7b)",
                         background: "var(--cream-soft, #fbf6ec)",
