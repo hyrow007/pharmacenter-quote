@@ -160,6 +160,8 @@ const es: Record<string, string> = {
   final: "final",
   "pre-cook": "precocción",
   cooked: "cocida",
+  "Moisture Loss": "Pérdida de humedad",
+  "Claim Baseline: ": "Base de declaración: ",
 };
 
 export function makeTr(lang: Lang) {

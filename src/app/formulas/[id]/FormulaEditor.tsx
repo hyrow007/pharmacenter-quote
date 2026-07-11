@@ -5402,7 +5402,7 @@ function BlendSectionCard({
                               marginTop: 2,
                             }}
                           >
-                            Solution
+                            {tr("Solution")}
                           </div>
                         </BTd>
                         <BTd
@@ -8134,6 +8134,7 @@ function OverageInput({
   actualG: number;
   onCommit: (nextGrams: number) => void;
 }) {
+  const tr = makeTr(useLang());
   const canCompute = baseG > 0;
   // Legacy rows may have grams = 0 — treat as "unset" and pretend the
   // operator is starting at the baseline (0%) so they don't have to
@@ -8351,7 +8352,7 @@ function OverageInput({
           marginTop: 2,
         }}
       >
-        Claim Baseline: {Format.grams(baseG)} g
+        {tr("Claim Baseline: ")}{Format.grams(baseG)} g
       </div>
     </div>
   );
