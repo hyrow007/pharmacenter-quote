@@ -1532,6 +1532,12 @@ export default function FormulaEditor({
         /* Show the print-only header only when actually printing so the
            on-screen view stays as-is. */
         .fe-print-only { display: none; }
+        /* v48.3: Process / Cooking notes rows hidden app-wide (user
+           request). The note text still persists and round-trips
+           through the API untouched — delete this one rule to bring
+           the rows back. Print was already hiding them via the same
+           class inside the @media print block. */
+        .fe-process-notes { display: none !important; }
         /* v47.6: the <br>s inside .fe-th-break exist for the printed
            column headers only (forces "% of / finished / product" onto
            three short lines inside the narrow print track so it can't
