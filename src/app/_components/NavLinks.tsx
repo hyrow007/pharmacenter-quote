@@ -49,15 +49,19 @@ export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) 
           Formulas
         </Link>
       ) : null}
+      {/* v49: Feedback and Admin are canonical on the quote host and
+          shared by all PharmaCenter apps (packing list links here too).
+          From the formula subdomain they're absolute URLs — a relative
+          /feedback there would get rewritten into /formulas/feedback. */}
       <Link
-        href="/feedback"
+        href={onFormulaHost ? "https://quote.pharmacenter.app/feedback" : "/feedback"}
         className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}
       >
         Feedback
       </Link>
       {effectiveAdmin ? (
         <Link
-          href="/admin"
+          href={onFormulaHost ? "https://quote.pharmacenter.app/admin" : "/admin"}
           className={`app-nav__link${isAdmin ? " app-nav__link--active" : ""}`}
         >
           <svg

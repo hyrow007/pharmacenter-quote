@@ -132,6 +132,29 @@ export default async function AdminPage() {
                 The ingredient catalogue used by the gummy formula calculator.
               </div>
             </a>
+            {/* v49: this page is the canonical admin hub for every
+                PharmaCenter app. The packing list keeps its own admin
+                surfaces (users / customers / products) — reachable from
+                here, while its nav's Admin link points back at this hub. */}
+            <a
+              href="https://packing.pharmacenter.app/admin"
+              style={{
+                display: "block",
+                padding: "14px 16px",
+                background: "var(--paper, #fffdf8)",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 10,
+                textDecoration: "none",
+                color: "var(--teal-900, #0f4a56)",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                Packing List admin &rarr;
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
+                Users, customers, and products for the packing list app.
+              </div>
+            </a>
           </div>
 
           <AdminPanel
