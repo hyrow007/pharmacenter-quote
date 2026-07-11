@@ -1564,8 +1564,10 @@ export default function FormulaEditor({
             size: letter;
             /* v41: header is no longer position:fixed (only page 1),
                so we don't need to reserve a huge top margin for a
-               running letterhead. Back to a normal 12mm margin. */
-            margin: 12mm 10mm 18mm 10mm;
+               running letterhead. Back to a normal 12mm margin.
+               v47.3: bottom bumped 18mm to 22mm so flowing content
+               clears the fixed identity strip (see rule below). */
+            margin: 12mm 10mm 22mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
@@ -1574,25 +1576,26 @@ export default function FormulaEditor({
               text-align: right;
               padding-right: 5mm;
             }
-            /* v47: identity strip centered in the bottom margin box
-               on every page (Formula / Version / Name). Text is
-               captured from .fe-print-footer-identity via a
-               string-set declaration on that element. */
-            @bottom-center {
-              content: string(footerIdentity);
-              font-size: 9pt;
-              color: #000;
-              font-family: sans-serif;
-              text-align: center;
-            }
           }
-          /* v47: capture the identity strip text into the named CSS
-             string that @bottom-center reads. The element itself is
-             hidden from body flow because it lives inside
-             .fe-print-only and never gets display block set at
-             render time — string-set works regardless of display. */
+          /* v47.3: identity strip (Formula / Version / Name) as a
+             position:fixed element. Chromium has NO string-set /
+             string() support (CSS.supports returns false for both),
+             so the v47 @bottom-center margin-box approach rendered
+             nothing and the capture element leaked into the top of
+             page 1. position:fixed repeats identical text on every
+             printed page, which is exactly right for the identity
+             strip — the v34/v35 objection below only applies to the
+             per-page counter, whose text must differ per page. The
+             22mm bottom @page margin above gives content clearance. */
           .fe-print-footer-identity {
-            string-set: footerIdentity content();
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9pt;
+            color: #000;
+            font-family: sans-serif;
           }
           /* v41: header is now an in-flow block that only appears on
              page 1 — no more position:fixed running header on every
@@ -1635,8 +1638,8 @@ export default function FormulaEditor({
             font-size: 10pt;
           }
           /* NOTE: we intentionally do NOT redeclare @page here with
-             margin: 0 — that would clobber the top @page rule's 34mm
-             top margin AND kill the @bottom-right page counter (a
+             margin: 0 — that would clobber the top @page rule's
+             margins AND kill the @bottom-right page counter (a
              margin box needs actual margin space to render into).
              The first @page rule above owns page geometry.
              Body padding stays 0 because @page margins already give
@@ -2185,11 +2188,11 @@ export default function FormulaEditor({
           margin boxes, the print dialog's own "Headers and footers"
           checkbox is the user's fallback. */}
 
-      {/* v47 identity footer — the print CSS above uses string-set
-          to capture this element's text content into a named CSS
-          string, then displays it in the @bottom-center margin box on
-          every printed page. The element is inside .fe-print-only so
-          it never shows on screen; the string capture works regardless. */}
+      {/* v47.3 identity footer — position:fixed in the print CSS, so
+          Chromium repeats it at the bottom of every printed page
+          (string-set / @bottom-center is unsupported in Chromium and
+          rendered nothing in v47). Inside .fe-print-only so it never
+          shows on screen. */}
       <div className="fe-print-only fe-print-footer-identity" aria-hidden="true">
         {`Formula F${String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}  ·  Version v${initialFormula.latestVersionNum}  ·  ${name || "—"}`}
       </div>
