@@ -1589,7 +1589,12 @@ export default function FormulaEditor({
              22mm bottom @page margin above gives content clearance. */
           .fe-print-footer-identity {
             position: fixed;
-            bottom: 0;
+            /* v47.4: negative bottom drops the strip out of the content
+               box and into the 22mm bottom page margin so it shares a
+               baseline with the @bottom-right page counter (margin-box
+               content sits vertically centered in the margin band,
+               roughly 13mm below the content edge). */
+            bottom: -13mm;
             left: 0;
             right: 0;
             text-align: center;
@@ -1923,6 +1928,38 @@ export default function FormulaEditor({
              everywhere else too. */
           .fe-solution-row__grid > *:last-child {
             display: none !important;
+          }
+          /* v47.4: Grand Total Cooked Blend is the most-checked line on
+             the sheet — print it a step larger, with heavy double rules
+             above and below, so it anchors the document. */
+          tr.fe-grand-total-row {
+            border-top: 3px double #000 !important;
+            border-bottom: 3px double #000 !important;
+            padding: 6px 6px !important;
+          }
+          tr.fe-grand-total-row,
+          tr.fe-grand-total-row * {
+            font-size: 11pt !important;
+          }
+          /* v47.4: solution component rows print as "Name NN %" on one
+             line — on screen the grid parks the bare percentage in its
+             own column, which on paper landed under unrelated numeric
+             column headers and read as ambiguous data. Collapse the
+             grid to an inline flex pair; the remove button is already
+             hidden by the global button rule below. */
+          .fe-solution-component-row {
+            display: flex !important;
+            justify-content: flex-start !important;
+            align-items: baseline !important;
+            gap: 6px !important;
+          }
+          .fe-solution-component-row > *:first-child {
+            flex: 0 1 auto !important;
+            min-width: 0 !important;
+          }
+          .fe-solution-component-row input {
+            width: 3.5em !important;
+            text-align: left !important;
           }
 
           /* Print-table treatment (Option B: CSS Grid rows).
@@ -6970,7 +7007,7 @@ function BlendSectionCard({
                           <col style={{ width: 40 }} />
                         </colgroup>
                         <tbody>
-                          <tr>
+                          <tr className="fe-grand-total-row">
                             <BTd style={{ padding: "10px 14px" }}>
                               <strong
                                 style={{
@@ -8961,6 +8998,7 @@ function SolutionComponentRow({
 
   return (
     <div
+      className="fe-solution-component-row"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -9214,24 +9252,6 @@ function IngredientPicker({
             <span style={{ color: "var(--ink-2, #415056)" }}>{customLabel}</span>
           )}
         </span>
-        {!resolved && hasCustom ? (
-          <span
-            title="Not in Fishbowl or raw_materials — added as a custom ingredient"
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--ink-3, #8a9498)",
-              border: "1px dashed var(--line, #e3dcc9)",
-              borderRadius: 999,
-              padding: "1px 6px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Not in FB
-          </span>
-        ) : null}
         <button
           type="button"
           onClick={() => {
