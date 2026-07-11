@@ -1575,6 +1575,11 @@ export default function FormulaEditor({
               font-family: sans-serif;
               text-align: right;
               padding-right: 5mm;
+              /* v47.4: margin boxes lay out like table cells; top
+                 alignment lifts the counter toward the content edge
+                 so it sits on (or near) the identity strip's line
+                 instead of centered 11mm below it. */
+              vertical-align: top;
             }
           }
           /* v47.3: identity strip (Formula / Version / Name) as a
@@ -1589,12 +1594,16 @@ export default function FormulaEditor({
              22mm bottom @page margin above gives content clearance. */
           .fe-print-footer-identity {
             position: fixed;
-            /* v47.4: negative bottom drops the strip out of the content
-               box and into the 22mm bottom page margin so it shares a
-               baseline with the @bottom-right page counter (margin-box
-               content sits vertically centered in the margin band,
-               roughly 13mm below the content edge). */
-            bottom: -13mm;
+            /* v47.4 tried bottom: -13mm to drop the strip into the
+               bottom page margin, baseline-aligned with the page
+               counter. DO NOT do that: Chromium treats a fixed element
+               that extends past the page content box as overflow and
+               repaints it at the TOP of the NEXT page — page 1 lost
+               its footer and pages 2..N got the strip colliding with
+               their section titles. bottom: 0 (content-box bottom) is
+               the only placement Chromium honors; the counter aligns
+               to it via vertical-align: top on the margin box. */
+            bottom: 0;
             left: 0;
             right: 0;
             text-align: center;
@@ -1958,7 +1967,11 @@ export default function FormulaEditor({
             min-width: 0 !important;
           }
           .fe-solution-component-row input {
-            width: 3.5em !important;
+            /* Shrink the printed value box to its content so the %
+               sign hugs the number (field-sizing: Chromium 123+;
+               the em width is the fallback for older engines). */
+            width: 2.5em !important;
+            field-sizing: content !important;
             text-align: left !important;
           }
 
