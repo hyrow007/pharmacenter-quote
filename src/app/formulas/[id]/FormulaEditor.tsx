@@ -1505,6 +1505,20 @@ export default function FormulaEditor({
     return { groups, unassigned };
   }, [ingredients]);
 
+  // v47.6: identity strip for the printed footer. Interpolated into the
+  // @bottom-center margin box inside the print CSS below. Chromium cannot
+  // capture element text via string-set (unsupported), but a plain string
+  // in a margin box renders fine — same mechanism as the page counter.
+  // Quotes, backslashes and newlines are stripped so the value cannot
+  // break out of the CSS string it is embedded in.
+  const printFooterIdentity = [
+    "Formula F" + String(initialFormula.formulaNumber ?? 0).padStart(4, "0"),
+    "Version v" + String(initialFormula.latestVersionNum),
+    (name || "").trim() || "(unnamed)",
+  ]
+    .join("  \u00B7  ")
+    .replace(/["\\\r\n]/g, " ");
+
   return (
     <div className={printing ? "fe-print-mode" : undefined}>
       {/* Print stylesheet — scoped via `@media print` so on-screen editing
@@ -1518,6 +1532,13 @@ export default function FormulaEditor({
         /* Show the print-only header only when actually printing so the
            on-screen view stays as-is. */
         .fe-print-only { display: none; }
+        /* v47.6: the <br>s inside .fe-th-break exist for the printed
+           column headers only (forces "% of / finished / product" onto
+           three short lines inside the narrow print track so it can't
+           collide with the neighboring header). Hidden on screen. */
+        @media screen {
+          .fe-th-break br { display: none; }
+        }
 
         /* "d line" — dotted section divider used in the printed sheet
            to separate blocks (e.g. under Label Claims, above Key
@@ -1575,41 +1596,21 @@ export default function FormulaEditor({
               font-family: sans-serif;
               text-align: right;
               padding-right: 5mm;
-              /* v47.4: margin boxes lay out like table cells; top
-                 alignment lifts the counter toward the content edge
-                 so it sits on (or near) the identity strip's line
-                 instead of centered 11mm below it. */
-              vertical-align: top;
             }
-          }
-          /* v47.3: identity strip (Formula / Version / Name) as a
-             position:fixed element. Chromium has NO string-set /
-             string() support (CSS.supports returns false for both),
-             so the v47 @bottom-center margin-box approach rendered
-             nothing and the capture element leaked into the top of
-             page 1. position:fixed repeats identical text on every
-             printed page, which is exactly right for the identity
-             strip — the v34/v35 objection below only applies to the
-             per-page counter, whose text must differ per page. The
-             22mm bottom @page margin above gives content clearance. */
-          .fe-print-footer-identity {
-            position: fixed;
-            /* v47.4 tried bottom: -13mm to drop the strip into the
-               bottom page margin, baseline-aligned with the page
-               counter. DO NOT do that: Chromium treats a fixed element
-               that extends past the page content box as overflow and
-               repaints it at the TOP of the NEXT page — page 1 lost
-               its footer and pages 2..N got the strip colliding with
-               their section titles. bottom: 0 (content-box bottom) is
-               the only placement Chromium honors; the counter aligns
-               to it via vertical-align: top on the margin box. */
-            bottom: 0;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 9pt;
-            color: #000;
-            font-family: sans-serif;
+            /* v47.6: identity strip lives in the @bottom-center margin
+               box, same band as the page counter, so the two footer
+               pieces share a baseline by construction. The text is a
+               plain CSS string interpolated at render time from
+               printFooterIdentity (see component body) — Chromium has
+               no string-set, but literal strings in margin boxes work
+               exactly like the counter to the right. */
+            @bottom-center {
+              content: "${printFooterIdentity}";
+              font-size: 9pt;
+              color: #000;
+              font-family: sans-serif;
+              text-align: center;
+            }
           }
           /* v41: header is now an in-flow block that only appears on
              page 1 — no more position:fixed running header on every
@@ -1967,12 +1968,17 @@ export default function FormulaEditor({
             min-width: 0 !important;
           }
           .fe-solution-component-row input {
-            /* Shrink the printed value box to its content so the %
-               sign hugs the number (field-sizing: Chromium 123+;
-               the em width is the fallback for older engines). */
+            /* v47.6: right-align the value inside its box and kill the
+               wrapper gap so the % sign sits flush against the number
+               regardless of field-sizing support. field-sizing
+               (Chromium 123+) shrinks the box to the value; the em
+               width is the fallback for older engines. */
             width: 2.5em !important;
             field-sizing: content !important;
-            text-align: left !important;
+            text-align: right !important;
+          }
+          .fe-solution-component-pct {
+            gap: 1px !important;
           }
 
           /* Print-table treatment (Option B: CSS Grid rows).
@@ -2237,15 +2243,6 @@ export default function FormulaEditor({
           handles per-page numbers. If a browser doesn't support @page
           margin boxes, the print dialog's own "Headers and footers"
           checkbox is the user's fallback. */}
-
-      {/* v47.3 identity footer — position:fixed in the print CSS, so
-          Chromium repeats it at the bottom of every printed page
-          (string-set / @bottom-center is unsupported in Chromium and
-          rendered nothing in v47). Inside .fe-print-only so it never
-          shows on screen. */}
-      <div className="fe-print-only fe-print-footer-identity" aria-hidden="true">
-        {`Formula F${String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}  ·  Version v${initialFormula.latestVersionNum}  ·  ${name || "—"}`}
-      </div>
 
       {/* v41 print header redesign (Option D): logo on the left,
           title next to it, meta strip below in two rows.
@@ -5202,7 +5199,7 @@ function BlendSectionCard({
                       share of the Grand Total Cooked Blend. Sits BETWEEN
                       the grams column and the chevron/delete column. */}
                   <BTh style={{ textAlign: "right", width: 120 }}>
-                    % of finished product
+                    <span className="fe-th-break">% of<br /> finished<br /> product</span>
                   </BTh>
                   {/* Residual Moisture % — the water contribution of each
                       row, expressed as a share of the Grand Total Cooked
@@ -6071,7 +6068,7 @@ function BlendSectionCard({
                           (Secondary/Final on the cooked card). */}
                       {showPctColumn ? (
                         <BTh style={{ textAlign: "right", width: 120 }}>
-                          % of finished product
+                          <span className="fe-th-break">% of<br /> finished<br /> product</span>
                         </BTh>
                       ) : null}
                       {/* Cooked-only: Residual Moisture % — waterFraction ×
@@ -9059,7 +9056,7 @@ function SolutionComponentRow({
           })
         }
       />
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div className="fe-solution-component-pct" style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <input
           type="number"
                 onFocus={(e) => {
