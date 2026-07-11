@@ -2238,22 +2238,22 @@ export default function FormulaEditor({
             <span>
               <strong style={{ color: "#0f4a56" }}>Name</strong> {name || "—"}
             </span>
-            {flavor ? (
-              <span>
-                <strong style={{ color: "#0f4a56" }}>Flavor</strong> {flavor}
-              </span>
-            ) : null}
-          </div>
-          {/* Row 2 — production context (v42.1): Shape, Customer,
-              Updated on consolidated onto one line. */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <span>
-              <strong style={{ color: "#0f4a56" }}>Shape</strong> {shape}
-            </span>
             {customerName ? (
               <span>
                 <strong style={{ color: "#0f4a56" }}>Customer</strong>{" "}
                 {customerName}
+              </span>
+            ) : null}
+          </div>
+          {/* Row 2 — production context. v43.1 swapped Flavor and
+              Customer positions per user request. */}
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <span>
+              <strong style={{ color: "#0f4a56" }}>Shape</strong> {shape}
+            </span>
+            {flavor ? (
+              <span>
+                <strong style={{ color: "#0f4a56" }}>Flavor</strong> {flavor}
               </span>
             ) : null}
             <span>
