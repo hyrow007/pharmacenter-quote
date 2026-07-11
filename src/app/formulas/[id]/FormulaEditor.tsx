@@ -1539,6 +1539,35 @@ export default function FormulaEditor({
         @media screen {
           .fe-th-break br { display: none; }
         }
+        /* v48.2: more distinct section borders on screen (user request).
+           Cards get a firmer teal frame + soft shadow; every blend
+           subsection (Primary, Primary Blend Carry Over, Secondary,
+           Final) reads as an inset panel; the Grand Total band is boxed
+           to match. All of this is print-neutralized in the @media
+           print block below so the paper sheet is untouched. */
+        @media screen {
+          .fe-blend-card {
+            border: 1.5px solid var(--teal-700, #1d6c7b) !important;
+            box-shadow: 0 1px 4px rgba(15, 74, 86, 0.10);
+          }
+          .fe-blend-panel {
+            border: 1px solid var(--line, #e3dcc9);
+            border-radius: 8px;
+            margin: 12px 14px;
+            background: var(--paper, #fffdf8);
+            overflow: hidden;
+          }
+          .fe-blend-panel > .fe-blend-subheading,
+          .fe-blend-panel > div:first-child {
+            border-top: none !important;
+          }
+          .fe-grand-total-block {
+            border: 1.5px solid var(--teal-700, #1d6c7b) !important;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(15, 74, 86, 0.10);
+          }
+        }
 
         /* "d line" — dotted section divider used in the printed sheet
            to separate blocks (e.g. under Label Claims, above Key
@@ -1792,6 +1821,19 @@ export default function FormulaEditor({
           .fe-grand-total-block {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          /* v48.2: strip the on-screen section chrome so the printed
+             sheet keeps its rule-only look (no boxes, no shadows). The
+             grand-total block keeps its top rule via the tr styling. */
+          .fe-blend-card,
+          .fe-blend-panel,
+          .fe-grand-total-block {
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            background: transparent !important;
           }
 
           /* Kill any leftover dashed / dotted rules the on-screen view
@@ -5191,7 +5233,7 @@ function BlendSectionCard({
           return s + wf * pctOfFinished;
         }, 0);
         return (
-          <>
+          <div className="fe-blend-panel">
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
                 subheading styling from renderIngredientsBlock. */}
             <div
@@ -5848,7 +5890,7 @@ function BlendSectionCard({
                 </tr>
               </tbody>
             </table>
-          </>
+          </div>
         );
       })() : null}
       </div>
@@ -5981,7 +6023,7 @@ function BlendSectionCard({
             blockDefaultProcessNote.length > 0 &&
             blockProcessNote.trim() === blockDefaultProcessNote.trim();
           return (
-            <div className="fe-blend-unit">
+            <div className="fe-blend-unit fe-blend-panel">
               {/* Optional sub-heading — e.g. "Secondary Blend" or
                   "Final Blend" on the cooked card. Other subsections pass
                   null so nothing renders. */}
