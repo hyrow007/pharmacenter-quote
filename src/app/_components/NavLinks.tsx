@@ -18,7 +18,10 @@ import { useEffectiveAdmin } from "@/lib/access";
 // The AdminToggle pill itself stays visible in the user-row of AppHeader,
 // so an admin can always flip back to admin view.
 
-export default function NavLinks() {
+// v48.7: `onFormulaHost` comes from AppHeader (server-side host read).
+// The formula site hides the Workflows link, the quote site hides the
+// Formulas link — each subdomain presents as its own product.
+export default function NavLinks({ onFormulaHost }: { onFormulaHost: boolean }) {
   const pathname = usePathname() || "";
   const { effectiveAdmin } = useEffectiveAdmin();
 
@@ -30,18 +33,22 @@ export default function NavLinks() {
 
   return (
     <nav className="app-nav__links" aria-label="Primary">
-      <Link
-        href="/workflows"
-        className={`app-nav__link${isWorkflows ? " app-nav__link--active" : ""}`}
-      >
-        Workflows
-      </Link>
-      <Link
-        href="/formulas"
-        className={`app-nav__link${isFormulas ? " app-nav__link--active" : ""}`}
-      >
-        Formulas
-      </Link>
+      {!onFormulaHost ? (
+        <Link
+          href="/workflows"
+          className={`app-nav__link${isWorkflows ? " app-nav__link--active" : ""}`}
+        >
+          Workflows
+        </Link>
+      ) : null}
+      {onFormulaHost ? (
+        <Link
+          href="/formulas"
+          className={`app-nav__link${isFormulas ? " app-nav__link--active" : ""}`}
+        >
+          Formulas
+        </Link>
+      ) : null}
       <Link
         href="/feedback"
         className={`app-nav__link${isFeedback ? " app-nav__link--active" : ""}`}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/auth/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { SignOutButton } from "../auth-buttons";
@@ -25,10 +26,18 @@ export default async function AppHeader({ user }: Props) {
   const supabase = await createClient();
   const admin = await checkIsAdmin(supabase, user.email);
 
+  // v48.7: the two subdomains now present themselves as separate
+  // products — the quote site doesn't link to Formulas and the formula
+  // site doesn't link to Workflows (middleware already 308s stray
+  // /formulas hits on the quote host). Host is read server-side and
+  // passed down so the client nav renders the right set on first paint.
+  const host = (await headers()).get("host") ?? "";
+  const onFormulaHost = host.startsWith("formula.");
+
   return (
     <header className="app-nav">
       <div className="app-nav__inner">
-        <Link href="/workflows" className="app-nav__brand">
+        <Link href={onFormulaHost ? "/" : "/workflows"} className="app-nav__brand">
           {/* The wordmark itself carries "PharmaCenter" + tagline, so we don't
               repeat "PharmaCenter" in text next to it. The product name
               ("Quote / Generator") sits beside the mark with a divider. */}
@@ -46,7 +55,7 @@ export default async function AppHeader({ user }: Props) {
           </span>
         </Link>
 
-        <NavLinks />
+        <NavLinks onFormulaHost={onFormulaHost} />
 
         <div className="app-nav__user">
           {admin ? <AdminToggle /> : null}
