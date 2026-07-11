@@ -1638,9 +1638,12 @@ export default function FormulaEditor({
             /* v41: header is no longer position:fixed (only page 1),
                so we don't need to reserve a huge top margin for a
                running letterhead. Back to a normal 12mm margin.
-               v47.3: bottom bumped 18mm to 22mm so flowing content
-               clears the fixed identity strip (see rule below). */
-            margin: 12mm 10mm 22mm 10mm;
+               v47.3/47.6: bottom stays 22mm so content clears the
+               @bottom-center identity strip and the page counter. */
+            /* v49.3: top is 18.5mm (12mm + ~0.25in) for staple
+               clearance on pages 2+; @page :first below restores the
+               tight 12mm on page 1. */
+            margin: 18.5mm 10mm 22mm 10mm;
             @bottom-right {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 9pt;
@@ -1663,6 +1666,13 @@ export default function FormulaEditor({
               font-family: sans-serif;
               text-align: center;
             }
+          }
+          /* v49.3: page 1 keeps the original tight 12mm top margin —
+             its header starts high and a staple corner overlaps margin,
+             not content. Pages 2+ use the 18.5mm default above so
+             stapled sheets don't hide the first rows. */
+          @page :first {
+            margin-top: 12mm;
           }
           /* v41: header is now an in-flow block that only appears on
              page 1 — no more position:fixed running header on every
