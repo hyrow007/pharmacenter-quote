@@ -2208,14 +2208,16 @@ export default function FormulaEditor({
 
         {/* Meta strip below — two rows for readability with generous
             gap. Row 1: product identity (Formula / Version / Product
-            Code / Name / Flavor / Shape). Row 2: production context
-            (Customer / Updated on). */}
+            Code / Name / Customer). Row 2: production context
+            (Shape / Flavor / Updated on).
+            v45: doubled marginTop (10 → 20) between BENCH TOP BATCH
+            and row 1, +30% inter-row gap (3 → 3.9). */}
         <div
           style={{
-            marginTop: 10,
+            marginTop: 20,
             display: "flex",
             flexDirection: "column",
-            gap: 3,
+            gap: 3.9,
             fontSize: 11,
             color: "#333",
           }}
