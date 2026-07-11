@@ -1576,8 +1576,8 @@ export default function FormulaEditor({
             }
             /* v47: identity strip centered in the bottom margin box
                on every page (Formula / Version / Name). Text is
-               captured from .fe-print-footer-identity via
-               string-set: footerIdentity contents(). */
+               captured from .fe-print-footer-identity via a
+               string-set declaration on that element. */
             @bottom-center {
               content: string(footerIdentity);
               font-size: 9pt;
@@ -1586,10 +1586,10 @@ export default function FormulaEditor({
               text-align: center;
             }
           }
-          /* v47: capture the identity strip's text into the named
-             CSS string that @bottom-center reads. The element itself
-             is hidden from body flow because it's inside
-             .fe-print-only and never gets `display: block` set at
+          /* v47: capture the identity strip text into the named CSS
+             string that @bottom-center reads. The element itself is
+             hidden from body flow because it lives inside
+             .fe-print-only and never gets display block set at
              render time — string-set works regardless of display. */
           .fe-print-footer-identity {
             string-set: footerIdentity content();
