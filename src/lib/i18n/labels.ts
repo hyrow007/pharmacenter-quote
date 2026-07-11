@@ -162,6 +162,11 @@ const es: Record<string, string> = {
   cooked: "cocida",
   "Moisture Loss": "Pérdida de humedad",
   "Claim Baseline: ": "Base de declaración: ",
+  // ---- Derived scale-up table (v51) ----
+  "Kg / batch": "Kg / lote",
+  "Total weighed input": "Total de entrada pesada",
+  "Derived from the bench-top formula — batch size equals Total Primary Blend.":
+    "Derivada de la fórmula de mesa — el tamaño de lote equivale al total de la mezcla primaria.",
 };
 
 export function makeTr(lang: Lang) {
