@@ -30,7 +30,6 @@ const es: Record<string, string> = {
   "Syrup (dry)": "Jarabe (seco)",
   "Batch Setup": "Configuración de lote",
   "Key Indicators": "Indicadores clave",
-  gummies: "gomitas",
 
   // ---- Product details ----
   "Product Details": "Detalles del producto",
@@ -138,6 +137,22 @@ const es: Record<string, string> = {
   "Per page:": "Por página:",
   Previous: "Anterior",
   Next: "Siguiente",
+  "Sugar to Syrup Ratio": "Proporción azúcar a jarabe",
+  "Updated ": "Actualizada ",
+  "by ": "por ",
+  // ---- Straggler pass (mixed-language report) ----
+  Existing: "Existente",
+  Milligrams: "Miligramos",
+  Micrograms: "Microgramos",
+  "Saved to library": "Guardada en biblioteca",
+  "Save to library": "Guardar en biblioteca",
+  Composition: "Composición",
+  empty: "vacía",
+  "Total: ": "Total: ",
+  gummies: "gomitas",
+  Solution: "Solución",
+  component: "componente",
+  components: "componentes",
 };
 
 export function makeTr(lang: Lang) {

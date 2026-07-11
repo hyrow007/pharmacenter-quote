@@ -2591,7 +2591,7 @@ export default function FormulaEditor({
                     }}
                     style={{ margin: 0 }}
                   />
-                  Existing
+                  {tr("Existing")}
                 </label>
               </div>
               {pcBkMode === "existing" ? (
@@ -2645,7 +2645,7 @@ export default function FormulaEditor({
                         color: "var(--teal-700, #1d6c7b)",
                       }}
                     >
-                      Change
+                      {tr("Change")}
                     </span>
                   </div>
                 ) : (
@@ -3347,6 +3347,7 @@ function BenchTopWeightInput({
   step?: number;
   emphasize?: boolean;
 }) {
+  const tr = makeTr(useLang());
   return (
     <div>
       <div
@@ -3359,7 +3360,7 @@ function BenchTopWeightInput({
           marginBottom: 4,
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <input
@@ -3414,6 +3415,7 @@ function BenchTopReadout({
   valueText: string;
   suffix: string;
 }) {
+  const tr = makeTr(useLang());
   return (
     <div>
       <div
@@ -3426,7 +3428,7 @@ function BenchTopReadout({
           marginBottom: 4,
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       {/* Mirror the *exact* horizontal structure of BenchTopWeightInput
           so the digits right-align with the numeric inputs above:
@@ -3513,6 +3515,7 @@ function BenchTopTab({
    *  missing — the UI shows "—" placeholders in that case. */
   sugarSyrupRatio: { sugarPct: number; syrupPct: number } | null;
 }) {
+  const tr = makeTr(useLang());
   // Combined batch weight across all three blends. Compared against the
   // bench top batch so the rep can see at a glance how close the recipe
   // sums to the target reference size.
@@ -3567,7 +3570,7 @@ function BenchTopTab({
             borderBottom: "1px solid var(--line, #e3dcc9)",
           }}
         >
-          Batch Setup
+          {tr("Batch Setup")}
         </div>
         <div
           className="fe-bench-stats"
@@ -3607,7 +3610,7 @@ function BenchTopTab({
                 ? Math.round(benchBatchG / wetCastPieceWeightG).toString()
                 : "—"
             }
-            suffix="gummies"
+            suffix={tr("gummies")}
           />
         </div>
       </div>
@@ -3636,7 +3639,7 @@ function BenchTopTab({
               borderBottom: "1px solid var(--line, #e3dcc9)",
             }}
           >
-            Key Indicators
+            {tr("Key Indicators")}
           </div>
           {/* Row 1: the blend equation (Primary + Secondary + Final = Total)
               on the left, % of bench batch pushed to the right edge via
@@ -3709,7 +3712,7 @@ function BenchTopTab({
                   whiteSpace: "nowrap",
                 }}
               >
-                % of bench batch
+                {tr("% of bench batch")}
               </div>
               <div
                 style={{
@@ -3775,7 +3778,7 @@ function BenchTopTab({
                   textAlign: "center",
                 }}
               >
-                Sugar to Syrup Ratio
+                {tr("Sugar to Syrup Ratio")}
               </div>
               <div
                 style={{
@@ -3823,7 +3826,7 @@ function BenchTopTab({
           label="Theoretical Yield"
           value={
             wetCastPieceWeightG > 0 && benchBatchG > 0
-              ? `${Math.round(benchBatchG / wetCastPieceWeightG)} gummies`
+              ? `${Math.round(benchBatchG / wetCastPieceWeightG)} ${tr("gummies")}`
               : "—"
           }
         />
@@ -6195,9 +6198,9 @@ function BlendSectionCard({
                             appearance: "auto",
                           }}
                         >
-                          <option value="g">Grams</option>
-                          <option value="mg">Milligrams</option>
-                          <option value="mcg">Micrograms</option>
+                          <option value="g">{tr("Grams")}</option>
+                          <option value="mg">{tr("Milligrams")}</option>
+                          <option value="mcg">{tr("Micrograms")}</option>
                         </select>
                       </BTh>
                       {/* Cooked-only: % of finished product — each row's
@@ -7402,6 +7405,7 @@ function CustomerSection(props: {
     patch: Partial<{ name: string; contact: string; email: string }>,
   ) => void;
 }) {
+  const tr = makeTr(useLang());
   const {
     customerId,
     customerName,
@@ -7504,7 +7508,7 @@ function CustomerSection(props: {
         borderTop: "1px dashed var(--line, #e3dcc9)",
       }}
     >
-      <p style={sectionLabel}>Customer</p>
+      <p style={sectionLabel}>{tr("Customer")}</p>
       {showPicked ? (
         <div style={selectedRow}>
           <div>
@@ -7530,7 +7534,7 @@ function CustomerSection(props: {
             ) : null}
           </div>
           <button type="button" style={changeBtn} onClick={onStartEdit}>
-            Change
+            {tr("Change")}
           </button>
         </div>
       ) : (
@@ -7793,7 +7797,7 @@ function LabelClaimsSection({
           >
             {tr("Per-gummy amount as printed on the finished label.")}{" "}
             <strong style={{ color: "var(--ink-2, #415056)" }}>
-              Values are for one (1) gummy.
+              {tr("Values are for one (1) gummy.")}
             </strong>
           </div>
         </div>
@@ -7851,13 +7855,13 @@ function LabelClaimsSection({
               color: "var(--ink-3, #8a9498)",
             }}
           >
-            <div>Ingredient</div>
-            <div style={{ textAlign: "right" }}>Claim</div>
-            <div style={{ textAlign: "left" }}>Unit</div>
+            <div>{tr("Ingredient")}</div>
+            <div style={{ textAlign: "right" }}>{tr("Claim")}</div>
+            <div style={{ textAlign: "left" }}>{tr("Unit")}</div>
             <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-              Overage %
+              {tr("Overage %")}
             </div>
-            <div style={{ textAlign: "right" }}>Input</div>
+            <div style={{ textAlign: "right" }}>{tr("Input")}</div>
             {/* Empty header slot for the row delete column so widths
                 stay perfectly aligned. */}
             <div aria-hidden="true" />
@@ -8521,6 +8525,7 @@ function SolutionRow({
    *  the operator's own expand/collapse state controls visibility. */
   printing?: boolean;
 }) {
+  const tr = makeTr(useLang());
   const showPctCell = pctOfFinishedText !== undefined;
   const showResidualCell = residualMoistureText !== undefined;
   const showOverageCell = showOverageColumn === true;
@@ -8714,7 +8719,7 @@ function SolutionRow({
                         padding: "2px 8px",
                       }}
                     >
-                      Saved to library
+                      {tr("Saved to library")}
                     </span>
                   ) : (
                     <>
@@ -8728,7 +8733,7 @@ function SolutionRow({
                             textTransform: "uppercase",
                           }}
                         >
-                          Saved to library
+                          {tr("Saved to library")}
                         </span>
                       ) : saveState.kind === "err" ? (
                         <span
@@ -8775,7 +8780,7 @@ function SolutionRow({
                           ? "Saving…"
                           : librarySolution
                             ? "Update in library"
-                            : "Save to library"}
+                            : tr("Save to library")}
                       </button>
                     </>
                   )}
@@ -8819,7 +8824,7 @@ function SolutionRow({
                       cursor: "pointer",
                     }}
                   >
-                    Change
+                    {tr("Change")}
                   </button>
                 </div>
               ) : (
@@ -9026,7 +9031,7 @@ function SolutionRow({
                     color: "var(--ink-3, #8a9498)",
                   }}
                 >
-                  Composition
+                  {tr("Composition")}
                 </span>
                 <span
                   style={{
@@ -9035,8 +9040,8 @@ function SolutionRow({
                   }}
                 >
                   {components.length === 0
-                    ? "empty"
-                    : `${components.length} component${components.length === 1 ? "" : "s"}`}
+                    ? tr("empty")
+                    : `${components.length} ${tr(components.length === 1 ? "component" : "components")}`}
                 </span>
                 <span
                   style={{
@@ -9050,7 +9055,7 @@ function SolutionRow({
                   }}
                   title="Component percentages should sum to 100%"
                 >
-                  Total: {Format.pct(totalPct)}%
+                  {tr("Total: ")}{Format.pct(totalPct)}%
                 </span>
               </span>
             </button>
@@ -9102,7 +9107,7 @@ function SolutionRow({
                     cursor: "pointer",
                   }}
                 >
-                  + Add component
+                  {tr("+ Add component")}
                 </button>
               </div>
             ) : null}
@@ -9341,6 +9346,7 @@ function IngredientPicker({
   onPickCustom: (name: string) => void;
   onClear: () => void;
 }) {
+  const tr = makeTr(useLang());
   const [search, setSearch] = useState("");
   // Consider the row "picked" (collapsed pill state) whenever it resolves
   // to a raw material OR carries a custom name.
@@ -9428,7 +9434,7 @@ function IngredientPicker({
             cursor: "pointer",
           }}
         >
-          Change
+          {tr("Change")}
         </button>
       </div>
     );

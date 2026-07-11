@@ -3,6 +3,8 @@ import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../_components/AppHeader";
 import { I18nProvider } from "@/lib/i18n/context";
 import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
+import { makeTr } from "@/lib/i18n/labels";
 import FormulaEditor, {
   type PcBkProductOption,
   type RawMaterialOption,
@@ -27,6 +29,9 @@ export default async function FormulaEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
+  const tr = makeTr(lang);
   const { id } = await params;
 
   const supabase = await createClient();
@@ -204,7 +209,7 @@ export default async function FormulaEditorPage({
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> Back to formulas
+            <span aria-hidden="true">&larr;</span> {t("backToFormulas").replace("← ", "")}
           </a>
 
           {/* Version / Updated / by strip. Sits between the Back pill and
@@ -230,21 +235,21 @@ export default async function FormulaEditorPage({
                 in the meta strip so operators have a scannable handle for
                 each formula in addition to the version + updated-by info. */}
             <span>
-              Formula{" "}
+              {tr("Formula")}{" "}
               <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
                 F{String(formula.formulaNumber).padStart(4, "0")}
               </strong>
             </span>
             <span aria-hidden="true">·</span>
             <span>
-              Version{" "}
+              {tr("Version")}{" "}
               <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
                 v{formula.latestVersionNum}
               </strong>
             </span>
             <span aria-hidden="true">·</span>
             <span>
-              Updated{" "}
+              {tr("Updated ").trim()}{" "}
               {new Date(formula.updatedAt).toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "short",
@@ -254,12 +259,12 @@ export default async function FormulaEditorPage({
             {updatedByDisplay ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>by {updatedByDisplay}</span>
+                <span>{tr("by ")}{updatedByDisplay}</span>
               </>
             ) : null}
           </div>
 
-          <I18nProvider lang={await getLangFromCookie()}>
+          <I18nProvider lang={lang}>
             <FormulaEditor
               initialFormula={formula}
               initialVersion={latestVersion}
