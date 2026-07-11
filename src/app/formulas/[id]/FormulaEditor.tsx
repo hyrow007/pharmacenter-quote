@@ -5390,7 +5390,7 @@ function BlendSectionCard({
                         <BTd style={{ position: "relative" }}>
                           {rowDnd.renderHandle(false)}
                           <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink, #1f2a2d)" }}>
-                            {row.customName || "Solution"}
+                            {row.customName || tr("Solution")}
                           </div>
                           <div
                             style={{
@@ -5596,7 +5596,7 @@ function BlendSectionCard({
                               textTransform: "capitalize",
                             }}
                           >
-                            {resolved.category} blend material
+                            {lang === "es" ? `material de mezcla ${tr(resolved.category)}` : `${resolved.category} blend material`}
                           </div>
                         ) : null}
                       </BTd>
@@ -6433,7 +6433,7 @@ function BlendSectionCard({
                                   marginTop: 2,
                                 }}
                               >
-                                from label claim
+                                {tr("from label claim")}
                               </div>
                             ) : resolved?.category ? (
                               <div
@@ -6444,7 +6444,7 @@ function BlendSectionCard({
                                   textTransform: "capitalize",
                                 }}
                               >
-                                {resolved.category} blend material
+                                {lang === "es" ? `material de mezcla ${tr(resolved.category)}` : `${resolved.category} blend material`}
                               </div>
                             ) : null}
                           </BTd>
@@ -8696,7 +8696,7 @@ function SolutionRow({
                     color: "var(--teal-700, #1d6c7b)",
                   }}
                 >
-                  Solution
+                  {tr("Solution")}
                 </span>
                 <span
                   className="fe-print-hide"

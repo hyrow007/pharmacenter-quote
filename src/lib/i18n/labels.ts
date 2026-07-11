@@ -153,6 +153,13 @@ const es: Record<string, string> = {
   Solution: "Solución",
   component: "componente",
   components: "componentes",
+  "from label claim": "de declaración de etiqueta",
+  // material source tags — categories come from raw_materials.category
+  primary: "primaria",
+  secondary: "secundaria",
+  final: "final",
+  "pre-cook": "precocción",
+  cooked: "cocida",
 };
 
 export function makeTr(lang: Lang) {
