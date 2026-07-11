@@ -1573,6 +1573,23 @@ export default function FormulaEditor({
             overflow: hidden;
             box-shadow: 0 1px 4px rgba(15, 74, 86, 0.10);
           }
+          /* v48.4: the cooked-blend banner freezes below the sticky
+             app nav (65px tall, z-index 20) and the card's content
+             scrolls up underneath it for as long as the cooked card
+             is in view. The header lives inside the .fe-blend-unit
+             print wrapper, whose box would cap the sticky range at
+             the carry-over table — display: contents dissolves that
+             box on screen so the sticky containing block becomes the
+             whole cooked card. Print restores the box below. */
+          .fe-blend-unit--head {
+            display: contents;
+          }
+          .fe-blend-card--cooked .fe-blend-unit--head > header {
+            position: sticky;
+            top: 65px;
+            z-index: 10;
+            box-shadow: 0 2px 6px rgba(15, 74, 86, 0.12);
+          }
         }
 
         /* "d line" — dotted section divider used in the printed sheet
@@ -1827,6 +1844,17 @@ export default function FormulaEditor({
           .fe-grand-total-block {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          /* v48.4: undo the screen-side sticky-banner plumbing. The
+             head wrapper must be a real box again so break-inside:
+             avoid can keep header + carry-over on one page, and a
+             sticky header would break Chromium's page fragmentation. */
+          .fe-blend-unit--head {
+            display: block !important;
+          }
+          .fe-blend-unit--head > header {
+            position: static !important;
+            box-shadow: none !important;
           }
           /* v48.2: strip the on-screen section chrome so the printed
              sheet keeps its rule-only look (no boxes, no shadows). The
@@ -5134,7 +5162,7 @@ function BlendSectionCard({
           keep-together print unit — the carry-over table is hand-
           rendered (not via renderIngredientsBlock), so it missed the
           .fe-blend-unit wrapper in v48 and split across pages. */}
-      <div className="fe-blend-unit">
+      <div className="fe-blend-unit fe-blend-unit--head">
       <header
         style={{
           padding: "14px 18px 12px",
