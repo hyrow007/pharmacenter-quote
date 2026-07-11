@@ -1574,6 +1574,25 @@ export default function FormulaEditor({
               text-align: right;
               padding-right: 5mm;
             }
+            /* v47: identity strip centered in the bottom margin box
+               on every page (Formula / Version / Name). Text is
+               captured from .fe-print-footer-identity via
+               string-set: footerIdentity contents(). */
+            @bottom-center {
+              content: string(footerIdentity);
+              font-size: 9pt;
+              color: #000;
+              font-family: sans-serif;
+              text-align: center;
+            }
+          }
+          /* v47: capture the identity strip's text into the named
+             CSS string that @bottom-center reads. The element itself
+             is hidden from body flow because it's inside
+             .fe-print-only and never gets `display: block` set at
+             render time — string-set works regardless of display. */
+          .fe-print-footer-identity {
+            string-set: footerIdentity content();
           }
           /* v41: header is now an in-flow block that only appears on
              page 1 — no more position:fixed running header on every
@@ -2165,6 +2184,15 @@ export default function FormulaEditor({
           handles per-page numbers. If a browser doesn't support @page
           margin boxes, the print dialog's own "Headers and footers"
           checkbox is the user's fallback. */}
+
+      {/* v47 identity footer — the print CSS above uses `string-set`
+          to capture this element's text content into a named CSS
+          string, then displays it in the @bottom-center margin box on
+          every printed page. The element is inside .fe-print-only so
+          it never shows on screen; the string capture works regardless. */}
+      <div className="fe-print-only fe-print-footer-identity" aria-hidden="true">
+        {`Formula F${String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}  ·  Version v${initialFormula.latestVersionNum}  ·  ${name || "—"}`}
+      </div>
 
       {/* v41 print header redesign (Option D): logo on the left,
           title next to it, meta strip below in two rows.
