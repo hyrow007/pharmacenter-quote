@@ -2185,7 +2185,7 @@ export default function FormulaEditor({
           margin boxes, the print dialog's own "Headers and footers"
           checkbox is the user's fallback. */}
 
-      {/* v47 identity footer — the print CSS above uses `string-set`
+      {/* v47 identity footer — the print CSS above uses string-set
           to capture this element's text content into a named CSS
           string, then displays it in the @bottom-center margin box on
           every printed page. The element is inside .fe-print-only so
