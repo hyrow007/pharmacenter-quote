@@ -1939,6 +1939,17 @@ export default function FormulaEditor({
           .fe-solution-row__grid > *:last-child {
             display: none !important;
           }
+          /* v47.8: the solution row's numeric cells are styled DIVS
+             that mirror BTd's on-screen padding ("8px 12px") — but the
+             print reset above ("th, td { padding: 0 }") only strips
+             real table cells, so solution values kept a phantom 12px
+             right padding and printed ~12px left of the column edge
+             every other row aligns to. Zero it on print. The first
+             child (solution name block) keeps its indent — that
+             hierarchy is intentional. */
+          .fe-solution-row__grid > *:not(:first-child) {
+            padding: 0 !important;
+          }
           /* v47.4: Grand Total Cooked Blend is the most-checked line on
              the sheet — print it a step larger, with heavy double rules
              above and below, so it anchors the document. */
@@ -1991,6 +2002,27 @@ export default function FormulaEditor({
           }
           .fe-solution-component-pct {
             gap: 1px !important;
+          }
+          /* v47.9: number inputs reserve intrinsic width for their
+             spinner buttons even when the spinners don't paint, so the
+             right-aligned value stopped short of the box edge and left
+             air before the % sign. Strip the spinner affordance on
+             print so the box hugs the digits. */
+          .fe-solution-component-pct input::-webkit-inner-spin-button,
+          .fe-solution-component-pct input::-webkit-outer-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+          }
+          .fe-solution-component-pct input {
+            -moz-appearance: textfield !important;
+            appearance: textfield !important;
+          }
+          /* v47.9: the drag-to-reorder handle is a SPAN, so the
+             "button { display: none }" print reset misses it and the
+             glyph printed at its resting opacity in the left gutter of
+             draggable rows. */
+          span[aria-label="Drag to reorder"] {
+            display: none !important;
           }
 
           /* Print-table treatment (Option B: CSS Grid rows).
