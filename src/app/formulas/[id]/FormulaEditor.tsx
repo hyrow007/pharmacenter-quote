@@ -2178,49 +2178,31 @@ export default function FormulaEditor({
           borderBottom: "1.5px solid #0f4a56",
         }}
       >
-        {/* Top row: logo + title stacked. Logo sits left, title runs
-            to its right with more generous 18pt weight. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.png"
-            alt="PharmaCenter"
+        {/* Title block — logo dropped in v42.1; "Gummy Formula Sheet"
+            + "Bench top batch" now center on the page. */}
+        <div style={{ textAlign: "center" }}>
+          <div
             style={{
-              height: 40,
-              width: "auto",
-              objectFit: "contain",
-              flex: "0 0 auto",
+              fontSize: 18,
+              fontWeight: 800,
+              color: "#0f4a56",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.1,
             }}
-          />
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                color: "#0f4a56",
-                letterSpacing: "-0.01em",
-                lineHeight: 1.1,
-              }}
-            >
-              Gummy Formula Sheet
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#4a5c60",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              Bench top batch
-            </div>
+          >
+            Gummy Formula Sheet
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#4a5c60",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            Bench top batch
           </div>
         </div>
 
@@ -2261,11 +2243,13 @@ export default function FormulaEditor({
                 <strong style={{ color: "#0f4a56" }}>Flavor</strong> {flavor}
               </span>
             ) : null}
+          </div>
+          {/* Row 2 — production context (v42.1): Shape, Customer,
+              Updated on consolidated onto one line. */}
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             <span>
               <strong style={{ color: "#0f4a56" }}>Shape</strong> {shape}
             </span>
-          </div>
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             {customerName ? (
               <span>
                 <strong style={{ color: "#0f4a56" }}>Customer</strong>{" "}
