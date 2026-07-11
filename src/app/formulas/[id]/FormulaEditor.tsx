@@ -2211,13 +2211,15 @@ export default function FormulaEditor({
             Code / Name / Customer). Row 2: production context
             (Shape / Flavor / Updated on).
             v45: doubled marginTop (10 → 20) between BENCH TOP BATCH
-            and row 1, +30% inter-row gap (3 → 3.9). */}
+            and row 1, +30% inter-row gap (3 → 3.9).
+            v46: +45% on top margin (20 → 29), +30% on inter-row gap
+            (3.9 → 5.07). */}
         <div
           style={{
-            marginTop: 20,
+            marginTop: 29,
             display: "flex",
             flexDirection: "column",
-            gap: 3.9,
+            gap: 5.07,
             fontSize: 11,
             color: "#333",
           }}
