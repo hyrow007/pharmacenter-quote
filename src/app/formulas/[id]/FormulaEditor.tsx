@@ -5282,15 +5282,6 @@ function BlendSectionCard({
             >
               Primary Blend Carry Over
             </div>
-            <div
-              style={{
-                padding: "0 14px 8px",
-                fontSize: 12,
-                color: "var(--ink-3, #8a9498)",
-              }}
-            >
-              From the pre-cook blend — carried over into the pot.
-            </div>
             <table
               style={{
                 width: "100%",

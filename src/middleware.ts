@@ -20,6 +20,16 @@ function isFormulaHost(host: string | null): boolean {
   return host.startsWith("formula.");
 }
 
+// v48.6: formulas are only reachable on the formula subdomain. A
+// /formulas page request arriving on the quote host gets a permanent
+// redirect to the same path on formula.<domain>. Scoped to hosts that
+// literally start with "quote." so Vercel preview URLs and localhost
+// (which have no formula subdomain) keep serving /formulas directly.
+function isQuoteHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("quote.");
+}
+
 function shouldRewriteToFormulas(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
@@ -51,6 +61,22 @@ export async function middleware(request: NextRequest) {
   const authResponse = await updateSession(request);
 
   const host = request.headers.get("host");
+
+  // Formulas must not be served from the quote site. Page routes only —
+  // /api/formulas stays reachable from either host on purpose, because
+  // the quote workflow will consume formula material costs same-origin
+  // once #164/#165 land.
+  if (isQuoteHost(host) && request.nextUrl.pathname.startsWith("/formulas")) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.host = (host as string).replace(/^quote\./, "formula.");
+    const redirectResponse = NextResponse.redirect(redirectUrl, 308);
+    // Forward refreshed auth cookies so sign-in state survives the hop.
+    authResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  }
+
   if (isFormulaHost(host)) {
     const { pathname, search, searchParams } = request.nextUrl;
     // Loop-guard: when /formulas discovers there's no valid Supabase
