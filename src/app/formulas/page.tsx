@@ -4,6 +4,9 @@ import { createClient } from "@/lib/auth/server";
 import { isAdmin } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import FormulasCatalog from "./FormulasCatalog";
+import { I18nProvider } from "@/lib/i18n/context";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
 
 // /formulas — top-level gummy formula catalog.
@@ -17,6 +20,8 @@ import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
 // owns search + shape filter + "+ New formula" and refetches on demand.
 
 export default async function FormulasPage() {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -95,28 +100,27 @@ export default async function FormulasPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> Back to workflows
+            <span aria-hidden="true">&larr;</span> {t("backToWorkflows").replace("← ", "")}
           </a>
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
               PharmaCenter · Formulas
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Gummy Formula Catalog
+              {t("catalogTitle")}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
-              Every gummy design PharmaCenter has authored, indexed by
-              PC-BK code (or held as <em>TBD</em> until R&amp;D assigns one).
-              Open a formula to view or edit its bench-top recipe,
-              scale-up, and material costing.
+              {t("catalogLede")}
             </p>
           </div>
 
-          <FormulasCatalog
-            initialFormulas={initialFormulas}
-            customersById={customersById}
-            isAdmin={admin}
-          />
+          <I18nProvider lang={lang}>
+            <FormulasCatalog
+              initialFormulas={initialFormulas}
+              customersById={customersById}
+              isAdmin={admin}
+            />
+          </I18nProvider>
         </div>
       </main>
     </div>

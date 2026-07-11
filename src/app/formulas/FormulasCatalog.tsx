@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLang } from "@/lib/i18n/context";
+import { makeTr } from "@/lib/i18n/labels";
 import {
   FORMULA_SHAPES,
   type GummyFormulaRecord,
@@ -66,6 +68,8 @@ export default function FormulasCatalog({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const lang = useLang();
+  const tr = makeTr(lang);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Sort state — default to most-recently-updated first, matching how
@@ -277,7 +281,7 @@ export default function FormulasCatalog({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search customer, product code, name, flavor, or preparer…"
+          placeholder={tr("Search customer, product code, name, flavor, or preparer…")}
           className="pricing__input"
           style={{ flex: "1 1 260px", minWidth: 240 }}
           autoComplete="off"
@@ -288,7 +292,7 @@ export default function FormulasCatalog({
           className="pricing__input"
           style={{ flex: "0 0 auto", minWidth: 140 }}
         >
-          <option value="">All shapes</option>
+          <option value="">{tr("All shapes")}</option>
           {FORMULA_SHAPES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -311,7 +315,7 @@ export default function FormulasCatalog({
             whiteSpace: "nowrap",
           }}
         >
-          {creating ? "Creating…" : "+ New formula"}
+          {creating ? tr("Creating…") : tr("+ New formula")}
         </button>
       </div>
 
@@ -362,7 +366,7 @@ export default function FormulasCatalog({
           }}
         >
           {formulas.length === 0
-            ? "No formulas yet. Click + New formula to author the first one."
+            ? tr("No formulas yet. Click + New formula to author the first one.")
             : "No formulas match those filters."}
         </div>
       ) : (
@@ -391,7 +395,7 @@ export default function FormulasCatalog({
                   width={col.width}
                 />
               ))}
-              {isAdmin ? <Th style={{ textAlign: "right", width: 90 }}>Actions</Th> : null}
+              {isAdmin ? <Th style={{ textAlign: "right", width: 90 }}>{tr("Actions")}</Th> : null}
             </tr>
           </thead>
           <tbody>
@@ -546,7 +550,7 @@ export default function FormulasCatalog({
                           cursor: "pointer",
                         }}
                       >
-                        Delete
+                        {tr("Delete")}
                       </button>
                     )}
                   </Td>
@@ -578,7 +582,7 @@ export default function FormulasCatalog({
           <label
             style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
           >
-            <span>Per page:</span>
+            <span>{tr("Per page:")}</span>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
@@ -611,7 +615,7 @@ export default function FormulasCatalog({
               whiteSpace: "nowrap",
             }}
           >
-            &larr; Previous
+            &larr; {tr("Previous")}
           </button>
           <span
             style={{
@@ -619,7 +623,7 @@ export default function FormulasCatalog({
               whiteSpace: "nowrap",
             }}
           >
-            Page {page} of {totalPages}
+            {lang === "es" ? <>Página {page} de {totalPages}</> : <>Page {page} of {totalPages}</>}
           </span>
           <button
             type="button"
@@ -640,7 +644,7 @@ export default function FormulasCatalog({
               whiteSpace: "nowrap",
             }}
           >
-            Next &rarr;
+            {tr("Next")} &rarr;
           </button>
         </div>
       ) : null}
@@ -670,9 +674,10 @@ function SortableTh({
   align?: "left" | "right";
   width?: number;
 }) {
+  const tr = makeTr(useLang());
   if (colKey === null) {
     return (
-      <Th style={{ textAlign: align, width }}>{label}</Th>
+      <Th style={{ textAlign: align, width }}>{tr(label)}</Th>
     );
   }
   const isActive = activeKey === colKey;

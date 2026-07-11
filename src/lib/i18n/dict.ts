@@ -26,6 +26,8 @@ const en = {
 
   // ---- Formulas catalog ----
   catalogTitle: "Gummy Formula Catalog",
+  catalogLede:
+    "Every gummy design PharmaCenter has authored, indexed by PC-BK code (or held as TBD until R&D assigns one). Open a formula to view or edit its bench-top recipe, scale-up, and material costing.",
   catalogSearch: "Search customer, product code, name, flavor, or preparer…",
   allShapes: "All shapes",
   newFormula: "+ New formula",
@@ -67,6 +69,8 @@ const es: typeof en = {
 
   // ---- Formulas catalog ----
   catalogTitle: "Catálogo de Fórmulas de Gomitas",
+  catalogLede:
+    "Cada diseño de gomita creado por PharmaCenter, indexado por código PC-BK (o marcado TBD hasta que I+D asigne uno). Abra una fórmula para ver o editar su receta de mesa, escalado y costo de materiales.",
   catalogSearch: "Buscar cliente, código, nombre, sabor o preparador…",
   allShapes: "Todas las formas",
   newFormula: "+ Nueva fórmula",

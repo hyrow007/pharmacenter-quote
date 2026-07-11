@@ -1,5 +1,8 @@
 "use client";
 
+import { useLang } from "@/lib/i18n/context";
+import { makeTr } from "@/lib/i18n/labels";
+
 // FormulaEditor — the three-tab spec authoring surface for a single
 // gummy formula.
 //
@@ -471,6 +474,7 @@ export default function FormulaEditor({
   initialSavedSolutions = [],
   currentUserEmail,
 }: Props) {
+  const tr = makeTr(useLang());
   const router = useRouter();
 
   // Saved-solutions library — client state so newly-saved entries appear
@@ -2393,7 +2397,7 @@ export default function FormulaEditor({
               lineHeight: 1.1,
             }}
           >
-            Gummy Formula Sheet
+            {tr("Gummy Formula Sheet")}
           </div>
           <div
             style={{
@@ -2405,7 +2409,7 @@ export default function FormulaEditor({
               textTransform: "uppercase",
             }}
           >
-            Bench top batch
+            {tr("Bench top batch")}
           </div>
         </div>
 
@@ -2429,25 +2433,25 @@ export default function FormulaEditor({
         >
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             <span>
-              <strong style={{ color: "#0f4a56" }}>Formula</strong> F
+              <strong style={{ color: "#0f4a56" }}>{tr("Formula")}</strong> F
               {String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}
             </span>
             <span>
-              <strong style={{ color: "#0f4a56" }}>Version</strong> v
+              <strong style={{ color: "#0f4a56" }}>{tr("Version")}</strong> v
               {initialFormula.latestVersionNum}
             </span>
             {initialFormula.pcBkCode ? (
               <span>
-                <strong style={{ color: "#0f4a56" }}>Product Code</strong>{" "}
+                <strong style={{ color: "#0f4a56" }}>{tr("Product Code")}</strong>{" "}
                 {initialFormula.pcBkCode}
               </span>
             ) : null}
             <span>
-              <strong style={{ color: "#0f4a56" }}>Name</strong> {name || "—"}
+              <strong style={{ color: "#0f4a56" }}>{tr("Name")}</strong> {name || "—"}
             </span>
             {customerName ? (
               <span>
-                <strong style={{ color: "#0f4a56" }}>Customer</strong>{" "}
+                <strong style={{ color: "#0f4a56" }}>{tr("Customer")}</strong>{" "}
                 {customerName}
               </span>
             ) : null}
@@ -2456,15 +2460,15 @@ export default function FormulaEditor({
               Customer positions per user request. */}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             <span>
-              <strong style={{ color: "#0f4a56" }}>Shape</strong> {shape}
+              <strong style={{ color: "#0f4a56" }}>{tr("Shape")}</strong> {shape}
             </span>
             {flavor ? (
               <span>
-                <strong style={{ color: "#0f4a56" }}>Flavor</strong> {flavor}
+                <strong style={{ color: "#0f4a56" }}>{tr("Flavor")}</strong> {flavor}
               </span>
             ) : null}
             <span>
-              <strong style={{ color: "#0f4a56" }}>Updated on:</strong>{" "}
+              <strong style={{ color: "#0f4a56" }}>{tr("Updated on:")}</strong>{" "}
               {initialFormula.updatedAt
                 ? new Date(initialFormula.updatedAt).toLocaleDateString(
                     "en-US",
@@ -2510,7 +2514,7 @@ export default function FormulaEditor({
             borderBottom: "2px solid var(--teal-700, #1d6c7b)",
           }}
         >
-          Product Details
+          {tr("Product Details")}
         </div>
         {/* Identity row.
             Uses flex-wrap so every column keeps its natural min width and
@@ -2859,7 +2863,7 @@ export default function FormulaEditor({
                   letterSpacing: "0.03em",
                 }}
               >
-                {printing ? "Preparing…" : "🖨 Print / PDF"}
+                {printing ? tr("Preparing…") : `🖨 ${tr("Print / PDF")}`}
               </button>
               <button
                 type="button"
@@ -2884,7 +2888,7 @@ export default function FormulaEditor({
                     ? `Save (v${(initialFormula.latestVersionNum || 0) + 1})`
                     : identityDirty
                       ? "Save"
-                      : "Saved"}
+                      : tr("Saved")}
               </button>
             </div>
             {saveStatus ? (
@@ -3208,6 +3212,7 @@ function Field({
    *  Shape) can hold their compact width. */
   grow?: boolean;
 }) {
+  const tr = makeTr(useLang());
   // Grow columns share leftover row space with each other. maxWidth caps
   // them so if one wraps to the next line the survivors don't stretch to
   // fill the whole row (which left a big empty gap between Name and Piece
@@ -3233,7 +3238,7 @@ function Field({
           color: "var(--ink-3, #8a9498)",
         }}
       >
-        {label}
+        {tr(label)}
       </span>
       {children}
     </label>
@@ -3249,6 +3254,7 @@ function TabButton({
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const tr = makeTr(useLang());
   return (
     <button
       type="button"
@@ -3268,7 +3274,7 @@ function TabButton({
         cursor: "pointer",
       }}
     >
-      {children}
+      {typeof children === "string" ? tr(children) : children}
     </button>
   );
 }
@@ -3854,9 +3860,10 @@ function BenchTopTab({
 // (label ................ value). Semantics use <dt>/<dd> pairs so
 // screen readers still get the label/value relationship.
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  const tr = makeTr(useLang());
   return (
     <div className="fe-simple-summary__row">
-      <dt className="fe-simple-summary__label">{label}</dt>
+      <dt className="fe-simple-summary__label">{tr(label)}</dt>
       <span className="fe-simple-summary__leader" aria-hidden="true" />
       <dd className="fe-simple-summary__value">{value}</dd>
     </div>
@@ -3875,6 +3882,7 @@ function KeyIndicatorStat({
   label: string;
   value: number;
 }) {
+  const tr = makeTr(useLang());
   return (
     <div
       style={{
@@ -3901,7 +3909,7 @@ function KeyIndicatorStat({
           textAlign: "center",
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       <div
         style={{
@@ -3943,6 +3951,7 @@ function KeyIndicatorPctStat({
   value: number;
   ok: boolean;
 }) {
+  const tr = makeTr(useLang());
   // Drop trailing ".00" so 100% reads as "100%" not "100.00%" — via
   // the shared Format.pctCompact helper.
   const display = Format.pctCompact(value);
@@ -3972,7 +3981,7 @@ function KeyIndicatorPctStat({
           textAlign: "center",
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       <div
         style={{
@@ -4004,6 +4013,7 @@ function KeyIndicatorRatioStat({
   sugarText: string;
   syrupText: string;
 }) {
+  const tr = makeTr(useLang());
   return (
     <div
       style={{
@@ -4025,7 +4035,7 @@ function KeyIndicatorRatioStat({
           textAlign: "center",
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       {/* Two labelled sub-values side by side. Kept as separate stacks
           so each has its own "SUGAR" / "SYRUP" caption above the digit. */}
@@ -4040,6 +4050,7 @@ function KeyIndicatorRatioStat({
 // A single value under a small "SUGAR" / "SYRUP" caption. Used by
 // KeyIndicatorRatioStat.
 function RatioSubValue({ caption, text }: { caption: string; text: string }) {
+  const tr = makeTr(useLang());
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div
@@ -4053,7 +4064,7 @@ function RatioSubValue({ caption, text }: { caption: string; text: string }) {
           marginBottom: 3,
         }}
       >
-        {caption}
+        {tr(caption)}
       </div>
       <div
         style={{
@@ -4179,6 +4190,7 @@ function ScaleUpTab({
 }
 
 function ParamBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  const tr = makeTr(useLang());
   return (
     <div>
       <div
@@ -4191,7 +4203,7 @@ function ParamBlock({ label, children }: { label: string; children: React.ReactN
           marginBottom: 4,
         }}
       >
-        {label}
+        {tr(label)}
       </div>
       {children}
     </div>
@@ -4333,6 +4345,7 @@ function IngredientTable({
   yieldPct: number;
   gummyPieceWeightG: number;
 }) {
+  const tr = makeTr(useLang());
   return (
     <div>
       <table
@@ -4493,7 +4506,7 @@ function IngredientTable({
             cursor: "pointer",
           }}
         >
-          + Add ingredient
+          {tr("+ Add ingredient")}
         </button>
       </div>
     </div>
@@ -4501,6 +4514,7 @@ function IngredientTable({
 }
 
 function ITh({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
+  const tr = makeTr(useLang());
   return (
     <th
       style={{
@@ -4515,7 +4529,7 @@ function ITh({ children, style }: { children?: React.ReactNode; style?: React.CS
         ...style,
       }}
     >
-      {children}
+      {typeof children === "string" ? tr(children) : children}
     </th>
   );
 }
@@ -4960,6 +4974,8 @@ function BlendSectionCard({
   // independent of the Secondary/Final subsection toggles so opening one
   // doesn't affect the others.
   const [cookingProcessEditing, setCookingProcessEditing] = useState(false);
+  const lang = useLang();
+  const tr = makeTr(lang);
   const label = BLEND_PHASE_LABELS[phase];
   const hint = BLEND_PHASE_HINTS[phase];
   // Number of decimal places to show in this section's Total row. Kept
@@ -5191,7 +5207,7 @@ function BlendSectionCard({
             lineHeight: 1.15,
           }}
         >
-          {label}
+          {tr(label)}
         </div>
         <div
           style={{
@@ -5200,7 +5216,7 @@ function BlendSectionCard({
             marginTop: 4,
           }}
         >
-          {hint}
+          {tr(hint)}
         </div>
       </header>
 
@@ -5290,7 +5306,7 @@ function BlendSectionCard({
                 letterSpacing: "-0.005em",
               }}
             >
-              Primary Blend Carry Over
+              {tr("Primary Blend Carry Over")}
             </div>
             <table
               style={{
@@ -5320,7 +5336,7 @@ function BlendSectionCard({
                       share of the Grand Total Cooked Blend. Sits BETWEEN
                       the grams column and the chevron/delete column. */}
                   <BTh style={{ textAlign: "right", width: 120 }}>
-                    <span className="fe-th-break">% of<br /> finished<br /> product</span>
+                    <span className="fe-th-break">{lang === "es" ? <>% de<br /> producto<br /> terminado</> : <>% of<br /> finished<br /> product</>}</span>
                   </BTh>
                   {/* Residual Moisture % — the water contribution of each
                       row, expressed as a share of the Grand Total Cooked
@@ -5762,7 +5778,7 @@ function BlendSectionCard({
                         color: "var(--teal-900, #0f4a56)",
                       }}
                     >
-                      Total primary blend carry over
+                      {tr("Total primary blend carry over")}
                     </strong>
                   </BTd>
                   {/* Total-row moisture-loss placeholder — no aggregate
@@ -6074,7 +6090,7 @@ function BlendSectionCard({
                     letterSpacing: "-0.005em",
                   }}
                 >
-                  {subHeading}
+                  {tr(subHeading)}
                 </div>
               ) : null}
 
@@ -6190,7 +6206,7 @@ function BlendSectionCard({
                           (Secondary/Final on the cooked card). */}
                       {showPctColumn ? (
                         <BTh style={{ textAlign: "right", width: 120 }}>
-                          <span className="fe-th-break">% of<br /> finished<br /> product</span>
+                          <span className="fe-th-break">{lang === "es" ? <>% de<br /> producto<br /> terminado</> : <>% of<br /> finished<br /> product</>}</span>
                         </BTh>
                       ) : null}
                       {/* Cooked-only: Residual Moisture % — waterFraction ×
@@ -6589,7 +6605,7 @@ function BlendSectionCard({
                               (e.g. "Tot secondary blend" / "Tot final
                               blend"). Otherwise fall back to the outer
                               phase label (pre-cook card). */}
-                          Total {subHeading?.toLowerCase() ?? label.toLowerCase()}
+                          {tr(`Total ${subHeading?.toLowerCase() ?? label.toLowerCase()}`)}
                         </strong>
                       </BTd>
                       {/* Empty Overage cell in the Total row so column
@@ -6776,7 +6792,7 @@ function BlendSectionCard({
                       cursor: "pointer",
                     }}
                   >
-                    + Add ingredient
+                    {tr("+ Add ingredient")}
                   </button>
                   <div style={{ position: "relative" }}>
                     <button
@@ -6799,7 +6815,7 @@ function BlendSectionCard({
                         gap: 4,
                       }}
                     >
-                      + Add solution
+                      {tr("+ Add solution")}
                       <span
                         aria-hidden="true"
                         style={{ fontSize: 9, color: "var(--ink-3, #8a9498)" }}
@@ -7151,7 +7167,7 @@ function BlendSectionCard({
                                   color: "var(--teal-900, #0f4a56)",
                                 }}
                               >
-                                Grand Total Cooked Blend
+                                {tr("Grand Total Cooked Blend")}
                               </strong>
                             </BTd>
                             {/* Empty Overage % cell for column
@@ -7325,6 +7341,7 @@ function BlendSectionCard({
 }
 
 function BTh({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
+  const tr = makeTr(useLang());
   return (
     <th
       style={{
@@ -7339,7 +7356,7 @@ function BTh({ children, style }: { children?: React.ReactNode; style?: React.CS
         ...style,
       }}
     >
-      {children}
+      {typeof children === "string" ? tr(children) : children}
     </th>
   );
 }
@@ -7701,6 +7718,7 @@ function LabelClaimsSection({
   onUpdate: (id: string, patch: Partial<LabelClaim>) => void;
   onRemove: (id: string) => void;
 }) {
+  const tr = makeTr(useLang());
   // Build the same lookup the parent uses so we can resolve a claim's
   // rawMaterialId or rawMaterialFpCode back to a RawMaterialOption without
   // threading another prop.
@@ -7755,7 +7773,7 @@ function LabelClaimsSection({
               lineHeight: 1.15,
             }}
           >
-            Label claims{" "}
+            {tr("Label claims")}{" "}
             <span
               style={{
                 fontSize: 13,
@@ -7763,7 +7781,7 @@ function LabelClaimsSection({
                 color: "var(--ink-3, #8a9498)",
               }}
             >
-              (active ingredients only)
+              {tr("(active ingredients only)")}
             </span>
           </div>
           <div
@@ -7773,7 +7791,7 @@ function LabelClaimsSection({
               marginTop: 2,
             }}
           >
-            Per-gummy amount as printed on the finished label.{" "}
+            {tr("Per-gummy amount as printed on the finished label.")}{" "}
             <strong style={{ color: "var(--ink-2, #415056)" }}>
               Values are for one (1) gummy.
             </strong>
@@ -7797,7 +7815,7 @@ function LabelClaimsSection({
             transition: "background 0.12s ease",
           }}
         >
-          + Add ingredient
+          {tr("+ Add ingredient")}
         </button>
       </div>
 

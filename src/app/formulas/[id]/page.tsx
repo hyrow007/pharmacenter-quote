@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../_components/AppHeader";
+import { I18nProvider } from "@/lib/i18n/context";
+import { getLangFromCookie } from "@/lib/i18n/server";
 import FormulaEditor, {
   type PcBkProductOption,
   type RawMaterialOption,
@@ -257,14 +259,16 @@ export default async function FormulaEditorPage({
             ) : null}
           </div>
 
-          <FormulaEditor
-            initialFormula={formula}
-            initialVersion={latestVersion}
-            rawMaterials={rawMaterials}
-            pcBkProducts={pcBkProducts}
-            initialSavedSolutions={savedSolutions}
-            currentUserEmail={user.email!}
-          />
+          <I18nProvider lang={await getLangFromCookie()}>
+            <FormulaEditor
+              initialFormula={formula}
+              initialVersion={latestVersion}
+              rawMaterials={rawMaterials}
+              pcBkProducts={pcBkProducts}
+              initialSavedSolutions={savedSolutions}
+              currentUserEmail={user.email!}
+            />
+          </I18nProvider>
         </div>
       </main>
     </div>
