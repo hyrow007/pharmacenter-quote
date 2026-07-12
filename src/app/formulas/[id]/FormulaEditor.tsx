@@ -3589,7 +3589,7 @@ function BenchTopTab({
           style={{ display: "flex", flexDirection: "column", gap: 10 }}
         >
           <BenchTopWeightInput
-            label="Bench top batch size"
+            label="Bench top batch size (Cooked)"
             value={benchBatchG}
             onChange={setBenchBatchG}
             min={1}

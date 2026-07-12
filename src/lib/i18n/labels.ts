@@ -15,6 +15,7 @@ import type { Lang } from "./dict";
 const es: Record<string, string> = {
   // ---- Batch setup / key indicators ----
   "Bench top batch size": "Tamaño de lote de mesa",
+  "Bench top batch size (Cooked)": "Tamaño de lote de mesa (cocido)",
   "Finished piece weight (Dry)": "Peso de pieza terminada (seco)",
   "Finished piece weight (dry)": "Peso de pieza terminada (seco)",
   "Cast weight (wet)": "Peso de vaciado (húmedo)",
