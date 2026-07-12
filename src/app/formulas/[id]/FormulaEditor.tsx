@@ -4300,7 +4300,7 @@ function ScaleUpBatchSetupCard({
     value: number,
     onChange: (n: number) => void,
     suffix = "g",
-    step: string | number = "0.1",
+    step = "0.1",
     min = 0,
   ) => (
     <div>
@@ -4346,7 +4346,7 @@ function ScaleUpBatchSetupCard({
         {tr("Batch Setup")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {editable("Batch size (pre-cooked)", batchKg, setBatchKg, "kg", 1, 1)}
+        {editable("Batch size (pre-cooked)", batchKg, setBatchKg, "kg", "1", 1)}
         {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
         {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
         {stat("Target Yield", "gummies")}
