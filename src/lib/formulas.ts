@@ -385,6 +385,9 @@ export type GummyFormulaVersion = {
   /** v51.3: operator-set production Target Yield in finished gummies.
    *  Optional for pre-migration rows; 0 = not set. */
   targetYieldUnits?: number;
+  /** v51.4: CFA batch size in kg. Optional for pre-migration rows;
+   *  defaults to 25 kg when unset. */
+  cfaBatchKg?: number;
   yieldPct: number;             // 0..100 (before daily loss)
   ingredients: GummyFormulaIngredient[];
   // Per-blend-phase process notes (mixing instructions, pH targets,
@@ -438,6 +441,7 @@ export const FORMULA_VERSION_DEFAULTS = {
   gummyPieceWeightG: 0,
   wetCastPieceWeightG: 0,
   targetYieldUnits: 0,
+  cfaBatchKg: 25,
   yieldPct: 100,
 } as const;
 
@@ -932,6 +936,7 @@ export function versionFromRow(row: {
   // default when null/undefined so the caller always gets a number.
   wet_cast_piece_weight_g?: number | string | null;
   target_yield_units?: number | string | null;
+  cfa_batch_kg?: number | string | null;
   yield_pct: number | string;
   ingredients: GummyFormulaIngredient[] | null;
   // Optional so pre-migration rows don't blow up TS. Reader coerces
@@ -953,6 +958,11 @@ export function versionFromRow(row: {
   const tyRaw = row.target_yield_units;
   const targetYieldUnits =
     tyRaw === null || tyRaw === undefined ? 0 : n(tyRaw);
+  const cfaRaw = row.cfa_batch_kg;
+  const cfaBatchKg =
+    cfaRaw === null || cfaRaw === undefined
+      ? FORMULA_VERSION_DEFAULTS.cfaBatchKg
+      : n(cfaRaw);
   return {
     id: row.id,
     formulaId: row.formula_id,
@@ -964,6 +974,7 @@ export function versionFromRow(row: {
     gummyPieceWeightG: n(row.gummy_piece_weight_g),
     wetCastPieceWeightG,
     targetYieldUnits,
+    cfaBatchKg,
     yieldPct: n(row.yield_pct),
     ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
     processNotes:

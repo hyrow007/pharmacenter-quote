@@ -16,7 +16,8 @@ const es: Record<string, string> = {
   // ---- Batch setup / key indicators ----
   "Bench top batch size": "Tamaño de lote de mesa",
   "Bench top batch size (Cooked)": "Tamaño de lote de mesa (cocido)",
-  "Batch size (pre-cooked)": "Tamaño de lote (precocido)",
+  "Batch size (pre-cook blend)": "Tamaño de lote (mezcla de precocción)",
+  "CFA Batch Size": "Tamaño de lote CFA",
   "Target Yield": "Rendimiento objetivo",
   "Finished piece weight (Dry)": "Peso de pieza terminada (seco)",
   "Finished piece weight (dry)": "Peso de pieza terminada (seco)",

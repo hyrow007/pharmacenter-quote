@@ -111,6 +111,7 @@ type PostBody = {
   benchBatchG?: number;
   batchKg?: number;
   targetYieldUnits?: number;
+  cfaBatchKg?: number;
   batchesPerDay?: number;
   fixedLossKgPerDay?: number;
   gummyPieceWeightG?: number;
@@ -185,6 +186,7 @@ export async function POST(request: Request) {
       bench_batch_g: body.benchBatchG ?? FORMULA_VERSION_DEFAULTS.benchBatchG,
       batch_kg: body.batchKg ?? FORMULA_VERSION_DEFAULTS.batchKg,
       target_yield_units: body.targetYieldUnits ?? FORMULA_VERSION_DEFAULTS.targetYieldUnits,
+      cfa_batch_kg: body.cfaBatchKg ?? FORMULA_VERSION_DEFAULTS.cfaBatchKg,
       batches_per_day: body.batchesPerDay ?? FORMULA_VERSION_DEFAULTS.batchesPerDay,
       fixed_loss_kg_per_day:
         body.fixedLossKgPerDay ?? FORMULA_VERSION_DEFAULTS.fixedLossKgPerDay,
@@ -198,7 +200,7 @@ export async function POST(request: Request) {
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
     )
     .single();
 

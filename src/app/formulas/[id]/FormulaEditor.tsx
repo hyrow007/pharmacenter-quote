@@ -567,6 +567,7 @@ export default function FormulaEditor({
     gummyPieceWeightG: FORMULA_VERSION_DEFAULTS.gummyPieceWeightG,
     wetCastPieceWeightG: FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
     targetYieldUnits: FORMULA_VERSION_DEFAULTS.targetYieldUnits,
+    cfaBatchKg: FORMULA_VERSION_DEFAULTS.cfaBatchKg,
     yieldPct: FORMULA_VERSION_DEFAULTS.yieldPct,
     ingredients: [emptyIngredient()],
     notes: null,
@@ -595,6 +596,11 @@ export default function FormulaEditor({
   // often in the hundreds of thousands. Rendered with comma grouping.
   const [targetYieldUnits, setTargetYieldUnits] = useState<number>(
     seedVersion.targetYieldUnits ?? 0,
+  );
+  // v51.4: CFA batch size (kg) — defaults to 25, editable on the Scale up
+  // Batch Setup card.
+  const [cfaBatchKg, setCfaBatchKg] = useState<number>(
+    seedVersion.cfaBatchKg ?? FORMULA_VERSION_DEFAULTS.cfaBatchKg,
   );
   const [ingredients, setIngredients] = useState<GummyFormulaIngredient[]>(
     seedVersion.ingredients.length > 0
@@ -733,6 +739,7 @@ export default function FormulaEditor({
       gummyPieceWeightG,
       wetCastPieceWeightG,
       targetYieldUnits,
+      cfaBatchKg,
       yieldPct,
       ingredients,
       processNotes,
@@ -753,6 +760,7 @@ export default function FormulaEditor({
           FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
         targetYieldUnits:
           seed.targetYieldUnits ?? FORMULA_VERSION_DEFAULTS.targetYieldUnits,
+        cfaBatchKg: seed.cfaBatchKg ?? FORMULA_VERSION_DEFAULTS.cfaBatchKg,
         yieldPct: seed.yieldPct,
         ingredients: seed.ingredients,
         processNotes: seed.processNotes ?? {},
@@ -770,6 +778,7 @@ export default function FormulaEditor({
     gummyPieceWeightG,
     wetCastPieceWeightG,
     targetYieldUnits,
+    cfaBatchKg,
     yieldPct,
     ingredients,
     processNotes,
@@ -1181,6 +1190,7 @@ export default function FormulaEditor({
               gummyPieceWeightG,
               wetCastPieceWeightG,
               targetYieldUnits,
+              cfaBatchKg,
               yieldPct,
               ingredients,
               processNotes,
@@ -3106,6 +3116,8 @@ export default function FormulaEditor({
           <ScaleUpBatchSetupCard
             batchKg={batchKg}
             setBatchKg={setBatchKg}
+            cfaBatchKg={cfaBatchKg}
+            setCfaBatchKg={setCfaBatchKg}
             targetYieldUnits={targetYieldUnits}
             setTargetYieldUnits={setTargetYieldUnits}
             gummyPieceWeightG={gummyPieceWeightG}
@@ -4270,6 +4282,8 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 function ScaleUpBatchSetupCard({
   batchKg,
   setBatchKg,
+  cfaBatchKg,
+  setCfaBatchKg,
   targetYieldUnits,
   setTargetYieldUnits,
   gummyPieceWeightG,
@@ -4279,6 +4293,8 @@ function ScaleUpBatchSetupCard({
 }: {
   batchKg: number;
   setBatchKg: (n: number) => void;
+  cfaBatchKg: number;
+  setCfaBatchKg: (n: number) => void;
   targetYieldUnits: number;
   setTargetYieldUnits: (n: number) => void;
   gummyPieceWeightG: number;
@@ -4380,7 +4396,8 @@ function ScaleUpBatchSetupCard({
         {tr("Batch Setup")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {editable("Batch size (pre-cooked)", batchKg, setBatchKg, "kg", "1", 1)}
+        {editable("Batch size (pre-cook blend)", batchKg, setBatchKg, "kg", "1", 1)}
+        {editable("CFA Batch Size", cfaBatchKg, setCfaBatchKg, "kg", "1", 0)}
         {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
         {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
         {commaEditable("Target Yield", targetYieldUnits, setTargetYieldUnits, "gummies")}
