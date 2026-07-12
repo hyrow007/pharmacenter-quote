@@ -3093,6 +3093,8 @@ export default function FormulaEditor({
       {tab === "scale" && !printing && (
         <div style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap", marginBottom: 14 }}>
           <ScaleUpBatchSetupCard
+            batchKg={batchKg}
+            setBatchKg={setBatchKg}
             gummyPieceWeightG={gummyPieceWeightG}
             setGummyPieceWeightG={setGummyPieceWeightG}
             wetCastPieceWeightG={wetCastPieceWeightG}
@@ -4253,11 +4255,15 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 // Batch Setup + Key Indicators row). Values blank until scaling rules
 // are defined.
 function ScaleUpBatchSetupCard({
+  batchKg,
+  setBatchKg,
   gummyPieceWeightG,
   setGummyPieceWeightG,
   wetCastPieceWeightG,
   setWetCastPieceWeightG,
 }: {
+  batchKg: number;
+  setBatchKg: (n: number) => void;
   gummyPieceWeightG: number;
   setGummyPieceWeightG: (n: number) => void;
   wetCastPieceWeightG: number;
@@ -4293,6 +4299,9 @@ function ScaleUpBatchSetupCard({
     label: string,
     value: number,
     onChange: (n: number) => void,
+    suffix = "g",
+    step: string | number = "0.1",
+    min = 0,
   ) => (
     <div>
       <div
@@ -4307,7 +4316,7 @@ function ScaleUpBatchSetupCard({
         {tr(label)}
       </div>
       <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
-        <NumberInput value={value} onChange={onChange} suffix="g" step="0.1" min={0} />
+        <NumberInput value={value} onChange={onChange} suffix={suffix} step={step} min={min} />
       </div>
     </div>
   );
@@ -4337,10 +4346,10 @@ function ScaleUpBatchSetupCard({
         {tr("Batch Setup")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {stat("Batch size (pre-cooked)", "g")}
+        {editable("Batch size (pre-cooked)", batchKg, setBatchKg, "kg", 1, 1)}
         {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
         {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
-        {stat("Theoretical Yield", "gummies")}
+        {stat("Target Yield", "gummies")}
       </div>
     </div>
   );
