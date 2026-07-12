@@ -3825,7 +3825,7 @@ function BenchTopTab({
           value on the right — the ledger/TOC pattern. Hidden on-screen
           via CSS in the print stylesheet block above. */}
       <dl className="fe-simple-summary">
-        <SummaryRow label="Bench top batch size" value={`${Format.grams(benchBatchG)} g`} />
+        <SummaryRow label="Bench top batch size (Cooked)" value={`${Format.grams(benchBatchG)} g`} />
         <SummaryRow
           label="Finished piece weight (dry)"
           value={`${Format.grams(gummyPieceWeightG)} g`}
