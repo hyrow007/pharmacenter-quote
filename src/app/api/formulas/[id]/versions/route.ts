@@ -100,6 +100,7 @@ export async function GET(
 type PostBody = {
   benchBatchG?: number;
   batchKg?: number;
+  targetYieldUnits?: number;
   batchesPerDay?: number;
   fixedLossKgPerDay?: number;
   gummyPieceWeightG?: number;

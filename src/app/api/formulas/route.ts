@@ -110,6 +110,7 @@ type PostBody = {
   customerId?: string | null;
   benchBatchG?: number;
   batchKg?: number;
+  targetYieldUnits?: number;
   batchesPerDay?: number;
   fixedLossKgPerDay?: number;
   gummyPieceWeightG?: number;
