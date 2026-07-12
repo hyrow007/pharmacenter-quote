@@ -3123,15 +3123,7 @@ export default function FormulaEditor({
           manual IngredientTable remains only on Material costing until
           that tab gets the same treatment. */}
       {tab === "scale" && !printing ? (
-        <DerivedScaleTable
-          groups={phaseIngredients.groups}
-          totalPrimaryG={phaseIngredients.groups["pre-cook"].reduce(
-            (s, r) => s + (Number(r.grams) || 0),
-            0,
-          )}
-          batchKg={batchKg}
-          rmById={rmById}
-        />
+        <ScaleUpBlendCards groups={phaseIngredients.groups} rmById={rmById} />
       ) : null}
       {tab === "cost" && !printing ? (
         <IngredientTable
@@ -4245,128 +4237,232 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 
 // --- Cost tab ----------------------------------------------------------------
 
-// v51: Scale up ingredient table — DERIVED from the bench-top formula
-// instead of the old manually-entered picker rows. Per the operator's
-// spec, "Batch size" is equivalent to the bench top's TOTAL PRIMARY
-// BLEND, so:   kg/batch = grams × batchKg / totalPrimaryG
-//              %        = grams / totalPrimaryG × 100
-// Pre-cook rows therefore sum to exactly 100%; Secondary and Final ride
-// on top of that (they're added to the pot after cooking). Rows are
-// read-only here — the bench top is the single source of truth. The old
-// manual rows remain in the DB but are no longer rendered or edited.
-function DerivedScaleTable({
+// v51.1: Scale up mirrors the bench-top card structure 1:1 — the
+// Pre-cook card and the Cooked card with all three subsections and the
+// same column sets — as a READ-ONLY scaffold. Per the operator's spec,
+// values are intentionally blank for now ("carry them over with no
+// values"); the grams column becomes KILOGRAMS. Scaling rules will be
+// dictated and plugged into this structure next.
+function ScaleUpBlendCards({
   groups,
-  totalPrimaryG,
-  batchKg,
   rmById,
 }: {
   groups: Record<string, GummyFormulaIngredient[]>;
-  totalPrimaryG: number;
-  batchKg: number;
   rmById: Map<string, RawMaterialOption>;
 }) {
   const tr = makeTr(useLang());
-  const kgFor = (grams: number) =>
-    totalPrimaryG > 0 ? (grams * batchKg) / totalPrimaryG : 0;
-  const pctFor = (grams: number) =>
-    totalPrimaryG > 0 ? (grams / totalPrimaryG) * 100 : 0;
-  const fmtKg = (kg: number) =>
-    `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
-  const nameFor = (r: GummyFormulaIngredient) => {
-    const nm = resolveRowName(r, rmById) || tr("Solution");
-    const code = r.rawMaterialId ? rmById.get(r.rawMaterialId)?.fpCode : null;
-    return code ? `${code} · ${nm}` : nm;
-  };
+  const DASH = "\u2014";
 
-  const sections = [
-    { label: "Primary Blend", rows: groups["pre-cook"] ?? [] },
-    { label: "Secondary Blend", rows: groups["cooked"] ?? [] },
-    { label: "Final Blend", rows: groups["final"] ?? [] },
-  ].filter((sec) => sec.rows.length > 0);
-
-  const grandG = sections.reduce(
-    (s, sec) => s + sec.rows.reduce((a, r) => a + (Number(r.grams) || 0), 0),
-    0,
-  );
-
-  const cell: React.CSSProperties = { padding: "8px 12px", fontSize: 13 };
-  const num: React.CSSProperties = {
-    ...cell,
+  const th: React.CSSProperties = {
+    padding: "8px 12px",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.09em",
+    textTransform: "uppercase",
+    color: "var(--ink-3, #8a9498)",
     textAlign: "right",
-    fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
   };
+  const td: React.CSSProperties = {
+    padding: "10px 12px",
+    fontSize: 13,
+    textAlign: "right",
+    color: "var(--ink-3, #8a9498)",
+    fontVariantNumeric: "tabular-nums",
+  };
 
-  return (
+  const rowName = (r: GummyFormulaIngredient) => {
+    const solution = !r.rawMaterialId && (r.customName ?? "").trim() !== "" && (r.solutionComponents?.length ?? 0) > 0;
+    const nm = resolveRowName(r, rmById) || tr("Solution");
+    const rm = r.rawMaterialId ? rmById.get(r.rawMaterialId) : null;
+    return (
+      <td style={{ ...td, textAlign: "left", color: "var(--ink-1, #1f2a2d)" }}>
+        {solution ? (
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            {tr("Solution")}
+          </div>
+        ) : null}
+        <div style={{ fontWeight: 600 }}>
+          {rm?.fpCode ? (
+            <span style={{ color: "var(--teal-700, #1d6c7b)", fontFamily: "monospace" }}>
+              {rm.fpCode}
+              {" · "}
+            </span>
+          ) : null}
+          {nm}
+        </div>
+        {rm?.category ? (
+          <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", textTransform: "capitalize" }}>
+            {tr(rm.category)}
+          </div>
+        ) : null}
+      </td>
+    );
+  };
+
+  const section = (
+    subhead: string,
+    rows: GummyFormulaIngredient[],
+    cols: string[],
+    totalLabel: string,
+  ) => (
     <div
       style={{
         border: "1px solid var(--line, #e3dcc9)",
         borderRadius: 8,
+        margin: "12px 14px",
         background: "var(--paper, #fffdf8)",
         overflow: "hidden",
-        marginBottom: 14,
       }}
     >
+      <div
+        style={{
+          padding: "10px 14px 4px",
+          fontSize: 13,
+          fontWeight: 700,
+          color: "var(--teal-900, #0f4a56)",
+        }}
+      >
+        {tr(subhead)}
+      </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
-          <tr
-            style={{
-              background: "var(--cream, #f6efe3)",
-              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
-            }}
-          >
-            <th style={{ ...cell, textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--ink-3, #8a9498)" }}>
-              {tr("Ingredient")}
-            </th>
-            <th style={{ ...num, fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--ink-3, #8a9498)", width: 110 }}>
-              %
-            </th>
-            <th style={{ ...num, fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--ink-3, #8a9498)", width: 140 }}>
-              {tr("Kg / batch")}
-            </th>
+          <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+            <th style={{ ...th, textAlign: "left" }}>{tr("Ingredient")}</th>
+            {cols.map((c) => (
+              <th key={c} style={{ ...th, width: 130 }}>
+                {tr(c)}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {sections.map((sec) => {
-            const secG = sec.rows.reduce((a, r) => a + (Number(r.grams) || 0), 0);
-            return (
-              <React.Fragment key={sec.label}>
-                <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
-                  <td
-                    colSpan={3}
-                    style={{ ...cell, fontWeight: 700, fontSize: 12.5, color: "var(--teal-900, #0f4a56)" }}
-                  >
-                    {tr(sec.label)}
-                  </td>
-                </tr>
-                {sec.rows.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
-                    <td style={cell}>{nameFor(r)}</td>
-                    <td style={num}>{Format.pct(pctFor(Number(r.grams) || 0))}%</td>
-                    <td style={num}>{fmtKg(kgFor(Number(r.grams) || 0))}</td>
-                  </tr>
-                ))}
-                <tr style={{ borderBottom: "1px solid var(--line, #e3dcc9)" }}>
-                  <td style={{ ...cell, fontWeight: 700, fontSize: 11.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--teal-900, #0f4a56)" }}>
-                    {tr(`Total ${sec.label.toLowerCase()}`)}
-                  </td>
-                  <td style={{ ...num, fontWeight: 700 }}>{Format.pct(pctFor(secG))}%</td>
-                  <td style={{ ...num, fontWeight: 700 }}>{fmtKg(kgFor(secG))}</td>
-                </tr>
-              </React.Fragment>
-            );
-          })}
-          <tr style={{ background: "var(--cream, #f6efe3)" }}>
-            <td style={{ ...cell, fontWeight: 700, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--teal-900, #0f4a56)" }}>
-              {tr("Total weighed input")}
+          {rows.map((r) => (
+            <tr key={r.id} style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
+              {rowName(r)}
+              {cols.map((c) => (
+                <td key={c} style={td}>
+                  {DASH}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+            <td
+              style={{
+                ...td,
+                textAlign: "left",
+                fontWeight: 700,
+                fontSize: 11.5,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+              }}
+            >
+              {tr(totalLabel)}
             </td>
-            <td style={{ ...num, fontWeight: 700 }}>{Format.pct(pctFor(grandG))}%</td>
-            <td style={{ ...num, fontWeight: 700 }}>{fmtKg(kgFor(grandG))}</td>
+            {cols.map((c) => (
+              <td key={c} style={{ ...td, fontWeight: 700 }}>
+                {DASH}
+              </td>
+            ))}
           </tr>
         </tbody>
       </table>
-      <div style={{ padding: "8px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
-        {tr("Derived from the bench-top formula — batch size equals Total Primary Blend.")}
+    </div>
+  );
+
+  const card = (
+    title: string,
+    hint: string,
+    children: React.ReactNode,
+  ) => (
+    <section
+      style={{
+        border: "1.5px solid var(--teal-700, #1d6c7b)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        marginBottom: 14,
+        boxShadow: "0 1px 4px rgba(15, 74, 86, 0.10)",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          padding: "14px 18px 12px",
+          background: "var(--cream, #f6efe3)",
+          borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+        }}
+      >
+        <div style={{ fontSize: 20, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+          {tr(title)}
+        </div>
+        <div style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", marginTop: 4 }}>
+          {tr(hint)}
+        </div>
+      </header>
+      {children}
+    </section>
+  );
+
+  return (
+    <div>
+      {card(
+        "Pre-cook blend",
+        "Ingredients weighed in before being cooked.",
+        section("Primary Blend", groups["pre-cook"] ?? [], ["Kilograms"], "Total primary blend"),
+      )}
+      {card(
+        "Cooked blend",
+        "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
+        <>
+          {section(
+            "Primary Blend Carry Over",
+            groups["pre-cook"] ?? [],
+            ["Moisture Loss", "Kilograms", "% of finished product", "Residual Moisture %"],
+            "Total primary blend carry over",
+          )}
+          {section(
+            "Secondary Blend",
+            groups["cooked"] ?? [],
+            ["Overage %", "Kilograms", "% of finished product", "Residual Moisture %"],
+            "Total secondary blend",
+          )}
+          {section(
+            "Final Blend",
+            groups["final"] ?? [],
+            ["Kilograms", "% of finished product", "Residual Moisture %"],
+            "Total final blend",
+          )}
+          <div
+            style={{
+              borderTop: "2px solid var(--teal-700, #1d6c7b)",
+              background: "var(--cream-soft, #fbf6ec)",
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "12px 14px",
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+            }}
+          >
+            <span>{tr("Grand Total Cooked Blend")}</span>
+            <span>{"\u2014"}</span>
+          </div>
+        </>,
+      )}
+      <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
+        {tr("Mirrors the bench-top formula. Production values to be defined.")}
       </div>
     </div>
   );

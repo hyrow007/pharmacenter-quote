@@ -162,6 +162,10 @@ const es: Record<string, string> = {
   cooked: "cocida",
   "Moisture Loss": "Pérdida de humedad",
   "Claim Baseline: ": "Base de declaración: ",
+  Kilograms: "Kilogramos",
+  "% of finished product": "% de producto terminado",
+  "Mirrors the bench-top formula. Production values to be defined.":
+    "Refleja la fórmula de mesa. Los valores de producción están por definirse.",
   // ---- Derived scale-up table (v51) ----
   "Kg / batch": "Kg / lote",
   "Total weighed input": "Total de entrada pesada",
