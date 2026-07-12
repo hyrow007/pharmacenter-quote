@@ -474,7 +474,8 @@ export default function FormulaEditor({
   initialSavedSolutions = [],
   currentUserEmail,
 }: Props) {
-  const tr = makeTr(useLang());
+  const lang = useLang();
+  const tr = makeTr(lang);
   const router = useRouter();
 
   // Saved-solutions library — client state so newly-saved entries appear
@@ -1516,8 +1517,8 @@ export default function FormulaEditor({
   // Quotes, backslashes and newlines are stripped so the value cannot
   // break out of the CSS string it is embedded in.
   const printFooterIdentity = [
-    "Formula F" + String(initialFormula.formulaNumber ?? 0).padStart(4, "0"),
-    "Version v" + String(initialFormula.latestVersionNum),
+    tr("Formula") + " F" + String(initialFormula.formulaNumber ?? 0).padStart(4, "0"),
+    tr("Version") + " v" + String(initialFormula.latestVersionNum),
     (name || "").trim() || "(unnamed)",
   ]
     .join("  \u00B7  ")
@@ -1649,7 +1650,7 @@ export default function FormulaEditor({
                tight 12mm on page 1. */
             margin: 18.5mm 10mm 22mm 10mm;
             @bottom-right {
-              content: "Page " counter(page) " of " counter(pages);
+              content: "${lang === "es" ? "P\u00e1gina" : "Page"} " counter(page) " ${lang === "es" ? "de" : "of"} " counter(pages);
               font-size: 9pt;
               color: #000;
               font-family: sans-serif;
@@ -2471,7 +2472,7 @@ export default function FormulaEditor({
               <strong style={{ color: "#0f4a56" }}>{tr("Updated on:")}</strong>{" "}
               {initialFormula.updatedAt
                 ? new Date(initialFormula.updatedAt).toLocaleDateString(
-                    "en-US",
+                    lang === "es" ? "es-MX" : "en-US",
                     {
                       year: "numeric",
                       month: "short",
