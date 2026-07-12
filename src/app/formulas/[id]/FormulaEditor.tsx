@@ -566,6 +566,7 @@ export default function FormulaEditor({
     fixedLossKgPerDay: FORMULA_VERSION_DEFAULTS.fixedLossKgPerDay,
     gummyPieceWeightG: FORMULA_VERSION_DEFAULTS.gummyPieceWeightG,
     wetCastPieceWeightG: FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
+    targetYieldUnits: FORMULA_VERSION_DEFAULTS.targetYieldUnits,
     yieldPct: FORMULA_VERSION_DEFAULTS.yieldPct,
     ingredients: [emptyIngredient()],
     notes: null,
@@ -590,6 +591,11 @@ export default function FormulaEditor({
     seedVersion.wetCastPieceWeightG ?? FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
   );
   const [yieldPct, setYieldPct] = useState<number>(seedVersion.yieldPct);
+  // v51.3: production Target Yield in finished gummies — operator-set,
+  // often in the hundreds of thousands. Rendered with comma grouping.
+  const [targetYieldUnits, setTargetYieldUnits] = useState<number>(
+    seedVersion.targetYieldUnits ?? 0,
+  );
   const [ingredients, setIngredients] = useState<GummyFormulaIngredient[]>(
     seedVersion.ingredients.length > 0
       ? seedVersion.ingredients
@@ -726,6 +732,7 @@ export default function FormulaEditor({
       fixedLossKgPerDay,
       gummyPieceWeightG,
       wetCastPieceWeightG,
+      targetYieldUnits,
       yieldPct,
       ingredients,
       processNotes,
@@ -744,6 +751,8 @@ export default function FormulaEditor({
         wetCastPieceWeightG:
           seed.wetCastPieceWeightG ??
           FORMULA_VERSION_DEFAULTS.wetCastPieceWeightG,
+        targetYieldUnits:
+          seed.targetYieldUnits ?? FORMULA_VERSION_DEFAULTS.targetYieldUnits,
         yieldPct: seed.yieldPct,
         ingredients: seed.ingredients,
         processNotes: seed.processNotes ?? {},
@@ -760,6 +769,7 @@ export default function FormulaEditor({
     fixedLossKgPerDay,
     gummyPieceWeightG,
     wetCastPieceWeightG,
+    targetYieldUnits,
     yieldPct,
     ingredients,
     processNotes,
@@ -1170,6 +1180,7 @@ export default function FormulaEditor({
               fixedLossKgPerDay,
               gummyPieceWeightG,
               wetCastPieceWeightG,
+              targetYieldUnits,
               yieldPct,
               ingredients,
               processNotes,
@@ -3095,6 +3106,8 @@ export default function FormulaEditor({
           <ScaleUpBatchSetupCard
             batchKg={batchKg}
             setBatchKg={setBatchKg}
+            targetYieldUnits={targetYieldUnits}
+            setTargetYieldUnits={setTargetYieldUnits}
             gummyPieceWeightG={gummyPieceWeightG}
             setGummyPieceWeightG={setGummyPieceWeightG}
             wetCastPieceWeightG={wetCastPieceWeightG}
@@ -4257,6 +4270,8 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 function ScaleUpBatchSetupCard({
   batchKg,
   setBatchKg,
+  targetYieldUnits,
+  setTargetYieldUnits,
   gummyPieceWeightG,
   setGummyPieceWeightG,
   wetCastPieceWeightG,
@@ -4264,34 +4279,14 @@ function ScaleUpBatchSetupCard({
 }: {
   batchKg: number;
   setBatchKg: (n: number) => void;
+  targetYieldUnits: number;
+  setTargetYieldUnits: (n: number) => void;
   gummyPieceWeightG: number;
   setGummyPieceWeightG: (n: number) => void;
   wetCastPieceWeightG: number;
   setWetCastPieceWeightG: (n: number) => void;
 }) {
   const tr = makeTr(useLang());
-  const DASH = "\u2014";
-  const stat = (label: string, suffix: string) => (
-    <div>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-        }}
-      >
-        {tr(label)}
-      </div>
-      <div style={{ textAlign: "right", marginTop: 2 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-1, #1f2a2d)" }}>
-          {DASH}
-        </span>{" "}
-        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>{tr(suffix)}</span>
-      </div>
-    </div>
-  );
   // Piece + cast weight edit the SAME state as the bench-top card, so
   // they carry over automatically and edits here reflect there (and
   // persist through the same autosave path).
@@ -4317,6 +4312,45 @@ function ScaleUpBatchSetupCard({
       </div>
       <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
         <NumberInput value={value} onChange={onChange} suffix={suffix} step={step} min={min} />
+      </div>
+    </div>
+  );
+
+  // Comma-grouped text input for Target Yield — values routinely land in
+  // the hundreds of thousands or millions, so a bare number input reads
+  // terribly. Renders 250000 as "250,000"; parsing strips non-digits.
+  const commaEditable = (
+    label: string,
+    value: number,
+    onChange: (n: number) => void,
+    suffix: string,
+  ) => (
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.09em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+        }}
+      >
+        {tr(label)}
+      </div>
+      <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4 }}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value > 0 ? value.toLocaleString("en-US") : ""}
+          placeholder="0"
+          onChange={(e) => {
+            const digits = e.target.value.replace(/[^0-9]/g, "");
+            onChange(digits ? Number(digits) : 0);
+          }}
+          className="pricing__input"
+          style={{ width: 110, textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+        />
+        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>{tr(suffix)}</span>
       </div>
     </div>
   );
@@ -4349,7 +4383,7 @@ function ScaleUpBatchSetupCard({
         {editable("Batch size (pre-cooked)", batchKg, setBatchKg, "kg", "1", 1)}
         {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
         {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
-        {stat("Target Yield", "gummies")}
+        {commaEditable("Target Yield", targetYieldUnits, setTargetYieldUnits, "gummies")}
       </div>
     </div>
   );

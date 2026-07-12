@@ -60,7 +60,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("gummy_formula_versions")
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, yield_pct, notes, created_at, created_by_email",
     )
     .eq("formula_id", id)
     .order("version_num", { ascending: false });
@@ -155,13 +155,14 @@ export async function POST(
     fixedLossKgPerDay: number;
     gummyPieceWeightG: number;
     wetCastPieceWeightG: number;
+    targetYieldUnits: number;
     yieldPct: number;
   } = { ...FORMULA_VERSION_DEFAULTS };
   if (formulaRow.latest_version_num > 0) {
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims",
+        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, yield_pct, ingredients, process_notes, label_claims",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -181,6 +182,10 @@ export async function POST(
       currentParams = {
         benchBatchG: Number(prev.bench_batch_g),
         batchKg: Number(prev.batch_kg),
+        targetYieldUnits:
+          prev.target_yield_units === null || prev.target_yield_units === undefined
+            ? 0
+            : Number(prev.target_yield_units),
         batchesPerDay: Number(prev.batches_per_day),
         fixedLossKgPerDay: Number(prev.fixed_loss_kg_per_day),
         gummyPieceWeightG: Number(prev.gummy_piece_weight_g),
@@ -199,9 +204,42 @@ export async function POST(
 
   const nextVersionNum = (formulaRow.latest_version_num || 0) + 1;
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("gummy_formula_versions")
     .insert({
+      formula_id: id,
+      version_num: nextVersionNum,
+      bench_batch_g: body.benchBatchG ?? currentParams.benchBatchG,
+      batch_kg: body.batchKg ?? currentParams.batchKg,
+      target_yield_units: body.targetYieldUnits ?? currentParams.targetYieldUnits,
+      batches_per_day: body.batchesPerDay ?? currentParams.batchesPerDay,
+      fixed_loss_kg_per_day: body.fixedLossKgPerDay ?? currentParams.fixedLossKgPerDay,
+      gummy_piece_weight_g: body.gummyPieceWeightG ?? currentParams.gummyPieceWeightG,
+      wet_cast_piece_weight_g:
+        body.wetCastPieceWeightG ?? currentParams.wetCastPieceWeightG,
+      yield_pct: body.yieldPct ?? currentParams.yieldPct,
+      ingredients: Array.isArray(body.ingredients) ? body.ingredients : currentIngredients,
+      process_notes:
+        body.processNotes && typeof body.processNotes === "object"
+          ? body.processNotes
+          : currentProcessNotes,
+      label_claims: Array.isArray(body.labelClaims)
+        ? body.labelClaims
+        : currentLabelClaims,
+      notes: body.notes ?? null,
+      created_by_email: user.email,
+    })
+    .select(
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+    )
+    .single();
+  // v51.3 fallback: if sql/gummy_versions_target_yield.sql hasn't been
+  // applied yet, the insert above fails on the unknown column — retry
+  // without it so saving keeps working during the migration window.
+  if (error && /target_yield_units/.test(error.message)) {
+    ({ data, error } = await supabase
+      .from("gummy_formula_versions")
+      .insert({
       formula_id: id,
       version_num: nextVersionNum,
       bench_batch_g: body.benchBatchG ?? currentParams.benchBatchG,
@@ -226,7 +264,8 @@ export async function POST(
     .select(
       "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
     )
-    .single();
+      .single());
+  }
 
   if (error || !data) {
     console.error("new formula version insert failed:", error?.message);
