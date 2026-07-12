@@ -4413,8 +4413,64 @@ function ScaleUpBlendCards({
     </section>
   );
 
+  // Mirrors the bench top's Batch Setup card — same stat labels, blank
+  // values until the scaling rules are defined (same as the blend cards).
+  const stat = (label: string, suffix: string) => (
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.09em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+        }}
+      >
+        {tr(label)}
+      </div>
+      <div style={{ textAlign: "right", marginTop: 2 }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-1, #1f2a2d)" }}>
+          {DASH}
+        </span>{" "}
+        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>{tr(suffix)}</span>
+      </div>
+    </div>
+  );
+
   return (
     <div>
+      <div
+        style={{
+          display: "inline-block",
+          minWidth: 220,
+          border: "1px solid var(--line, #e3dcc9)",
+          borderRadius: 8,
+          background: "var(--paper, #fffdf8)",
+          padding: "14px 16px",
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+            borderBottom: "1px solid var(--line, #e3dcc9)",
+            paddingBottom: 4,
+            marginBottom: 8,
+          }}
+        >
+          {tr("Batch Setup")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {stat("Bench top batch size", "g")}
+          {stat("Finished piece weight (dry)", "g")}
+          {stat("Cast weight (wet)", "g")}
+          {stat("Theoretical Yield", "gummies")}
+        </div>
+      </div>
       {card(
         "Pre-cook blend",
         "Ingredients weighed in before being cooked.",
