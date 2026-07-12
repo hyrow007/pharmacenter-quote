@@ -3092,7 +3092,12 @@ export default function FormulaEditor({
       )}
       {tab === "scale" && !printing && (
         <div style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap", marginBottom: 14 }}>
-          <ScaleUpBatchSetupCard />
+          <ScaleUpBatchSetupCard
+            gummyPieceWeightG={gummyPieceWeightG}
+            setGummyPieceWeightG={setGummyPieceWeightG}
+            wetCastPieceWeightG={wetCastPieceWeightG}
+            setWetCastPieceWeightG={setWetCastPieceWeightG}
+          />
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}
@@ -4247,7 +4252,17 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 // scale-up parameter card (same left/right layout as the bench top's
 // Batch Setup + Key Indicators row). Values blank until scaling rules
 // are defined.
-function ScaleUpBatchSetupCard() {
+function ScaleUpBatchSetupCard({
+  gummyPieceWeightG,
+  setGummyPieceWeightG,
+  wetCastPieceWeightG,
+  setWetCastPieceWeightG,
+}: {
+  gummyPieceWeightG: number;
+  setGummyPieceWeightG: (n: number) => void;
+  wetCastPieceWeightG: number;
+  setWetCastPieceWeightG: (n: number) => void;
+}) {
   const tr = makeTr(useLang());
   const DASH = "\u2014";
   const stat = (label: string, suffix: string) => (
@@ -4271,6 +4286,32 @@ function ScaleUpBatchSetupCard() {
       </div>
     </div>
   );
+  // Piece + cast weight edit the SAME state as the bench-top card, so
+  // they carry over automatically and edits here reflect there (and
+  // persist through the same autosave path).
+  const editable = (
+    label: string,
+    value: number,
+    onChange: (n: number) => void,
+  ) => (
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.09em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+        }}
+      >
+        {tr(label)}
+      </div>
+      <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
+        <NumberInput value={value} onChange={onChange} suffix="g" step="0.1" min={0} />
+      </div>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -4296,9 +4337,9 @@ function ScaleUpBatchSetupCard() {
         {tr("Batch Setup")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {stat("Bench top batch size", "g")}
-        {stat("Finished piece weight (dry)", "g")}
-        {stat("Cast weight (wet)", "g")}
+        {stat("Batch size (pre-cooked)", "g")}
+        {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
+        {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
         {stat("Theoretical Yield", "gummies")}
       </div>
     </div>
