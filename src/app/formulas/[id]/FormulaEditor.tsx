@@ -3090,6 +3090,9 @@ export default function FormulaEditor({
         </>
       )}
       {tab === "scale" && !printing && (
+        <div style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap", marginBottom: 14 }}>
+          <ScaleUpBatchSetupCard />
+          <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}
           setBatchKg={setBatchKg}
@@ -3103,6 +3106,8 @@ export default function FormulaEditor({
           setYieldPct={setYieldPct}
           effectiveYield={cost.dailyEffectiveYield}
         />
+          </div>
+        </div>
       )}
       {tab === "cost" && !printing && (
         <CostTab
@@ -4237,6 +4242,68 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 
 // --- Cost tab ----------------------------------------------------------------
 
+// v51.2: bench-top Batch Setup mirror, rendered side by side with the
+// scale-up parameter card (same left/right layout as the bench top's
+// Batch Setup + Key Indicators row). Values blank until scaling rules
+// are defined.
+function ScaleUpBatchSetupCard() {
+  const tr = makeTr(useLang());
+  const DASH = "\u2014";
+  const stat = (label: string, suffix: string) => (
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.09em",
+          textTransform: "uppercase",
+          color: "var(--ink-3, #8a9498)",
+        }}
+      >
+        {tr(label)}
+      </div>
+      <div style={{ textAlign: "right", marginTop: 2 }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-1, #1f2a2d)" }}>
+          {DASH}
+        </span>{" "}
+        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>{tr(suffix)}</span>
+      </div>
+    </div>
+  );
+  return (
+    <div
+      style={{
+        flex: "0 0 220px",
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        padding: "14px 16px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color: "var(--teal-900, #0f4a56)",
+          borderBottom: "1px solid var(--line, #e3dcc9)",
+          paddingBottom: 4,
+          marginBottom: 8,
+        }}
+      >
+        {tr("Batch Setup")}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {stat("Bench top batch size", "g")}
+        {stat("Finished piece weight (dry)", "g")}
+        {stat("Cast weight (wet)", "g")}
+        {stat("Theoretical Yield", "gummies")}
+      </div>
+    </div>
+  );
+}
+
 // v51.1: Scale up mirrors the bench-top card structure 1:1 — the
 // Pre-cook card and the Cooked card with all three subsections and the
 // same column sets — as a READ-ONLY scaffold. Per the operator's spec,
@@ -4413,64 +4480,8 @@ function ScaleUpBlendCards({
     </section>
   );
 
-  // Mirrors the bench top's Batch Setup card — same stat labels, blank
-  // values until the scaling rules are defined (same as the blend cards).
-  const stat = (label: string, suffix: string) => (
-    <div>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-        }}
-      >
-        {tr(label)}
-      </div>
-      <div style={{ textAlign: "right", marginTop: 2 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-1, #1f2a2d)" }}>
-          {DASH}
-        </span>{" "}
-        <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>{tr(suffix)}</span>
-      </div>
-    </div>
-  );
-
   return (
     <div>
-      <div
-        style={{
-          display: "inline-block",
-          minWidth: 220,
-          border: "1px solid var(--line, #e3dcc9)",
-          borderRadius: 8,
-          background: "var(--paper, #fffdf8)",
-          padding: "14px 16px",
-          marginBottom: 14,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            color: "var(--teal-900, #0f4a56)",
-            borderBottom: "1px solid var(--line, #e3dcc9)",
-            paddingBottom: 4,
-            marginBottom: 8,
-          }}
-        >
-          {tr("Batch Setup")}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {stat("Bench top batch size", "g")}
-          {stat("Finished piece weight (dry)", "g")}
-          {stat("Cast weight (wet)", "g")}
-          {stat("Theoretical Yield", "gummies")}
-        </div>
-      </div>
       {card(
         "Pre-cook blend",
         "Ingredients weighed in before being cooked.",
