@@ -3161,7 +3161,7 @@ export default function FormulaEditor({
           manual IngredientTable remains only on Material costing until
           that tab gets the same treatment. */}
       {tab === "scale" && !printing ? (
-        <ScaleUpBlendCards groups={phaseIngredients.groups} rmById={rmById} />
+        <ScaleUpBlendCards groups={phaseIngredients.groups} rmById={rmById} batchKg={batchKg} />
       ) : null}
       {tab === "cost" && !printing ? (
         <IngredientTable
@@ -4415,12 +4415,30 @@ function ScaleUpBatchSetupCard({
 function ScaleUpBlendCards({
   groups,
   rmById,
+  batchKg,
 }: {
   groups: Record<string, GummyFormulaIngredient[]>;
   rmById: Map<string, RawMaterialOption>;
+  batchKg: number;
 }) {
   const tr = makeTr(useLang());
   const DASH = "\u2014";
+
+  // v51.6: first scaling rule (operator spec). The pre-cook Primary
+  // Blend scales linearly from the bench top: the ratio is
+  //   batchKg (in grams) ÷ TOTAL PRIMARY BLEND (bench grams)
+  // e.g. F0001: 100,000 g ÷ 260.50 g = 383.87716× — every Primary
+  // Blend row is its bench grams times that ratio, and the section
+  // total lands exactly on the Batch size (pre-cook blend) value.
+  // Cooked-card sections remain dashed until their rules are defined.
+  const totalPrimaryG = (groups["pre-cook"] ?? []).reduce(
+    (sum, r) => sum + (Number(r.grams) || 0),
+    0,
+  );
+  const preCookKg = (grams: number) =>
+    totalPrimaryG > 0 ? (grams * batchKg) / totalPrimaryG : 0;
+  const fmtKg = (kg: number) =>
+    `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
 
   const th: React.CSSProperties = {
     padding: "8px 12px",
@@ -4482,6 +4500,7 @@ function ScaleUpBlendCards({
     rows: GummyFormulaIngredient[],
     cols: string[],
     totalLabel: string,
+    kgValue?: (r: GummyFormulaIngredient) => number,
   ) => (
     <div
       style={{
@@ -4518,8 +4537,8 @@ function ScaleUpBlendCards({
             <tr key={r.id} style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
               {rowName(r)}
               {cols.map((c) => (
-                <td key={c} style={td}>
-                  {DASH}
+                <td key={c} style={c === "Kilograms" && kgValue ? { ...td, color: "var(--ink-1, #1f2a2d)", fontWeight: 600 } : td}>
+                  {c === "Kilograms" && kgValue ? fmtKg(kgValue(r)) : DASH}
                 </td>
               ))}
             </tr>
@@ -4539,8 +4558,10 @@ function ScaleUpBlendCards({
               {tr(totalLabel)}
             </td>
             {cols.map((c) => (
-              <td key={c} style={{ ...td, fontWeight: 700 }}>
-                {DASH}
+              <td key={c} style={{ ...td, fontWeight: 700, ...(c === "Kilograms" && kgValue ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
+                {c === "Kilograms" && kgValue
+                  ? fmtKg(rows.reduce((sum, r) => sum + kgValue(r), 0))
+                  : DASH}
               </td>
             ))}
           </tr>
@@ -4587,7 +4608,13 @@ function ScaleUpBlendCards({
       {card(
         "Pre-cook blend",
         "Ingredients weighed in before being cooked.",
-        section("Primary Blend", groups["pre-cook"] ?? [], ["Kilograms"], "Total primary blend"),
+        section(
+          "Primary Blend",
+          groups["pre-cook"] ?? [],
+          ["Kilograms"],
+          "Total primary blend",
+          (r) => preCookKg(Number(r.grams) || 0),
+        ),
       )}
       {card(
         "Cooked blend",
@@ -4631,7 +4658,7 @@ function ScaleUpBlendCards({
         </>,
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
-        {tr("Mirrors the bench-top formula. Production values to be defined.")}
+        {tr("Pre-cook blend scales from the bench top: batch size ÷ total primary blend. Remaining values to be defined.")}
       </div>
     </div>
   );
