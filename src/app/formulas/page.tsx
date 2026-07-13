@@ -19,6 +19,10 @@ import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
 // Server-renders the initial list; the client island (FormulasCatalog)
 // owns search + shape filter + "+ New formula" and refetches on demand.
 
+// v51.5: formula pages carry their own tab title — the root layout's
+// "PharmaCenter — Quote" was showing on the formula subdomain.
+export const metadata = { title: "PharmaCenter — Formulas" };
+
 export default async function FormulasPage() {
   const lang = await getLangFromCookie();
   const t = makeT(lang);

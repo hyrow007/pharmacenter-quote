@@ -24,6 +24,10 @@ import {
 // catalog (so the ingredient picker can render without a second round
 // trip), then hands off to the client island.
 
+// v51.5: tab title for the editor. Static "Formulas" branding — the
+// page itself renders the formula number prominently.
+export const metadata = { title: "PharmaCenter — Formulas" };
+
 export default async function FormulaEditorPage({
   params,
 }: {
