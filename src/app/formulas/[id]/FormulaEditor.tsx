@@ -3161,7 +3161,12 @@ export default function FormulaEditor({
           manual IngredientTable remains only on Material costing until
           that tab gets the same treatment. */}
       {tab === "scale" && !printing ? (
-        <ScaleUpBlendCards groups={phaseIngredients.groups} rmById={rmById} batchKg={batchKg} />
+        <ScaleUpBlendCards
+          groups={phaseIngredients.groups}
+          rmById={rmById}
+          batchKg={batchKg}
+          benchBatchG={benchBatchG}
+        />
       ) : null}
       {tab === "cost" && !printing ? (
         <IngredientTable
@@ -4416,10 +4421,12 @@ function ScaleUpBlendCards({
   groups,
   rmById,
   batchKg,
+  benchBatchG,
 }: {
   groups: Record<string, GummyFormulaIngredient[]>;
   rmById: Map<string, RawMaterialOption>;
   batchKg: number;
+  benchBatchG: number;
 }) {
   const tr = makeTr(useLang());
   const DASH = "\u2014";
@@ -4437,6 +4444,38 @@ function ScaleUpBlendCards({
   );
   const preCookKg = (grams: number) =>
     totalPrimaryG > 0 ? (grams * batchKg) / totalPrimaryG : 0;
+
+  // v51.7: Primary Blend Carry Over (operator spec) — the percentage
+  // columns CARRY OVER unchanged from the bench top (they're ratios,
+  // scale-invariant), and the kilograms flow through the identical
+  // moisture-loss functions the bench card uses, applied to the scaled
+  // inputs. Reusing the same helpers guarantees the two cards agree.
+  const preCookRows = groups["pre-cook"] ?? [];
+  const secondaryG = (groups["cooked"] ?? []).reduce((sum, r) => sum + (Number(r.grams) || 0), 0);
+  const finalG = (groups["final"] ?? []).reduce((sum, r) => sum + (Number(r.grams) || 0), 0);
+  const carryWaterPct = computeCarryOverWaterPct({
+    preCookRows,
+    benchBatchG,
+    secondaryG,
+    finalG,
+  });
+  const carryLossPct = (r: GummyFormulaIngredient): number => {
+    if (isWaterRow(r)) return carryWaterPct;
+    const raw = Number(r.moistureLossPct);
+    return Number.isFinite(raw) ? raw : carryOverDefaultMoisturePct(r);
+  };
+  const benchNetG = (r: GummyFormulaIngredient) =>
+    (Number(r.grams) || 0) * (1 - carryLossPct(r) / 100);
+  const carryNetKg = (r: GummyFormulaIngredient) =>
+    preCookKg(Number(r.grams) || 0) * (1 - carryLossPct(r) / 100);
+  // Grand Total Cooked Blend, bench basis — carry-over net + secondary
+  // + final (equals the bench batch size by water-balance construction).
+  const grandCookedG =
+    preCookRows.reduce((sum, r) => sum + benchNetG(r), 0) + secondaryG + finalG;
+  const carryPctFin = (r: GummyFormulaIngredient) =>
+    grandCookedG > 0 ? (benchNetG(r) / grandCookedG) * 100 : 0;
+  const carryResid = (r: GummyFormulaIngredient) =>
+    waterFractionFor(r) * carryPctFin(r);
   const fmtKg = (kg: number) =>
     `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
 
@@ -4500,7 +4539,8 @@ function ScaleUpBlendCards({
     rows: GummyFormulaIngredient[],
     cols: string[],
     totalLabel: string,
-    kgValue?: (r: GummyFormulaIngredient) => number,
+    valueFor?: (col: string, r: GummyFormulaIngredient) => string | null,
+    totalFor?: (col: string) => string | null,
   ) => (
     <div
       style={{
@@ -4536,11 +4576,14 @@ function ScaleUpBlendCards({
           {rows.map((r) => (
             <tr key={r.id} style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
               {rowName(r)}
-              {cols.map((c) => (
-                <td key={c} style={c === "Kilograms" && kgValue ? { ...td, color: "var(--ink-1, #1f2a2d)", fontWeight: 600 } : td}>
-                  {c === "Kilograms" && kgValue ? fmtKg(kgValue(r)) : DASH}
-                </td>
-              ))}
+              {cols.map((c) => {
+                const v = valueFor ? valueFor(c, r) : null;
+                return (
+                  <td key={c} style={v !== null ? { ...td, color: "var(--ink-1, #1f2a2d)", fontWeight: 600 } : td}>
+                    {v ?? DASH}
+                  </td>
+                );
+              })}
             </tr>
           ))}
           <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
@@ -4557,13 +4600,14 @@ function ScaleUpBlendCards({
             >
               {tr(totalLabel)}
             </td>
-            {cols.map((c) => (
-              <td key={c} style={{ ...td, fontWeight: 700, ...(c === "Kilograms" && kgValue ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
-                {c === "Kilograms" && kgValue
-                  ? fmtKg(rows.reduce((sum, r) => sum + kgValue(r), 0))
-                  : DASH}
-              </td>
-            ))}
+            {cols.map((c) => {
+              const v = totalFor ? totalFor(c) : null;
+              return (
+                <td key={c} style={{ ...td, fontWeight: 700, ...(v !== null ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
+                  {v ?? DASH}
+                </td>
+              );
+            })}
           </tr>
         </tbody>
       </table>
@@ -4613,7 +4657,11 @@ function ScaleUpBlendCards({
           groups["pre-cook"] ?? [],
           ["Kilograms"],
           "Total primary blend",
-          (r) => preCookKg(Number(r.grams) || 0),
+          (c, r) => (c === "Kilograms" ? fmtKg(preCookKg(Number(r.grams) || 0)) : null),
+          (c) =>
+            c === "Kilograms"
+              ? fmtKg(preCookRows.reduce((sum, r) => sum + preCookKg(Number(r.grams) || 0), 0))
+              : null,
         ),
       )}
       {card(
@@ -4625,6 +4673,23 @@ function ScaleUpBlendCards({
             groups["pre-cook"] ?? [],
             ["Moisture Loss", "Kilograms", "% of finished product", "Residual Moisture %"],
             "Total primary blend carry over",
+            (c, r) => {
+              if (c === "Moisture Loss") return `${Format.pctCompact(carryLossPct(r))} %`;
+              if (c === "Kilograms") return fmtKg(carryNetKg(r));
+              if (c === "% of finished product") return `${Format.pctCompact(carryPctFin(r))}%`;
+              if (c === "Residual Moisture %")
+                return waterFractionFor(r) > 0 ? `${Format.pctCompact(carryResid(r))}%` : null;
+              return null;
+            },
+            (c) => {
+              if (c === "Kilograms")
+                return fmtKg(preCookRows.reduce((sum, r) => sum + carryNetKg(r), 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(preCookRows.reduce((sum, r) => sum + carryPctFin(r), 0))}%`;
+              if (c === "Residual Moisture %")
+                return `${Format.pctCompact(preCookRows.reduce((sum, r) => sum + carryResid(r), 0))}%`;
+              return null;
+            },
           )}
           {section(
             "Secondary Blend",
