@@ -4448,16 +4448,23 @@ function ScaleUpBlendCards({
   const preCookKg = (grams: number) =>
     totalPrimaryG > 0 ? (grams * batchKg) / totalPrimaryG : 0;
 
-  // v51.8: Secondary + Final Blend scaling (operator spec) — calculated
-  // the same way as the Primary Blend except the reference value is the
-  // CFA BATCH SIZE from the Batch Setup card instead of Batch size
-  // (pre-cook blend):
-  //   kg = bench grams × (cfaBatchKg ÷ TOTAL PRIMARY BLEND bench grams)
-  // e.g. F0001 at CFA 25 kg: 25,000 g ÷ 260.50 g = 95.9693×. The
+  // v51.9: Secondary + Final Blend scaling (operator spec, corrected) —
+  // same shape as the Primary Blend rule but referenced to the COOKED
+  // side: the bench TOTAL PRIMARY BLEND CARRY OVER (net grams) relates
+  // to the CFA BATCH SIZE on the Batch Setup card:
+  //   kg = bench grams × (cfaBatchKg ÷ TOTAL CARRY OVER bench net grams)
+  // e.g. F0001 at CFA 25 kg: 25,000 g ÷ 223.82 g = 111.697×. The
   // percentage columns work exactly like the bench card (they're
   // scale-invariant ratios of the bench grand total cooked blend).
-  const cfaKg = (grams: number) =>
-    totalPrimaryG > 0 ? (grams * cfaBatchKg) / totalPrimaryG : 0;
+  // NOTE: defined as a lazy function — benchNetG below isn't initialized
+  // yet at this point in the body, but every call happens at render.
+  const cfaKg = (grams: number) => {
+    const carryNetTotalG = (groups["pre-cook"] ?? []).reduce(
+      (s, r) => s + benchNetG(r),
+      0,
+    );
+    return carryNetTotalG > 0 ? (grams * cfaBatchKg) / carryNetTotalG : 0;
+  };
 
   // v51.7: Primary Blend Carry Over (operator spec) — the percentage
   // columns CARRY OVER unchanged from the bench top (they're ratios,
@@ -4799,7 +4806,7 @@ function ScaleUpBlendCards({
         </>,
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
-        {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend.")}
+        {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.")}
       </div>
     </div>
   );

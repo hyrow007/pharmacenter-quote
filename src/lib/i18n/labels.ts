@@ -172,8 +172,8 @@ const es: Record<string, string> = {
     "Refleja la fórmula de mesa. Los valores de producción están por definirse.",
   "Pre-cook blend scales from the bench top: batch size ÷ total primary blend. Remaining values to be defined.":
     "La mezcla de precocción se escala desde la mesa: tamaño de lote ÷ total de mezcla primaria. Los demás valores están por definirse.",
-  "Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend.":
-    "La mezcla de precocción se escala por tamaño de lote ÷ total de mezcla primaria; las mezclas secundaria y final por tamaño de lote CFA ÷ total de mezcla primaria.",
+  "Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.":
+    "La mezcla de precocción se escala por tamaño de lote ÷ total de mezcla primaria; las mezclas secundaria y final por tamaño de lote CFA ÷ total de arrastre de mezcla primaria.",
   // ---- Derived scale-up table (v51) ----
   "Kg / batch": "Kg / lote",
   "Total weighed input": "Total de entrada pesada",
