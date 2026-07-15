@@ -4658,7 +4658,11 @@ function ScaleUpBlendCards({
       >
         {tr(subhead)}
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      {/* table-layout: fixed — data columns hold their exact 130px (and
+          the picker column its 44px) so the Kilograms / % / Residual
+          columns land on identical x-positions in EVERY section table
+          and the grand-total band, regardless of column count. */}
+      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
         <thead>
           <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
             <th style={{ ...th, textAlign: "left" }}>{tr("Ingredient")}</th>
@@ -4961,7 +4965,7 @@ function ScaleUpBlendCards({
                   overflow: "hidden",
                 }}
               >
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                   <tbody>
                     <tr>
                       <td
