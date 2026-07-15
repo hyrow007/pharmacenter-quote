@@ -4928,52 +4928,68 @@ function ScaleUpBlendCards({
             [finalDec, setFinalDec],
           )}
           {(() => {
-            // Grand Total Cooked Blend \u2014 sums the three sections the same
-            // way the bench card does: carry-over net + secondary + final.
-            // Kilograms are the section totals' sum (carry-over on the
-            // pre-cook batch basis, secondary/final on the CFA basis, per
-            // the operator's scaling rules); % of finished is 100% by
-            // construction; residual is the sum of the three sections'
-            // residual totals.
+            // Grand Total CFA Batch \u2014 sums THIS card's three sections:
+            // transferred cooked primary blend (= CFA Batch Size by
+            // construction) + secondary + final, all on the CFA basis.
+            // % of finished sums to 100% across the card; residual is the
+            // sum of the three sections' residual totals. Rendered as a
+            // table with the same right-anchored column widths as the
+            // sections above so the values line up with their columns.
             const secRows = groups["cooked"] ?? [];
             const finRows = groups["final"] ?? [];
             const grandKg =
-              preCookRows.reduce((s, r) => s + carryNetKg(r), 0) +
+              preCookRows.reduce((s, r) => s + cfaKg(benchNetG(r)), 0) +
               secRows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0) +
               finRows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0);
             const grandResid =
               preCookRows.reduce((s, r) => s + carryResid(r), 0) +
               secRows.reduce((s, r) => s + blendResid(r, false), 0) +
               finRows.reduce((s, r) => s + blendResid(r, true), 0);
+            const grandTd: React.CSSProperties = {
+              ...td,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+              whiteSpace: "nowrap",
+            };
             return (
               <div
                 style={{
-                  borderTop: "2px solid var(--teal-700, #1d6c7b)",
+                  border: "1.5px solid var(--teal-700, #1d6c7b)",
+                  borderRadius: 8,
+                  margin: "12px 14px",
                   background: "var(--cream-soft, #fbf6ec)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "12px 14px",
-                  fontWeight: 700,
-                  fontSize: 12,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "var(--teal-900, #0f4a56)",
+                  overflow: "hidden",
                 }}
               >
-                <span>{tr("Grand Total Cooked Blend")}</span>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    gap: 22,
-                    alignItems: "center",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  <span>{fmtKg(grandKg, grandDec)}</span>
-                  <span>100%</span>
-                  <span>{Format.pctCompact(grandResid)}%</span>
-                  {decPicker(grandDec, setGrandDec)}
-                </span>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <tbody>
+                    <tr>
+                      <td
+                        style={{
+                          ...td,
+                          textAlign: "left",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          color: "var(--teal-900, #0f4a56)",
+                        }}
+                      >
+                        {tr("Grand Total CFA Batch")}
+                      </td>
+                      <td style={{ ...grandTd, width: 130 }}>
+                        {fmtKg(grandKg, grandDec)}
+                      </td>
+                      <td style={{ ...grandTd, width: 130 }}>100%</td>
+                      <td style={{ ...grandTd, width: 130 }}>
+                        {Format.pctCompact(grandResid)}%
+                      </td>
+                      <td style={{ ...td, width: 44, padding: "8px 6px" }}>
+                        {decPicker(grandDec, setGrandDec)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             );
           })()}
