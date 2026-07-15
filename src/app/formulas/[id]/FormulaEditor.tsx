@@ -4513,6 +4513,13 @@ function ScaleUpBlendCards({
     isSolutionRow(r) && !includeSolutions ? 0 : waterFractionFor(r);
   const blendResid = (r: GummyFormulaIngredient, includeSolutions: boolean) =>
     blendWaterFrac(r, includeSolutions) * blendPctFin(r);
+  // Total Moisture Loss % — weighted aggregate across the carry-over
+  // rows: (gross input − net carry-over) ÷ gross input. Scale-invariant,
+  // so the bench card, the carry-over section, and the CFA tank section
+  // all show the same value.
+  const carryNetTotalBenchG = preCookRows.reduce((s, r) => s + benchNetG(r), 0);
+  const totalMoistureLossPct =
+    totalPrimaryG > 0 ? (1 - carryNetTotalBenchG / totalPrimaryG) * 100 : 0;
   const fmtKg = (kg: number) =>
     `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
 
@@ -4721,6 +4728,8 @@ function ScaleUpBlendCards({
               return null;
             },
             (c) => {
+              if (c === "Moisture Loss")
+                return `${Format.pctCompact(totalMoistureLossPct)} %`;
               if (c === "Kilograms")
                 return fmtKg(preCookRows.reduce((sum, r) => sum + carryNetKg(r), 0));
               if (c === "% of finished product")
@@ -4751,6 +4760,8 @@ function ScaleUpBlendCards({
               return null;
             },
             (c) => {
+              if (c === "Moisture Loss")
+                return `${Format.pctCompact(totalMoistureLossPct)} %`;
               if (c === "Kilograms")
                 return fmtKg(preCookRows.reduce((s, r) => s + cfaKg(benchNetG(r)), 0));
               if (c === "% of finished product")
@@ -5938,6 +5949,18 @@ function BlendSectionCard({
               : 0;
           return s + wf * pctOfFinished;
         }, 0);
+        // Total Moisture Loss % — the weighted aggregate across every
+        // carry-over row: (gross input − net carry-over) ÷ gross input.
+        // This is the loss the operator actually cooks off, so it belongs
+        // in the total row under the Moisture Loss column.
+        const totalGrossGrams = carryOverRows.reduce(
+          (s, r) => s + (Number(r.grams) || 0),
+          0,
+        );
+        const totalMoistureLossPct =
+          totalGrossGrams > 0
+            ? (1 - totalNetGrams / totalGrossGrams) * 100
+            : 0;
         return (
           <div className="fe-blend-panel">
             {/* Subheading — mirrors the "Secondary Blend" / "Final Blend"
@@ -6427,17 +6450,26 @@ function BlendSectionCard({
                       {tr("Total primary blend carry over")}
                     </strong>
                   </BTd>
-                  {/* Total-row moisture-loss placeholder — no aggregate
-                      percentage makes sense here (each row has its own
-                      loss), so just show a small em-dash. */}
+                  {/* Total Moisture Loss — weighted aggregate across the
+                      carry-over rows: (gross − net) ÷ gross. */}
                   <BTd
                     style={{
                       textAlign: "right",
-                      color: "var(--ink-3, #8a9498)",
-                      fontWeight: 400,
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    —
+                    <span>{Format.pctCompact(totalMoistureLossPct)}</span>
+                    <span
+                      style={{
+                        color: "var(--ink-3, #8a9498)",
+                        fontWeight: 400,
+                      }}
+                    >
+                      {" %"}
+                    </span>
                   </BTd>
                   <BTd
                     style={{
