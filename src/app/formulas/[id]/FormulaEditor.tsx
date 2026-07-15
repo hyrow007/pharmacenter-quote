@@ -4998,6 +4998,10 @@ function ScaleUpBlendCards({
             );
           })()}
         </>,
+        // "cooked" variant reuses the bench card's sticky-banner CSS so
+        // the CFA Batch header freezes below the app nav while its
+        // sections scroll underneath.
+        "cooked",
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
         {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.")}
