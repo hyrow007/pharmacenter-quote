@@ -4667,6 +4667,9 @@ function ScaleUpBlendCards({
                 {tr(c)}
               </th>
             ))}
+            {/* Trailing utility column — hosts the decimal chevrons in
+                the total row, same placement as the bench top card. */}
+            {dec ? <th style={{ ...th, width: 44 }} /> : null}
           </tr>
         </thead>
         <tbody>
@@ -4681,6 +4684,7 @@ function ScaleUpBlendCards({
                   </td>
                 );
               })}
+              {dec ? <td style={td} /> : null}
             </tr>
           ))}
           <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
@@ -4699,20 +4703,19 @@ function ScaleUpBlendCards({
             </td>
             {cols.map((c) => {
               const v = totalFor ? totalFor(c) : null;
-              const showPicker = c === "Kilograms" && dec !== undefined;
               return (
                 <td key={c} style={{ ...td, fontWeight: 700, whiteSpace: "nowrap", ...(v !== null ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
-                  {showPicker ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <span>{v ?? DASH}</span>
-                      {decPicker(dec[0], dec[1])}
-                    </span>
-                  ) : (
-                    v ?? DASH
-                  )}
+                  {v ?? DASH}
                 </td>
               );
             })}
+            {/* Decimal chevrons — trailing cell of the total row, the
+                same spot they occupy on the bench top card. */}
+            {dec ? (
+              <td style={{ ...td, padding: "8px 6px" }}>
+                {decPicker(dec[0], dec[1])}
+              </td>
+            ) : null}
           </tr>
         </tbody>
       </table>
@@ -4960,18 +4963,10 @@ function ScaleUpBlendCards({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <span>{fmtKg(grandKg, grandDec)}</span>
-                    {decPicker(grandDec, setGrandDec)}
-                  </span>
+                  <span>{fmtKg(grandKg, grandDec)}</span>
                   <span>100%</span>
                   <span>{Format.pctCompact(grandResid)}%</span>
+                  {decPicker(grandDec, setGrandDec)}
                 </span>
               </div>
             );
