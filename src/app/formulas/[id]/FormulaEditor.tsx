@@ -4731,6 +4731,36 @@ function ScaleUpBlendCards({
             },
           )}
           {section(
+            "Transferred Cooked Primary Blend to CFA Tank",
+            groups["pre-cook"] ?? [],
+            ["Moisture Loss", "Kilograms", "% of finished product", "Residual Moisture %"],
+            "Total transferred to CFA tank",
+            (c, r) => {
+              // Same values as Primary Blend Carry Over, re-ratioed so the
+              // section's total kilograms equals the CFA Batch Size: each
+              // row is its bench NET grams × (cfaBatchKg ÷ total carry-over
+              // net grams). The percentage columns are scale-invariant and
+              // match the carry-over card exactly.
+              if (c === "Moisture Loss") return `${Format.pctCompact(carryLossPct(r))} %`;
+              if (c === "Kilograms") return fmtKg(cfaKg(benchNetG(r)));
+              if (c === "% of finished product") return `${Format.pctCompact(carryPctFin(r))}%`;
+              if (c === "Residual Moisture %")
+                return waterFractionFor(r) > 0 && !isSolutionRow(r)
+                  ? `${Format.pctCompact(carryResid(r))}%`
+                  : null;
+              return null;
+            },
+            (c) => {
+              if (c === "Kilograms")
+                return fmtKg(preCookRows.reduce((s, r) => s + cfaKg(benchNetG(r)), 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(preCookRows.reduce((s, r) => s + carryPctFin(r), 0))}%`;
+              if (c === "Residual Moisture %")
+                return `${Format.pctCompact(preCookRows.reduce((s, r) => s + carryResid(r), 0))}%`;
+              return null;
+            },
+          )}
+          {section(
             "Secondary Blend",
             groups["cooked"] ?? [],
             ["Overage %", "Kilograms", "% of finished product", "Residual Moisture %"],

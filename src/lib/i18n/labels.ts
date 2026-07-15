@@ -67,6 +67,9 @@ const es: Record<string, string> = {
   // ---- Totals ----
   "Total primary blend": "Total mezcla primaria",
   "Total primary blend carry over": "Total arrastre mezcla primaria",
+  "Transferred Cooked Primary Blend to CFA Tank":
+    "Mezcla primaria cocida transferida al tanque CFA",
+  "Total transferred to CFA tank": "Total transferido al tanque CFA",
   "Total secondary blend": "Total mezcla secundaria",
   "Total final blend": "Total mezcla final",
   "Grand Total Cooked Blend": "Gran total de mezcla cocida",
