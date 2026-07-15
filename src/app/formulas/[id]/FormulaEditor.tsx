@@ -4434,6 +4434,58 @@ function ScaleUpBlendCards({
   const tr = makeTr(useLang());
   const DASH = "\u2014";
 
+  // v52: per-section decimal pickers \u2014 mirrors the bench card's chevron
+  // controls (< drops one decimal, > adds one; range 0\u20134). Each section
+  // owns its precision independently, exactly like the bench top tab.
+  const [primaryDec, setPrimaryDec] = useState<number>(3);
+  const [carryDec, setCarryDec] = useState<number>(3);
+  const [tankDec, setTankDec] = useState<number>(3);
+  const [secDec, setSecDec] = useState<number>(3);
+  const [finalDec, setFinalDec] = useState<number>(3);
+  const [grandDec, setGrandDec] = useState<number>(3);
+  const decBtnStyle = (off: boolean): React.CSSProperties => ({
+    width: 16,
+    height: 18,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    color: off ? "var(--ink-4, #c7cccf)" : "var(--ink-3, #8a9498)",
+    background: "transparent",
+    border: "1px solid var(--line, #e3dcc9)",
+    borderRadius: 3,
+    padding: 0,
+    cursor: off ? "default" : "pointer",
+  });
+  const decPicker = (
+    d: number,
+    setD: React.Dispatch<React.SetStateAction<number>>,
+  ) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+      <button
+        type="button"
+        onClick={() => setD((x) => Math.max(0, x - 1))}
+        disabled={d <= 0}
+        title="Fewer decimal places"
+        aria-label="Fewer decimal places"
+        style={decBtnStyle(d <= 0)}
+      >
+        &lt;
+      </button>
+      <button
+        type="button"
+        onClick={() => setD((x) => Math.min(4, x + 1))}
+        disabled={d >= 4}
+        title="More decimal places"
+        aria-label="More decimal places"
+        style={decBtnStyle(d >= 4)}
+      >
+        &gt;
+      </button>
+    </span>
+  );
+
   // v51.6: first scaling rule (operator spec). The pre-cook Primary
   // Blend scales linearly from the bench top: the ratio is
   //   batchKg (in grams) ÷ TOTAL PRIMARY BLEND (bench grams)
@@ -4520,8 +4572,8 @@ function ScaleUpBlendCards({
   const carryNetTotalBenchG = preCookRows.reduce((s, r) => s + benchNetG(r), 0);
   const totalMoistureLossPct =
     totalPrimaryG > 0 ? (1 - carryNetTotalBenchG / totalPrimaryG) * 100 : 0;
-  const fmtKg = (kg: number) =>
-    `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
+  const fmtKg = (kg: number, dec: number = 3) =>
+    `${kg.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec })} kg`;
 
   const th: React.CSSProperties = {
     padding: "8px 12px",
@@ -4585,6 +4637,7 @@ function ScaleUpBlendCards({
     totalLabel: string,
     valueFor?: (col: string, r: GummyFormulaIngredient) => string | null,
     totalFor?: (col: string) => string | null,
+    dec?: [number, React.Dispatch<React.SetStateAction<number>>],
   ) => (
     <div
       style={{
@@ -4646,9 +4699,17 @@ function ScaleUpBlendCards({
             </td>
             {cols.map((c) => {
               const v = totalFor ? totalFor(c) : null;
+              const showPicker = c === "Kilograms" && dec !== undefined;
               return (
-                <td key={c} style={{ ...td, fontWeight: 700, ...(v !== null ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
-                  {v ?? DASH}
+                <td key={c} style={{ ...td, fontWeight: 700, whiteSpace: "nowrap", ...(v !== null ? { color: "var(--teal-900, #0f4a56)" } : null) }}>
+                  {showPicker ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <span>{v ?? DASH}</span>
+                      {decPicker(dec[0], dec[1])}
+                    </span>
+                  ) : (
+                    v ?? DASH
+                  )}
                 </td>
               );
             })}
@@ -4662,22 +4723,25 @@ function ScaleUpBlendCards({
     title: string,
     hint: string,
     children: React.ReactNode,
-  ) => (
-    <section
-      style={{
-        border: "1.5px solid var(--teal-700, #1d6c7b)",
-        borderRadius: 8,
-        background: "var(--paper, #fffdf8)",
-        marginBottom: 14,
-        boxShadow: "0 1px 4px rgba(15, 74, 86, 0.10)",
-        overflow: "hidden",
-      }}
-    >
+    variant?: "pre-cook" | "cooked",
+  ) => {
+    // The cooked card reuses the bench card's sticky-banner CSS: the
+    // header sits inside a .fe-blend-unit--head wrapper (display:
+    // contents on screen) so `.fe-blend-card--cooked .fe-blend-unit--head
+    // > header` freezes it below the app nav while the card's sections
+    // scroll underneath — identical behaviour to the bench top tab.
+    const headerEl = (
       <header
         style={{
           padding: "14px 18px 12px",
           background: "var(--cream, #f6efe3)",
           borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+          // Per-corner radius mirrors the bench card — the cooked card
+          // needs overflow: visible for position: sticky to work, so the
+          // header rounds its own top corners instead of relying on the
+          // parent's overflow clip.
+          borderTopLeftRadius: 6,
+          borderTopRightRadius: 6,
         }}
       >
         <div style={{ fontSize: 20, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
@@ -4687,9 +4751,30 @@ function ScaleUpBlendCards({
           {tr(hint)}
         </div>
       </header>
-      {children}
-    </section>
-  );
+    );
+    return (
+      <section
+        className={variant ? `fe-blend-card fe-blend-card--${variant}` : undefined}
+        style={{
+          border: "1.5px solid var(--teal-700, #1d6c7b)",
+          borderRadius: 8,
+          background: "var(--paper, #fffdf8)",
+          marginBottom: 14,
+          boxShadow: "0 1px 4px rgba(15, 74, 86, 0.10)",
+          // overflow: visible (not hidden) — an overflow-clipping ancestor
+          // would break the cooked card's sticky banner.
+          overflow: "visible",
+        }}
+      >
+        {variant === "cooked" ? (
+          <div className="fe-blend-unit fe-blend-unit--head">{headerEl}</div>
+        ) : (
+          headerEl
+        )}
+        {children}
+      </section>
+    );
+  };
 
   return (
     <div>
@@ -4701,12 +4786,14 @@ function ScaleUpBlendCards({
           groups["pre-cook"] ?? [],
           ["Kilograms"],
           "Total primary blend",
-          (c, r) => (c === "Kilograms" ? fmtKg(preCookKg(Number(r.grams) || 0)) : null),
+          (c, r) => (c === "Kilograms" ? fmtKg(preCookKg(Number(r.grams) || 0), primaryDec) : null),
           (c) =>
             c === "Kilograms"
-              ? fmtKg(preCookRows.reduce((sum, r) => sum + preCookKg(Number(r.grams) || 0), 0))
+              ? fmtKg(preCookRows.reduce((sum, r) => sum + preCookKg(Number(r.grams) || 0), 0), primaryDec)
               : null,
+          [primaryDec, setPrimaryDec],
         ),
+        "pre-cook",
       )}
       {card(
         "Cooked blend",
@@ -4719,7 +4806,7 @@ function ScaleUpBlendCards({
             "Total primary blend carry over",
             (c, r) => {
               if (c === "Moisture Loss") return `${Format.pctCompact(carryLossPct(r))} %`;
-              if (c === "Kilograms") return fmtKg(carryNetKg(r));
+              if (c === "Kilograms") return fmtKg(carryNetKg(r), carryDec);
               if (c === "% of finished product") return `${Format.pctCompact(carryPctFin(r))}%`;
               if (c === "Residual Moisture %")
                 return waterFractionFor(r) > 0 && !isSolutionRow(r)
@@ -4731,13 +4818,14 @@ function ScaleUpBlendCards({
               if (c === "Moisture Loss")
                 return `${Format.pctCompact(totalMoistureLossPct)} %`;
               if (c === "Kilograms")
-                return fmtKg(preCookRows.reduce((sum, r) => sum + carryNetKg(r), 0));
+                return fmtKg(preCookRows.reduce((sum, r) => sum + carryNetKg(r), 0), carryDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(preCookRows.reduce((sum, r) => sum + carryPctFin(r), 0))}%`;
               if (c === "Residual Moisture %")
                 return `${Format.pctCompact(preCookRows.reduce((sum, r) => sum + carryResid(r), 0))}%`;
               return null;
             },
+            [carryDec, setCarryDec],
           )}
           {section(
             "Transferred Cooked Primary Blend to CFA Tank",
@@ -4751,7 +4839,7 @@ function ScaleUpBlendCards({
               // net grams). The percentage columns are scale-invariant and
               // match the carry-over card exactly.
               if (c === "Moisture Loss") return `${Format.pctCompact(carryLossPct(r))} %`;
-              if (c === "Kilograms") return fmtKg(cfaKg(benchNetG(r)));
+              if (c === "Kilograms") return fmtKg(cfaKg(benchNetG(r)), tankDec);
               if (c === "% of finished product") return `${Format.pctCompact(carryPctFin(r))}%`;
               if (c === "Residual Moisture %")
                 return waterFractionFor(r) > 0 && !isSolutionRow(r)
@@ -4763,13 +4851,14 @@ function ScaleUpBlendCards({
               if (c === "Moisture Loss")
                 return `${Format.pctCompact(totalMoistureLossPct)} %`;
               if (c === "Kilograms")
-                return fmtKg(preCookRows.reduce((s, r) => s + cfaKg(benchNetG(r)), 0));
+                return fmtKg(preCookRows.reduce((s, r) => s + cfaKg(benchNetG(r)), 0), tankDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(preCookRows.reduce((s, r) => s + carryPctFin(r), 0))}%`;
               if (c === "Residual Moisture %")
                 return `${Format.pctCompact(preCookRows.reduce((s, r) => s + carryResid(r), 0))}%`;
               return null;
             },
+            [tankDec, setTankDec],
           )}
           {section(
             "Secondary Blend",
@@ -4781,7 +4870,7 @@ function ScaleUpBlendCards({
                 return r.sourceLabelClaimId
                   ? `${Format.pctSigned(Number(r.overagePct) || 0)}%`
                   : null;
-              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0));
+              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0), secDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(blendPctFin(r))}%`;
               if (c === "Residual Moisture %")
@@ -4793,13 +4882,14 @@ function ScaleUpBlendCards({
             (c) => {
               const rows = groups["cooked"] ?? [];
               if (c === "Kilograms")
-                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0));
+                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0), secDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(rows.reduce((s, r) => s + blendPctFin(r), 0))}%`;
               if (c === "Residual Moisture %")
                 return `${Format.pctCompact(rows.reduce((s, r) => s + blendResid(r, false), 0))}%`;
               return null;
             },
+            [secDec, setSecDec],
           )}
           {section(
             "Final Blend",
@@ -4807,7 +4897,7 @@ function ScaleUpBlendCards({
             ["Kilograms", "% of finished product", "Residual Moisture %"],
             "Total final blend",
             (c, r) => {
-              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0));
+              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0), finalDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(blendPctFin(r))}%`;
               if (c === "Residual Moisture %")
@@ -4819,13 +4909,14 @@ function ScaleUpBlendCards({
             (c) => {
               const rows = groups["final"] ?? [];
               if (c === "Kilograms")
-                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0));
+                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0), finalDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(rows.reduce((s, r) => s + blendPctFin(r), 0))}%`;
               if (c === "Residual Moisture %")
                 return `${Format.pctCompact(rows.reduce((s, r) => s + blendResid(r, true), 0))}%`;
               return null;
             },
+            [finalDec, setFinalDec],
           )}
           {(() => {
             // Grand Total Cooked Blend \u2014 sums the three sections the same
@@ -4865,10 +4956,20 @@ function ScaleUpBlendCards({
                   style={{
                     display: "inline-flex",
                     gap: 22,
+                    alignItems: "center",
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  <span>{fmtKg(grandKg)}</span>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <span>{fmtKg(grandKg, grandDec)}</span>
+                    {decPicker(grandDec, setGrandDec)}
+                  </span>
                   <span>100%</span>
                   <span>{Format.pctCompact(grandResid)}%</span>
                 </span>
@@ -4876,6 +4977,7 @@ function ScaleUpBlendCards({
             );
           })()}
         </>,
+        "cooked",
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
         {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.")}
