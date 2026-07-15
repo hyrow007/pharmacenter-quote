@@ -4830,6 +4830,12 @@ function ScaleUpBlendCards({
             },
             [carryDec, setCarryDec],
           )}
+        </>,
+      )}
+      {card(
+        "CFA Batch",
+        "Scaled to the CFA Batch Size — the transferred cooked primary blend plus the secondary and final additions.",
+        <>
           {section(
             "Transferred Cooked Primary Blend to CFA Tank",
             groups["pre-cook"] ?? [],
@@ -4972,7 +4978,6 @@ function ScaleUpBlendCards({
             );
           })()}
         </>,
-        "cooked",
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
         {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.")}
