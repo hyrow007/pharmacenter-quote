@@ -3165,6 +3165,7 @@ export default function FormulaEditor({
           groups={phaseIngredients.groups}
           rmById={rmById}
           batchKg={batchKg}
+          cfaBatchKg={cfaBatchKg}
           benchBatchG={benchBatchG}
         />
       ) : null}
@@ -4421,11 +4422,13 @@ function ScaleUpBlendCards({
   groups,
   rmById,
   batchKg,
+  cfaBatchKg,
   benchBatchG,
 }: {
   groups: Record<string, GummyFormulaIngredient[]>;
   rmById: Map<string, RawMaterialOption>;
   batchKg: number;
+  cfaBatchKg: number;
   benchBatchG: number;
 }) {
   const tr = makeTr(useLang());
@@ -4444,6 +4447,17 @@ function ScaleUpBlendCards({
   );
   const preCookKg = (grams: number) =>
     totalPrimaryG > 0 ? (grams * batchKg) / totalPrimaryG : 0;
+
+  // v51.8: Secondary + Final Blend scaling (operator spec) — calculated
+  // the same way as the Primary Blend except the reference value is the
+  // CFA BATCH SIZE from the Batch Setup card instead of Batch size
+  // (pre-cook blend):
+  //   kg = bench grams × (cfaBatchKg ÷ TOTAL PRIMARY BLEND bench grams)
+  // e.g. F0001 at CFA 25 kg: 25,000 g ÷ 260.50 g = 95.9693×. The
+  // percentage columns work exactly like the bench card (they're
+  // scale-invariant ratios of the bench grand total cooked blend).
+  const cfaKg = (grams: number) =>
+    totalPrimaryG > 0 ? (grams * cfaBatchKg) / totalPrimaryG : 0;
 
   // v51.7: Primary Blend Carry Over (operator spec) — the percentage
   // columns CARRY OVER unchanged from the bench top (they're ratios,
@@ -4474,8 +4488,24 @@ function ScaleUpBlendCards({
     preCookRows.reduce((sum, r) => sum + benchNetG(r), 0) + secondaryG + finalG;
   const carryPctFin = (r: GummyFormulaIngredient) =>
     grandCookedG > 0 ? (benchNetG(r) / grandCookedG) * 100 : 0;
+  // Bench rule: SOLUTION rows in Primary Blend Carry Over do NOT
+  // contribute to Residual Moisture % (mirrors the bench card's
+  // exclusion) — their per-row cell is blank and they're left out of
+  // the section total.
   const carryResid = (r: GummyFormulaIngredient) =>
-    waterFractionFor(r) * carryPctFin(r);
+    isSolutionRow(r) ? 0 : waterFractionFor(r) * carryPctFin(r);
+  // Secondary / Final Blend bench-mirror math. "% of finished product"
+  // uses the bench grand total cooked blend as its base (the same
+  // pctBaseG the bench card passes) so the percentages match the bench
+  // card exactly. Residual gating mirrors the bench flags: Secondary
+  // excludes SOLUTION rows, Final includes them (water rows always
+  // contribute).
+  const blendPctFin = (r: GummyFormulaIngredient) =>
+    grandCookedG > 0 ? ((Number(r.grams) || 0) / grandCookedG) * 100 : 0;
+  const blendWaterFrac = (r: GummyFormulaIngredient, includeSolutions: boolean) =>
+    isSolutionRow(r) && !includeSolutions ? 0 : waterFractionFor(r);
+  const blendResid = (r: GummyFormulaIngredient, includeSolutions: boolean) =>
+    blendWaterFrac(r, includeSolutions) * blendPctFin(r);
   const fmtKg = (kg: number) =>
     `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
 
@@ -4678,7 +4708,9 @@ function ScaleUpBlendCards({
               if (c === "Kilograms") return fmtKg(carryNetKg(r));
               if (c === "% of finished product") return `${Format.pctCompact(carryPctFin(r))}%`;
               if (c === "Residual Moisture %")
-                return waterFractionFor(r) > 0 ? `${Format.pctCompact(carryResid(r))}%` : null;
+                return waterFractionFor(r) > 0 && !isSolutionRow(r)
+                  ? `${Format.pctCompact(carryResid(r))}%`
+                  : null;
               return null;
             },
             (c) => {
@@ -4696,12 +4728,56 @@ function ScaleUpBlendCards({
             groups["cooked"] ?? [],
             ["Overage %", "Kilograms", "% of finished product", "Residual Moisture %"],
             "Total secondary blend",
+            (c, r) => {
+              if (c === "Overage %")
+                return r.sourceLabelClaimId
+                  ? `${Format.pctSigned(Number(r.overagePct) || 0)}%`
+                  : null;
+              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(blendPctFin(r))}%`;
+              if (c === "Residual Moisture %")
+                return blendWaterFrac(r, false) > 0
+                  ? `${Format.pctCompact(blendResid(r, false))}%`
+                  : null;
+              return null;
+            },
+            (c) => {
+              const rows = groups["cooked"] ?? [];
+              if (c === "Kilograms")
+                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(rows.reduce((s, r) => s + blendPctFin(r), 0))}%`;
+              if (c === "Residual Moisture %")
+                return `${Format.pctCompact(rows.reduce((s, r) => s + blendResid(r, false), 0))}%`;
+              return null;
+            },
           )}
           {section(
             "Final Blend",
             groups["final"] ?? [],
             ["Kilograms", "% of finished product", "Residual Moisture %"],
             "Total final blend",
+            (c, r) => {
+              if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(blendPctFin(r))}%`;
+              if (c === "Residual Moisture %")
+                return blendWaterFrac(r, true) > 0
+                  ? `${Format.pctCompact(blendResid(r, true))}%`
+                  : null;
+              return null;
+            },
+            (c) => {
+              const rows = groups["final"] ?? [];
+              if (c === "Kilograms")
+                return fmtKg(rows.reduce((s, r) => s + cfaKg(Number(r.grams) || 0), 0));
+              if (c === "% of finished product")
+                return `${Format.pctCompact(rows.reduce((s, r) => s + blendPctFin(r), 0))}%`;
+              if (c === "Residual Moisture %")
+                return `${Format.pctCompact(rows.reduce((s, r) => s + blendResid(r, true), 0))}%`;
+              return null;
+            },
           )}
           <div
             style={{
@@ -4723,7 +4799,7 @@ function ScaleUpBlendCards({
         </>,
       )}
       <div style={{ padding: "4px 2px 12px", fontSize: 11.5, color: "var(--ink-3, #8a9498)" }}>
-        {tr("Pre-cook blend scales from the bench top: batch size ÷ total primary blend. Remaining values to be defined.")}
+        {tr("Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend.")}
       </div>
     </div>
   );
