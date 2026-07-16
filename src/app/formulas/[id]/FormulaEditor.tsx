@@ -4583,7 +4583,14 @@ function ScaleUpBlendCards({
     textTransform: "uppercase",
     color: "var(--ink-3, #8a9498)",
     textAlign: "right",
-    whiteSpace: "nowrap",
+    // Wrap, don't overflow — with table-layout: fixed the columns hold
+    // exactly 130px, so long headers ("% of finished product",
+    // "Residual Moisture %") break onto extra lines instead of
+    // overlapping their neighbors (same fix as the bench top tab).
+    whiteSpace: "normal",
+    overflowWrap: "break-word",
+    lineHeight: 1.35,
+    verticalAlign: "bottom",
   };
   const td: React.CSSProperties = {
     padding: "10px 12px",
