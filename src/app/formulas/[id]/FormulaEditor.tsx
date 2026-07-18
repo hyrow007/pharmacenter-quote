@@ -3133,7 +3133,6 @@ export default function FormulaEditor({
           fixedLossKgPerDay={fixedLossKgPerDay}
           setFixedLossKgPerDay={setFixedLossKgPerDay}
           gummyPieceWeightG={gummyPieceWeightG}
-          setGummyPieceWeightG={setGummyPieceWeightG}
           yieldPct={yieldPct}
           setYieldPct={setYieldPct}
           effectiveYield={cost.dailyEffectiveYield}
@@ -4178,7 +4177,6 @@ function ScaleUpTab({
   fixedLossKgPerDay: number;
   setFixedLossKgPerDay: (n: number) => void;
   gummyPieceWeightG: number;
-  setGummyPieceWeightG: (n: number) => void;
   yieldPct: number;
   setYieldPct: (n: number) => void;
   effectiveYield: number;
@@ -4213,15 +4211,9 @@ function ScaleUpTab({
           min={0}
         />
       </ParamBlock>
-      <ParamBlock label="Piece weight">
-        <NumberInput
-          value={gummyPieceWeightG}
-          onChange={setGummyPieceWeightG}
-          suffix="g"
-          step="0.1"
-          min={0.1}
-        />
-      </ParamBlock>
+      {/* Piece weight input removed — it lives on the Batch Setup card
+          ("Finished piece weight (Dry)"); gummyPieceWeightG still feeds
+          Gummies / batch below. */}
       <ParamBlock label="Process yield">
         <NumberInput value={yieldPct} onChange={setYieldPct} suffix="%" min={1} />
       </ParamBlock>
