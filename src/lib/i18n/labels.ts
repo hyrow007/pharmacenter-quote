@@ -33,6 +33,7 @@ const es: Record<string, string> = {
   "Sugar (dry)": "Azúcar (seca)",
   "Syrup (dry)": "Jarabe (seco)",
   "Batch Setup": "Configuración de lote",
+  "Place Holder": "Marcador de posición",
   "Key Indicators": "Indicadores clave",
 
   // ---- Product details ----

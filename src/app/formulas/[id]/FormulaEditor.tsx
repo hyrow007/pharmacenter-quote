@@ -3125,6 +3125,32 @@ export default function FormulaEditor({
             wetCastPieceWeightG={wetCastPieceWeightG}
             setWetCastPieceWeightG={setWetCastPieceWeightG}
           />
+          {/* Place Holder card — same footprint as Batch Setup; contents
+              to be defined by the operator. */}
+          <div
+            style={{
+              flex: "0 0 220px",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              background: "var(--paper, #fffdf8)",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+                borderBottom: "1px solid var(--line, #e3dcc9)",
+                paddingBottom: 4,
+                marginBottom: 8,
+              }}
+            >
+              {tr("Place Holder")}
+            </div>
+          </div>
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}
