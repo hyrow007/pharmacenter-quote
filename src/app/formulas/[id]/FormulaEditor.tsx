@@ -4166,7 +4166,6 @@ function ScaleUpTab({
   fixedLossKgPerDay,
   setFixedLossKgPerDay,
   gummyPieceWeightG,
-  setGummyPieceWeightG,
   yieldPct,
   setYieldPct,
   effectiveYield,
