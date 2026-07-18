@@ -3607,35 +3607,30 @@ function BenchTopReadout({
           - hidden "g" placeholder: preserves the same right-edge offset
             the input row loses to its visible "g" suffix, so the
             readout's number ends at the same X as the input's digits. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      {/* v52.3: unit sits INLINE beside the value (operator request) —
+          same baseline row the numeric inputs use, value + suffix
+          right-aligned. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "flex-end",
+          gap: 4,
+        }}
+      >
         <div
           style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
+            fontSize: 15,
+            fontWeight: 500,
+            color: "var(--teal-900, #0f4a56)",
+            fontVariantNumeric: "tabular-nums",
+            lineHeight: 1.15,
           }}
         >
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 500,
-              color: "var(--teal-900, #0f4a56)",
-              fontVariantNumeric: "tabular-nums",
-              lineHeight: 1.15,
-            }}
-          >
-            {valueText}
-          </div>
-          <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
-            {suffix}
-          </span>
+          {valueText}
         </div>
-        <span
-          aria-hidden="true"
-          style={{ fontSize: 12, color: "transparent", visibility: "hidden" }}
-        >
-          g
+        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", lineHeight: 1.1 }}>
+          {suffix}
         </span>
       </div>
     </div>
