@@ -3128,7 +3128,6 @@ export default function FormulaEditor({
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}
-          setBatchKg={setBatchKg}
           batchesPerDay={batchesPerDay}
           setBatchesPerDay={setBatchesPerDay}
           fixedLossKgPerDay={fixedLossKgPerDay}
@@ -4163,7 +4162,6 @@ function KeyIndicatorOp({ glyph }: { glyph: string }) {
 
 function ScaleUpTab({
   batchKg,
-  setBatchKg,
   batchesPerDay,
   setBatchesPerDay,
   fixedLossKgPerDay,
@@ -4175,7 +4173,6 @@ function ScaleUpTab({
   effectiveYield,
 }: {
   batchKg: number;
-  setBatchKg: (n: number) => void;
   batchesPerDay: number;
   setBatchesPerDay: (n: number) => void;
   fixedLossKgPerDay: number;
@@ -4202,9 +4199,9 @@ function ScaleUpTab({
         gap: 14,
       }}
     >
-      <ParamBlock label="Batch size">
-        <NumberInput value={batchKg} onChange={setBatchKg} suffix="kg" min={1} />
-      </ParamBlock>
+      {/* Batch size input removed — it lives on the Batch Setup card
+          beside this one ("Batch size (pre-cook blend)"); batchKg still
+          feeds the derived values below. */}
       <ParamBlock label="Batches / day">
         <NumberInput value={batchesPerDay} onChange={setBatchesPerDay} min={1} />
       </ParamBlock>
