@@ -3173,10 +3173,42 @@ export default function FormulaEditor({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {(gummyPieceWeightG > 0
-                    ? (batchKg * 1000) / gummyPieceWeightG
-                    : 0
-                  ).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  {(() => {
+                    // Total Primary Blend Carry Over (scale-up kg) ÷ Cast
+                    // weight (wet). The carry-over kg mirrors the scale-up
+                    // card's math exactly: bench NET carry-over grams ×
+                    // (batchKg ÷ bench Total Primary Blend).
+                    const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
+                    const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
+                      (s, r) => s + (Number(r.grams) || 0),
+                      0,
+                    );
+                    const finG = (phaseIngredients.groups["final"] ?? []).reduce(
+                      (s, r) => s + (Number(r.grams) || 0),
+                      0,
+                    );
+                    const totalPrimaryG = pcRows.reduce(
+                      (s, r) => s + (Number(r.grams) || 0),
+                      0,
+                    );
+                    const carryNetG = computeCarryOverPrimaryNetG({
+                      preCookRows: pcRows,
+                      benchBatchG,
+                      secondaryG: secG,
+                      finalG: finG,
+                    });
+                    const carryKg =
+                      totalPrimaryG > 0
+                        ? (carryNetG * batchKg) / totalPrimaryG
+                        : 0;
+                    const gummies =
+                      wetCastPieceWeightG > 0
+                        ? (carryKg * 1000) / wetCastPieceWeightG
+                        : 0;
+                    return gummies.toLocaleString("en-US", {
+                      maximumFractionDigits: 0,
+                    });
+                  })()}
                 </div>
               </div>
             </div>
