@@ -3700,6 +3700,10 @@ function BenchTopTab({
     border: "1px solid var(--line, #e3dcc9)",
     borderRadius: 8,
     background: "var(--paper, #fffdf8)",
+    // v52.2: all three cards (Batch Setup / Reconciliation / Key
+    // Indicators) share the row equally so they read as same-size peers.
+    flex: "1 1 0",
+    minWidth: 220,
   };
   return (
     // Two side-by-side cards separated by a small gap. Wraps to two
