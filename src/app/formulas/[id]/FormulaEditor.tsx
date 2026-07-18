@@ -3783,6 +3783,75 @@ function BenchTopTab({
           />
         </div>
       </div>
+      {/* Middle card — Reconciliation. The per-phase blend totals that
+          used to form the Key Indicators equation, stacked vertically,
+          closing with % of bench batch (green at 100%, red otherwise).
+          Same content-sized card chrome as Batch Setup. */}
+      <div style={{ ...cardStyle }}>
+        <div
+          style={{
+            fontSize: 14.5,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--teal-900, #0f4a56)",
+            marginBottom: 8,
+            paddingBottom: 4,
+            borderBottom: "1px solid var(--line, #e3dcc9)",
+          }}
+        >
+          {tr("Reconciliation")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <BenchTopReadout
+            label="Primary Blend (cooked)"
+            valueText={Format.grams(primaryBlendG)}
+            suffix="g"
+          />
+          <BenchTopReadout
+            label="Secondary Blend"
+            valueText={Format.grams(secondaryBlendG)}
+            suffix="g"
+          />
+          <BenchTopReadout
+            label="Final Blend"
+            valueText={Format.grams(finalBlendG)}
+            suffix="g"
+          />
+          <BenchTopReadout
+            label="Total (Sum of all blends)"
+            valueText={Format.grams(totalBlendsG)}
+            suffix="g"
+          />
+          {/* % of bench batch — same stacked layout, value colored by
+              whether the blends reconcile to the bench batch. */}
+          <div>
+            <div
+              style={{
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: "0.09em",
+                textTransform: "uppercase",
+                color: "var(--ink-3, #8a9498)",
+                marginBottom: 4,
+              }}
+            >
+              {tr("% of bench batch")}
+            </div>
+            <div
+              style={{
+                textAlign: "right",
+                fontSize: 16,
+                fontWeight: 700,
+                color: totalOk ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {Format.pctCompact(pctOfBench)}%
+            </div>
+          </div>
+        </div>
+      </div>
       {/* Right card — Key Indicators equation + % of bench batch.
           Grows to fill remaining space so the equation stays readable
           without cramping on wider viewports. */}
@@ -3810,99 +3879,10 @@ function BenchTopTab({
           >
             {tr("Key Indicators")}
           </div>
-          {/* Row 1: the blend equation (Primary + Secondary + Final = Total)
-              on the left, % of bench batch pushed to the right edge via
-              marginLeft: auto on the group wrapper. Nested flex keeps
-              the equation itself compact so operators sit tight against
-              their operands even when the card is wide. flexWrap: nowrap
-              keeps % of bench on the same line as the equation instead
-              of dropping to its own row when the card is narrow. */}
-          <div
-            className="fe-key-indicators-row"
-            style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: 16,
-              flexWrap: "nowrap",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                gap: 16,
-              }}
-            >
-              <KeyIndicatorStat
-                label="Primary Blend (cooked)"
-                value={primaryBlendG}
-              />
-              <KeyIndicatorOp glyph="+" />
-              <KeyIndicatorStat
-                label="Secondary Blend"
-                value={secondaryBlendG}
-              />
-              <KeyIndicatorOp glyph="+" />
-              <KeyIndicatorStat
-                label="Final Blend"
-                value={finalBlendG}
-              />
-              <KeyIndicatorOp glyph="=" />
-              <KeyIndicatorStat
-                label="Total (Sum of all blends)"
-                value={totalBlendsG}
-              />
-            </div>
-            {/* marginLeft: auto anchors the cell to the far right of
-                the row. alignItems: center centers each child (the
-                label + the value) horizontally within the container.
-                Since the container sizes to its widest child (the
-                label — the value is narrower), the value ends up
-                centered under the label without stretching the cell
-                past the card edge. */}
-            <div
-              className="fe-ki-pct-of-bench"
-              style={{
-                marginLeft: "auto",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 4,
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.09em",
-                  textTransform: "uppercase",
-                  color: "var(--ink-3, #8a9498)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {tr("% of bench batch")}
-              </div>
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  color: totalOk ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
-                  fontVariantNumeric: "tabular-nums",
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {Format.pctCompact(pctOfBench)}%
-              </div>
-            </div>
-          </div>
-          {/* Row 2: two grouped indicators — Residual Moisture Total on
-              the left, Sugar to Syrup Ratio on the right. The ratio has
-              a small centered group title above its two sub-values
-              (Sugar (dry) : Syrup (dry)) so it reads as a labelled pair
-              instead of two orphan stats. Both groups are centered in
-              the row with a comfortable gap so nothing feels stranded. */}
+          {/* The blend equation + % of bench batch moved to the new
+              Reconciliation card (stacked vertically). Key Indicators
+              keeps the grouped indicators: Residual Moisture Total and
+              the Sugar to Syrup Ratio. */}
           <div
             className="fe-ki-row2"
             style={{
@@ -3912,8 +3892,7 @@ function BenchTopTab({
               flexWrap: "wrap",
               justifyContent: "center",
               marginTop: 14,
-              paddingTop: 12,
-              borderTop: "1px dashed var(--line, #e3dcc9)",
+              paddingTop: 4,
             }}
           >
             <KeyIndicatorPctStat

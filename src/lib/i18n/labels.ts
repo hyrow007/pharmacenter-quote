@@ -40,6 +40,7 @@ const es: Record<string, string> = {
   "QTY of Primary Blend Batches": "Cant. de lotes de mezcla primaria",
   "QTY of CFA Batches": "Cant. de lotes CFA",
   "Key Indicators": "Indicadores clave",
+  Reconciliation: "Conciliación",
 
   // ---- Product details ----
   "Product Details": "Detalles del producto",
