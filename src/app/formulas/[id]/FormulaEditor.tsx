@@ -3855,10 +3855,7 @@ function BenchTopTab({
       {/* Right card — Key Indicators equation + % of bench batch.
           Grows to fill remaining space so the equation stays readable
           without cramping on wider viewports. */}
-      <div
-        className="fe-key-indicators-card"
-        style={{ ...cardStyle, flex: 1, minWidth: 0 }}
-      >
+      <div className="fe-key-indicators-card" style={{ ...cardStyle }}>
         {/* Key Indicators — per-phase blend totals wired together as a
             visible equation: Primary + Secondary + Final = Total. The
             block is laid out on a CSS grid with two rows so each label
@@ -3879,76 +3876,33 @@ function BenchTopTab({
           >
             {tr("Key Indicators")}
           </div>
-          {/* The blend equation + % of bench batch moved to the new
-              Reconciliation card (stacked vertically). Key Indicators
-              keeps the grouped indicators: Residual Moisture Total and
-              the Sugar to Syrup Ratio. */}
-          <div
-            className="fe-ki-row2"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 60,
-              flexWrap: "wrap",
-              justifyContent: "center",
-              marginTop: 14,
-              paddingTop: 4,
-            }}
-          >
-            <KeyIndicatorPctStat
+          {/* v52.2: vertical stack, same pattern as the Reconciliation
+              card — Residual Moisture Total, then the sugar/syrup split
+              as two stacked rows. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <BenchTopReadout
               label="Residual Moisture Total"
-              value={residualMoistureTotalPct}
-              ok
+              valueText={Format.pctCompact(residualMoistureTotalPct)}
+              suffix="%"
             />
-            {/* Sugar to Syrup Ratio group — small title centered above
-                the two sub-stats so the semantic pairing is explicit.
-                A thin hairline between title and sub-stats reinforces
-                the "this is a group" reading without adding a heavy
-                border. */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  color: "var(--ink-2, #415056)",
-                  textTransform: "uppercase",
-                  paddingBottom: 3,
-                  borderBottom: "1px solid var(--line, #e3dcc9)",
-                  minWidth: 240,
-                  textAlign: "center",
-                }}
-              >
-                {tr("Sugar to Syrup Ratio")}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  gap: 12,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <KeyIndicatorPctStat
-                  label="Sugar (dry)"
-                  value={sugarSyrupRatio ? sugarSyrupRatio.sugarPct : NaN}
-                  ok
-                />
-                <KeyIndicatorOp glyph=":" />
-                <KeyIndicatorPctStat
-                  label="Syrup (dry)"
-                  value={sugarSyrupRatio ? sugarSyrupRatio.syrupPct : NaN}
-                  ok
-                />
-              </div>
-            </div>
+            <BenchTopReadout
+              label="Sugar (dry)"
+              valueText={
+                sugarSyrupRatio
+                  ? Format.pctCompact(sugarSyrupRatio.sugarPct)
+                  : "—"
+              }
+              suffix="%"
+            />
+            <BenchTopReadout
+              label="Syrup (dry)"
+              valueText={
+                sugarSyrupRatio
+                  ? Format.pctCompact(sugarSyrupRatio.syrupPct)
+                  : "—"
+              }
+              suffix="%"
+            />
           </div>
         </div>
       </div>
