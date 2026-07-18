@@ -37,6 +37,8 @@ const es: Record<string, string> = {
   "Gummies / batch (Cooked Primary Blend)":
     "Gomitas / lote (mezcla primaria cocida)",
   "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CFA)",
+  "QTY of Primary Blend Batches": "Cant. de lotes de mezcla primaria",
+  "QTY of CFA Batches": "Cant. de lotes CFA",
   "Key Indicators": "Indicadores clave",
 
   // ---- Product details ----

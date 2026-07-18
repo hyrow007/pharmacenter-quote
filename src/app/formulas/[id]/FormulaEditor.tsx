@@ -3186,7 +3186,7 @@ export default function FormulaEditor({
                 wetCastPieceWeightG > 0
                   ? (kg * 1000) / wetCastPieceWeightG
                   : 0;
-              const readout = (label: string, kg: number) => (
+              const readout = (label: string, display: string) => (
                 <div>
                   <div
                     style={{
@@ -3209,16 +3209,39 @@ export default function FormulaEditor({
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {gummiesOf(kg).toLocaleString("en-US", {
-                      maximumFractionDigits: 0,
-                    })}
+                    {display}
                   </div>
                 </div>
               );
+              const fmtInt = (n: number) =>
+                n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+              // Batch QTYs — Target Yield ÷ gummies per batch. Fractional
+              // by nature (a run rarely lands on a whole batch), shown to
+              // 2 decimals.
+              const fmtBatches = (perBatch: number) =>
+                perBatch > 0
+                  ? (targetYieldUnits / perBatch).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })
+                  : "0";
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {readout("Gummies / batch (Cooked Primary Blend)", carryKg)}
-                  {readout("Gummies / batch (CFA Batch)", grandCfaKg)}
+                  {readout(
+                    "Gummies / batch (Cooked Primary Blend)",
+                    fmtInt(gummiesOf(carryKg)),
+                  )}
+                  {readout(
+                    "QTY of Primary Blend Batches",
+                    fmtBatches(gummiesOf(carryKg)),
+                  )}
+                  {readout(
+                    "Gummies / batch (CFA Batch)",
+                    fmtInt(gummiesOf(grandCfaKg)),
+                  )}
+                  {readout(
+                    "QTY of CFA Batches",
+                    fmtBatches(gummiesOf(grandCfaKg)),
+                  )}
                 </div>
               );
             })()}
