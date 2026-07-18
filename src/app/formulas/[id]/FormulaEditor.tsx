@@ -3150,6 +3150,36 @@ export default function FormulaEditor({
             >
               {tr("Place Holder")}
             </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.09em",
+                    textTransform: "uppercase",
+                    color: "var(--ink-3, #8a9498)",
+                  }}
+                >
+                  {tr("Gummies / batch (Cooked Primary Blend)")}
+                </div>
+                <div
+                  style={{
+                    marginTop: 2,
+                    textAlign: "right",
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: "var(--teal-900, #0f4a56)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {(gummyPieceWeightG > 0
+                    ? (batchKg * 1000) / gummyPieceWeightG
+                    : 0
+                  ).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+            </div>
           </div>
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
@@ -3158,7 +3188,6 @@ export default function FormulaEditor({
           setBatchesPerDay={setBatchesPerDay}
           fixedLossKgPerDay={fixedLossKgPerDay}
           setFixedLossKgPerDay={setFixedLossKgPerDay}
-          gummyPieceWeightG={gummyPieceWeightG}
           yieldPct={yieldPct}
           setYieldPct={setYieldPct}
           effectiveYield={cost.dailyEffectiveYield}
@@ -4191,7 +4220,6 @@ function ScaleUpTab({
   setBatchesPerDay,
   fixedLossKgPerDay,
   setFixedLossKgPerDay,
-  gummyPieceWeightG,
   yieldPct,
   setYieldPct,
   effectiveYield,
@@ -4201,13 +4229,11 @@ function ScaleUpTab({
   setBatchesPerDay: (n: number) => void;
   fixedLossKgPerDay: number;
   setFixedLossKgPerDay: (n: number) => void;
-  gummyPieceWeightG: number;
   yieldPct: number;
   setYieldPct: (n: number) => void;
   effectiveYield: number;
 }) {
   const totalDailyKg = batchKg * batchesPerDay;
-  const gummiesPerBatch = gummyPieceWeightG > 0 ? (batchKg * 1000) / gummyPieceWeightG : 0;
 
   return (
     <div
@@ -4248,11 +4274,8 @@ function ScaleUpTab({
       <ParamBlock label="Effective daily yield">
         <ReadOnly>{Format.pct(effectiveYield * 100)}%</ReadOnly>
       </ParamBlock>
-      <ParamBlock label="Gummies / batch">
-        <ReadOnly>
-          {gummiesPerBatch.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-        </ReadOnly>
-      </ParamBlock>
+      {/* Gummies / batch moved to the Place Holder card beside Batch
+          Setup, relabeled "Gummies / batch (Cooked Primary Blend)". */}
     </div>
   );
 }
