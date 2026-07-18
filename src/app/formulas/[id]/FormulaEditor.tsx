@@ -3150,68 +3150,78 @@ export default function FormulaEditor({
             >
               {tr("Place Holder")}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.09em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-3, #8a9498)",
-                  }}
-                >
-                  {tr("Gummies / batch (Cooked Primary Blend)")}
-                </div>
-                <div
-                  style={{
-                    marginTop: 2,
-                    textAlign: "right",
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: "var(--teal-900, #0f4a56)",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {(() => {
-                    // Total Primary Blend Carry Over (scale-up kg) ÷ Cast
-                    // weight (wet). The carry-over kg mirrors the scale-up
-                    // card's math exactly: bench NET carry-over grams ×
-                    // (batchKg ÷ bench Total Primary Blend).
-                    const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
-                    const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
-                      (s, r) => s + (Number(r.grams) || 0),
-                      0,
-                    );
-                    const finG = (phaseIngredients.groups["final"] ?? []).reduce(
-                      (s, r) => s + (Number(r.grams) || 0),
-                      0,
-                    );
-                    const totalPrimaryG = pcRows.reduce(
-                      (s, r) => s + (Number(r.grams) || 0),
-                      0,
-                    );
-                    const carryNetG = computeCarryOverPrimaryNetG({
-                      preCookRows: pcRows,
-                      benchBatchG,
-                      secondaryG: secG,
-                      finalG: finG,
-                    });
-                    const carryKg =
-                      totalPrimaryG > 0
-                        ? (carryNetG * batchKg) / totalPrimaryG
-                        : 0;
-                    const gummies =
-                      wetCastPieceWeightG > 0
-                        ? (carryKg * 1000) / wetCastPieceWeightG
-                        : 0;
-                    return gummies.toLocaleString("en-US", {
+            {(() => {
+              // Shared scale-up math (mirrors the blend cards exactly):
+              // - Carry-over kg = bench NET carry-over grams × (batchKg ÷
+              //   bench Total Primary Blend)
+              // - Grand Total CFA Batch kg = CFA Batch Size (the tank
+              //   transfer, by construction) + secondary + final on the
+              //   CFA basis (bench grams × cfaBatchKg ÷ carry-over net g)
+              const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
+              const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const finG = (phaseIngredients.groups["final"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const totalPrimaryG = pcRows.reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const carryNetG = computeCarryOverPrimaryNetG({
+                preCookRows: pcRows,
+                benchBatchG,
+                secondaryG: secG,
+                finalG: finG,
+              });
+              const carryKg =
+                totalPrimaryG > 0 ? (carryNetG * batchKg) / totalPrimaryG : 0;
+              const grandCfaKg =
+                carryNetG > 0
+                  ? cfaBatchKg + ((secG + finG) * cfaBatchKg) / carryNetG
+                  : 0;
+              const gummiesOf = (kg: number) =>
+                wetCastPieceWeightG > 0
+                  ? (kg * 1000) / wetCastPieceWeightG
+                  : 0;
+              const readout = (label: string, kg: number) => (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.09em",
+                      textTransform: "uppercase",
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    {tr(label)}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      textAlign: "right",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {gummiesOf(kg).toLocaleString("en-US", {
                       maximumFractionDigits: 0,
-                    });
-                  })()}
+                    })}
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {readout("Gummies / batch (Cooked Primary Blend)", carryKg)}
+                  {readout("Gummies / batch (CFA Batch)", grandCfaKg)}
+                </div>
+              );
+            })()}
           </div>
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab

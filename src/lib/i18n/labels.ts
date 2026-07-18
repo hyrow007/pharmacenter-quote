@@ -36,6 +36,7 @@ const es: Record<string, string> = {
   "Place Holder": "Marcador de posición",
   "Gummies / batch (Cooked Primary Blend)":
     "Gomitas / lote (mezcla primaria cocida)",
+  "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CFA)",
   "Key Indicators": "Indicadores clave",
 
   // ---- Product details ----
