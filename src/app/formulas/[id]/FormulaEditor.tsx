@@ -3276,7 +3276,6 @@ export default function FormulaEditor({
                 state; the two derived readouts follow live. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {([
-                ["Batches / day (Primary Blend)", batchesPerDay, setBatchesPerDay, "", 1],
                 ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
                 ["Process yield", yieldPct, setYieldPct, "%", 1],
               ] as Array<[string, number, (n: number) => void, string, number]>).map(
@@ -3412,6 +3411,29 @@ export default function FormulaEditor({
                   : 0;
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Batches / day (Primary Blend) — editable input,
+                      moved here from Placeholder 2. Same state; the
+                      CFA-batches and daily-yield readouts below follow. */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("Batches / day (Primary Blend)")}
+                    </div>
+                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
+                      <NumberInput
+                        value={batchesPerDay}
+                        onChange={setBatchesPerDay}
+                        min={1}
+                      />
+                    </div>
+                  </div>
                   <div>
                     <div
                       style={{
