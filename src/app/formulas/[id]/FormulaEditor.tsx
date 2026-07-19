@@ -3246,6 +3246,32 @@ export default function FormulaEditor({
               );
             })()}
           </div>
+          {/* Placeholder 2 card — same footprint as Place Holder;
+              contents to be defined by the operator. */}
+          <div
+            style={{
+              flex: "0 0 220px",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              background: "var(--paper, #fffdf8)",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+                borderBottom: "1px solid var(--line, #e3dcc9)",
+                paddingBottom: 4,
+                marginBottom: 8,
+              }}
+            >
+              {tr("Placeholder 2")}
+            </div>
+          </div>
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}

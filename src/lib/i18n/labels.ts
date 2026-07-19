@@ -34,6 +34,7 @@ const es: Record<string, string> = {
   "Syrup (dry)": "Jarabe (seco)",
   "Batch Setup": "Configuración de lote",
   "Place Holder": "Marcador de posición",
+  "Placeholder 2": "Marcador de posición 2",
   "Gummies / batch (Cooked Primary Blend)":
     "Gomitas / lote (mezcla primaria cocida)",
   "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CFA)",
