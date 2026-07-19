@@ -3367,6 +3367,73 @@ export default function FormulaEditor({
             >
               {tr("Placeholder 3")}
             </div>
+            {/* Daily Yield (gummies) — CFA kilograms produced per day
+                minus the fixed daily loss, divided by the cast weight
+                (wet). CFA kg/day = batches/day × the finished cooked
+                mass each pre-cook batch yields (carry-over net +
+                secondary + final, scaled batchKg ÷ total primary). */}
+            {(() => {
+              const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
+              const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const finG = (phaseIngredients.groups["final"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const totalPrimaryG = pcRows.reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const carryNetG = computeCarryOverPrimaryNetG({
+                preCookRows: pcRows,
+                benchBatchG,
+                secondaryG: secG,
+                finalG: finG,
+              });
+              const cfaKgPerBatch =
+                totalPrimaryG > 0
+                  ? ((carryNetG + secG + finG) * batchKg) / totalPrimaryG
+                  : 0;
+              const dailyCfaKg = cfaKgPerBatch * batchesPerDay;
+              const dailyYieldGummies =
+                wetCastPieceWeightG > 0
+                  ? Math.max(0, dailyCfaKg - fixedLossKgPerDay) * 1000 /
+                    wetCastPieceWeightG
+                  : 0;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("Daily Yield (gummies)")}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        textAlign: "right",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {dailyYieldGummies.toLocaleString("en-US", {
+                        maximumFractionDigits: 0,
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           {/* Key Indicators — same card as the bench top tab, computed
               from the scale-up quantities. Both indicators are ratios of

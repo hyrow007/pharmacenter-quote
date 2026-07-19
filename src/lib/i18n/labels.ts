@@ -36,6 +36,7 @@ const es: Record<string, string> = {
   "Place Holder": "Marcador de posición",
   "Placeholder 2": "Marcador de posición 2",
   "Placeholder 3": "Marcador de posición 3",
+  "Daily Yield (gummies)": "Rendimiento diario (gomitas)",
   "Gummies / batch (Cooked Primary Blend)":
     "Gomitas / lote (mezcla primaria cocida)",
   "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CFA)",
