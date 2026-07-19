@@ -91,6 +91,8 @@ const es: Record<string, string> = {
   // ---- Scale up / material costing params ----
   "Batch size": "Tamaño de lote",
   "Batches / day": "Lotes / día",
+  "Batches / day (Primary Blend)": "Lotes / día (mezcla primaria)",
+  "CFA Batches / day": "Lotes CFA / día",
   "Fixed loss / day": "Pérdida fija / día",
   "Piece weight": "Peso de pieza",
   "Process yield": "Rendimiento del proceso",

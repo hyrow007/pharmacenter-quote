@@ -3276,7 +3276,7 @@ export default function FormulaEditor({
                 state; the two derived readouts follow live. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {([
-                ["Batches / day", batchesPerDay, setBatchesPerDay, "", 1],
+                ["Batches / day (Primary Blend)", batchesPerDay, setBatchesPerDay, "", 1],
                 ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
                 ["Process yield", yieldPct, setYieldPct, "%", 1],
               ] as Array<[string, number, (n: number) => void, string, number]>).map(
@@ -3402,8 +3402,43 @@ export default function FormulaEditor({
                   ? Math.max(0, dailyCfaKg - fixedLossKgPerDay) * 1000 /
                     wetCastPieceWeightG
                   : 0;
+              // CFA Batches / day — daily carry-over kg (net cooked
+              // primary transferred to the CFA tank) ÷ CFA Batch Size.
+              const carryKgPerBatch =
+                totalPrimaryG > 0 ? (carryNetG * batchKg) / totalPrimaryG : 0;
+              const cfaBatchesPerDay =
+                cfaBatchKg > 0
+                  ? (carryKgPerBatch * batchesPerDay) / cfaBatchKg
+                  : 0;
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("CFA Batches / day")}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        textAlign: "right",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {cfaBatchesPerDay.toLocaleString("en-US", {
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <div
                       style={{
