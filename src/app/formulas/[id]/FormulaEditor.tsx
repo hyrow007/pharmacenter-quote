@@ -3342,6 +3342,32 @@ export default function FormulaEditor({
               ))}
             </div>
           </div>
+          {/* Placeholder 3 card — same footprint; contents to be defined
+              by the operator. */}
+          <div
+            style={{
+              flex: "0 0 220px",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              background: "var(--paper, #fffdf8)",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+                borderBottom: "1px solid var(--line, #e3dcc9)",
+                paddingBottom: 4,
+                marginBottom: 8,
+              }}
+            >
+              {tr("Placeholder 3")}
+            </div>
+          </div>
           {/* Key Indicators — same card as the bench top tab, computed
               from the scale-up quantities. Both indicators are ratios of
               the same rows the scale-up cards scale, so they're derived
