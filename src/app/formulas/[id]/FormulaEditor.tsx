@@ -3215,15 +3215,6 @@ export default function FormulaEditor({
               );
               const fmtInt = (n: number) =>
                 n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-              // Batch QTYs — Target Yield ÷ gummies per batch. Fractional
-              // by nature (a run rarely lands on a whole batch), shown to
-              // 2 decimals.
-              const fmtBatches = (perBatch: number) =>
-                perBatch > 0
-                  ? (targetYieldUnits / perBatch).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })
-                  : "0";
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {readout(
@@ -3231,16 +3222,8 @@ export default function FormulaEditor({
                     fmtInt(gummiesOf(carryKg)),
                   )}
                   {readout(
-                    "QTY of Primary Blend Batches",
-                    fmtBatches(gummiesOf(carryKg)),
-                  )}
-                  {readout(
                     "Gummies / batch (CFA Batch)",
                     fmtInt(gummiesOf(grandCfaKg)),
-                  )}
-                  {readout(
-                    "QTY of CFA Batches",
-                    fmtBatches(gummiesOf(grandCfaKg)),
                   )}
                 </div>
               );
@@ -3367,6 +3350,86 @@ export default function FormulaEditor({
             >
               {tr("Placeholder 3")}
             </div>
+            {/* Batch QTYs — moved from the Place Holder card. Target
+                Yield ÷ gummies per batch, on the same shared scale-up
+                math (carry-over kg and Grand Total CFA Batch kg ÷ cast
+                weight wet). Fractional by nature; shown to 2 decimals. */}
+            {(() => {
+              const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
+              const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const finG = (phaseIngredients.groups["final"] ?? []).reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const totalPrimaryG = pcRows.reduce(
+                (s, r) => s + (Number(r.grams) || 0),
+                0,
+              );
+              const carryNetG = computeCarryOverPrimaryNetG({
+                preCookRows: pcRows,
+                benchBatchG,
+                secondaryG: secG,
+                finalG: finG,
+              });
+              const carryKg =
+                totalPrimaryG > 0 ? (carryNetG * batchKg) / totalPrimaryG : 0;
+              const grandCfaKg =
+                carryNetG > 0
+                  ? cfaBatchKg + ((secG + finG) * cfaBatchKg) / carryNetG
+                  : 0;
+              const gummiesOf = (kg: number) =>
+                wetCastPieceWeightG > 0
+                  ? (kg * 1000) / wetCastPieceWeightG
+                  : 0;
+              const fmtBatches = (perBatch: number) =>
+                perBatch > 0
+                  ? (targetYieldUnits / perBatch).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })
+                  : "0";
+              const readout = (label: string, display: string) => (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.09em",
+                      textTransform: "uppercase",
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    {tr(label)}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      textAlign: "right",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {display}
+                  </div>
+                </div>
+              );
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {readout(
+                    "QTY of Primary Blend Batches",
+                    fmtBatches(gummiesOf(carryKg)),
+                  )}
+                  {readout(
+                    "QTY of CFA Batches",
+                    fmtBatches(gummiesOf(grandCfaKg)),
+                  )}
+                </div>
+              );
+            })()}
           </div>
           {/* Key Indicators — same card as the bench top tab, computed
               from the scale-up quantities. Both indicators are ratios of
