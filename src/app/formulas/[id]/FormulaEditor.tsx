@@ -3271,6 +3271,76 @@ export default function FormulaEditor({
             >
               {tr("Placeholder 2")}
             </div>
+            {/* Production-day params — moved here from the old unlabeled
+                params card, stacked vertically. Inputs edit the same
+                state; the two derived readouts follow live. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {([
+                ["Batches / day", batchesPerDay, setBatchesPerDay, "", 1],
+                ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
+                ["Process yield", yieldPct, setYieldPct, "%", 1],
+              ] as Array<[string, number, (n: number) => void, string, number]>).map(
+                ([label, value, onChange, suffix, min]) => (
+                  <div key={label}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr(label)}
+                    </div>
+                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
+                      <NumberInput
+                        value={value}
+                        onChange={onChange}
+                        suffix={suffix || undefined}
+                        min={min}
+                      />
+                    </div>
+                  </div>
+                ),
+              )}
+              {([
+                [
+                  "Total daily kg",
+                  `${(batchKg * batchesPerDay).toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`,
+                ],
+                [
+                  "Effective daily yield",
+                  `${Format.pct(cost.dailyEffectiveYield * 100)}%`,
+                ],
+              ] as Array<[string, string]>).map(([label, display]) => (
+                <div key={label}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.09em",
+                      textTransform: "uppercase",
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    {tr(label)}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      textAlign: "right",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {display}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           {/* Key Indicators — same card as the bench top tab, computed
               from the scale-up quantities. Both indicators are ratios of
@@ -3331,18 +3401,8 @@ export default function FormulaEditor({
               );
             })()}
           </div>
-          <div style={{ flex: "1 1 420px", minWidth: 320 }}>
-        <ScaleUpTab
-          batchKg={batchKg}
-          batchesPerDay={batchesPerDay}
-          setBatchesPerDay={setBatchesPerDay}
-          fixedLossKgPerDay={fixedLossKgPerDay}
-          setFixedLossKgPerDay={setFixedLossKgPerDay}
-          yieldPct={yieldPct}
-          setYieldPct={setYieldPct}
-          effectiveYield={cost.dailyEffectiveYield}
-        />
-          </div>
+          {/* The unlabeled params card (ScaleUpTab) is gone — its
+              inputs and readouts moved into the Placeholder 2 card. */}
         </div>
       )}
       {tab === "cost" && !printing && (
