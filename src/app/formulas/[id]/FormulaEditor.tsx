@@ -3272,6 +3272,65 @@ export default function FormulaEditor({
               {tr("Placeholder 2")}
             </div>
           </div>
+          {/* Key Indicators — same card as the bench top tab, computed
+              from the scale-up quantities. Both indicators are ratios of
+              the same rows the scale-up cards scale, so they're derived
+              through the identical shared helpers. */}
+          <div
+            style={{
+              flex: "0 0 220px",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              background: "var(--paper, #fffdf8)",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+                borderBottom: "1px solid var(--line, #e3dcc9)",
+                paddingBottom: 4,
+                marginBottom: 8,
+              }}
+            >
+              {tr("Key Indicators")}
+            </div>
+            {(() => {
+              const resid = computeGrandResidualPct({
+                preCookRows: phaseIngredients.groups["pre-cook"],
+                secondaryRows: phaseIngredients.groups["cooked"],
+                finalRows: phaseIngredients.groups["final"],
+                benchBatchG,
+              });
+              const ratio = computeSugarSyrupRatio({
+                preCookRows: phaseIngredients.groups["pre-cook"],
+                rmById,
+              });
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <BenchTopReadout
+                    label="Residual Moisture Total"
+                    valueText={Format.pctCompact(resid)}
+                    suffix="%"
+                  />
+                  <BenchTopReadout
+                    label="Sugar (dry)"
+                    valueText={ratio ? Format.pctCompact(ratio.sugarPct) : "—"}
+                    suffix="%"
+                  />
+                  <BenchTopReadout
+                    label="Syrup (dry)"
+                    valueText={ratio ? Format.pctCompact(ratio.syrupPct) : "—"}
+                    suffix="%"
+                  />
+                </div>
+              );
+            })()}
+          </div>
           <div style={{ flex: "1 1 420px", minWidth: 320 }}>
         <ScaleUpTab
           batchKg={batchKg}
