@@ -17,7 +17,8 @@ const es: Record<string, string> = {
   "Bench top batch size": "Tamaño de lote de mesa",
   "Bench top batch size (Cooked)": "Tamaño de lote de mesa (cocido)",
   "Batch size (pre-cook blend)": "Tamaño de lote (mezcla de precocción)",
-  "CFA Batch Size": "Tamaño de lote CFA",
+  // CFA = Colors Flavors Actives → Spanish CSA (Colores Sabores Activos).
+  "CFA Batch Size": "Tamaño de lote CSA",
   "Target Yield": "Rendimiento objetivo",
   "Finished piece weight (Dry)": "Peso de pieza terminada (seco)",
   "Finished piece weight (dry)": "Peso de pieza terminada (seco)",
@@ -43,9 +44,9 @@ const es: Record<string, string> = {
   "Daily Yield (gummies)": "Rendimiento diario (gomitas)",
   "Gummies / batch (Cooked Primary Blend)":
     "Gomitas / lote (mezcla primaria cocida)",
-  "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CFA)",
+  "Gummies / batch (CFA Batch)": "Gomitas / lote (lote CSA)",
   "QTY of Primary Blend Batches": "Cant. de lotes de mezcla primaria",
-  "QTY of CFA Batches": "Cant. de lotes CFA",
+  "QTY of CFA Batches": "Cant. de lotes CSA",
   "Key Indicators": "Indicadores clave",
   Reconciliation: "Conciliación",
 
@@ -82,12 +83,12 @@ const es: Record<string, string> = {
   "Total primary blend": "Total mezcla primaria",
   "Total primary blend carry over": "Total arrastre mezcla primaria",
   "Transferred Cooked Primary Blend to CFA Tank":
-    "Mezcla primaria cocida transferida al tanque CFA",
-  "CFA Batch": "Lote CFA",
-  "Grand Total CFA Batch": "Gran total de lote CFA",
+    "Mezcla primaria cocida transferida al tanque CSA",
+  "CFA Batch": "Lote CSA",
+  "Grand Total CFA Batch": "Gran total de lote CSA",
   "Scaled to the CFA Batch Size — the transferred cooked primary blend plus the secondary and final additions.":
-    "Escalado al tamaño de lote CFA — la mezcla primaria cocida transferida más las adiciones secundarias y finales.",
-  "Total transferred to CFA tank": "Total transferido al tanque CFA",
+    "Escalado al tamaño de lote CSA — la mezcla primaria cocida transferida más las adiciones secundarias y finales.",
+  "Total transferred to CFA tank": "Total transferido al tanque CSA",
   "Total secondary blend": "Total mezcla secundaria",
   "Total final blend": "Total mezcla final",
   "Grand Total Cooked Blend": "Gran total de mezcla cocida",
@@ -96,7 +97,7 @@ const es: Record<string, string> = {
   "Batch size": "Tamaño de lote",
   "Batches / day": "Lotes / día",
   "Batches / day (Primary Blend)": "Lotes / día (mezcla primaria)",
-  "CFA Batches / day": "Lotes CFA / día",
+  "CFA Batches / day": "Lotes CSA / día",
   "Fixed loss / day": "Pérdida fija / día",
   "Piece weight": "Peso de pieza",
   "Process yield": "Rendimiento del proceso",
@@ -197,7 +198,7 @@ const es: Record<string, string> = {
   "Pre-cook blend scales from the bench top: batch size ÷ total primary blend. Remaining values to be defined.":
     "La mezcla de precocción se escala desde la mesa: tamaño de lote ÷ total de mezcla primaria. Los demás valores están por definirse.",
   "Pre-cook blend scales by batch size ÷ total primary blend; Secondary and Final blends by CFA batch size ÷ total primary blend carry over.":
-    "La mezcla de precocción se escala por tamaño de lote ÷ total de mezcla primaria; las mezclas secundaria y final por tamaño de lote CFA ÷ total de arrastre de mezcla primaria.",
+    "La mezcla de precocción se escala por tamaño de lote ÷ total de mezcla primaria; las mezclas secundaria y final por tamaño de lote CSA ÷ total de arrastre de mezcla primaria.",
   // ---- Derived scale-up table (v51) ----
   "Kg / batch": "Kg / lote",
   "Total weighed input": "Total de entrada pesada",
