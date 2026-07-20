@@ -97,6 +97,7 @@ const es: Record<string, string> = {
   "Piece weight": "Peso de pieza",
   "Process yield": "Rendimiento del proceso",
   "Total daily kg": "Kg diarios totales",
+  "Total daily kg (pre-cook blend)": "Kg diarios totales (mezcla de precocción)",
   "Effective daily yield": "Rendimiento diario efectivo",
   "Gummies / batch": "Gomitas / lote",
   "$ / gummy (raw)": "$ / gomita (bruto)",

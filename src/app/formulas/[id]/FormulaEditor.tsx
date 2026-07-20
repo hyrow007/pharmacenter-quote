@@ -3275,9 +3275,11 @@ export default function FormulaEditor({
                 params card, stacked vertically. Inputs edit the same
                 state; the two derived readouts follow live. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Process yield input removed (operator request) — the
+                  yieldPct value persists and still feeds the Material
+                  costing math; it's just no longer edited here. */}
               {([
                 ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
-                ["Process yield", yieldPct, setYieldPct, "%", 1],
               ] as Array<[string, number, (n: number) => void, string, number]>).map(
                 ([label, value, onChange, suffix, min]) => (
                   <div key={label}>
@@ -3305,7 +3307,7 @@ export default function FormulaEditor({
               )}
               {([
                 [
-                  "Total daily kg",
+                  "Total daily kg (pre-cook blend)",
                   `${(batchKg * batchesPerDay).toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`,
                 ],
                 [
