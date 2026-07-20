@@ -35,6 +35,7 @@ const es: Record<string, string> = {
   "Batch Setup": "Configuración de lote",
   "Place Holder": "Marcador de posición",
   "Placeholder 2": "Marcador de posición 2",
+  Efficiencies: "Eficiencias",
   "Placeholder 3": "Marcador de posición 3",
   "Daily Metrics": "Métricas diarias",
   "Production Days": "Días de producción",

@@ -3246,101 +3246,8 @@ export default function FormulaEditor({
               );
             })()}
           </div>
-          {/* Placeholder 2 card — same footprint as Place Holder;
-              contents to be defined by the operator. */}
-          <div
-            style={{
-              flex: "0 0 220px",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 8,
-              background: "var(--paper, #fffdf8)",
-              padding: "14px 16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "var(--teal-900, #0f4a56)",
-                borderBottom: "1px solid var(--line, #e3dcc9)",
-                paddingBottom: 4,
-                marginBottom: 8,
-              }}
-            >
-              {tr("Placeholder 2")}
-            </div>
-            {/* Production-day params — moved here from the old unlabeled
-                params card, stacked vertically. Inputs edit the same
-                state; the two derived readouts follow live. */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Process yield input removed (operator request) — the
-                  yieldPct value persists and still feeds the Material
-                  costing math; it's just no longer edited here. */}
-              {([
-                ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
-              ] as Array<[string, number, (n: number) => void, string, number]>).map(
-                ([label, value, onChange, suffix, min]) => (
-                  <div key={label}>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr(label)}
-                    </div>
-                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
-                      <NumberInput
-                        value={value}
-                        onChange={onChange}
-                        suffix={suffix || undefined}
-                        min={min}
-                      />
-                    </div>
-                  </div>
-                ),
-              )}
-              {([
-                [
-                  "Effective daily yield",
-                  `${Format.pct(cost.dailyEffectiveYield * 100)}%`,
-                ],
-              ] as Array<[string, string]>).map(([label, display]) => (
-                <div key={label}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.09em",
-                      textTransform: "uppercase",
-                      color: "var(--ink-3, #8a9498)",
-                    }}
-                  >
-                    {tr(label)}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 2,
-                      textAlign: "right",
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: "var(--teal-900, #0f4a56)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {display}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Placeholder 3 card — same footprint; contents to be defined
-              by the operator. */}
+          {/* Daily Metrics card (formerly Placeholder 3) — swapped ahead
+              of the Efficiencies card (operator request). */}
           <div
             style={{
               flex: "0 0 220px",
@@ -3550,6 +3457,94 @@ export default function FormulaEditor({
                 </div>
               );
             })()}
+          </div>
+          {/* Efficiencies card (formerly Placeholder 2) — production
+              efficiency inputs/readouts, now positioned after Daily
+              Metrics. */}
+          <div
+            style={{
+              flex: "0 0 220px",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              background: "var(--paper, #fffdf8)",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "var(--teal-900, #0f4a56)",
+                borderBottom: "1px solid var(--line, #e3dcc9)",
+                paddingBottom: 4,
+                marginBottom: 8,
+              }}
+            >
+              {tr("Efficiencies")}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {([
+                ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
+              ] as Array<[string, number, (n: number) => void, string, number]>).map(
+                ([label, value, onChange, suffix, min]) => (
+                  <div key={label}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr(label)}
+                    </div>
+                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
+                      <NumberInput
+                        value={value}
+                        onChange={onChange}
+                        suffix={suffix || undefined}
+                        min={min}
+                      />
+                    </div>
+                  </div>
+                ),
+              )}
+              {([
+                [
+                  "Effective daily yield",
+                  `${Format.pct(cost.dailyEffectiveYield * 100)}%`,
+                ],
+              ] as Array<[string, string]>).map(([label, display]) => (
+                <div key={label}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.09em",
+                      textTransform: "uppercase",
+                      color: "var(--ink-3, #8a9498)",
+                    }}
+                  >
+                    {tr(label)}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      textAlign: "right",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {display}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           {/* Key Indicators — same card as the bench top tab, computed
               from the scale-up quantities. Both indicators are ratios of
