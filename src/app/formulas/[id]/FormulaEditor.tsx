@@ -1531,6 +1531,33 @@ export default function FormulaEditor({
     return { groups, unassigned };
   }, [ingredients]);
 
+  // v53: shared scale-up model — every derived number the scale-up
+  // header cards show comes from this one computation (see
+  // computeScaleUpModel). Cheap to recompute per render.
+  const scaleUp = computeScaleUpModel({
+    groups: phaseIngredients.groups,
+    benchBatchG,
+    batchKg,
+    cfaBatchKg,
+  });
+  const scaleUpGummiesOf = (kg: number) =>
+    wetCastPieceWeightG > 0 ? (kg * 1000) / wetCastPieceWeightG : 0;
+  // Daily Yield: CFA kg/day (batches/day × finished cooked mass per
+  // batch) minus the fixed daily loss, ÷ cast weight (wet).
+  const scaleUpDailyYield =
+    wetCastPieceWeightG > 0
+      ? (Math.max(0, scaleUp.cfaKgPerBatch * batchesPerDay - fixedLossKgPerDay) *
+          1000) /
+        wetCastPieceWeightG
+      : 0;
+  // Batch QTYs: Target Yield ÷ gummies per batch (fractional, 2 dp).
+  const fmtQtyBatches = (perBatch: number) =>
+    perBatch > 0
+      ? (targetYieldUnits / perBatch).toLocaleString("en-US", {
+          maximumFractionDigits: 2,
+        })
+      : "0";
+
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
   // capture element text via string-set (unsupported), but a plain string
@@ -3125,454 +3152,76 @@ export default function FormulaEditor({
             wetCastPieceWeightG={wetCastPieceWeightG}
             setWetCastPieceWeightG={setWetCastPieceWeightG}
           />
-          {/* Place Holder card — same footprint as Batch Setup; contents
-              to be defined by the operator. */}
-          <div
-            style={{
-              flex: "0 0 220px",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 8,
-              background: "var(--paper, #fffdf8)",
-              padding: "14px 16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "var(--teal-900, #0f4a56)",
-                borderBottom: "1px solid var(--line, #e3dcc9)",
-                paddingBottom: 4,
-                marginBottom: 8,
-              }}
-            >
-              {tr("Place Holder")}
-            </div>
-            {(() => {
-              // Shared scale-up math (mirrors the blend cards exactly):
-              // - Carry-over kg = bench NET carry-over grams × (batchKg ÷
-              //   bench Total Primary Blend)
-              // - Grand Total CFA Batch kg = CFA Batch Size (the tank
-              //   transfer, by construction) + secondary + final on the
-              //   CFA basis (bench grams × cfaBatchKg ÷ carry-over net g)
-              const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
-              const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const finG = (phaseIngredients.groups["final"] ?? []).reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const totalPrimaryG = pcRows.reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const carryNetG = computeCarryOverPrimaryNetG({
-                preCookRows: pcRows,
-                benchBatchG,
-                secondaryG: secG,
-                finalG: finG,
-              });
-              const carryKg =
-                totalPrimaryG > 0 ? (carryNetG * batchKg) / totalPrimaryG : 0;
-              const grandCfaKg =
-                carryNetG > 0
-                  ? cfaBatchKg + ((secG + finG) * cfaBatchKg) / carryNetG
-                  : 0;
-              const gummiesOf = (kg: number) =>
-                wetCastPieceWeightG > 0
-                  ? (kg * 1000) / wetCastPieceWeightG
-                  : 0;
-              const readout = (label: string, display: string) => (
-                <div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.09em",
-                      textTransform: "uppercase",
-                      color: "var(--ink-3, #8a9498)",
-                    }}
-                  >
-                    {tr(label)}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 2,
-                      textAlign: "right",
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: "var(--teal-900, #0f4a56)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {display}
-                  </div>
-                </div>
-              );
-              const fmtInt = (n: number) =>
-                n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-              // Batch QTYs — Target Yield ÷ gummies per batch. Fractional
-              // by nature (a run rarely lands on a whole batch), shown to
-              // 2 decimals.
-              const fmtBatches = (perBatch: number) =>
-                perBatch > 0
-                  ? (targetYieldUnits / perBatch).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })
-                  : "0";
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {readout(
-                    "Gummies / batch (Cooked Primary Blend)",
-                    fmtInt(gummiesOf(carryKg)),
-                  )}
-                  {readout(
-                    "QTY of Primary Blend Batches",
-                    fmtBatches(gummiesOf(carryKg)),
-                  )}
-                  {readout(
-                    "Gummies / batch (CFA Batch)",
-                    fmtInt(gummiesOf(grandCfaKg)),
-                  )}
-                  {readout(
-                    "QTY of CFA Batches",
-                    fmtBatches(gummiesOf(grandCfaKg)),
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-          {/* Daily Metrics card (formerly Placeholder 3) — swapped ahead
-              of the Efficiencies card (operator request). */}
-          <div
-            style={{
-              flex: "0 0 220px",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 8,
-              background: "var(--paper, #fffdf8)",
-              padding: "14px 16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "var(--teal-900, #0f4a56)",
-                borderBottom: "1px solid var(--line, #e3dcc9)",
-                paddingBottom: 4,
-                marginBottom: 8,
-              }}
-            >
-              {tr("Daily Metrics")}
-            </div>
-            {/* Daily Yield (gummies) — CFA kilograms produced per day
-                minus the fixed daily loss, divided by the cast weight
-                (wet). CFA kg/day = batches/day × the finished cooked
-                mass each pre-cook batch yields (carry-over net +
-                secondary + final, scaled batchKg ÷ total primary). */}
-            {(() => {
-              const pcRows = phaseIngredients.groups["pre-cook"] ?? [];
-              const secG = (phaseIngredients.groups["cooked"] ?? []).reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const finG = (phaseIngredients.groups["final"] ?? []).reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const totalPrimaryG = pcRows.reduce(
-                (s, r) => s + (Number(r.grams) || 0),
-                0,
-              );
-              const carryNetG = computeCarryOverPrimaryNetG({
-                preCookRows: pcRows,
-                benchBatchG,
-                secondaryG: secG,
-                finalG: finG,
-              });
-              const cfaKgPerBatch =
-                totalPrimaryG > 0
-                  ? ((carryNetG + secG + finG) * batchKg) / totalPrimaryG
-                  : 0;
-              const dailyCfaKg = cfaKgPerBatch * batchesPerDay;
-              const dailyYieldGummies =
-                wetCastPieceWeightG > 0
-                  ? Math.max(0, dailyCfaKg - fixedLossKgPerDay) * 1000 /
-                    wetCastPieceWeightG
-                  : 0;
-              // CFA Batches / day — daily carry-over kg (net cooked
-              // primary transferred to the CFA tank) ÷ CFA Batch Size.
-              const carryKgPerBatch =
-                totalPrimaryG > 0 ? (carryNetG * batchKg) / totalPrimaryG : 0;
-              const cfaBatchesPerDay =
-                cfaBatchKg > 0
-                  ? (carryKgPerBatch * batchesPerDay) / cfaBatchKg
-                  : 0;
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {/* Batches / day (Primary Blend) — editable input,
-                      moved here from Placeholder 2. Same state; the
-                      CFA-batches and daily-yield readouts below follow. */}
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr("Batches / day (Primary Blend)")}
-                    </div>
-                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
-                      <NumberInput
-                        value={batchesPerDay}
-                        onChange={setBatchesPerDay}
-                        min={1}
-                      />
-                    </div>
-                  </div>
-                  {/* Total daily kg (pre-cook blend) — moved here from
-                      Placeholder 2, directly under Batches / day. */}
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr("Total daily kg (pre-cook blend)")}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 2,
-                        textAlign: "right",
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {(batchKg * batchesPerDay).toLocaleString("en-US", {
-                        maximumFractionDigits: 1,
-                      })}{" kg"}
-                    </div>
-                  </div>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr("CFA Batches / day")}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 2,
-                        textAlign: "right",
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {cfaBatchesPerDay.toLocaleString("en-US", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr("Daily Yield (gummies)")}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 2,
-                        textAlign: "right",
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {dailyYieldGummies.toLocaleString("en-US", {
-                        maximumFractionDigits: 0,
-                      })}
-                    </div>
-                  </div>
-                  {/* Production Days — Target Yield ÷ Daily Yield. How
-                      many production days the order takes at this rate. */}
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr("Production Days")}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 2,
-                        textAlign: "right",
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {(dailyYieldGummies > 0
-                        ? targetYieldUnits / dailyYieldGummies
-                        : 0
-                      ).toLocaleString("en-US", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-          {/* Efficiencies card (formerly Placeholder 2) — production
-              efficiency inputs/readouts, now positioned after Daily
-              Metrics. */}
-          <div
-            style={{
-              flex: "0 0 220px",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 8,
-              background: "var(--paper, #fffdf8)",
-              padding: "14px 16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "var(--teal-900, #0f4a56)",
-                borderBottom: "1px solid var(--line, #e3dcc9)",
-                paddingBottom: 4,
-                marginBottom: 8,
-              }}
-            >
-              {tr("Efficiencies")}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {([
-                ["Fixed loss / day", fixedLossKgPerDay, setFixedLossKgPerDay, "kg", 0],
-              ] as Array<[string, number, (n: number) => void, string, number]>).map(
-                ([label, value, onChange, suffix, min]) => (
-                  <div key={label}>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-3, #8a9498)",
-                      }}
-                    >
-                      {tr(label)}
-                    </div>
-                    <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
-                      <NumberInput
-                        value={value}
-                        onChange={onChange}
-                        suffix={suffix || undefined}
-                        min={min}
-                      />
-                    </div>
-                  </div>
-                ),
-              )}
-              {([
-                [
-                  "Effective daily yield",
-                  `${Format.pct(cost.dailyEffectiveYield * 100)}%`,
-                ],
-              ] as Array<[string, string]>).map(([label, display]) => (
-                <div key={label}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.09em",
-                      textTransform: "uppercase",
-                      color: "var(--ink-3, #8a9498)",
-                    }}
-                  >
-                    {tr(label)}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 2,
-                      textAlign: "right",
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: "var(--teal-900, #0f4a56)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {display}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Key Indicators — same card as the bench top tab, computed
-              from the scale-up quantities. Both indicators are ratios of
-              the same rows the scale-up cards scale, so they're derived
-              through the identical shared helpers. */}
-          <div
-            style={{
-              flex: "0 0 220px",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 8,
-              background: "var(--paper, #fffdf8)",
-              padding: "14px 16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "var(--teal-900, #0f4a56)",
-                borderBottom: "1px solid var(--line, #e3dcc9)",
-                paddingBottom: 4,
-                marginBottom: 8,
-              }}
-            >
-              {tr("Key Indicators")}
-            </div>
+          {/* Batch Yields (formerly "Place Holder") — per-batch gummy
+              counts and how many batches the Target Yield requires. */}
+          <MetricCard title="Batch Yields">
+            <MetricReadout
+              label="Gummies / batch (Cooked Primary Blend)"
+              display={fmtMetricInt(scaleUpGummiesOf(scaleUp.carryKg))}
+            />
+            <MetricReadout
+              label="QTY of Primary Blend Batches"
+              display={fmtQtyBatches(scaleUpGummiesOf(scaleUp.carryKg))}
+            />
+            <MetricReadout
+              label="Gummies / batch (CFA Batch)"
+              display={fmtMetricInt(scaleUpGummiesOf(scaleUp.grandCfaKg))}
+            />
+            <MetricReadout
+              label="QTY of CFA Batches"
+              display={fmtQtyBatches(scaleUpGummiesOf(scaleUp.grandCfaKg))}
+            />
+          </MetricCard>
+          {/* Daily Metrics — batches/day input plus the daily throughput
+              chain derived from the shared scale-up model. */}
+          <MetricCard title="Daily Metrics">
+            <MetricInputRow
+              label="Batches / day (Primary Blend)"
+              value={batchesPerDay}
+              onChange={setBatchesPerDay}
+              min={1}
+            />
+            <MetricReadout
+              label="Total daily kg (pre-cook blend)"
+              display={`${(batchKg * batchesPerDay).toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`}
+            />
+            <MetricReadout
+              label="CFA Batches / day"
+              display={(cfaBatchKg > 0
+                ? (scaleUp.carryKg * batchesPerDay) / cfaBatchKg
+                : 0
+              ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            />
+            <MetricReadout
+              label="Daily Yield (gummies)"
+              display={fmtMetricInt(scaleUpDailyYield)}
+            />
+            <MetricReadout
+              label="Production Days"
+              display={(scaleUpDailyYield > 0
+                ? targetYieldUnits / scaleUpDailyYield
+                : 0
+              ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            />
+          </MetricCard>
+          {/* Efficiencies — loss input + effective-yield readout. */}
+          <MetricCard title="Efficiencies">
+            <MetricInputRow
+              label="Fixed loss / day"
+              value={fixedLossKgPerDay}
+              onChange={setFixedLossKgPerDay}
+              suffix="kg"
+              min={0}
+            />
+            <MetricReadout
+              label="Effective daily yield"
+              display={`${Format.pct(cost.dailyEffectiveYield * 100)}%`}
+            />
+          </MetricCard>
+          {/* Key Indicators — same indicators as the bench top tab.
+              Both are ratios of the same rows the scale-up cards scale,
+              so they're derived through the identical shared helpers. */}
+          <MetricCard title="Key Indicators">
             {(() => {
               const resid = computeGrandResidualPct({
                 preCookRows: phaseIngredients.groups["pre-cook"],
@@ -3585,7 +3234,7 @@ export default function FormulaEditor({
                 rmById,
               });
               return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <>
                   <BenchTopReadout
                     label="Residual Moisture Total"
                     valueText={Format.pctCompact(resid)}
@@ -3601,12 +3250,10 @@ export default function FormulaEditor({
                     valueText={ratio ? Format.pctCompact(ratio.syrupPct) : "—"}
                     suffix="%"
                   />
-                </div>
+                </>
               );
             })()}
-          </div>
-          {/* The unlabeled params card (ScaleUpTab) is gone — its
-              inputs and readouts moved into the Placeholder 2 card. */}
+          </MetricCard>
         </div>
       )}
       {tab === "cost" && !printing && (
@@ -4323,308 +3970,11 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ---- Key Indicators stat cell ----
-// Each cell is a fixed-width column with the label centered above the
-// value. All four stat cells share the same width (min-width) so the
-// equation lays out as evenly-sized boxes with operators between —
-// giving each + / = an equal amount of space on both sides.
-function KeyIndicatorStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
-  const tr = makeTr(useLang());
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 4,
-        // Fixed min-width sized to comfortably fit the widest label
-        // ("TOTAL (SUM OF ALL BLENDS)"). All four cells share this so
-        // the operators land equidistant between them. 155 keeps the
-        // whole equation + % of bench on a single row for typical card
-        // widths without truncating any label.
-        minWidth: 155,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11.5,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-          whiteSpace: "nowrap",
-          textAlign: "center",
-        }}
-      >
-        {tr(label)}
-      </div>
-      <div
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          color: "var(--teal-900, #0f4a56)",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-          whiteSpace: "nowrap",
-          textAlign: "center",
-        }}
-      >
-        {Format.grams(value)}
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: "var(--ink-3, #8a9498)",
-            marginLeft: 4,
-          }}
-        >
-          g
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// Percentage variant of KeyIndicatorStat used for the "% of bench batch"
-// slot at the end of the Key Indicators row. Same visual box as the
-// gram-value stats so the whole row stays aligned; renders a % instead
-// of grams and turns red when the recipe doesn't balance to bench batch.
-function KeyIndicatorPctStat({
-  label,
-  value,
-  ok,
-}: {
-  label: string;
-  value: number;
-  ok: boolean;
-}) {
-  const tr = makeTr(useLang());
-  // Drop trailing ".00" so 100% reads as "100%" not "100.00%" — via
-  // the shared Format.pctCompact helper.
-  const display = Format.pctCompact(value);
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 4,
-        // 155 min-width matches KeyIndicatorStat so row 2's cells
-        // line up under row 1's equation. Row 1's % of bench batch
-        // no longer uses this component (it's inlined so it can
-        // right-align its label without overflowing the card edge),
-        // so this width now only affects row 2 stats.
-        minWidth: 155,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11.5,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-          whiteSpace: "nowrap",
-          textAlign: "center",
-        }}
-      >
-        {tr(label)}
-      </div>
-      <div
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          color: ok ? "var(--teal-700, #1d6c7b)" : "#8b2f2f",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-          whiteSpace: "nowrap",
-          textAlign: "center",
-        }}
-      >
-        {display}%
-      </div>
-    </div>
-  );
-}
-
-// Two-value ratio stat used for "Sugar to Syrup Ratio (dry)" in the
-// Key Indicators card. Shows a single label above two labelled sub-
-// values (Sugar / Syrup) side by side. Same 190px fixed cell width so
-// it aligns with the other Key Indicator stats.
-function KeyIndicatorRatioStat({
-  label,
-  sugarText,
-  syrupText,
-}: {
-  label: string;
-  sugarText: string;
-  syrupText: string;
-}) {
-  const tr = makeTr(useLang());
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 4,
-        minWidth: 190,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11.5,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-          whiteSpace: "nowrap",
-          textAlign: "center",
-        }}
-      >
-        {tr(label)}
-      </div>
-      {/* Two labelled sub-values side by side. Kept as separate stacks
-          so each has its own "SUGAR" / "SYRUP" caption above the digit. */}
-      <div style={{ display: "flex", gap: 18, alignItems: "flex-end" }}>
-        <RatioSubValue caption="Sugar" text={sugarText} />
-        <RatioSubValue caption="Syrup" text={syrupText} />
-      </div>
-    </div>
-  );
-}
-
-// A single value under a small "SUGAR" / "SYRUP" caption. Used by
-// KeyIndicatorRatioStat.
-function RatioSubValue({ caption, text }: { caption: string; text: string }) {
-  const tr = makeTr(useLang());
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-          lineHeight: 1,
-          marginBottom: 3,
-        }}
-      >
-        {tr(caption)}
-      </div>
-      <div
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          color: "var(--teal-900, #0f4a56)",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
-}
-
-// Operator glyph (+, =) between KeyIndicatorStat cells. Aligns to the
-// value baseline (not the label above) so the equation reads across.
-function KeyIndicatorOp({ glyph }: { glyph: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        // Nudge down so the glyph sits at the digit baseline, not the
-        // top of the cell. The parent's alignItems: "flex-end" bottoms
-        // the operator; a tiny paddingBottom fine-tunes to the digit
-        // baseline for visual symmetry with the values.
-        paddingBottom: 2,
-        fontSize: 22,
-        fontWeight: 700,
-        color: "var(--ink-3, #8a9498)",
-        lineHeight: 1,
-      }}
-    >
-      {glyph}
-    </div>
-  );
-}
-
-// --- Scale up tab ------------------------------------------------------------
-
-function ScaleUpTab({
-  batchKg,
-  batchesPerDay,
-  setBatchesPerDay,
-  fixedLossKgPerDay,
-  setFixedLossKgPerDay,
-  yieldPct,
-  setYieldPct,
-  effectiveYield,
-}: {
-  batchKg: number;
-  batchesPerDay: number;
-  setBatchesPerDay: (n: number) => void;
-  fixedLossKgPerDay: number;
-  setFixedLossKgPerDay: (n: number) => void;
-  yieldPct: number;
-  setYieldPct: (n: number) => void;
-  effectiveYield: number;
-}) {
-  const totalDailyKg = batchKg * batchesPerDay;
-
-  return (
-    <div
-      style={{
-        marginBottom: 14,
-        padding: 14,
-        border: "1px solid var(--line, #e3dcc9)",
-        borderRadius: 8,
-        background: "var(--paper, #fffdf8)",
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        gap: 14,
-      }}
-    >
-      {/* Batch size input removed — it lives on the Batch Setup card
-          beside this one ("Batch size (pre-cook blend)"); batchKg still
-          feeds the derived values below. */}
-      <ParamBlock label="Batches / day">
-        <NumberInput value={batchesPerDay} onChange={setBatchesPerDay} min={1} />
-      </ParamBlock>
-      <ParamBlock label="Fixed loss / day">
-        <NumberInput
-          value={fixedLossKgPerDay}
-          onChange={setFixedLossKgPerDay}
-          suffix="kg"
-          min={0}
-        />
-      </ParamBlock>
-      {/* Piece weight input removed — it lives on the Batch Setup card
-          ("Finished piece weight (Dry)"); gummyPieceWeightG still feeds
-          Gummies / batch below. */}
-      <ParamBlock label="Process yield">
-        <NumberInput value={yieldPct} onChange={setYieldPct} suffix="%" min={1} />
-      </ParamBlock>
-      <ParamBlock label="Total daily kg">
-        <ReadOnly>{totalDailyKg.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg</ReadOnly>
-      </ParamBlock>
-      <ParamBlock label="Effective daily yield">
-        <ReadOnly>{Format.pct(effectiveYield * 100)}%</ReadOnly>
-      </ParamBlock>
-      {/* Gummies / batch moved to the Place Holder card beside Batch
-          Setup, relabeled "Gummies / batch (Cooked Primary Blend)". */}
-    </div>
-  );
-}
+// v53 code-health sweep: the Key Indicator equation components
+// (KeyIndicatorStat / PctStat / RatioStat / Op) and the retired
+// ScaleUpTab params card were removed — the bench Key Indicators went
+// vertical (BenchTopReadout) and the scale-up header cards absorbed the
+// params (see MetricCard / MetricReadout / MetricInputRow).
 
 function ParamBlock({ label, children }: { label: string; children: React.ReactNode }) {
   const tr = makeTr(useLang());
@@ -4668,6 +4018,151 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 // scale-up parameter card (same left/right layout as the bench top's
 // Batch Setup + Key Indicators row). Values blank until scaling rules
 // are defined.
+// ---- v53: shared scale-up model + metric-card building blocks ----
+// Single source of truth for every derived mass the scale-up header
+// cards show. All cards read from this one computation so the numbers
+// cannot drift apart (the class of bug we hit with the residual total).
+function computeScaleUpModel(params: {
+  groups: Record<string, GummyFormulaIngredient[]>;
+  benchBatchG: number;
+  batchKg: number;
+  cfaBatchKg: number;
+}) {
+  const preCookRows = params.groups["pre-cook"] ?? [];
+  const secG = (params.groups["cooked"] ?? []).reduce(
+    (s, r) => s + (Number(r.grams) || 0),
+    0,
+  );
+  const finG = (params.groups["final"] ?? []).reduce(
+    (s, r) => s + (Number(r.grams) || 0),
+    0,
+  );
+  const totalPrimaryG = preCookRows.reduce(
+    (s, r) => s + (Number(r.grams) || 0),
+    0,
+  );
+  const carryNetG = computeCarryOverPrimaryNetG({
+    preCookRows,
+    benchBatchG: params.benchBatchG,
+    secondaryG: secG,
+    finalG: finG,
+  });
+  // Carry-over kg per pre-cook batch: bench NET carry-over grams ×
+  // (batchKg ÷ bench Total Primary Blend).
+  const carryKg =
+    totalPrimaryG > 0 ? (carryNetG * params.batchKg) / totalPrimaryG : 0;
+  // Finished cooked mass per pre-cook batch (carry-over + secondary +
+  // final on the batch basis).
+  const cfaKgPerBatch =
+    totalPrimaryG > 0
+      ? ((carryNetG + secG + finG) * params.batchKg) / totalPrimaryG
+      : 0;
+  // Grand Total CFA Batch kg: the tank transfer (= CFA Batch Size by
+  // construction) + secondary + final on the CFA basis.
+  const grandCfaKg =
+    carryNetG > 0
+      ? params.cfaBatchKg + ((secG + finG) * params.cfaBatchKg) / carryNetG
+      : 0;
+  return { secG, finG, totalPrimaryG, carryNetG, carryKg, cfaKgPerBatch, grandCfaKg };
+}
+
+// Shared chrome for the small scale-up header cards: one component for
+// the card shell, one for a read-only metric, one for an editable one.
+const metricLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.09em",
+  textTransform: "uppercase",
+  color: "var(--ink-3, #8a9498)",
+};
+
+function MetricCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  const tr = makeTr(useLang());
+  return (
+    <div
+      style={{
+        flex: "0 0 220px",
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 8,
+        background: "var(--paper, #fffdf8)",
+        padding: "14px 16px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color: "var(--teal-900, #0f4a56)",
+          borderBottom: "1px solid var(--line, #e3dcc9)",
+          paddingBottom: 4,
+          marginBottom: 8,
+        }}
+      >
+        {tr(title)}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MetricReadout({ label, display }: { label: string; display: string }) {
+  const tr = makeTr(useLang());
+  return (
+    <div>
+      <div style={metricLabelStyle}>{tr(label)}</div>
+      <div
+        style={{
+          marginTop: 2,
+          textAlign: "right",
+          fontSize: 16,
+          fontWeight: 700,
+          color: "var(--teal-900, #0f4a56)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {display}
+      </div>
+    </div>
+  );
+}
+
+function MetricInputRow({
+  label,
+  value,
+  onChange,
+  suffix,
+  min,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  suffix?: string;
+  min?: number;
+}) {
+  const tr = makeTr(useLang());
+  return (
+    <div>
+      <div style={metricLabelStyle}>{tr(label)}</div>
+      <div style={{ marginTop: 2, display: "flex", justifyContent: "flex-end" }}>
+        <NumberInput value={value} onChange={onChange} suffix={suffix} min={min} />
+      </div>
+    </div>
+  );
+}
+
+const fmtMetricInt = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
 function ScaleUpBatchSetupCard({
   batchKg,
   setBatchKg,

@@ -34,6 +34,7 @@ const es: Record<string, string> = {
   "Syrup (dry)": "Jarabe (seco)",
   "Batch Setup": "Configuración de lote",
   "Place Holder": "Marcador de posición",
+  "Batch Yields": "Rendimientos de lote",
   "Placeholder 2": "Marcador de posición 2",
   Efficiencies: "Eficiencias",
   "Placeholder 3": "Marcador de posición 3",
