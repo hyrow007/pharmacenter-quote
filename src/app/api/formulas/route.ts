@@ -77,7 +77,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const formulas: GummyFormulaRecord[] = (data ?? []).map(recordFromRow);
+  let formulas: GummyFormulaRecord[] = (data ?? []).map(recordFromRow);
+
+  // v54: surface the ISSUED version number in the catalog list (matches
+  // the server-rendered page). Errors — e.g. the issues migration not
+  // yet run — leave the revision numbers standing in unchanged.
+  if (formulas.length > 0) {
+    const { data: issueRows, error: issueErr } = await supabase
+      .from("gummy_formula_issues")
+      .select("formula_id, issue_num")
+      .in(
+        "formula_id",
+        formulas.map((f) => f.id),
+      );
+    if (!issueErr && issueRows) {
+      const issuedByFormula: Record<string, number> = {};
+      for (const row of issueRows) {
+        const cur = issuedByFormula[row.formula_id] ?? 0;
+        if (Number(row.issue_num) > cur)
+          issuedByFormula[row.formula_id] = Number(row.issue_num);
+      }
+      formulas = formulas.map((f) =>
+        issuedByFormula[f.id] !== undefined
+          ? { ...f, latestVersionNum: issuedByFormula[f.id] }
+          : f,
+      );
+    }
+  }
   return NextResponse.json({ ok: true, formulas });
 }
 

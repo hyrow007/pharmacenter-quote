@@ -53,7 +53,7 @@ export default async function FormulaEditorPage({
   // in raw_materials get their overlay fields (cost / solids / category);
   // Fishbowl-only PC-RW products still appear in the picker but with
   // null cost until an admin or Fishbowl sync fills them in.
-  const [formulaRes, versionRes, rmRes, pcBkRes, pcRwRes, solRes] = await Promise.all([
+  const [formulaRes, versionRes, rmRes, pcBkRes, pcRwRes, solRes, issueRes] = await Promise.all([
     supabase
       .from("gummy_formulas")
       .select(
@@ -64,7 +64,7 @@ export default async function FormulaEditorPage({
     supabase
       .from("gummy_formula_versions")
       .select(
-        "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+        "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
       )
       .eq("formula_id", id)
       .order("version_num", { ascending: false })
@@ -98,6 +98,15 @@ export default async function FormulaEditorPage({
       )
       .eq("active", true)
       .order("name", { ascending: true }),
+    // v54: latest ISSUED version. Errors (e.g. migration not yet run)
+    // fall back to the old behavior below — issued = latest revision.
+    supabase
+      .from("gummy_formula_issues")
+      .select("issue_num, revision_num")
+      .eq("formula_id", id)
+      .order("issue_num", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (formulaRes.error || !formulaRes.data) {
@@ -107,6 +116,21 @@ export default async function FormulaEditorPage({
   const formula: GummyFormulaRecord = recordFromRow(formulaRes.data);
   const latestVersion: GummyFormulaVersion | null =
     versionRes.data ? versionFromRow(versionRes.data) : null;
+
+  // v54: issued number + the revision it stamps. Pre-migration (table
+  // missing or no baseline row) falls back to the save-per-version
+  // behavior so nothing breaks: issued = latest revision, no draft.
+  const issue =
+    !issueRes.error && issueRes.data
+      ? {
+          issueNum: Number(issueRes.data.issue_num),
+          revisionNum: Number(issueRes.data.revision_num),
+        }
+      : {
+          issueNum: formula.latestVersionNum,
+          revisionNum: formula.latestVersionNum,
+        };
+  const isDraft = formula.latestVersionNum > issue.revisionNum;
 
   // Curated raw_materials rows — full data (cost, solids, category, notes).
   const curatedRawMaterials: RawMaterialOption[] = (rmRes.data ?? []).map((r) => ({
@@ -248,8 +272,22 @@ export default async function FormulaEditorPage({
             <span>
               {tr("Version")}{" "}
               <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
-                v{formula.latestVersionNum}
+                v{issue.issueNum}
               </strong>
+              {isDraft ? (
+                <strong
+                  style={{
+                    marginLeft: 6,
+                    padding: "1px 7px",
+                    borderRadius: 999,
+                    background: "#f4e9d4",
+                    border: "1px solid #d9c48f",
+                    color: "#8a6d1a",
+                  }}
+                >
+                  {tr("draft")}
+                </strong>
+              ) : null}
             </span>
             <span aria-hidden="true">·</span>
             <span>
@@ -276,6 +314,7 @@ export default async function FormulaEditorPage({
               pcBkProducts={pcBkProducts}
               initialSavedSolutions={savedSolutions}
               currentUserEmail={user.email!}
+              initialIssue={issue}
             />
           </I18nProvider>
         </div>

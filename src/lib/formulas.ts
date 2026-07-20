@@ -667,7 +667,7 @@ export function recordFromRow(row: {
 //   'identity' — name / pc_bk_code / shape / flavor edit (no version cut)
 //   'version'  — new gummy_formula_versions row cut
 // -----------------------------------------------------------------------------
-export type GummyFormulaAuditKind = "created" | "identity" | "version";
+export type GummyFormulaAuditKind = "created" | "identity" | "version" | "issued";
 
 export type GummyFormulaAuditRecord = {
   id: string;

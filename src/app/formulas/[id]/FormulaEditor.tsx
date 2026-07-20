@@ -449,6 +449,10 @@ type Props = {
   // Email of the signed-in operator. Used to gate note edit/delete
   // affordances (only shown on notes the current user authored).
   currentUserEmail: string;
+  // v54: latest ISSUED version (official number + the internal revision
+  // it stamps). Saves cut revisions without bumping the visible number;
+  // the Issue button assigns the next issueNum.
+  initialIssue: { issueNum: number; revisionNum: number };
 };
 
 type Tab = "bench" | "scale" | "cost";
@@ -473,10 +477,15 @@ export default function FormulaEditor({
   pcBkProducts,
   initialSavedSolutions = [],
   currentUserEmail,
+  initialIssue,
 }: Props) {
   const lang = useLang();
   const tr = makeTr(lang);
   const router = useRouter();
+
+  // v54: draft = there are saved revisions newer than the last issued
+  // one. Refresh after save/issue keeps this in sync via server props.
+  const isDraft = initialFormula.latestVersionNum > initialIssue.revisionNum;
 
   // Saved-solutions library — client state so newly-saved entries appear
   // in the "load from library" list without a full page refresh.
@@ -1148,10 +1157,11 @@ export default function FormulaEditor({
     | null
   >(null);
 
-  async function handleSave() {
-    setSaving(true);
-    setSaveStatus(null);
-    try {
+  // v54: the save body is extracted so the Issue button can reuse it
+  // (save-if-dirty, then stamp). Returns false when any step failed —
+  // the failing step has already set saveStatus.
+  async function performSave(): Promise<boolean> {
+    {
       // 1. Identity PUT (if identity dirty).
       if (identityDirty) {
         const res = await fetch(`/api/formulas/${initialFormula.id}`, {
@@ -1171,8 +1181,7 @@ export default function FormulaEditor({
             kind: "err",
             text: json.error || `identity_save_failed_${res.status}`,
           });
-          setSaving(false);
-          return;
+          return false;
         }
       }
       // 2. Version POST (if version dirty).
@@ -1205,8 +1214,7 @@ export default function FormulaEditor({
             kind: "err",
             text: json.error || `version_save_failed_${res.status}`,
           });
-          setSaving(false);
-          return;
+          return false;
         }
       }
       setSaveStatus({ kind: "ok", text: "Saved" });
@@ -1215,6 +1223,15 @@ export default function FormulaEditor({
       // new event appears at the top of the timeline immediately.
       router.refresh();
       refetchAudit();
+      return true;
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      await performSave();
     } catch (err) {
       setSaveStatus({
         kind: "err",
@@ -1222,6 +1239,41 @@ export default function FormulaEditor({
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // v54: Issue — save any dirty edits first, then stamp the current
+  // revision with the next official version number.
+  const [issuing, setIssuing] = useState(false);
+  async function handleIssue() {
+    setIssuing(true);
+    setSaveStatus(null);
+    try {
+      if (anyDirty) {
+        const ok = await performSave();
+        if (!ok) return;
+      }
+      const res = await fetch(`/api/formulas/${initialFormula.id}/issue`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setSaveStatus({
+          kind: "err",
+          text: json.error || `issue_failed_${res.status}`,
+        });
+        return;
+      }
+      setSaveStatus({ kind: "ok", text: `Issued v${json.issue.issueNum}` });
+      router.refresh();
+      refetchAudit();
+    } catch (err) {
+      setSaveStatus({
+        kind: "err",
+        text: err instanceof Error ? err.message : "issue_failed",
+      });
+    } finally {
+      setIssuing(false);
     }
   }
 
@@ -1566,7 +1618,9 @@ export default function FormulaEditor({
   // break out of the CSS string it is embedded in.
   const printFooterIdentity = [
     tr("Formula") + " F" + String(initialFormula.formulaNumber ?? 0).padStart(4, "0"),
-    tr("Version") + " v" + String(initialFormula.latestVersionNum),
+    // v54: the printed sheet carries the ISSUED number; a draft marker
+    // flags sheets printed with unissued changes.
+    tr("Version") + " v" + String(initialIssue.issueNum) + (isDraft ? " (" + tr("draft") + ")" : ""),
     (name || "").trim() || "(unnamed)",
   ]
     .join("  \u00B7  ")
@@ -2487,7 +2541,8 @@ export default function FormulaEditor({
             </span>
             <span>
               <strong style={{ color: "#0f4a56" }}>{tr("Version")}</strong> v
-              {initialFormula.latestVersionNum}
+              {initialIssue.issueNum}
+              {isDraft ? ` (${tr("draft")})` : ""}
             </span>
             {initialFormula.pcBkCode ? (
               <span>
@@ -2917,7 +2972,7 @@ export default function FormulaEditor({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving || !anyDirty}
+                disabled={saving || issuing || !anyDirty}
                 style={{
                   padding: "10px 18px",
                   background: anyDirty ? "var(--teal-700, #1d6c7b)" : "#c7d2d6",
@@ -2931,13 +2986,41 @@ export default function FormulaEditor({
                   whiteSpace: "nowrap",
                 }}
               >
-                {saving
-                  ? "Saving…"
-                  : versionDirty
-                    ? `Save (v${(initialFormula.latestVersionNum || 0) + 1})`
-                    : identityDirty
-                      ? "Save"
-                      : tr("Saved")}
+                {/* v54: saves log a revision without bumping the visible
+                    version — the number is assigned by Issue. */}
+                {saving ? "Saving…" : anyDirty ? tr("Save") : tr("Saved")}
+              </button>
+              {/* v54: Issue — stamps the current state with the next
+                  official version number (saving first if dirty).
+                  Enabled whenever there's anything unissued. */}
+              <button
+                type="button"
+                onClick={handleIssue}
+                disabled={saving || issuing || (!anyDirty && !isDraft)}
+                title={
+                  !anyDirty && !isDraft
+                    ? tr("Nothing to issue — no changes since the last issued version")
+                    : undefined
+                }
+                style={{
+                  padding: "10px 14px",
+                  background:
+                    anyDirty || isDraft ? "var(--sage-500, #7fb04f)" : "#c7d2d6",
+                  color: "#fff",
+                  border: "1px solid",
+                  borderColor:
+                    anyDirty || isDraft ? "var(--sage-700, #5f8e3a)" : "#b6c1c5",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor:
+                    issuing ? "wait" : anyDirty || isDraft ? "pointer" : "not-allowed",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {issuing
+                  ? tr("Issuing…")
+                  : `${tr("Issue")} (v${initialIssue.issueNum + 1})`}
               </button>
             </div>
             {saveStatus ? (
@@ -10494,12 +10577,16 @@ function AuditRow({ event }: { event: GummyFormulaAuditRecord }) {
   const kindLabel = {
     created: "Created",
     identity: "Identity edit",
-    version: `Version v${event.versionNum ?? "?"}`,
+    // v54: saves cut internal revisions; official numbers come from
+    // 'issued' events.
+    version: `Saved rev ${event.versionNum ?? "?"}`,
+    issued: `Issued v${event.versionNum ?? "?"}`,
   }[event.kind];
   const kindColor = {
     created: "var(--sage-700, #5f8e3a)",
     identity: "var(--teal-500, #3a8d9c)",
     version: "var(--teal-900, #0f4a56)",
+    issued: "var(--sage-700, #5f8e3a)",
   }[event.kind];
 
   const hasDiff = event.kind !== "created";

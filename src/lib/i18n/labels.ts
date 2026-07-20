@@ -127,6 +127,12 @@ const es: Record<string, string> = {
   "+ Add component": "+ Agregar componente",
   "+ Add Ingredient": "+ Agregar ingrediente",
   Saved: "Guardado",
+  Save: "Guardar",
+  Issue: "Emitir",
+  "Issuing…": "Emitiendo…",
+  draft: "borrador",
+  "Nothing to issue — no changes since the last issued version":
+    "Nada que emitir — sin cambios desde la última versión emitida",
   "Preparing…": "Preparando…",
   "Bench top": "Mesa de trabajo",
   "Print / PDF": "Imprimir / PDF",

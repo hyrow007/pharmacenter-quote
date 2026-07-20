@@ -303,7 +303,9 @@ export async function POST(
       : null;
   if (prevForDiff) {
     const { diff, summary } = diffVersion(prevForDiff, newVersion);
-    const baseSummary = `Cut v${newVersion.versionNum} — ${summary.replace(/^New version — |^New version /, "")}`;
+    // v54: saves cut internal REVISIONS; official version numbers are
+    // assigned by POST /issue. The audit wording reflects that split.
+    const baseSummary = `Saved rev ${newVersion.versionNum} — ${summary.replace(/^New version — |^New version /, "")}`;
     await supabase.from("gummy_formula_audit").insert({
       formula_id: id,
       by_email: user.email,

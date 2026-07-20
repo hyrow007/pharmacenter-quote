@@ -55,9 +55,35 @@ export default async function FormulasPage() {
     .eq("active", true)
     .order("updated_at", { ascending: false });
 
-  const initialFormulas: GummyFormulaRecord[] = error
+  let initialFormulas: GummyFormulaRecord[] = error
     ? []
     : (data ?? []).map(recordFromRow);
+
+  // v54: the catalog's Version column shows the ISSUED number, not the
+  // internal revision counter. One query for all formulas; on error
+  // (migration not run yet) the revision numbers stand in unchanged.
+  if (initialFormulas.length > 0) {
+    const { data: issueRows, error: issueErr } = await supabase
+      .from("gummy_formula_issues")
+      .select("formula_id, issue_num")
+      .in(
+        "formula_id",
+        initialFormulas.map((f) => f.id),
+      );
+    if (!issueErr && issueRows) {
+      const issuedByFormula: Record<string, number> = {};
+      for (const row of issueRows) {
+        const cur = issuedByFormula[row.formula_id] ?? 0;
+        if (Number(row.issue_num) > cur)
+          issuedByFormula[row.formula_id] = Number(row.issue_num);
+      }
+      initialFormulas = initialFormulas.map((f) =>
+        issuedByFormula[f.id] !== undefined
+          ? { ...f, latestVersionNum: issuedByFormula[f.id] }
+          : f,
+      );
+    }
+  }
 
   // Resolve customer names for the catalog's Customer column. We fetch
   // in a second query rather than a join so we can share the customers
