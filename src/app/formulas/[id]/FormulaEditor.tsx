@@ -3362,7 +3362,7 @@ export default function FormulaEditor({
                 marginBottom: 8,
               }}
             >
-              {tr("Placeholder 3")}
+              {tr("Daily Metrics")}
             </div>
             {/* Daily Yield (gummies) — CFA kilograms produced per day
                 minus the fixed daily loss, divided by the cast weight
@@ -3512,6 +3512,38 @@ export default function FormulaEditor({
                     >
                       {dailyYieldGummies.toLocaleString("en-US", {
                         maximumFractionDigits: 0,
+                      })}
+                    </div>
+                  </div>
+                  {/* Production Days — Target Yield ÷ Daily Yield. How
+                      many production days the order takes at this rate. */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("Production Days")}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        textAlign: "right",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {(dailyYieldGummies > 0
+                        ? targetYieldUnits / dailyYieldGummies
+                        : 0
+                      ).toLocaleString("en-US", {
+                        maximumFractionDigits: 2,
                       })}
                     </div>
                   </div>
