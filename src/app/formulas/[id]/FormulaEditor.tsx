@@ -3307,10 +3307,6 @@ export default function FormulaEditor({
               )}
               {([
                 [
-                  "Total daily kg (pre-cook blend)",
-                  `${(batchKg * batchesPerDay).toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`,
-                ],
-                [
                   "Effective daily yield",
                   `${Format.pct(cost.dailyEffectiveYield * 100)}%`,
                 ],
@@ -3434,6 +3430,35 @@ export default function FormulaEditor({
                         onChange={setBatchesPerDay}
                         min={1}
                       />
+                    </div>
+                  </div>
+                  {/* Total daily kg (pre-cook blend) — moved here from
+                      Placeholder 2, directly under Batches / day. */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("Total daily kg (pre-cook blend)")}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        textAlign: "right",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {(batchKg * batchesPerDay).toLocaleString("en-US", {
+                        maximumFractionDigits: 1,
+                      })}{" kg"}
                     </div>
                   </div>
                   <div>
