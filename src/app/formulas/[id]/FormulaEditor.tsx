@@ -3541,62 +3541,97 @@ export default function FormulaEditor({
             {tr("Ingredients")}
           </div>
           {(() => {
+            // v56.1: solutions expand into their COMPONENT ingredients —
+            // one row per component, deduped against everything else
+            // (a solution's Water merges with the standalone Water row).
             const seen = new Set<string>();
-            const unique: GummyFormulaIngredient[] = [];
-            for (const r of ingredients) {
-              const nm = resolveRowName(r, rmById);
-              if (!nm.trim() && !r.rawMaterialId) continue;
-              const key = r.rawMaterialId ?? `name:${nm.trim().toLowerCase()}`;
-              if (seen.has(key)) continue;
+            const entries: {
+              key: string;
+              fpCode: string | null;
+              name: string;
+              category: string | null;
+            }[] = [];
+            const pushEntry = (
+              rawMaterialId: string | null,
+              fpCodeIn: string | null,
+              nameIn: string,
+            ) => {
+              const rm = rawMaterialId ? rmById.get(rawMaterialId) : null;
+              const name = (nameIn || rm?.name || "").trim();
+              if (!name) return;
+              // Water can arrive as a builtin row OR a free-text solution
+              // component — normalize on the name so it lists once.
+              const keyName = name.toLowerCase();
+              const key =
+                keyName === "water" || keyName === "agua"
+                  ? "name:water"
+                  : rawMaterialId ?? `name:${keyName}`;
+              if (seen.has(key)) return;
               seen.add(key);
-              unique.push(r);
+              entries.push({
+                key,
+                fpCode: rm?.fpCode ?? fpCodeIn ?? null,
+                name,
+                category: rm?.category ?? null,
+              });
+            };
+            for (const r of ingredients) {
+              const isSolution =
+                !r.rawMaterialId && (r.solutionComponents?.length ?? 0) > 0;
+              if (isSolution) {
+                for (const c of r.solutionComponents ?? []) {
+                  pushEntry(
+                    c.rawMaterialId ?? null,
+                    c.rawMaterialFpCode ?? null,
+                    (c.customName ?? "").trim(),
+                  );
+                }
+              } else {
+                pushEntry(r.rawMaterialId ?? null, null, resolveRowName(r, rmById));
+              }
             }
-            return unique.map((r, i) => {
-              const rm = r.rawMaterialId ? rmById.get(r.rawMaterialId) : null;
-              const nm = resolveRowName(r, rmById) || tr("Solution");
-              return (
+            return entries.map((e, i) => (
+              <div
+                key={e.key}
+                style={{
+                  padding: "10px 16px",
+                  borderTop:
+                    i === 0 ? "none" : "1px solid var(--line-2, #efe9da)",
+                }}
+              >
                 <div
-                  key={r.id}
                   style={{
-                    padding: "10px 16px",
-                    borderTop:
-                      i === 0 ? "none" : "1px solid var(--line-2, #efe9da)",
+                    fontWeight: 600,
+                    color: "var(--ink-1, #1f2a2d)",
+                    fontSize: 13,
                   }}
                 >
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      color: "var(--ink-1, #1f2a2d)",
-                      fontSize: 13,
-                    }}
-                  >
-                    {rm?.fpCode ? (
-                      <span
-                        style={{
-                          color: "var(--teal-700, #1d6c7b)",
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {rm.fpCode}
-                        {" · "}
-                      </span>
-                    ) : null}
-                    {nm}
-                  </div>
-                  {rm?.category ? (
-                    <div
+                  {e.fpCode ? (
+                    <span
                       style={{
-                        fontSize: 11,
-                        color: "var(--ink-3, #8a9498)",
-                        textTransform: "capitalize",
+                        color: "var(--teal-700, #1d6c7b)",
+                        fontFamily: "monospace",
                       }}
                     >
-                      {tr(rm.category)}
-                    </div>
+                      {e.fpCode}
+                      {" · "}
+                    </span>
                   ) : null}
+                  {e.name}
                 </div>
-              );
-            });
+                {e.category ? (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--ink-3, #8a9498)",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {tr(e.category)}
+                  </div>
+                ) : null}
+              </div>
+            ));
           })()}
         </div>
       ) : null}
