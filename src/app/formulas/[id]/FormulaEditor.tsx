@@ -3360,6 +3360,15 @@ export default function FormulaEditor({
           the bench sheet's Batch Setup / Key Indicators summary. */}
       {tab === "scale" && (
         <dl className="fe-simple-summary">
+          {/* v55.1: Target Yield leads (matches the Batch Setup card). */}
+          <SummaryRow
+            label="Target Yield"
+            value={
+              targetYieldUnits > 0
+                ? `${targetYieldUnits.toLocaleString("en-US")} ${tr("gummies")}`
+                : "—"
+            }
+          />
           <SummaryRow
             label="Batch size (pre-cook blend)"
             value={`${batchKg.toLocaleString("en-US")} kg`}
@@ -3375,14 +3384,6 @@ export default function FormulaEditor({
           <SummaryRow
             label="Cast weight (wet)"
             value={`${Format.grams(wetCastPieceWeightG)} g`}
-          />
-          <SummaryRow
-            label="Target Yield"
-            value={
-              targetYieldUnits > 0
-                ? `${targetYieldUnits.toLocaleString("en-US")} ${tr("gummies")}`
-                : "—"
-            }
           />
           <SummaryRow
             label="Gummies / batch (Cooked Primary Blend)"
@@ -4489,11 +4490,12 @@ function ScaleUpBatchSetupCard({
         {tr("Batch Setup")}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* v55.1: Target Yield leads the card (operator request). */}
+        {commaEditable("Target Yield", targetYieldUnits, setTargetYieldUnits, "gummies")}
         {editable("Batch size (pre-cook blend)", batchKg, setBatchKg, "kg", "1", 1)}
         {editable("CFA Batch Size", cfaBatchKg, setCfaBatchKg, "kg", "1", 0)}
         {editable("Finished piece weight (dry)", gummyPieceWeightG, setGummyPieceWeightG)}
         {editable("Cast weight (wet)", wetCastPieceWeightG, setWetCastPieceWeightG)}
-        {commaEditable("Target Yield", targetYieldUnits, setTargetYieldUnits, "gummies")}
       </div>
     </div>
   );
