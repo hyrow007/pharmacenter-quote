@@ -3571,7 +3571,9 @@ export default function FormulaEditor({
               entries.push({
                 key,
                 fpCode: rm?.fpCode ?? fpCodeIn ?? null,
-                name,
+                // Normalize the merged Water row's casing (solution
+                // components often carry it as lowercase free text).
+                name: key === "name:water" ? tr("Water") : name,
                 category: rm?.category ?? null,
               });
             };
