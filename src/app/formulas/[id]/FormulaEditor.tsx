@@ -1612,6 +1612,10 @@ export default function FormulaEditor({
   // v56.3: decimal precision for the Costing tab's quantity columns —
   // same chevron control the bench/scale-up total rows use.
   const [costingDec, setCostingDec] = useState<number>(3);
+  // v56.4: per-ingredient cost source (keyed by the costing table's
+  // dedup key). Client-side for now — persistence can follow once the
+  // cost columns are wired to the sources.
+  const [costSourceByKey, setCostSourceByKey] = useState<Record<string, string>>({});
 
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
@@ -3681,6 +3685,7 @@ export default function FormulaEditor({
                     <th style={{ ...qth, width: 130 }}>{tr("Pre-cook Blend QTY")}</th>
                     <th style={{ ...qth, width: 130 }}>{tr("CFA Batch Addition QTY")}</th>
                     <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
+                    <th style={{ ...qth, width: 150 }}>{tr("Cost Source")}</th>
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
@@ -3728,6 +3733,26 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, color: "var(--teal-900, #0f4a56)", fontWeight: 700 }}>
                           {fmtQtyKg(pre + cfa)}
                         </td>
+                        {/* Cost Source — where this ingredient's $/kg
+                            will be pulled from once cost columns land. */}
+                        <td style={{ ...qtd, whiteSpace: "normal", padding: "6px 8px" }}>
+                          <select
+                            value={costSourceByKey[e.key] ?? "Fish Bowl (Inventory)"}
+                            onChange={(ev) =>
+                              setCostSourceByKey((prev) => ({
+                                ...prev,
+                                [e.key]: ev.target.value,
+                              }))
+                            }
+                            className="pricing__input"
+                            style={{ width: "100%", fontSize: 12, fontWeight: 500 }}
+                          >
+                            <option value="Fish Bowl (Inventory)">Fish Bowl (Inventory)</option>
+                            <option value="Fish Bowl (Last Order)">Fish Bowl (Last Order)</option>
+                            <option value="App">App</option>
+                            <option value="Manual">Manual</option>
+                          </select>
+                        </td>
                         <td style={qtd} />
                       </tr>
                     );
@@ -3766,6 +3791,7 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
                           {fmtQtyKg(preSum + cfaSum)}
                         </td>
+                        <td style={qtd} />
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
                         </td>

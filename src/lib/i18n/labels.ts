@@ -79,6 +79,7 @@ const es: Record<string, string> = {
   "CFA Batch Addition QTY": "Cant. de adición lote CSA",
   "Total QTY": "Cant. total",
   Total: "Total",
+  "Cost Source": "Fuente de costo",
   Grams: "Gramos",
   "Overage %": "% de exceso",
   "Moisture loss": "Pérdida de humedad",
