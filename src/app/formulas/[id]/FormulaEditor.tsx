@@ -1962,6 +1962,19 @@ export default function FormulaEditor({
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* v55: scale-up print sheet — same packing rules. Each section
+             of the static cooked card (carry-over) is a keep-together
+             unit; the CFA Batch card's sections ride the --cooked rule
+             above. */
+          .fe-blend-card--cooked-static .fe-blend-unit {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* The on-screen metric-card row collapses into the print-only
+             simple-summary ledger (mirrors Batch Setup on the bench
+             sheet); decimal chevrons are screen chrome. */
+          .fe-scale-cards { display: none !important; }
+          .fe-dec-picker { display: none !important; }
           /* v48.4: undo the screen-side sticky-banner plumbing. The
              head wrapper must be a real box again so break-inside:
              avoid can keep header + carry-over on one page, and a
@@ -1978,6 +1991,7 @@ export default function FormulaEditor({
              grand-total block keeps its top rule via the tr styling. */
           .fe-blend-card,
           .fe-blend-panel,
+          .fe-blend-unit,
           .fe-grand-total-block {
             border: none !important;
             box-shadow: none !important;
@@ -3113,7 +3127,9 @@ export default function FormulaEditor({
       {/* ============ Tab content ============
           When `printing` is on we always show the Bench top view — the
           print output is scoped to bench per the R&D spec-sheet spec. */}
-      {(tab === "bench" || printing) && (
+      {/* v55: printing from the Scale up tab prints the SCALE-UP sheet;
+          every other tab prints the bench sheet as before. */}
+      {(tab === "bench" || (printing && tab !== "scale")) && (
         <>
           <BenchTopTab
             benchBatchG={benchBatchG}
@@ -3221,8 +3237,8 @@ export default function FormulaEditor({
           />
         </>
       )}
-      {tab === "scale" && !printing && (
-        <div style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap", marginBottom: 14 }}>
+      {tab === "scale" && (
+        <div className="fe-scale-cards" style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap", marginBottom: 14 }}>
           <ScaleUpBatchSetupCard
             batchKg={batchKg}
             setBatchKg={setBatchKg}
@@ -3339,6 +3355,116 @@ export default function FormulaEditor({
           </MetricCard>
         </div>
       )}
+      {/* v55: print-only scale-up summary ledger — the metric cards
+          above collapse into this definition list on paper, mirroring
+          the bench sheet's Batch Setup / Key Indicators summary. */}
+      {tab === "scale" && (
+        <dl className="fe-simple-summary">
+          <SummaryRow
+            label="Batch size (pre-cook blend)"
+            value={`${batchKg.toLocaleString("en-US")} kg`}
+          />
+          <SummaryRow
+            label="CFA Batch Size"
+            value={`${cfaBatchKg.toLocaleString("en-US")} kg`}
+          />
+          <SummaryRow
+            label="Finished piece weight (dry)"
+            value={`${Format.grams(gummyPieceWeightG)} g`}
+          />
+          <SummaryRow
+            label="Cast weight (wet)"
+            value={`${Format.grams(wetCastPieceWeightG)} g`}
+          />
+          <SummaryRow
+            label="Target Yield"
+            value={
+              targetYieldUnits > 0
+                ? `${targetYieldUnits.toLocaleString("en-US")} ${tr("gummies")}`
+                : "—"
+            }
+          />
+          <SummaryRow
+            label="Gummies / batch (Cooked Primary Blend)"
+            value={fmtMetricInt(scaleUpGummiesOf(scaleUp.carryKg))}
+          />
+          <SummaryRow
+            label="QTY of Primary Blend Batches"
+            value={fmtQtyBatches(scaleUpGummiesOf(scaleUp.carryKg))}
+          />
+          <SummaryRow
+            label="Gummies / batch (CFA Batch)"
+            value={fmtMetricInt(scaleUpGummiesOf(scaleUp.grandCfaKg))}
+          />
+          <SummaryRow
+            label="QTY of CFA Batches"
+            value={fmtQtyBatches(scaleUpGummiesOf(scaleUp.grandCfaKg))}
+          />
+          <SummaryRow
+            label="Batches / day (Primary Blend)"
+            value={String(batchesPerDay)}
+          />
+          <SummaryRow
+            label="Total daily kg (pre-cook blend)"
+            value={`${(batchKg * batchesPerDay).toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`}
+          />
+          <SummaryRow
+            label="CFA Batches / day"
+            value={(cfaBatchKg > 0
+              ? (scaleUp.carryKg * batchesPerDay) / cfaBatchKg
+              : 0
+            ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          />
+          <SummaryRow
+            label="Daily Yield (gummies)"
+            value={fmtMetricInt(scaleUpDailyYield)}
+          />
+          <SummaryRow
+            label="Production Days"
+            value={(scaleUpDailyYield > 0
+              ? targetYieldUnits / scaleUpDailyYield
+              : 0
+            ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          />
+          <SummaryRow
+            label="Fixed loss / day"
+            value={`${fixedLossKgPerDay.toLocaleString("en-US")} kg`}
+          />
+          <SummaryRow
+            label="Effective daily yield"
+            value={`${Format.pct(cost.dailyEffectiveYield * 100)}%`}
+          />
+          <SummaryRow
+            label="Residual Moisture Total"
+            value={`${Format.pctCompact(
+              computeGrandResidualPct({
+                preCookRows: phaseIngredients.groups["pre-cook"],
+                secondaryRows: phaseIngredients.groups["cooked"],
+                finalRows: phaseIngredients.groups["final"],
+                benchBatchG,
+              }),
+            )}%`}
+          />
+          {(() => {
+            const ratio = computeSugarSyrupRatio({
+              preCookRows: phaseIngredients.groups["pre-cook"],
+              rmById,
+            });
+            return (
+              <>
+                <SummaryRow
+                  label="Sugar (dry)"
+                  value={ratio ? `${Format.pctCompact(ratio.sugarPct)}%` : "—"}
+                />
+                <SummaryRow
+                  label="Syrup (dry)"
+                  value={ratio ? `${Format.pctCompact(ratio.syrupPct)}%` : "—"}
+                />
+              </>
+            );
+          })()}
+        </dl>
+      )}
       {tab === "cost" && !printing && (
         <CostTab
           cost={cost}
@@ -3357,7 +3483,7 @@ export default function FormulaEditor({
           (read-only; batch size ≡ Total Primary Blend). The legacy
           manual IngredientTable remains only on Material costing until
           that tab gets the same treatment. */}
-      {tab === "scale" && !printing ? (
+      {tab === "scale" ? (
         <ScaleUpBlendCards
           groups={phaseIngredients.groups}
           rmById={rmById}
@@ -4423,7 +4549,10 @@ function ScaleUpBlendCards({
     d: number,
     setD: React.Dispatch<React.SetStateAction<number>>,
   ) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+    <span
+      className="fe-dec-picker"
+      style={{ display: "inline-flex", alignItems: "center", gap: 2 }}
+    >
       <button
         type="button"
         onClick={() => setD((x) => Math.max(0, x - 1))}
@@ -4608,6 +4737,7 @@ function ScaleUpBlendCards({
     dec?: [number, React.Dispatch<React.SetStateAction<number>>],
   ) => (
     <div
+      className="fe-blend-unit"
       style={{
         border: "1px solid var(--line, #e3dcc9)",
         borderRadius: 8,
@@ -4698,7 +4828,9 @@ function ScaleUpBlendCards({
     title: string,
     hint: string,
     children: React.ReactNode,
-    variant?: "pre-cook" | "cooked",
+    // "cooked-static" = cooked-card chrome + print keep-together, but
+    // WITHOUT the sticky banner (the operator unfroze this card).
+    variant?: "pre-cook" | "cooked" | "cooked-static",
   ) => {
     // The cooked card reuses the bench card's sticky-banner CSS: the
     // header sits inside a .fe-blend-unit--head wrapper (display:
@@ -4803,6 +4935,7 @@ function ScaleUpBlendCards({
             [carryDec, setCarryDec],
           )}
         </>,
+        "cooked-static",
       )}
       {card(
         "CFA Batch",
@@ -4925,6 +5058,7 @@ function ScaleUpBlendCards({
             };
             return (
               <div
+                className="fe-grand-total-block"
                 style={{
                   border: "1.5px solid var(--teal-700, #1d6c7b)",
                   borderRadius: 8,
