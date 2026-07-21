@@ -73,6 +73,7 @@ const es: Record<string, string> = {
 
   // ---- Table headers ----
   Ingredient: "Ingrediente",
+  Ingredients: "Ingredientes",
   Grams: "Gramos",
   "Overage %": "% de exceso",
   "Moisture loss": "Pérdida de humedad",

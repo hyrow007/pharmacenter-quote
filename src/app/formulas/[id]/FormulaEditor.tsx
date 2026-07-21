@@ -3512,20 +3512,93 @@ export default function FormulaEditor({
           benchBatchG={benchBatchG}
         />
       ) : null}
+      {/* v56: Costing ingredient list — every unique ingredient used
+          across the blends, each listed exactly once (Water appearing in
+          pre-cook AND secondary collapses to one line). Quantities and
+          cost columns layer on next; the legacy editable IngredientTable
+          is retired from this tab. */}
       {tab === "cost" && !printing ? (
-        <IngredientTable
-          tab={tab}
-          ingredients={ingredients}
-          rawMaterials={rawMaterials}
-          benchGramById={benchGramById}
-          scaleKgById={scaleKgById}
-          onUpdate={updateRow}
-          onAdd={addRow}
-          onRemove={removeRow}
-          rmById={rmById}
-          yieldPct={yieldPct}
-          gummyPieceWeightG={gummyPieceWeightG}
-        />
+        <div
+          style={{
+            marginBottom: 14,
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 8,
+            background: "var(--paper, #fffdf8)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 16px",
+              fontSize: 14.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+            }}
+          >
+            {tr("Ingredients")}
+          </div>
+          {(() => {
+            const seen = new Set<string>();
+            const unique: GummyFormulaIngredient[] = [];
+            for (const r of ingredients) {
+              const nm = resolveRowName(r, rmById);
+              if (!nm.trim() && !r.rawMaterialId) continue;
+              const key = r.rawMaterialId ?? `name:${nm.trim().toLowerCase()}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              unique.push(r);
+            }
+            return unique.map((r, i) => {
+              const rm = r.rawMaterialId ? rmById.get(r.rawMaterialId) : null;
+              const nm = resolveRowName(r, rmById) || tr("Solution");
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    padding: "10px 16px",
+                    borderTop:
+                      i === 0 ? "none" : "1px solid var(--line-2, #efe9da)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: "var(--ink-1, #1f2a2d)",
+                      fontSize: 13,
+                    }}
+                  >
+                    {rm?.fpCode ? (
+                      <span
+                        style={{
+                          color: "var(--teal-700, #1d6c7b)",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {rm.fpCode}
+                        {" · "}
+                      </span>
+                    ) : null}
+                    {nm}
+                  </div>
+                  {rm?.category ? (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--ink-3, #8a9498)",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {tr(rm.category)}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            });
+          })()}
+        </div>
       ) : null}
 
       {/* Notes first — user-authored, free-form. Placed above Activity so
