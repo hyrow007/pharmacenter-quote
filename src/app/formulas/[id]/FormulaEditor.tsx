@@ -1962,13 +1962,21 @@ export default function FormulaEditor({
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          /* v55: scale-up print sheet — same packing rules. Each section
-             of the static cooked card (carry-over) is a keep-together
-             unit; the CFA Batch card's sections ride the --cooked rule
-             above. */
+          /* v55: scale-up print sheet — same packing rules. The static
+             cooked card (header + carry-over) keeps together as a whole,
+             like the pre-cook card; the CFA Batch card's sections ride
+             the --cooked rule above. */
+          .fe-blend-card--cooked-static,
           .fe-blend-card--cooked-static .fe-blend-unit {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          /* v55.2: a card banner can never strand at a page bottom away
+             from its first section. */
+          .fe-blend-unit--head,
+          .fe-blend-card > header {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
           }
           /* The on-screen metric-card row collapses into the print-only
              simple-summary ledger (mirrors Batch Setup on the bench
@@ -2526,7 +2534,8 @@ export default function FormulaEditor({
               textTransform: "uppercase",
             }}
           >
-            {tr("Bench top batch")}
+            {/* v55.2: the sheet subtitle names the tab being printed. */}
+            {tab === "scale" ? tr("Scaled Up Batch") : tr("Bench top batch")}
           </div>
         </div>
 
@@ -2573,10 +2582,8 @@ export default function FormulaEditor({
                 {customerName}
               </span>
             ) : null}
-          </div>
-          {/* Row 2 — production context. v43.1 swapped Flavor and
-              Customer positions per user request. */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            {/* v55.2: Shape / Flavor / Updated on join the same line as
+                Customer (single meta row; wraps only when it must). */}
             <span>
               <strong style={{ color: "#0f4a56" }}>{tr("Shape")}</strong> {shape}
             </span>

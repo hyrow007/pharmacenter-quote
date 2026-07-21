@@ -112,6 +112,7 @@ const es: Record<string, string> = {
   // ---- Print sheet ----
   "Gummy Formula Sheet": "Hoja de Fórmula de Gomitas",
   "Bench top batch": "Lote de mesa",
+  "Scaled Up Batch": "Lote escalado",
   Formula: "Fórmula",
   Version: "Versión",
   Name: "Nombre",
