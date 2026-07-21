@@ -3127,7 +3127,7 @@ export default function FormulaEditor({
           Scale up
         </TabButton>
         <TabButton active={tab === "cost"} onClick={() => setTab("cost")}>
-          Material costing
+          Costing
         </TabButton>
       </div>
 

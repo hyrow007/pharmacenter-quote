@@ -158,6 +158,7 @@ const es: Record<string, string> = {
   Input: "Entrada",
   "Scale up": "Escalado",
   "Material costing": "Costo de materiales",
+  Costing: "Costos",
 
   // ---- Formulas catalog ----
   Updated: "Actualizada",
