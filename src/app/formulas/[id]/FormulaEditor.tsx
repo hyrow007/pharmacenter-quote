@@ -1609,6 +1609,9 @@ export default function FormulaEditor({
           maximumFractionDigits: 2,
         })
       : "0";
+  // v56.3: decimal precision for the Costing tab's quantity columns —
+  // same chevron control the bench/scale-up total rows use.
+  const [costingDec, setCostingDec] = useState<number>(3);
 
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
@@ -3641,7 +3644,7 @@ export default function FormulaEditor({
               }
             }
             const fmtQtyKg = (kg: number) =>
-              `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
+              `${kg.toLocaleString("en-US", { minimumFractionDigits: costingDec, maximumFractionDigits: costingDec })} kg`;
             const qth: React.CSSProperties = {
               padding: "8px 12px",
               fontSize: 11,
@@ -3678,6 +3681,10 @@ export default function FormulaEditor({
                     <th style={{ ...qth, width: 130 }}>{tr("Pre-cook Blend QTY")}</th>
                     <th style={{ ...qth, width: 130 }}>{tr("CFA Batch Addition QTY")}</th>
                     <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
+                    {/* Trailing utility column — hosts the decimal
+                        chevrons in the totals row, same placement as the
+                        bench/scale-up cards. */}
+                    <th style={{ ...qth, width: 44 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -3721,9 +3728,50 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, color: "var(--teal-900, #0f4a56)", fontWeight: 700 }}>
                           {fmtQtyKg(pre + cfa)}
                         </td>
+                        <td style={qtd} />
                       </tr>
                     );
                   })}
+                  {/* Totals row — sums each quantity column; hosts the
+                      decimal chevrons in the trailing cell. */}
+                  {(() => {
+                    let preSum = 0;
+                    let cfaSum = 0;
+                    for (const k of order) {
+                      const e = byKey.get(k)!;
+                      preSum += e.preKg * qtyPrimaryBatches;
+                      cfaSum += e.cfaKg * qtyCfaBatches;
+                    }
+                    return (
+                      <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                        <td
+                          style={{
+                            ...qtd,
+                            textAlign: "left",
+                            fontWeight: 700,
+                            fontSize: 11.5,
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                            color: "var(--teal-900, #0f4a56)",
+                          }}
+                        >
+                          {tr("Total")}
+                        </td>
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                          {fmtQtyKg(preSum)}
+                        </td>
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                          {fmtQtyKg(cfaSum)}
+                        </td>
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                          {fmtQtyKg(preSum + cfaSum)}
+                        </td>
+                        <td style={{ ...qtd, padding: "8px 6px" }}>
+                          <DecimalPicker value={costingDec} onChange={setCostingDec} />
+                        </td>
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             );
@@ -4498,6 +4546,60 @@ function computeScaleUpModel(params: {
       ? params.cfaBatchKg + ((secG + finG) * params.cfaBatchKg) / carryNetG
       : 0;
   return { secG, finG, totalPrimaryG, carryNetG, carryKg, cfaKgPerBatch, grandCfaKg };
+}
+
+// v56.3: shared decimal chevron picker (< fewer / > more, range 0–4) —
+// same control the bench and scale-up total rows use, exported at
+// module scope so any tab can mount it.
+function DecimalPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const btnStyle = (off: boolean): React.CSSProperties => ({
+    width: 16,
+    height: 18,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    color: off ? "var(--ink-4, #c7cccf)" : "var(--ink-3, #8a9498)",
+    background: "transparent",
+    border: "1px solid var(--line, #e3dcc9)",
+    borderRadius: 3,
+    padding: 0,
+    cursor: off ? "default" : "pointer",
+  });
+  return (
+    <span
+      className="fe-dec-picker"
+      style={{ display: "inline-flex", alignItems: "center", gap: 2 }}
+    >
+      <button
+        type="button"
+        onClick={() => onChange((x) => Math.max(0, x - 1))}
+        disabled={value <= 0}
+        title="Fewer decimal places"
+        aria-label="Fewer decimal places"
+        style={btnStyle(value <= 0)}
+      >
+        &lt;
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange((x) => Math.min(4, x + 1))}
+        disabled={value >= 4}
+        title="More decimal places"
+        aria-label="More decimal places"
+        style={btnStyle(value >= 4)}
+      >
+        &gt;
+      </button>
+    </span>
+  );
 }
 
 // Shared chrome for the small scale-up header cards: one component for

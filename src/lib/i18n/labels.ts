@@ -78,6 +78,7 @@ const es: Record<string, string> = {
   "Pre-cook Blend QTY": "Cant. mezcla de precocción",
   "CFA Batch Addition QTY": "Cant. de adición lote CSA",
   "Total QTY": "Cant. total",
+  Total: "Total",
   Grams: "Gramos",
   "Overage %": "% de exceso",
   "Moisture loss": "Pérdida de humedad",
