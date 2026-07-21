@@ -3545,8 +3545,10 @@ export default function FormulaEditor({
         <AuditTimeline events={auditEvents} loading={auditLoading} />
       )}
 
-      {/* Version notes (only relevant when writing a new version) */}
-      {versionDirty ? (
+      {/* Version notes (only relevant when writing a new version).
+          v55.3: suppressed from print — it's an editing affordance, not
+          sheet content (it was leaking onto prints of dirty drafts). */}
+      {versionDirty && !printing ? (
         <div style={{ marginTop: 18 }}>
           <label style={{ display: "block", marginBottom: 6 }}>
             <span
