@@ -3761,9 +3761,10 @@ export default function FormulaEditor({
                             <option value="Manual">Manual</option>
                           </select>
                         </td>
-                        {/* Cost ($/kg) — Manual = editable input; App =
-                            the raw-materials catalog cost; Fishbowl
-                            sources show — until that integration lands. */}
+                        {/* Cost ($/kg) — Manual = editable input. App is
+                            intentionally nulled for now (it gets wired a
+                            different way later); Fishbowl sources show —
+                            until the cost sync lands. */}
                         <td style={{ ...qtd, padding: "6px 8px" }}>
                           {(costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
                           "Manual" ? (
@@ -3791,13 +3792,6 @@ export default function FormulaEditor({
                                 fontVariantNumeric: "tabular-nums",
                               }}
                             />
-                          ) : (costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
-                              "App" ? (
-                            e.appCostPerKg !== null ? (
-                              usd.format(e.appCostPerKg)
-                            ) : (
-                              "—"
-                            )
                           ) : (
                             "—"
                           )}
