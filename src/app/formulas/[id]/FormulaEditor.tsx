@@ -76,6 +76,9 @@ export type RawMaterialOption = {
   name: string;
   defaultUnit: string | null;
   defaultCostPerKg: number | null;
+  // v57: Fishbowl cost sources (nightly sync) for the Costing tab.
+  inventoryCostPerKg?: number | null;
+  lastOrderCostPerKg?: number | null;
   defaultSolids: number;
   category: "primary" | "secondary" | "final" | "other" | null;
   source?: "raw_material" | "fishbowl" | "builtin";
@@ -3585,6 +3588,9 @@ export default function FormulaEditor({
               /** $/kg from the app's raw-materials catalog (Cost Source
                *  = "App"). Null when the ingredient has no curated cost. */
               appCostPerKg: number | null;
+              /** v57: Fishbowl costs from the nightly sync. */
+              inventoryCostPerKg: number | null;
+              lastOrderCostPerKg: number | null;
             };
             const byKey = new Map<string, CostEntry>();
             const order: string[] = [];
@@ -3613,6 +3619,8 @@ export default function FormulaEditor({
                   preKg: 0,
                   cfaKg: 0,
                   appCostPerKg: rm?.defaultCostPerKg ?? null,
+                  inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
+                  lastOrderCostPerKg: rm?.lastOrderCostPerKg ?? null,
                 };
                 byKey.set(key, e);
                 order.push(key);
@@ -3761,12 +3769,25 @@ export default function FormulaEditor({
                             <option value="Manual">Manual</option>
                           </select>
                         </td>
-                        {/* Cost ($/kg) — Manual = editable input. App is
-                            intentionally nulled for now (it gets wired a
-                            different way later); Fishbowl sources show —
-                            until the cost sync lands. */}
+                        {/* Cost ($/kg) — Manual = editable input; the two
+                            Fishbowl sources read the nightly sync's
+                            inventory-average and last-PO costs. App stays
+                            nulled (it gets wired a different way later). */}
                         <td style={{ ...qtd, padding: "6px 8px" }}>
-                          {(costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
+                          {(() => {
+                            const src =
+                              costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
+                            if (src === "Fish Bowl (Inventory)")
+                              return e.inventoryCostPerKg !== null
+                                ? usd.format(e.inventoryCostPerKg)
+                                : "—";
+                            if (src === "Fish Bowl (Last Order)")
+                              return e.lastOrderCostPerKg !== null
+                                ? usd.format(e.lastOrderCostPerKg)
+                                : "—";
+                            return null;
+                          })() ??
+                          ((costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
                           "Manual" ? (
                             <input
                               type="number"
@@ -3794,7 +3815,7 @@ export default function FormulaEditor({
                             />
                           ) : (
                             "—"
-                          )}
+                          ))}
                         </td>
                         <td style={qtd} />
                       </tr>

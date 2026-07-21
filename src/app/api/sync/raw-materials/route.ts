@@ -30,6 +30,11 @@ type RawMaterialPayload = {
   name: string;
   default_unit?: string;
   default_cost_per_kg?: number | null;
+  // v57: Fishbowl cost sources for the Costing tab —
+  //   inventory_cost_per_kg  = latest partcost.avgCost (inventory average)
+  //   last_order_cost_per_kg = newest poitem.unitCost (last price paid)
+  inventory_cost_per_kg?: number | null;
+  last_order_cost_per_kg?: number | null;
   active?: boolean;
 };
 
@@ -48,6 +53,20 @@ function isRawMaterial(v: unknown): v is RawMaterialPayload {
     rec.default_cost_per_kg !== undefined &&
     rec.default_cost_per_kg !== null &&
     typeof rec.default_cost_per_kg !== "number"
+  ) {
+    return false;
+  }
+  if (
+    rec.inventory_cost_per_kg !== undefined &&
+    rec.inventory_cost_per_kg !== null &&
+    typeof rec.inventory_cost_per_kg !== "number"
+  ) {
+    return false;
+  }
+  if (
+    rec.last_order_cost_per_kg !== undefined &&
+    rec.last_order_cost_per_kg !== null &&
+    typeof rec.last_order_cost_per_kg !== "number"
   ) {
     return false;
   }
@@ -99,6 +118,14 @@ export async function POST(request: Request) {
       default_unit: (v.default_unit || "kg").trim(),
       default_cost_per_kg:
         typeof v.default_cost_per_kg === "number" ? v.default_cost_per_kg : null,
+      inventory_cost_per_kg:
+        typeof v.inventory_cost_per_kg === "number"
+          ? v.inventory_cost_per_kg
+          : null,
+      last_order_cost_per_kg:
+        typeof v.last_order_cost_per_kg === "number"
+          ? v.last_order_cost_per_kg
+          : null,
       active: v.active === undefined ? true : v.active,
     });
   }
@@ -131,18 +158,34 @@ export async function POST(request: Request) {
     name: r.name,
     default_unit: r.default_unit,
     default_cost_per_kg: r.default_cost_per_kg,
+    inventory_cost_per_kg: r.inventory_cost_per_kg,
+    last_order_cost_per_kg: r.last_order_cost_per_kg,
     active: r.active,
     source: "fishbowl",
     synced_at: now,
   }));
 
-  const { error, count } = await supabase
+  let { error, count } = await supabase
     .from("raw_materials")
     .upsert(records, {
       onConflict: "fp_code",
       ignoreDuplicates: false,
       count: "exact",
     });
+  // Pre-migration fallback: if the cost columns don't exist yet, retry
+  // without them so the nightly sync never breaks during the window.
+  if (error && /inventory_cost_per_kg|last_order_cost_per_kg/.test(error.message)) {
+    const legacy = records.map(
+      ({ inventory_cost_per_kg: _i, last_order_cost_per_kg: _l, ...rest }) => rest,
+    );
+    ({ error, count } = await supabase
+      .from("raw_materials")
+      .upsert(legacy, {
+        onConflict: "fp_code",
+        ignoreDuplicates: false,
+        count: "exact",
+      }));
+  }
 
   if (error) {
     console.error("raw_materials upsert failed:", error.message);

@@ -72,7 +72,7 @@ export default async function FormulaEditorPage({
       .maybeSingle(),
     supabase
       .from("raw_materials")
-      .select("id, fp_code, name, default_unit, default_cost_per_kg, default_solids, category, active")
+      .select("id, fp_code, name, default_unit, default_cost_per_kg, inventory_cost_per_kg, last_order_cost_per_kg, default_solids, category, active")
       .eq("active", true)
       .order("category", { ascending: true, nullsFirst: false })
       .order("name", { ascending: true }),
@@ -140,6 +140,14 @@ export default async function FormulaEditorPage({
     defaultUnit: r.default_unit,
     defaultCostPerKg:
       r.default_cost_per_kg === null ? null : Number(r.default_cost_per_kg),
+    inventoryCostPerKg:
+      r.inventory_cost_per_kg === null || r.inventory_cost_per_kg === undefined
+        ? null
+        : Number(r.inventory_cost_per_kg),
+    lastOrderCostPerKg:
+      r.last_order_cost_per_kg === null || r.last_order_cost_per_kg === undefined
+        ? null
+        : Number(r.last_order_cost_per_kg),
     defaultSolids: Number(r.default_solids),
     category: r.category,
     source: "raw_material" as const,
