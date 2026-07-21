@@ -1616,6 +1616,9 @@ export default function FormulaEditor({
   // dedup key). Client-side for now — persistence can follow once the
   // cost columns are wired to the sources.
   const [costSourceByKey, setCostSourceByKey] = useState<Record<string, string>>({});
+  // v56.5: manually-entered $/kg per ingredient (used when the row's
+  // Cost Source is "Manual").
+  const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>({});
 
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
@@ -3579,6 +3582,9 @@ export default function FormulaEditor({
               category: string | null;
               preKg: number;
               cfaKg: number;
+              /** $/kg from the app's raw-materials catalog (Cost Source
+               *  = "App"). Null when the ingredient has no curated cost. */
+              appCostPerKg: number | null;
             };
             const byKey = new Map<string, CostEntry>();
             const order: string[] = [];
@@ -3606,6 +3612,7 @@ export default function FormulaEditor({
                   category: rm?.category ?? null,
                   preKg: 0,
                   cfaKg: 0,
+                  appCostPerKg: rm?.defaultCostPerKg ?? null,
                 };
                 byKey.set(key, e);
                 order.push(key);
@@ -3686,6 +3693,7 @@ export default function FormulaEditor({
                     <th style={{ ...qth, width: 130 }}>{tr("CFA Batch Addition QTY")}</th>
                     <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
                     <th style={{ ...qth, width: 150 }}>{tr("Cost Source")}</th>
+                    <th style={{ ...qth, width: 110 }}>{tr("Cost ($/kg)")}</th>
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
@@ -3734,7 +3742,7 @@ export default function FormulaEditor({
                           {fmtQtyKg(pre + cfa)}
                         </td>
                         {/* Cost Source — where this ingredient's $/kg
-                            will be pulled from once cost columns land. */}
+                            comes from. */}
                         <td style={{ ...qtd, whiteSpace: "normal", padding: "6px 8px" }}>
                           <select
                             value={costSourceByKey[e.key] ?? "Fish Bowl (Inventory)"}
@@ -3752,6 +3760,47 @@ export default function FormulaEditor({
                             <option value="App">App</option>
                             <option value="Manual">Manual</option>
                           </select>
+                        </td>
+                        {/* Cost ($/kg) — Manual = editable input; App =
+                            the raw-materials catalog cost; Fishbowl
+                            sources show — until that integration lands. */}
+                        <td style={{ ...qtd, padding: "6px 8px" }}>
+                          {(costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
+                          "Manual" ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={
+                                manualCostByKey[e.key] !== undefined
+                                  ? manualCostByKey[e.key]
+                                  : ""
+                              }
+                              placeholder="$ / kg"
+                              onChange={(ev) => {
+                                const n = Number(ev.target.value);
+                                setManualCostByKey((prev) => ({
+                                  ...prev,
+                                  [e.key]: Number.isFinite(n) ? n : 0,
+                                }));
+                              }}
+                              className="pricing__input"
+                              style={{
+                                width: "100%",
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            />
+                          ) : (costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
+                              "App" ? (
+                            e.appCostPerKg !== null ? (
+                              usd.format(e.appCostPerKg)
+                            ) : (
+                              "—"
+                            )
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td style={qtd} />
                       </tr>
@@ -3791,6 +3840,7 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
                           {fmtQtyKg(preSum + cfaSum)}
                         </td>
+                        <td style={qtd} />
                         <td style={qtd} />
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
