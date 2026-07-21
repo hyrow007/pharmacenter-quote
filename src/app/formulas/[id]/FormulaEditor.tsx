@@ -3541,99 +3541,192 @@ export default function FormulaEditor({
             {tr("Ingredients")}
           </div>
           {(() => {
-            // v56.1: solutions expand into their COMPONENT ingredients —
-            // one row per component, deduped against everything else
-            // (a solution's Water merges with the standalone Water row).
-            const seen = new Set<string>();
-            const entries: {
+            // v56.2: quantity columns. Each unique ingredient (solutions
+            // expanded into components, Water merged) accumulates:
+            //   Pre-cook Blend QTY = its kg in the scale-up Primary Blend
+            //     × QTY of Primary Blend Batches (Target Yield ÷ gummies
+            //     per primary batch)
+            //   CFA Batch Addition QTY = its kg in the CFA card's
+            //     Secondary + Final sections × QTY of CFA Batches
+            //   Total QTY = the two added together.
+            const qtyPrimaryBatches =
+              scaleUpGummiesOf(scaleUp.carryKg) > 0
+                ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
+                : 0;
+            const qtyCfaBatches =
+              scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
+                ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
+                : 0;
+            const preKgOf = (grams: number) =>
+              scaleUp.totalPrimaryG > 0
+                ? (grams * batchKg) / scaleUp.totalPrimaryG
+                : 0;
+            const cfaKgOf = (grams: number) =>
+              scaleUp.carryNetG > 0
+                ? (grams * cfaBatchKg) / scaleUp.carryNetG
+                : 0;
+            type CostEntry = {
               key: string;
               fpCode: string | null;
               name: string;
               category: string | null;
-            }[] = [];
-            const pushEntry = (
+              preKg: number;
+              cfaKg: number;
+            };
+            const byKey = new Map<string, CostEntry>();
+            const order: string[] = [];
+            const accumulate = (
               rawMaterialId: string | null,
               fpCodeIn: string | null,
               nameIn: string,
+              col: "pre" | "cfa",
+              kg: number,
             ) => {
               const rm = rawMaterialId ? rmById.get(rawMaterialId) : null;
               const name = (nameIn || rm?.name || "").trim();
               if (!name) return;
-              // Water can arrive as a builtin row OR a free-text solution
-              // component — normalize on the name so it lists once.
               const keyName = name.toLowerCase();
               const key =
                 keyName === "water" || keyName === "agua"
                   ? "name:water"
                   : rawMaterialId ?? `name:${keyName}`;
-              if (seen.has(key)) return;
-              seen.add(key);
-              entries.push({
-                key,
-                fpCode: rm?.fpCode ?? fpCodeIn ?? null,
-                // Normalize the merged Water row's casing (solution
-                // components often carry it as lowercase free text).
-                name: key === "name:water" ? tr("Water") : name,
-                category: rm?.category ?? null,
-              });
+              let e = byKey.get(key);
+              if (!e) {
+                e = {
+                  key,
+                  fpCode: rm?.fpCode ?? fpCodeIn ?? null,
+                  name: key === "name:water" ? tr("Water") : name,
+                  category: rm?.category ?? null,
+                  preKg: 0,
+                  cfaKg: 0,
+                };
+                byKey.set(key, e);
+                order.push(key);
+              }
+              if (col === "pre") e.preKg += kg;
+              else e.cfaKg += kg;
             };
             for (const r of ingredients) {
+              const phase = r.blendPhase;
+              const col: "pre" | "cfa" | null =
+                phase === "pre-cook"
+                  ? "pre"
+                  : phase === "cooked" || phase === "final"
+                    ? "cfa"
+                    : null;
+              if (!col) continue;
+              const grams = Number(r.grams) || 0;
+              const rowKg = col === "pre" ? preKgOf(grams) : cfaKgOf(grams);
               const isSolution =
                 !r.rawMaterialId && (r.solutionComponents?.length ?? 0) > 0;
               if (isSolution) {
                 for (const c of r.solutionComponents ?? []) {
-                  pushEntry(
+                  const share = (Number(c.pct) || 0) / 100;
+                  accumulate(
                     c.rawMaterialId ?? null,
                     c.rawMaterialFpCode ?? null,
                     (c.customName ?? "").trim(),
+                    col,
+                    rowKg * share,
                   );
                 }
               } else {
-                pushEntry(r.rawMaterialId ?? null, null, resolveRowName(r, rmById));
+                accumulate(
+                  r.rawMaterialId ?? null,
+                  null,
+                  resolveRowName(r, rmById),
+                  col,
+                  rowKg,
+                );
               }
             }
-            return entries.map((e, i) => (
-              <div
-                key={e.key}
+            const fmtQtyKg = (kg: number) =>
+              `${kg.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
+            const qth: React.CSSProperties = {
+              padding: "8px 12px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              textAlign: "right",
+              whiteSpace: "normal",
+              overflowWrap: "break-word",
+              lineHeight: 1.35,
+              verticalAlign: "bottom",
+            };
+            const qtd: React.CSSProperties = {
+              padding: "10px 12px",
+              fontSize: 13,
+              textAlign: "right",
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--ink-1, #1f2a2d)",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            };
+            return (
+              <table
                 style={{
-                  padding: "10px 16px",
-                  borderTop:
-                    i === 0 ? "none" : "1px solid var(--line-2, #efe9da)",
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
                 }}
               >
-                <div
-                  style={{
-                    fontWeight: 600,
-                    color: "var(--ink-1, #1f2a2d)",
-                    fontSize: 13,
-                  }}
-                >
-                  {e.fpCode ? (
-                    <span
-                      style={{
-                        color: "var(--teal-700, #1d6c7b)",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {e.fpCode}
-                      {" · "}
-                    </span>
-                  ) : null}
-                  {e.name}
-                </div>
-                {e.category ? (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--ink-3, #8a9498)",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {tr(e.category)}
-                  </div>
-                ) : null}
-              </div>
-            ));
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    <th style={{ ...qth, textAlign: "left" }}>{tr("Ingredient")}</th>
+                    <th style={{ ...qth, width: 130 }}>{tr("Pre-cook Blend QTY")}</th>
+                    <th style={{ ...qth, width: 130 }}>{tr("CFA Batch Addition QTY")}</th>
+                    <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.map((k) => {
+                    const e = byKey.get(k)!;
+                    const pre = e.preKg * qtyPrimaryBatches;
+                    const cfa = e.cfaKg * qtyCfaBatches;
+                    return (
+                      <tr
+                        key={e.key}
+                        style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                      >
+                        <td style={{ ...qtd, textAlign: "left", whiteSpace: "normal" }}>
+                          {e.fpCode ? (
+                            <span
+                              style={{
+                                color: "var(--teal-700, #1d6c7b)",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {e.fpCode}
+                              {" · "}
+                            </span>
+                          ) : null}
+                          {e.name}
+                          {e.category ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 400,
+                                color: "var(--ink-3, #8a9498)",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {tr(e.category)}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td style={qtd}>{e.preKg > 0 ? fmtQtyKg(pre) : "—"}</td>
+                        <td style={qtd}>{e.cfaKg > 0 ? fmtQtyKg(cfa) : "—"}</td>
+                        <td style={{ ...qtd, color: "var(--teal-900, #0f4a56)", fontWeight: 700 }}>
+                          {fmtQtyKg(pre + cfa)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
           })()}
         </div>
       ) : null}
