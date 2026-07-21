@@ -1983,12 +1983,16 @@ export default function FormulaEditor({
              sheet); decimal chevrons are screen chrome. */
           .fe-scale-cards { display: none !important; }
           .fe-dec-picker { display: none !important; }
-          /* v55.4: uniform row rules — every ingredient row in every
-             blend card prints with the same thin gray separator,
-             regardless of whether the on-screen table draws its line on
-             the row or the cells (border-collapse merges overlaps, so
-             no doubling). Header cells (th) keep their own treatment. */
+          /* v55.5: uniform row rules — the separator lives on the ROW,
+             not the cells (a cell-level border fragmented into short
+             underlines beneath each value because ingredient rows are
+             built from several nested cells). Header rows live in
+             <thead> and keep their own treatment; border-collapse
+             merges any overlapping inline row borders so no doubling. */
           .fe-blend-card td {
+            border-bottom: none !important;
+          }
+          .fe-blend-card tbody tr {
             border-bottom: 0.5pt solid #d5cfc0 !important;
           }
           /* v48.4: undo the screen-side sticky-banner plumbing. The
