@@ -64,8 +64,8 @@ const es: Record<string, string> = {
   "Cooked blend": "Mezcla cocida",
   "Ingredients weighed in before being cooked.":
     "Ingredientes pesados antes de la cocción.",
-  "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.":
-    "Lo que queda después de la cocción. El agua se evapora — cocine hasta el peso objetivo antes de incorporar las mezclas secundaria y final.",
+  "What remains after cooking. Water boils off.":
+    "Lo que queda después de la cocción. El agua se evapora.",
   "Primary Blend": "Mezcla primaria",
   "Primary Blend Carry Over": "Arrastre de mezcla primaria",
   "From the pre-cook blend — carried over into the pot.":

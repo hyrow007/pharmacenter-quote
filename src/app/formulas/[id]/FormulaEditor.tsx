@@ -4772,7 +4772,7 @@ function ScaleUpBlendCards({
       )}
       {card(
         "Cooked blend",
-        "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
+        "What remains after cooking. Water boils off.",
         <>
           {section(
             "Primary Blend Carry Over",

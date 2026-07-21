@@ -37,7 +37,7 @@ export const BLEND_PHASE_HINTS: Record<BlendPhase, string> = {
   cooking:
     "Cook the pre-cook blend down to target solids before folding in the secondary blend.",
   cooked:
-    "What remains after cooking. Water boils off — cook to the target weight before folding in secondary and final blends.",
+    "What remains after cooking. Water boils off.",
   secondary: "Added after cooking is complete.",
   final: "Colors, flavors, and any last-step masking agents.",
 };
