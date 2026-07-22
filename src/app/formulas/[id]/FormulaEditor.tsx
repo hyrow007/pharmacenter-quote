@@ -3778,15 +3778,15 @@ export default function FormulaEditor({
                             const src =
                               costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
                             // No Fishbowl data for this ingredient →
-                            // explicit N/A (operator request).
+                            // em-dash line, same as Water (operator request).
                             if (src === "Fish Bowl (Inventory)")
                               return e.inventoryCostPerKg !== null
                                 ? usd.format(e.inventoryCostPerKg)
-                                : tr("N/A");
+                                : "—";
                             if (src === "Fish Bowl (Last Order)")
                               return e.lastOrderCostPerKg !== null
                                 ? usd.format(e.lastOrderCostPerKg)
-                                : tr("N/A");
+                                : "—";
                             return null;
                           })() ??
                           ((costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
