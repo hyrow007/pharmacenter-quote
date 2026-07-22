@@ -3662,6 +3662,16 @@ export default function FormulaEditor({
                 );
               }
             }
+            // Resolved $/kg for an entry per its selected Cost Source.
+            // Null = the "—" line (no Fishbowl data, App source, or
+            // Manual left blank).
+            const resolveCostPerKg = (e: CostEntry): number | null => {
+              const src = costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
+              if (src === "Fish Bowl (Inventory)") return e.inventoryCostPerKg;
+              if (src === "Fish Bowl (Last Order)") return e.lastOrderCostPerKg;
+              if (src === "Manual") return manualCostByKey[e.key] ?? null;
+              return null; // App — wired a different way later
+            };
             const fmtQtyKg = (kg: number) =>
               `${kg.toLocaleString("en-US", { minimumFractionDigits: costingDec, maximumFractionDigits: costingDec })} kg`;
             const qth: React.CSSProperties = {
@@ -3702,6 +3712,8 @@ export default function FormulaEditor({
                     <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
                     <th style={{ ...qth, width: 150 }}>{tr("Cost Source")}</th>
                     <th style={{ ...qth, width: 110 }}>{tr("Cost ($/kg)")}</th>
+                    {/* Batch Total = Total QTY × Cost ($/kg). */}
+                    <th style={{ ...qth, width: 120 }}>{tr("Batch Total")}</th>
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
@@ -3819,6 +3831,16 @@ export default function FormulaEditor({
                             "—"
                           ))}
                         </td>
+                        {/* Batch Total = Total QTY × resolved $/kg. A "—"
+                            cost carries the line through here too. */}
+                        <td style={{ ...qtd, padding: "6px 8px" }}>
+                          {(() => {
+                            const c = resolveCostPerKg(e);
+                            return c !== null
+                              ? usd.format((pre + cfa) * c)
+                              : "—";
+                          })()}
+                        </td>
                         <td style={qtd} />
                       </tr>
                     );
@@ -3828,10 +3850,9 @@ export default function FormulaEditor({
                   {(() => {
                     let preSum = 0;
                     let cfaSum = 0;
-                    // Total cost = Σ (Total QTY × resolved $/kg). If any
-                    // ingredient's cost shows the "—" line (no Fishbowl
-                    // data, App source, or Manual left blank) the total
-                    // shows the line too — a partial sum would be
+                    // Batch Total sum = Σ (Total QTY × resolved $/kg). If
+                    // any ingredient's Batch Total shows the "—" line the
+                    // sum shows the line too — a partial sum would be
                     // misleading (operator request).
                     let costSum = 0;
                     let costMissing = false;
@@ -3839,16 +3860,7 @@ export default function FormulaEditor({
                       const e = byKey.get(k)!;
                       preSum += e.preKg * qtyPrimaryBatches;
                       cfaSum += e.cfaKg * qtyCfaBatches;
-                      const src =
-                        costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
-                      const c =
-                        src === "Fish Bowl (Inventory)"
-                          ? e.inventoryCostPerKg
-                          : src === "Fish Bowl (Last Order)"
-                            ? e.lastOrderCostPerKg
-                            : src === "Manual"
-                              ? (manualCostByKey[e.key] ?? null)
-                              : null;
+                      const c = resolveCostPerKg(e);
                       if (c === null) costMissing = true;
                       else
                         costSum +=
@@ -3881,8 +3893,9 @@ export default function FormulaEditor({
                           {fmtQtyKg(preSum + cfaSum)}
                         </td>
                         <td style={qtd} />
-                        {/* Total cost (extended $), bottom of the cost
-                            column. */}
+                        <td style={qtd} />
+                        {/* Batch Total sum — the "—" line carries through
+                            if any row shows it. */}
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
                           {costMissing ? "—" : usd.format(costSum)}
                         </td>

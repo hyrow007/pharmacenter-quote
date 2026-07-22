@@ -81,6 +81,7 @@ const es: Record<string, string> = {
   Total: "Total",
   "Cost Source": "Fuente de costo",
   "Cost ($/kg)": "Costo ($/kg)",
+  "Batch Total": "Total por lote",
   Grams: "Gramos",
   "Overage %": "% de exceso",
   "Moisture loss": "Pérdida de humedad",
