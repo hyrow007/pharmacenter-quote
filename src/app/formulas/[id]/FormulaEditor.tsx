@@ -704,6 +704,37 @@ export default function FormulaEditor({
     setLabelClaims((prev) => prev.filter((c) => c.id !== id));
   }
 
+  // v56.3: decimal precision for the Costing tab's quantity columns —
+  // same chevron control the bench/scale-up total rows use.
+  const [costingDec, setCostingDec] = useState<number>(
+    seedVersion.costing?.dec ?? 3,
+  );
+  // v57.3: costing table column sort. null key = natural (blend) order;
+  // clicking a header cycles asc → desc → natural. Not persisted — a
+  // view preference, not formula data.
+  const [costSortKey, setCostSortKey] = useState<string | null>(null);
+  const [costSortDir, setCostSortDir] = useState<"asc" | "desc">("asc");
+  // v56.4: per-ingredient cost source (keyed by the costing table's
+  // dedup key). v57.4: persisted on the version (costing jsonb).
+  const [costSourceByKey, setCostSourceByKey] = useState<Record<string, string>>(
+    () => ({ ...(seedVersion.costing?.sources ?? {}) }),
+  );
+  // v56.5: manually-entered $/kg per ingredient (used when the row's
+  // Cost Source is "Manual").
+  const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>(
+    () => ({ ...(seedVersion.costing?.manualCosts ?? {}) }),
+  );
+  // v57.4: normalized costing blob — what Save writes and what the dirty
+  // check compares. Default-source entries are dropped so an untouched
+  // table stays clean.
+  const costingPayload = useMemo(() => {
+    const sources: Record<string, string> = {};
+    for (const [k, v] of Object.entries(costSourceByKey)) {
+      if (v !== "Fish Bowl (Inventory)") sources[k] = v;
+    }
+    return { dec: costingDec, sources, manualCosts: manualCostByKey };
+  }, [costingDec, costSourceByKey, manualCostByKey]);
+
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
   // whether Save writes a new version row.
@@ -761,6 +792,7 @@ export default function FormulaEditor({
       ingredients,
       processNotes,
       labelClaims,
+      costing: costingPayload,
     };
     try {
       const seed = JSON.parse(loadedSnapshot);
@@ -782,6 +814,15 @@ export default function FormulaEditor({
         ingredients: seed.ingredients,
         processNotes: seed.processNotes ?? {},
         labelClaims: seed.labelClaims ?? [],
+        // Rebuild in the same literal key order as costingPayload so the
+        // stringify comparison isn't tripped by jsonb key sorting.
+        costing: seed.costing
+          ? {
+              dec: seed.costing.dec ?? 3,
+              sources: seed.costing.sources ?? {},
+              manualCosts: seed.costing.manualCosts ?? {},
+            }
+          : { dec: 3, sources: {}, manualCosts: {} },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -800,6 +841,7 @@ export default function FormulaEditor({
     ingredients,
     processNotes,
     labelClaims,
+    costingPayload,
     loadedSnapshot,
   ]);
 
@@ -1212,6 +1254,7 @@ export default function FormulaEditor({
               ingredients,
               processNotes,
               labelClaims,
+              costing: costingPayload,
               notes: versionNotes.trim() || null,
             }),
           },
@@ -1617,21 +1660,6 @@ export default function FormulaEditor({
           maximumFractionDigits: 2,
         })
       : "0";
-  // v56.3: decimal precision for the Costing tab's quantity columns —
-  // same chevron control the bench/scale-up total rows use.
-  const [costingDec, setCostingDec] = useState<number>(3);
-  // v57.3: costing table column sort. null key = natural (blend) order;
-  // clicking a header cycles asc → desc → natural.
-  const [costSortKey, setCostSortKey] = useState<string | null>(null);
-  const [costSortDir, setCostSortDir] = useState<"asc" | "desc">("asc");
-  // v56.4: per-ingredient cost source (keyed by the costing table's
-  // dedup key). Client-side for now — persistence can follow once the
-  // cost columns are wired to the sources.
-  const [costSourceByKey, setCostSourceByKey] = useState<Record<string, string>>({});
-  // v56.5: manually-entered $/kg per ingredient (used when the row's
-  // Cost Source is "Manual").
-  const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>({});
-
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
   // capture element text via string-set (unsupported), but a plain string

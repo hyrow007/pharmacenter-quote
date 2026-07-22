@@ -4,6 +4,7 @@ import {
   FORMULA_VERSION_DEFAULTS,
   diffVersion,
   versionFromRow,
+  type GummyFormulaCosting,
   type GummyFormulaIngredient,
   type GummyFormulaVersion,
   type LabelClaim,
@@ -110,6 +111,8 @@ type PostBody = {
   ingredients?: GummyFormulaIngredient[];
   processNotes?: Record<string, string> | null;
   labelClaims?: LabelClaim[];
+  // v57.4: Costing-tab selections (cost sources / manual $/kg / decimals).
+  costing?: GummyFormulaCosting | null;
   notes?: string | null;
 };
 
@@ -146,6 +149,7 @@ export async function POST(
   let currentIngredients: GummyFormulaIngredient[] = [];
   let currentProcessNotes: Record<string, string> = {};
   let currentLabelClaims: LabelClaim[] = [];
+  let currentCosting: GummyFormulaCosting | null = null;
   // Explicit `number` type on each field — spreading FORMULA_VERSION_DEFAULTS
   // (which is `as const`) narrows to literal types like `250` / `100`, and
   // then the reassignment below to `Number(prev.bench_batch_g)` (a plain
@@ -165,7 +169,7 @@ export async function POST(
     const { data: prev, error: prevErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims",
+        "bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, costing",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -206,6 +210,9 @@ export async function POST(
       if (Array.isArray(prev.label_claims)) {
         currentLabelClaims = prev.label_claims as LabelClaim[];
       }
+      if (prev.costing && typeof prev.costing === "object") {
+        currentCosting = prev.costing as GummyFormulaCosting;
+      }
     }
   }
 
@@ -234,17 +241,20 @@ export async function POST(
       label_claims: Array.isArray(body.labelClaims)
         ? body.labelClaims
         : currentLabelClaims,
+      costing:
+        body.costing !== undefined ? body.costing : currentCosting,
       notes: body.notes ?? null,
       created_by_email: user.email,
     })
     .select(
-      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+      "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, costing, notes, created_at, created_by_email",
     )
     .single();
   // v51.3 fallback: if sql/gummy_versions_target_yield.sql hasn't been
   // applied yet, the insert above fails on the unknown column — retry
   // without it so saving keeps working during the migration window.
-  if (error && /target_yield_units|cfa_batch_kg/.test(error.message)) {
+  // (v57.4 adds `costing` to the same guard.)
+  if (error && /target_yield_units|cfa_batch_kg|costing/.test(error.message)) {
     ({ data, error } = await supabase
       .from("gummy_formula_versions")
       .insert({

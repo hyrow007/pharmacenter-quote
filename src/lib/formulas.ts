@@ -399,9 +399,25 @@ export type GummyFormulaVersion = {
   // Optional for backward compat with versions authored before the field
   // existed; read as [] when null/undefined.
   labelClaims?: LabelClaim[] | null;
+  /** v57.4: Costing-tab operator selections (cost sources, manual $/kg,
+   *  decimal precision). Keyed by the costing table's dedup key
+   *  (rawMaterialId or "name:<lowercase>"). Optional for pre-migration
+   *  rows. */
+  costing?: GummyFormulaCosting | null;
   notes: string | null;         // why this version was cut (version-level)
   createdAt: string;            // ISO
   createdByEmail: string | null;
+};
+
+// Costing-tab persisted selections (v57.4).
+export type GummyFormulaCosting = {
+  /** Decimal places for the quantity + dollar columns. */
+  dec?: number;
+  /** Cost Source per ingredient key — only non-default entries
+   *  ("Fish Bowl (Inventory)" omitted). */
+  sources?: Record<string, string>;
+  /** Manual $/kg per ingredient key. */
+  manualCosts?: Record<string, number>;
 };
 
 // -----------------------------------------------------------------------------
@@ -943,6 +959,7 @@ export function versionFromRow(row: {
   // null/undefined into empty {}.
   process_notes?: Partial<Record<BlendPhase, string>> | null;
   label_claims?: LabelClaim[] | null;
+  costing?: GummyFormulaCosting | null;
   notes: string | null;
   created_at: string;
   created_by_email: string | null;
@@ -982,6 +999,8 @@ export function versionFromRow(row: {
         ? row.process_notes
         : {},
     labelClaims: Array.isArray(row.label_claims) ? row.label_claims : [],
+    costing:
+      row.costing && typeof row.costing === "object" ? row.costing : null,
     notes: row.notes,
     createdAt: row.created_at,
     createdByEmail: row.created_by_email,
