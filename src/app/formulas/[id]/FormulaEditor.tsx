@@ -4157,7 +4157,7 @@ export default function FormulaEditor({
               <NumberInput
                 value={setupDays}
                 onChange={(n) => setSetupDays(n)}
-                step={0.5}
+                step="0.5"
                 min={0}
               />
             </ParamBlock>
@@ -4173,7 +4173,7 @@ export default function FormulaEditor({
               <NumberInput
                 value={cleaningDays}
                 onChange={(n) => setCleaningDays(n)}
-                step={0.5}
+                step="0.5"
                 min={0}
               />
             </ParamBlock>
