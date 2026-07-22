@@ -3541,6 +3541,7 @@ export default function FormulaEditor({
           gummyPieceWeightG={gummyPieceWeightG}
           batchKg={batchKg}
           batchesPerDay={batchesPerDay}
+          targetYieldUnits={targetYieldUnits}
         />
       )}
 
@@ -5740,6 +5741,7 @@ function CostTab({
   gummyPieceWeightG,
   batchKg,
   batchesPerDay,
+  targetYieldUnits,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -5750,6 +5752,8 @@ function CostTab({
   gummyPieceWeightG: number;
   batchKg: number;
   batchesPerDay: number;
+  /** v57.5: Target Yield from the Scale up tab — shown as QTY (Gummies). */
+  targetYieldUnits: number;
 }) {
   const dailyGummies =
     gummyPieceWeightG > 0 ? (batchKg * batchesPerDay * 1000) / gummyPieceWeightG : 0;
@@ -5780,6 +5784,15 @@ function CostTab({
         gap: 14,
       }}
     >
+      {/* v57.5: Target Yield (Scale up tab) reflected here so the
+          quantity the costing math runs against is visible up top. */}
+      <ParamBlock label="QTY (Gummies)">
+        <ReadOnly>
+          {targetYieldUnits > 0
+            ? Math.round(targetYieldUnits).toLocaleString("en-US")
+            : "—"}
+        </ReadOnly>
+      </ParamBlock>
       <ParamBlock label="$ / gummy (raw)">
         <ReadOnly>{usd.format(cost.dollarsPerGummy)}</ReadOnly>
       </ParamBlock>

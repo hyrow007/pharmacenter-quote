@@ -83,6 +83,7 @@ const es: Record<string, string> = {
   "Cost ($/kg)": "Costo ($/kg)",
   "Batch Total": "Total por lote",
   "Price per Gummy": "Precio por gomita",
+  "QTY (Gummies)": "Cant. (gomitas)",
   Grams: "Gramos",
   "Overage %": "% de exceso",
   "Moisture loss": "Pérdida de humedad",
