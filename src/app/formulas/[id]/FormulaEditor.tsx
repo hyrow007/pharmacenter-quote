@@ -724,14 +724,20 @@ export default function FormulaEditor({
   const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>(
     () => ({ ...(seedVersion.costing?.manualCosts ?? {}) }),
   );
-  // v57.8: Direct Labor Costs presets — Setup / Cleaning are operator
-  // inputs (persisted); Production Days derives from the scale-up model.
-  const [setupDays, setSetupDays] = useState<number>(
-    seedVersion.costing?.setupDays ?? 0,
+  // v57.8: Direct Labor Costs presets. Null = follow the default rule
+  // (Setup = 1; Cleaning = Production Days ÷ 4 — Friday teardown / deep
+  // clean); a number is an operator override. `|| null` also treats a
+  // stray saved 0 as "use default".
+  const [setupDays, setSetupDays] = useState<number | null>(
+    seedVersion.costing?.setupDays || null,
   );
-  const [cleaningDays, setCleaningDays] = useState<number>(
-    seedVersion.costing?.cleaningDays ?? 0,
+  const [cleaningDays, setCleaningDays] = useState<number | null>(
+    seedVersion.costing?.cleaningDays || null,
   );
+  // Whole-day rounding rule: fractions of .25 and up round up to an
+  // additional day; .24 and below round down.
+  const roundDays = (x: number) =>
+    x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) > 0.24 ? 1 : 0);
   // v57.4: normalized costing blob — what Save writes and what the dirty
   // check compares. Default-source entries are dropped so an untouched
   // table stays clean.
@@ -835,10 +841,10 @@ export default function FormulaEditor({
               dec: seed.costing.dec ?? 3,
               sources: seed.costing.sources ?? {},
               manualCosts: seed.costing.manualCosts ?? {},
-              setupDays: seed.costing.setupDays ?? 0,
-              cleaningDays: seed.costing.cleaningDays ?? 0,
+              setupDays: seed.costing.setupDays || null,
+              cleaningDays: seed.costing.cleaningDays || null,
             }
-          : { dec: 3, sources: {}, manualCosts: {}, setupDays: 0, cleaningDays: 0 },
+          : { dec: 3, sources: {}, manualCosts: {}, setupDays: null, cleaningDays: null },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -4142,42 +4148,48 @@ export default function FormulaEditor({
           >
             {tr("Direct Labor Costs")}
           </div>
-          {/* v57.8: three presets — Setup / Cleaning are inputs saved
-              with the formula; Production Days mirrors the Scale up
-              tab's Daily Metrics (Target Yield ÷ Daily Yield). */}
-          <div
-            style={{
-              padding: 14,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 14,
-            }}
-          >
-            <ParamBlock label="Setup Days">
-              <NumberInput
-                value={setupDays}
-                onChange={(n) => setSetupDays(n)}
-                step="0.5"
-                min={0}
-              />
-            </ParamBlock>
-            <ParamBlock label="Production Days">
-              <ReadOnly>
-                {(scaleUpDailyYield > 0
-                  ? targetYieldUnits / scaleUpDailyYield
-                  : 0
-                ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
-              </ReadOnly>
-            </ParamBlock>
-            <ParamBlock label="Cleaning Days">
-              <NumberInput
-                value={cleaningDays}
-                onChange={(n) => setCleaningDays(n)}
-                step="0.5"
-                min={0}
-              />
-            </ParamBlock>
-          </div>
+          {/* v57.8: three presets, all whole days (>.24 rounds up).
+              Defaults: Setup = 1; Production = Target Yield ÷ Daily
+              Yield (scale-up model); Cleaning = Production ÷ 4 (Friday
+              teardown / deep clean). Setup & Cleaning stay editable —
+              a typed value overrides the default and saves with the
+              formula. */}
+          {(() => {
+            const prodDays = roundDays(
+              scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
+            );
+            const cleaningDefault = roundDays(prodDays / 4);
+            return (
+              <div
+                style={{
+                  padding: 14,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <ParamBlock label="Setup Days">
+                  <NumberInput
+                    value={setupDays ?? 1}
+                    onChange={(n) => setSetupDays(roundDays(n))}
+                    step="1"
+                    min={0}
+                  />
+                </ParamBlock>
+                <ParamBlock label="Production Days">
+                  <ReadOnly>{prodDays.toLocaleString("en-US")}</ReadOnly>
+                </ParamBlock>
+                <ParamBlock label="Cleaning Days">
+                  <NumberInput
+                    value={cleaningDays ?? cleaningDefault}
+                    onChange={(n) => setCleaningDays(roundDays(n))}
+                    step="1"
+                    min={0}
+                  />
+                </ParamBlock>
+              </div>
+            );
+          })()}
         </div>
       ) : null}
 

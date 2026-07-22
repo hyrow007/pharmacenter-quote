@@ -419,9 +419,11 @@ export type GummyFormulaCosting = {
   /** Manual $/kg per ingredient key. */
   manualCosts?: Record<string, number>;
   /** v57.8: Direct Labor Costs presets. Production Days is derived from
-   *  the scale-up model, so only the two operator inputs persist. */
-  setupDays?: number;
-  cleaningDays?: number;
+   *  the scale-up model. Null/absent = use the default rule (Setup = 1;
+   *  Cleaning = Production Days ÷ 4, Friday teardown); a number is an
+   *  operator override. Whole days only (>.24 rounds up). */
+  setupDays?: number | null;
+  cleaningDays?: number | null;
 };
 
 // -----------------------------------------------------------------------------
