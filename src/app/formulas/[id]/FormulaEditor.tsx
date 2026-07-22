@@ -4124,7 +4124,7 @@ export default function FormulaEditor({
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
             }}
           >
-            {tr("Labor Costs")}
+            {tr("Direct Labor Costs")}
           </div>
           <div
             style={{
