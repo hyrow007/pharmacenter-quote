@@ -418,6 +418,10 @@ export type GummyFormulaCosting = {
   sources?: Record<string, string>;
   /** Manual $/kg per ingredient key. */
   manualCosts?: Record<string, number>;
+  /** v57.8: Direct Labor Costs presets. Production Days is derived from
+   *  the scale-up model, so only the two operator inputs persist. */
+  setupDays?: number;
+  cleaningDays?: number;
 };
 
 // -----------------------------------------------------------------------------

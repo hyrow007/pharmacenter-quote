@@ -76,6 +76,8 @@ const es: Record<string, string> = {
   Ingredients: "Ingredientes",
   "Material Costs": "Costos de materiales",
   "Direct Labor Costs": "Costos de mano de obra directa",
+  "Setup Days": "Días de preparación",
+  "Cleaning Days": "Días de limpieza",
   Water: "Agua",
   "Pre-cook Blend QTY": "Cant. mezcla de precocción",
   "CFA Batch Addition QTY": "Cant. de adición lote CSA",

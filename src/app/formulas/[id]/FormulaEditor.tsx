@@ -724,6 +724,14 @@ export default function FormulaEditor({
   const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>(
     () => ({ ...(seedVersion.costing?.manualCosts ?? {}) }),
   );
+  // v57.8: Direct Labor Costs presets — Setup / Cleaning are operator
+  // inputs (persisted); Production Days derives from the scale-up model.
+  const [setupDays, setSetupDays] = useState<number>(
+    seedVersion.costing?.setupDays ?? 0,
+  );
+  const [cleaningDays, setCleaningDays] = useState<number>(
+    seedVersion.costing?.cleaningDays ?? 0,
+  );
   // v57.4: normalized costing blob — what Save writes and what the dirty
   // check compares. Default-source entries are dropped so an untouched
   // table stays clean.
@@ -732,8 +740,14 @@ export default function FormulaEditor({
     for (const [k, v] of Object.entries(costSourceByKey)) {
       if (v !== "Fish Bowl (Inventory)") sources[k] = v;
     }
-    return { dec: costingDec, sources, manualCosts: manualCostByKey };
-  }, [costingDec, costSourceByKey, manualCostByKey]);
+    return {
+      dec: costingDec,
+      sources,
+      manualCosts: manualCostByKey,
+      setupDays,
+      cleaningDays,
+    };
+  }, [costingDec, costSourceByKey, manualCostByKey, setupDays, cleaningDays]);
 
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
@@ -821,8 +835,10 @@ export default function FormulaEditor({
               dec: seed.costing.dec ?? 3,
               sources: seed.costing.sources ?? {},
               manualCosts: seed.costing.manualCosts ?? {},
+              setupDays: seed.costing.setupDays ?? 0,
+              cleaningDays: seed.costing.cleaningDays ?? 0,
             }
-          : { dec: 3, sources: {}, manualCosts: {} },
+          : { dec: 3, sources: {}, manualCosts: {}, setupDays: 0, cleaningDays: 0 },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -4126,14 +4142,41 @@ export default function FormulaEditor({
           >
             {tr("Direct Labor Costs")}
           </div>
+          {/* v57.8: three presets — Setup / Cleaning are inputs saved
+              with the formula; Production Days mirrors the Scale up
+              tab's Daily Metrics (Target Yield ÷ Daily Yield). */}
           <div
             style={{
-              padding: "14px 16px",
-              fontSize: 12.5,
-              color: "var(--ink-3, #8a9498)",
+              padding: 14,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
             }}
           >
-            —
+            <ParamBlock label="Setup Days">
+              <NumberInput
+                value={setupDays}
+                onChange={(n) => setSetupDays(n)}
+                step={0.5}
+                min={0}
+              />
+            </ParamBlock>
+            <ParamBlock label="Production Days">
+              <ReadOnly>
+                {(scaleUpDailyYield > 0
+                  ? targetYieldUnits / scaleUpDailyYield
+                  : 0
+                ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+              </ReadOnly>
+            </ParamBlock>
+            <ParamBlock label="Cleaning Days">
+              <NumberInput
+                value={cleaningDays}
+                onChange={(n) => setCleaningDays(n)}
+                step={0.5}
+                min={0}
+              />
+            </ParamBlock>
           </div>
         </div>
       ) : null}
