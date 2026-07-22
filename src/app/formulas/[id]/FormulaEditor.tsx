@@ -3734,6 +3734,8 @@ export default function FormulaEditor({
                     <th style={{ ...qth, width: 110 }}>{tr("Cost ($/kg)")}</th>
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
                     <th style={{ ...qth, width: 120 }}>{tr("Batch Total")}</th>
+                    {/* Price per Gummy = Batch Total ÷ Target Yield. */}
+                    <th style={{ ...qth, width: 110 }}>{tr("Price per Gummy")}</th>
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
@@ -3890,6 +3892,16 @@ export default function FormulaEditor({
                               : "—";
                           })()}
                         </td>
+                        {/* Price per Gummy = this ingredient's Batch Total
+                            ÷ Target Yield. Same "—" carry-through. */}
+                        <td style={{ ...qtd, padding: "6px 8px" }}>
+                          {(() => {
+                            const c = resolveCostPerKg(e);
+                            return c !== null && targetYieldUnits > 0
+                              ? fmtUsd(((pre + cfa) * c) / targetYieldUnits)
+                              : "—";
+                          })()}
+                        </td>
                         <td style={qtd} />
                       </tr>
                     );
@@ -3947,6 +3959,13 @@ export default function FormulaEditor({
                             if any row shows it. */}
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
                           {costMissing ? "—" : fmtUsd(costSum)}
+                        </td>
+                        {/* Price per Gummy total = Batch Total sum ÷
+                            Target Yield, same line rule. */}
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
+                          {costMissing || !(targetYieldUnits > 0)
+                            ? "—"
+                            : fmtUsd(costSum / targetYieldUnits)}
                         </td>
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
