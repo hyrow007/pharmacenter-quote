@@ -3674,6 +3674,15 @@ export default function FormulaEditor({
             };
             const fmtQtyKg = (kg: number) =>
               `${kg.toLocaleString("en-US", { minimumFractionDigits: costingDec, maximumFractionDigits: costingDec })} kg`;
+            // Dollar amounts follow the same decimal picker as the
+            // quantities (operator request).
+            const fmtUsd = (n: number) =>
+              n.toLocaleString("en-US", {
+                style: "currency",
+                currency: "USD",
+                minimumFractionDigits: costingDec,
+                maximumFractionDigits: costingDec,
+              });
             const qth: React.CSSProperties = {
               padding: "8px 12px",
               fontSize: 11,
@@ -3793,11 +3802,11 @@ export default function FormulaEditor({
                             // em-dash line, same as Water (operator request).
                             if (src === "Fish Bowl (Inventory)")
                               return e.inventoryCostPerKg !== null
-                                ? usd.format(e.inventoryCostPerKg)
+                                ? fmtUsd(e.inventoryCostPerKg)
                                 : "—";
                             if (src === "Fish Bowl (Last Order)")
                               return e.lastOrderCostPerKg !== null
-                                ? usd.format(e.lastOrderCostPerKg)
+                                ? fmtUsd(e.lastOrderCostPerKg)
                                 : "—";
                             return null;
                           })() ??
@@ -3837,7 +3846,7 @@ export default function FormulaEditor({
                           {(() => {
                             const c = resolveCostPerKg(e);
                             return c !== null
-                              ? usd.format((pre + cfa) * c)
+                              ? fmtUsd((pre + cfa) * c)
                               : "—";
                           })()}
                         </td>
@@ -3897,7 +3906,7 @@ export default function FormulaEditor({
                         {/* Batch Total sum — the "—" line carries through
                             if any row shows it. */}
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
-                          {costMissing ? "—" : usd.format(costSum)}
+                          {costMissing ? "—" : fmtUsd(costSum)}
                         </td>
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
