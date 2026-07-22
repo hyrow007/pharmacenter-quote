@@ -423,6 +423,7 @@ export type GummyFormulaCosting = {
    *  Cleaning = Production Days ÷ 4, Friday teardown); a number is an
    *  operator override. Whole days only (>.24 rounds up). */
   setupDays?: number | null;
+  productionDays?: number | null;
   cleaningDays?: number | null;
 };
 

@@ -731,6 +731,9 @@ export default function FormulaEditor({
   const [setupDays, setSetupDays] = useState<number | null>(
     seedVersion.costing?.setupDays || null,
   );
+  const [productionDays, setProductionDays] = useState<number | null>(
+    seedVersion.costing?.productionDays || null,
+  );
   const [cleaningDays, setCleaningDays] = useState<number | null>(
     seedVersion.costing?.cleaningDays || null,
   );
@@ -751,9 +754,17 @@ export default function FormulaEditor({
       sources,
       manualCosts: manualCostByKey,
       setupDays,
+      productionDays,
       cleaningDays,
     };
-  }, [costingDec, costSourceByKey, manualCostByKey, setupDays, cleaningDays]);
+  }, [
+    costingDec,
+    costSourceByKey,
+    manualCostByKey,
+    setupDays,
+    productionDays,
+    cleaningDays,
+  ]);
 
   // Loaded snapshot — used to compute whether version fields actually
   // changed vs. the currently-pinned version. This is what decides
@@ -842,9 +853,17 @@ export default function FormulaEditor({
               sources: seed.costing.sources ?? {},
               manualCosts: seed.costing.manualCosts ?? {},
               setupDays: seed.costing.setupDays || null,
+              productionDays: seed.costing.productionDays || null,
               cleaningDays: seed.costing.cleaningDays || null,
             }
-          : { dec: 3, sources: {}, manualCosts: {}, setupDays: null, cleaningDays: null },
+          : {
+              dec: 3,
+              sources: {},
+              manualCosts: {},
+              setupDays: null,
+              productionDays: null,
+              cleaningDays: null,
+            },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
     } catch {
@@ -4155,9 +4174,12 @@ export default function FormulaEditor({
               a typed value overrides the default and saves with the
               formula. */}
           {(() => {
-            const prodDays = roundDays(
+            const prodDaysDefault = roundDays(
               scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
             );
+            // Effective production days (override wins) feeds the
+            // cleaning default so ÷4 tracks what's actually planned.
+            const prodDays = productionDays ?? prodDaysDefault;
             const cleaningDefault = roundDays(prodDays / 4);
             return (
               <div
@@ -4177,7 +4199,12 @@ export default function FormulaEditor({
                   />
                 </ParamBlock>
                 <ParamBlock label="Production Days">
-                  <ReadOnly>{prodDays.toLocaleString("en-US")}</ReadOnly>
+                  <NumberInput
+                    value={prodDays}
+                    onChange={(n) => setProductionDays(roundDays(n))}
+                    step="1"
+                    min={0}
+                  />
                 </ParamBlock>
                 <ParamBlock label="Cleaning Days">
                   <NumberInput
