@@ -35,6 +35,11 @@ type RawMaterialPayload = {
   //   last_order_cost_per_kg = newest poitem.unitCost (last price paid)
   inventory_cost_per_kg?: number | null;
   last_order_cost_per_kg?: number | null;
+  // v57.1: source UOM each cost was converted from ("lb", "gal", …).
+  // "kg"/null = no conversion; the Costing tab shows a "lb → kg"
+  // indicator for anything else.
+  inventory_cost_uom?: string | null;
+  last_order_cost_uom?: string | null;
   active?: boolean;
 };
 
@@ -67,6 +72,20 @@ function isRawMaterial(v: unknown): v is RawMaterialPayload {
     rec.last_order_cost_per_kg !== undefined &&
     rec.last_order_cost_per_kg !== null &&
     typeof rec.last_order_cost_per_kg !== "number"
+  ) {
+    return false;
+  }
+  if (
+    rec.inventory_cost_uom !== undefined &&
+    rec.inventory_cost_uom !== null &&
+    typeof rec.inventory_cost_uom !== "string"
+  ) {
+    return false;
+  }
+  if (
+    rec.last_order_cost_uom !== undefined &&
+    rec.last_order_cost_uom !== null &&
+    typeof rec.last_order_cost_uom !== "string"
   ) {
     return false;
   }
@@ -126,6 +145,14 @@ export async function POST(request: Request) {
         typeof v.last_order_cost_per_kg === "number"
           ? v.last_order_cost_per_kg
           : null,
+      inventory_cost_uom:
+        typeof v.inventory_cost_uom === "string" && v.inventory_cost_uom.trim()
+          ? v.inventory_cost_uom.trim()
+          : null,
+      last_order_cost_uom:
+        typeof v.last_order_cost_uom === "string" && v.last_order_cost_uom.trim()
+          ? v.last_order_cost_uom.trim()
+          : null,
       active: v.active === undefined ? true : v.active,
     });
   }
@@ -160,6 +187,8 @@ export async function POST(request: Request) {
     default_cost_per_kg: r.default_cost_per_kg,
     inventory_cost_per_kg: r.inventory_cost_per_kg,
     last_order_cost_per_kg: r.last_order_cost_per_kg,
+    inventory_cost_uom: r.inventory_cost_uom,
+    last_order_cost_uom: r.last_order_cost_uom,
     active: r.active,
     source: "fishbowl",
     synced_at: now,
@@ -174,9 +203,20 @@ export async function POST(request: Request) {
     });
   // Pre-migration fallback: if the cost columns don't exist yet, retry
   // without them so the nightly sync never breaks during the window.
-  if (error && /inventory_cost_per_kg|last_order_cost_per_kg/.test(error.message)) {
+  if (
+    error &&
+    /inventory_cost_per_kg|last_order_cost_per_kg|inventory_cost_uom|last_order_cost_uom/.test(
+      error.message,
+    )
+  ) {
     const legacy = records.map(
-      ({ inventory_cost_per_kg: _i, last_order_cost_per_kg: _l, ...rest }) => rest,
+      ({
+        inventory_cost_per_kg: _i,
+        last_order_cost_per_kg: _l,
+        inventory_cost_uom: _iu,
+        last_order_cost_uom: _lu,
+        ...rest
+      }) => rest,
     );
     ({ error, count } = await supabase
       .from("raw_materials")

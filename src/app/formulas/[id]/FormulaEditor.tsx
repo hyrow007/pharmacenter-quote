@@ -79,6 +79,11 @@ export type RawMaterialOption = {
   // v57: Fishbowl cost sources (nightly sync) for the Costing tab.
   inventoryCostPerKg?: number | null;
   lastOrderCostPerKg?: number | null;
+  /** v57.1: source UOM each Fishbowl cost was converted from ("lb",
+   *  "gal", …). "kg"/null = no conversion; anything else renders a
+   *  "lb → kg" indicator next to the cost. */
+  inventoryCostUom?: string | null;
+  lastOrderCostUom?: string | null;
   defaultSolids: number;
   category: "primary" | "secondary" | "final" | "other" | null;
   source?: "raw_material" | "fishbowl" | "builtin";
@@ -3591,6 +3596,10 @@ export default function FormulaEditor({
               /** v57: Fishbowl costs from the nightly sync. */
               inventoryCostPerKg: number | null;
               lastOrderCostPerKg: number | null;
+              /** v57.1: source UOM the cost was converted from (non-kg
+               *  → show the conversion indicator). */
+              inventoryCostUom: string | null;
+              lastOrderCostUom: string | null;
             };
             const byKey = new Map<string, CostEntry>();
             const order: string[] = [];
@@ -3621,6 +3630,8 @@ export default function FormulaEditor({
                   appCostPerKg: rm?.defaultCostPerKg ?? null,
                   inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
                   lastOrderCostPerKg: rm?.lastOrderCostPerKg ?? null,
+                  inventoryCostUom: rm?.inventoryCostUom ?? null,
+                  lastOrderCostUom: rm?.lastOrderCostUom ?? null,
                 };
                 byKey.set(key, e);
                 order.push(key);
@@ -3800,13 +3811,42 @@ export default function FormulaEditor({
                               costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
                             // No Fishbowl data for this ingredient →
                             // em-dash line, same as Water (operator request).
+                            // v57.1: costs converted from a non-kg
+                            // Fishbowl UOM get a small "lb → kg" tag so
+                            // the operator can see a conversion happened.
+                            const withUomTag = (
+                              cost: number,
+                              uom: string | null,
+                            ) => (
+                              <>
+                                {fmtUsd(cost)}
+                                {uom && uom.toLowerCase() !== "kg" ? (
+                                  <div
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 500,
+                                      color: "var(--ink-3, #8a9498)",
+                                    }}
+                                    title={`Fishbowl cost is per ${uom}; converted to per kg`}
+                                  >
+                                    {uom} → kg
+                                  </div>
+                                ) : null}
+                              </>
+                            );
                             if (src === "Fish Bowl (Inventory)")
                               return e.inventoryCostPerKg !== null
-                                ? fmtUsd(e.inventoryCostPerKg)
+                                ? withUomTag(
+                                    e.inventoryCostPerKg,
+                                    e.inventoryCostUom,
+                                  )
                                 : "—";
                             if (src === "Fish Bowl (Last Order)")
                               return e.lastOrderCostPerKg !== null
-                                ? fmtUsd(e.lastOrderCostPerKg)
+                                ? withUomTag(
+                                    e.lastOrderCostPerKg,
+                                    e.lastOrderCostUom,
+                                  )
                                 : "—";
                             return null;
                           })() ??
