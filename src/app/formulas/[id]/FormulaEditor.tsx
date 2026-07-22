@@ -1660,6 +1660,143 @@ export default function FormulaEditor({
           maximumFractionDigits: 2,
         })
       : "0";
+  // v57.6: shared costing model — the Costing table AND the top card's
+  // Material cost / gummy readout both read from this single computation
+  // (dedup ingredient entries, solutions expanded, Water merged; QTYs
+  // scaled by the batch counts; costs resolved per selected source).
+  const costingModel = (() => {
+    const qtyPrimaryBatches =
+      scaleUpGummiesOf(scaleUp.carryKg) > 0
+        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
+        : 0;
+    const qtyCfaBatches =
+      scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
+        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
+        : 0;
+    const preKgOf = (grams: number) =>
+      scaleUp.totalPrimaryG > 0 ? (grams * batchKg) / scaleUp.totalPrimaryG : 0;
+    const cfaKgOf = (grams: number) =>
+      scaleUp.carryNetG > 0 ? (grams * cfaBatchKg) / scaleUp.carryNetG : 0;
+    type CostEntry = {
+      key: string;
+      fpCode: string | null;
+      name: string;
+      category: string | null;
+      preKg: number;
+      cfaKg: number;
+      /** $/kg from the app's raw-materials catalog (Cost Source
+       *  = "App"). Null when the ingredient has no curated cost. */
+      appCostPerKg: number | null;
+      /** v57: Fishbowl costs from the nightly sync. */
+      inventoryCostPerKg: number | null;
+      lastOrderCostPerKg: number | null;
+      /** v57.1: source UOM the cost was converted from (non-kg
+       *  → show the conversion indicator). */
+      inventoryCostUom: string | null;
+      lastOrderCostUom: string | null;
+    };
+    const byKey = new Map<string, CostEntry>();
+    const order: string[] = [];
+    const accumulate = (
+      rawMaterialId: string | null,
+      fpCodeIn: string | null,
+      nameIn: string,
+      col: "pre" | "cfa",
+      kg: number,
+    ) => {
+      const rm = rawMaterialId ? rmById.get(rawMaterialId) : null;
+      const name = (nameIn || rm?.name || "").trim();
+      if (!name) return;
+      const keyName = name.toLowerCase();
+      const key =
+        keyName === "water" || keyName === "agua"
+          ? "name:water"
+          : rawMaterialId ?? `name:${keyName}`;
+      let e = byKey.get(key);
+      if (!e) {
+        e = {
+          key,
+          fpCode: rm?.fpCode ?? fpCodeIn ?? null,
+          name: key === "name:water" ? tr("Water") : name,
+          category: rm?.category ?? null,
+          preKg: 0,
+          cfaKg: 0,
+          appCostPerKg: rm?.defaultCostPerKg ?? null,
+          inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
+          lastOrderCostPerKg: rm?.lastOrderCostPerKg ?? null,
+          inventoryCostUom: rm?.inventoryCostUom ?? null,
+          lastOrderCostUom: rm?.lastOrderCostUom ?? null,
+        };
+        byKey.set(key, e);
+        order.push(key);
+      }
+      if (col === "pre") e.preKg += kg;
+      else e.cfaKg += kg;
+    };
+    for (const r of ingredients) {
+      const phase = r.blendPhase;
+      const col: "pre" | "cfa" | null =
+        phase === "pre-cook"
+          ? "pre"
+          : phase === "cooked" || phase === "final"
+            ? "cfa"
+            : null;
+      if (!col) continue;
+      const grams = Number(r.grams) || 0;
+      const rowKg = col === "pre" ? preKgOf(grams) : cfaKgOf(grams);
+      const isSolution =
+        !r.rawMaterialId && (r.solutionComponents?.length ?? 0) > 0;
+      if (isSolution) {
+        for (const c of r.solutionComponents ?? []) {
+          const share = (Number(c.pct) || 0) / 100;
+          accumulate(
+            c.rawMaterialId ?? null,
+            c.rawMaterialFpCode ?? null,
+            (c.customName ?? "").trim(),
+            col,
+            rowKg * share,
+          );
+        }
+      } else {
+        accumulate(
+          r.rawMaterialId ?? null,
+          null,
+          resolveRowName(r, rmById),
+          col,
+          rowKg,
+        );
+      }
+    }
+    // Resolved $/kg for an entry per its selected Cost Source.
+    // Null = the "—" line (no Fishbowl data, App source, or Manual
+    // left blank).
+    const resolveCostPerKg = (e: CostEntry): number | null => {
+      const src = costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
+      if (src === "Fish Bowl (Inventory)") return e.inventoryCostPerKg;
+      if (src === "Fish Bowl (Last Order)") return e.lastOrderCostPerKg;
+      if (src === "Manual") return manualCostByKey[e.key] ?? null;
+      return null; // App — wired a different way later
+    };
+    // Batch Total sum = Σ (Total QTY × resolved $/kg); the "—" line
+    // carries through when any ingredient is unresolved.
+    let costSum = 0;
+    let costMissing = false;
+    for (const k of order) {
+      const e = byKey.get(k)!;
+      const c = resolveCostPerKg(e);
+      if (c === null) costMissing = true;
+      else costSum += (e.preKg * qtyPrimaryBatches + e.cfaKg * qtyCfaBatches) * c;
+    }
+    return {
+      qtyPrimaryBatches,
+      qtyCfaBatches,
+      byKey,
+      order,
+      resolveCostPerKg,
+      costSum,
+      costMissing,
+    };
+  })();
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
   // capture element text via string-set (unsupported), but a plain string
@@ -3542,6 +3679,11 @@ export default function FormulaEditor({
           batchKg={batchKg}
           batchesPerDay={batchesPerDay}
           targetYieldUnits={targetYieldUnits}
+          materialCostPerGummy={
+            !costingModel.costMissing && targetYieldUnits > 0
+              ? costingModel.costSum / targetYieldUnits
+              : null
+          }
         />
       )}
 
@@ -3592,130 +3734,11 @@ export default function FormulaEditor({
             {tr("Ingredients")}
           </div>
           {(() => {
-            // v56.2: quantity columns. Each unique ingredient (solutions
-            // expanded into components, Water merged) accumulates:
-            //   Pre-cook Blend QTY = its kg in the scale-up Primary Blend
-            //     × QTY of Primary Blend Batches (Target Yield ÷ gummies
-            //     per primary batch)
-            //   CFA Batch Addition QTY = its kg in the CFA card's
-            //     Secondary + Final sections × QTY of CFA Batches
-            //   Total QTY = the two added together.
-            const qtyPrimaryBatches =
-              scaleUpGummiesOf(scaleUp.carryKg) > 0
-                ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
-                : 0;
-            const qtyCfaBatches =
-              scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
-                ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
-                : 0;
-            const preKgOf = (grams: number) =>
-              scaleUp.totalPrimaryG > 0
-                ? (grams * batchKg) / scaleUp.totalPrimaryG
-                : 0;
-            const cfaKgOf = (grams: number) =>
-              scaleUp.carryNetG > 0
-                ? (grams * cfaBatchKg) / scaleUp.carryNetG
-                : 0;
-            type CostEntry = {
-              key: string;
-              fpCode: string | null;
-              name: string;
-              category: string | null;
-              preKg: number;
-              cfaKg: number;
-              /** $/kg from the app's raw-materials catalog (Cost Source
-               *  = "App"). Null when the ingredient has no curated cost. */
-              appCostPerKg: number | null;
-              /** v57: Fishbowl costs from the nightly sync. */
-              inventoryCostPerKg: number | null;
-              lastOrderCostPerKg: number | null;
-              /** v57.1: source UOM the cost was converted from (non-kg
-               *  → show the conversion indicator). */
-              inventoryCostUom: string | null;
-              lastOrderCostUom: string | null;
-            };
-            const byKey = new Map<string, CostEntry>();
-            const order: string[] = [];
-            const accumulate = (
-              rawMaterialId: string | null,
-              fpCodeIn: string | null,
-              nameIn: string,
-              col: "pre" | "cfa",
-              kg: number,
-            ) => {
-              const rm = rawMaterialId ? rmById.get(rawMaterialId) : null;
-              const name = (nameIn || rm?.name || "").trim();
-              if (!name) return;
-              const keyName = name.toLowerCase();
-              const key =
-                keyName === "water" || keyName === "agua"
-                  ? "name:water"
-                  : rawMaterialId ?? `name:${keyName}`;
-              let e = byKey.get(key);
-              if (!e) {
-                e = {
-                  key,
-                  fpCode: rm?.fpCode ?? fpCodeIn ?? null,
-                  name: key === "name:water" ? tr("Water") : name,
-                  category: rm?.category ?? null,
-                  preKg: 0,
-                  cfaKg: 0,
-                  appCostPerKg: rm?.defaultCostPerKg ?? null,
-                  inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
-                  lastOrderCostPerKg: rm?.lastOrderCostPerKg ?? null,
-                  inventoryCostUom: rm?.inventoryCostUom ?? null,
-                  lastOrderCostUom: rm?.lastOrderCostUom ?? null,
-                };
-                byKey.set(key, e);
-                order.push(key);
-              }
-              if (col === "pre") e.preKg += kg;
-              else e.cfaKg += kg;
-            };
-            for (const r of ingredients) {
-              const phase = r.blendPhase;
-              const col: "pre" | "cfa" | null =
-                phase === "pre-cook"
-                  ? "pre"
-                  : phase === "cooked" || phase === "final"
-                    ? "cfa"
-                    : null;
-              if (!col) continue;
-              const grams = Number(r.grams) || 0;
-              const rowKg = col === "pre" ? preKgOf(grams) : cfaKgOf(grams);
-              const isSolution =
-                !r.rawMaterialId && (r.solutionComponents?.length ?? 0) > 0;
-              if (isSolution) {
-                for (const c of r.solutionComponents ?? []) {
-                  const share = (Number(c.pct) || 0) / 100;
-                  accumulate(
-                    c.rawMaterialId ?? null,
-                    c.rawMaterialFpCode ?? null,
-                    (c.customName ?? "").trim(),
-                    col,
-                    rowKg * share,
-                  );
-                }
-              } else {
-                accumulate(
-                  r.rawMaterialId ?? null,
-                  null,
-                  resolveRowName(r, rmById),
-                  col,
-                  rowKg,
-                );
-              }
-            }
-            // Resolved $/kg for an entry per its selected Cost Source.
-            // Null = the "—" line (no Fishbowl data, App source, or
-            // Manual left blank).
-            const resolveCostPerKg = (e: CostEntry): number | null => {
-              const src = costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
-              if (src === "Fish Bowl (Inventory)") return e.inventoryCostPerKg;
-              if (src === "Fish Bowl (Last Order)") return e.lastOrderCostPerKg;
-              if (src === "Manual") return manualCostByKey[e.key] ?? null;
-              return null; // App — wired a different way later
-            };
+            // v57.6: quantities + costs come from the shared costingModel
+            // (built once in the component body; the top card's Material
+            // cost / gummy readout uses the same numbers).
+            const { qtyPrimaryBatches, qtyCfaBatches, byKey, order, resolveCostPerKg } =
+              costingModel;
             const fmtQtyKg = (kg: number) =>
               `${kg.toLocaleString("en-US", { minimumFractionDigits: costingDec, maximumFractionDigits: costingDec })} kg`;
             // Dollar amounts follow the same decimal picker as the
@@ -5754,6 +5777,9 @@ function CostTab({
   batchesPerDay: number;
   /** v57.5: Target Yield from the Scale up tab — shown as QTY (Gummies). */
   targetYieldUnits: number;
+  /** v57.6: costing-table grand total ÷ Target Yield. Null = "—" (an
+   *  ingredient has the line, or no target yield). */
+  materialCostPerGummy: number | null;
 }) {
   const dailyGummies =
     gummyPieceWeightG > 0 ? (batchKg * batchesPerDay * 1000) / gummyPieceWeightG : 0;
@@ -5791,6 +5817,13 @@ function CostTab({
           {targetYieldUnits > 0
             ? Math.round(targetYieldUnits).toLocaleString("en-US")
             : "—"}
+        </ReadOnly>
+      </ParamBlock>
+      {/* v57.6: costing-table grand total ÷ Target Yield — the same
+          line rule as the table (any "—" ingredient blanks this). */}
+      <ParamBlock label="Material cost / gummy">
+        <ReadOnly>
+          {materialCostPerGummy !== null ? usd.format(materialCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       <ParamBlock label="$ / gummy (raw)">
