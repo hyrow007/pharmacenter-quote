@@ -74,6 +74,8 @@ const es: Record<string, string> = {
   // ---- Table headers ----
   Ingredient: "Ingrediente",
   Ingredients: "Ingredientes",
+  "Material Costs": "Costos de materiales",
+  "Labor Costs": "Costos de mano de obra",
   Water: "Agua",
   "Pre-cook Blend QTY": "Cant. mezcla de precocción",
   "CFA Batch Addition QTY": "Cant. de adición lote CSA",

@@ -3731,7 +3731,7 @@ export default function FormulaEditor({
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
             }}
           >
-            {tr("Ingredients")}
+            {tr("Material Costs")}
           </div>
           {(() => {
             // v57.6: quantities + costs come from the shared costingModel
@@ -4098,6 +4098,43 @@ export default function FormulaEditor({
               </table>
             );
           })()}
+        </div>
+      ) : null}
+
+      {/* v57.7: Labor Costs — placeholder card below Material Costs;
+          content to be defined with the operator. */}
+      {tab === "cost" && !printing ? (
+        <div
+          style={{
+            marginBottom: 14,
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 8,
+            background: "var(--paper, #fffdf8)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 16px",
+              fontSize: 14.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+            }}
+          >
+            {tr("Labor Costs")}
+          </div>
+          <div
+            style={{
+              padding: "14px 16px",
+              fontSize: 12.5,
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            —
+          </div>
         </div>
       ) : null}
 
