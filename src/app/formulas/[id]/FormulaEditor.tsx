@@ -1620,6 +1620,10 @@ export default function FormulaEditor({
   // v56.3: decimal precision for the Costing tab's quantity columns —
   // same chevron control the bench/scale-up total rows use.
   const [costingDec, setCostingDec] = useState<number>(3);
+  // v57.3: costing table column sort. null key = natural (blend) order;
+  // clicking a header cycles asc → desc → natural.
+  const [costSortKey, setCostSortKey] = useState<string | null>(null);
+  const [costSortDir, setCostSortDir] = useState<"asc" | "desc">("asc");
   // v56.4: per-ingredient cost source (keyed by the costing table's
   // dedup key). Client-side for now — persistence can follow once the
   // cost columns are wired to the sources.
@@ -3716,6 +3720,71 @@ export default function FormulaEditor({
               fontWeight: 600,
               whiteSpace: "nowrap",
             };
+            // v57.3: column sorting. Clicking a header cycles
+            // asc → desc → natural (blend) order. "—" rows sort last.
+            const sortValOf = (k: string): number | string | null => {
+              const e = byKey.get(k)!;
+              const pre = e.preKg * qtyPrimaryBatches;
+              const cfa = e.cfaKg * qtyCfaBatches;
+              switch (costSortKey) {
+                case "name":
+                  return e.name.toLowerCase();
+                case "pre":
+                  return pre;
+                case "cfa":
+                  return cfa;
+                case "total":
+                  return pre + cfa;
+                case "source":
+                  return costSourceByKey[k] ?? "Fish Bowl (Inventory)";
+                case "cost":
+                  return resolveCostPerKg(e);
+                case "batch":
+                case "gummy": {
+                  const c = resolveCostPerKg(e);
+                  return c === null ? null : (pre + cfa) * c;
+                }
+                default:
+                  return null;
+              }
+            };
+            const sortedOrder = !costSortKey
+              ? order
+              : [...order].sort((a, b) => {
+                  const va = sortValOf(a);
+                  const vb = sortValOf(b);
+                  if (va === null && vb === null) return 0;
+                  if (va === null) return 1; // "—" rows last either way
+                  if (vb === null) return -1;
+                  const cmp =
+                    typeof va === "string"
+                      ? va.localeCompare(String(vb))
+                      : (va as number) - (vb as number);
+                  return costSortDir === "asc" ? cmp : -cmp;
+                });
+            const sortableTh = (
+              label: string,
+              key: string,
+              style: React.CSSProperties,
+            ) => (
+              <th
+                style={{ ...style, cursor: "pointer", userSelect: "none" }}
+                title="Click to sort"
+                onClick={() => {
+                  if (costSortKey !== key) {
+                    setCostSortKey(key);
+                    setCostSortDir("asc");
+                  } else if (costSortDir === "asc") {
+                    setCostSortDir("desc");
+                  } else {
+                    setCostSortKey(null);
+                  }
+                }}
+              >
+                {label}
+                {costSortKey === key ? (costSortDir === "asc" ? " ▲" : " ▼") : ""}
+              </th>
+            );
             return (
               <table
                 style={{
@@ -3726,16 +3795,16 @@ export default function FormulaEditor({
               >
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
-                    <th style={{ ...qth, textAlign: "left" }}>{tr("Ingredient")}</th>
-                    <th style={{ ...qth, width: 130 }}>{tr("Pre-cook Blend QTY")}</th>
-                    <th style={{ ...qth, width: 130 }}>{tr("CFA Batch Addition QTY")}</th>
-                    <th style={{ ...qth, width: 130 }}>{tr("Total QTY")}</th>
-                    <th style={{ ...qth, width: 150 }}>{tr("Cost Source")}</th>
-                    <th style={{ ...qth, width: 110 }}>{tr("Cost ($/kg)")}</th>
+                    {sortableTh(tr("Ingredient"), "name", { ...qth, textAlign: "left" })}
+                    {sortableTh(tr("Pre-cook Blend QTY"), "pre", { ...qth, width: 130 })}
+                    {sortableTh(tr("CFA Batch Addition QTY"), "cfa", { ...qth, width: 130 })}
+                    {sortableTh(tr("Total QTY"), "total", { ...qth, width: 130 })}
+                    {sortableTh(tr("Cost Source"), "source", { ...qth, width: 150 })}
+                    {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
-                    <th style={{ ...qth, width: 120 }}>{tr("Batch Total")}</th>
+                    {sortableTh(tr("Batch Total"), "batch", { ...qth, width: 120 })}
                     {/* Price per Gummy = Batch Total ÷ Target Yield. */}
-                    <th style={{ ...qth, width: 110 }}>{tr("Price per Gummy")}</th>
+                    {sortableTh(tr("Price per Gummy"), "gummy", { ...qth, width: 110 })}
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
@@ -3743,7 +3812,7 @@ export default function FormulaEditor({
                   </tr>
                 </thead>
                 <tbody>
-                  {order.map((k) => {
+                  {sortedOrder.map((k) => {
                     const e = byKey.get(k)!;
                     const pre = e.preKg * qtyPrimaryBatches;
                     const cfa = e.cfaKg * qtyCfaBatches;
