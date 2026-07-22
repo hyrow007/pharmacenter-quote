@@ -3828,10 +3828,33 @@ export default function FormulaEditor({
                   {(() => {
                     let preSum = 0;
                     let cfaSum = 0;
+                    // Total cost = Σ (Total QTY × resolved $/kg). If any
+                    // ingredient's cost shows the "—" line (no Fishbowl
+                    // data, App source, or Manual left blank) the total
+                    // shows the line too — a partial sum would be
+                    // misleading (operator request).
+                    let costSum = 0;
+                    let costMissing = false;
                     for (const k of order) {
                       const e = byKey.get(k)!;
                       preSum += e.preKg * qtyPrimaryBatches;
                       cfaSum += e.cfaKg * qtyCfaBatches;
+                      const src =
+                        costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
+                      const c =
+                        src === "Fish Bowl (Inventory)"
+                          ? e.inventoryCostPerKg
+                          : src === "Fish Bowl (Last Order)"
+                            ? e.lastOrderCostPerKg
+                            : src === "Manual"
+                              ? (manualCostByKey[e.key] ?? null)
+                              : null;
+                      if (c === null) costMissing = true;
+                      else
+                        costSum +=
+                          (e.preKg * qtyPrimaryBatches +
+                            e.cfaKg * qtyCfaBatches) *
+                          c;
                     }
                     return (
                       <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
@@ -3858,7 +3881,11 @@ export default function FormulaEditor({
                           {fmtQtyKg(preSum + cfaSum)}
                         </td>
                         <td style={qtd} />
-                        <td style={qtd} />
+                        {/* Total cost (extended $), bottom of the cost
+                            column. */}
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
+                          {costMissing ? "—" : usd.format(costSum)}
+                        </td>
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
                         </td>
