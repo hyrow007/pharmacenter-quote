@@ -5765,6 +5765,7 @@ function CostTab({
   batchKg,
   batchesPerDay,
   targetYieldUnits,
+  materialCostPerGummy,
 }: {
   cost: {
     dollarsPerGummy: number;
