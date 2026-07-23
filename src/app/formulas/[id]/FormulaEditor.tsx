@@ -747,6 +747,25 @@ export default function FormulaEditor({
   const [cleaningHours, setCleaningHours] = useState<number | null>(
     seedVersion.costing?.cleaningHours || null,
   );
+  // v58.4: Man Hours crew counts per phase (null = 0).
+  const [setupLeaders, setSetupLeaders] = useState<number | null>(
+    seedVersion.costing?.setupLeaders || null,
+  );
+  const [productionLeaders, setProductionLeaders] = useState<number | null>(
+    seedVersion.costing?.productionLeaders || null,
+  );
+  const [cleaningLeaders, setCleaningLeaders] = useState<number | null>(
+    seedVersion.costing?.cleaningLeaders || null,
+  );
+  const [setupOperators, setSetupOperators] = useState<number | null>(
+    seedVersion.costing?.setupOperators || null,
+  );
+  const [productionOperators, setProductionOperators] = useState<number | null>(
+    seedVersion.costing?.productionOperators || null,
+  );
+  const [cleaningOperators, setCleaningOperators] = useState<number | null>(
+    seedVersion.costing?.cleaningOperators || null,
+  );
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
@@ -769,6 +788,12 @@ export default function FormulaEditor({
       setupHours,
       productionHours,
       cleaningHours,
+      setupLeaders,
+      productionLeaders,
+      cleaningLeaders,
+      setupOperators,
+      productionOperators,
+      cleaningOperators,
     };
   }, [
     costingDec,
@@ -780,6 +805,12 @@ export default function FormulaEditor({
     setupHours,
     productionHours,
     cleaningHours,
+    setupLeaders,
+    productionLeaders,
+    cleaningLeaders,
+    setupOperators,
+    productionOperators,
+    cleaningOperators,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -874,6 +905,12 @@ export default function FormulaEditor({
               setupHours: seed.costing.setupHours || null,
               productionHours: seed.costing.productionHours || null,
               cleaningHours: seed.costing.cleaningHours || null,
+              setupLeaders: seed.costing.setupLeaders || null,
+              productionLeaders: seed.costing.productionLeaders || null,
+              cleaningLeaders: seed.costing.cleaningLeaders || null,
+              setupOperators: seed.costing.setupOperators || null,
+              productionOperators: seed.costing.productionOperators || null,
+              cleaningOperators: seed.costing.cleaningOperators || null,
             }
           : {
               dec: 3,
@@ -885,6 +922,12 @@ export default function FormulaEditor({
               setupHours: null,
               productionHours: null,
               cleaningHours: null,
+              setupLeaders: null,
+              productionLeaders: null,
+              cleaningLeaders: null,
+              setupOperators: null,
+              productionOperators: null,
+              cleaningOperators: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4268,7 +4311,31 @@ export default function FormulaEditor({
                 }}
               />
             );
+            // v58.4: Man Hours crew rows (per phase, same column order
+            // as `cols`).
+            const crewRows = [
+              {
+                label: "QTY of Line Leaders",
+                vals: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+                sets: [setSetupLeaders, setProductionLeaders, setCleaningLeaders],
+              },
+              {
+                label: "QTY of Line Operators",
+                vals: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+                sets: [setSetupOperators, setProductionOperators, setCleaningOperators],
+              },
+            ];
+            const subhead: React.CSSProperties = {
+              padding: "12px 12px 4px",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--teal-700, #1d6c7b)",
+            };
             return (
+              <>
+              <div style={subhead}>{tr("Shift Hours")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
@@ -4349,6 +4416,45 @@ export default function FormulaEditor({
                   </tr>
                 </tbody>
               </table>
+              {/* v58.4: Man Hours — crew counts per phase. */}
+              <div style={subhead}>{tr("Man Hours")}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    <th style={{ ...lth, textAlign: "left" }} />
+                    {cols.map((c) => (
+                      <th key={c.label} style={lth}>
+                        {tr(c.label)}
+                      </th>
+                    ))}
+                    <th style={lth}>{tr("Total")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {crewRows.map((row) => (
+                    <tr
+                      key={row.label}
+                      style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                    >
+                      <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
+                      {row.vals.map((v, i) => (
+                        <td key={i} style={ltd}>
+                          <NumberInput
+                            value={v}
+                            onChange={(n) => row.sets[i](Math.max(0, Math.round(n)))}
+                            step="1"
+                            min={0}
+                          />
+                        </td>
+                      ))}
+                      <td style={ltd}>
+                        {sumCell(row.vals.reduce((s, v) => s + v, 0))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </>
             );
           })()}
         </div>

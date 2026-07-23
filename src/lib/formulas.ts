@@ -430,6 +430,13 @@ export type GummyFormulaCosting = {
   setupHours?: number | null;
   productionHours?: number | null;
   cleaningHours?: number | null;
+  /** v58.4: Man Hours crew counts per phase. Null = 0. */
+  setupLeaders?: number | null;
+  productionLeaders?: number | null;
+  cleaningLeaders?: number | null;
+  setupOperators?: number | null;
+  productionOperators?: number | null;
+  cleaningOperators?: number | null;
 };
 
 // -----------------------------------------------------------------------------
