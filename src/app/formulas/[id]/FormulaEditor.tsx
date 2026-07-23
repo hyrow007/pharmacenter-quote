@@ -4325,17 +4325,25 @@ export default function FormulaEditor({
                 sets: [setSetupOperators, setProductionOperators, setCleaningOperators],
               },
             ];
-            const subhead: React.CSSProperties = {
-              padding: "12px 12px 4px",
-              fontSize: 12,
+            // v58.5: sub-card chrome — same treatment as the scale-up
+            // card's inner sections (Transferred / Secondary / Final).
+            const subCard: React.CSSProperties = {
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              margin: "12px 14px",
+              background: "var(--paper, #fffdf8)",
+              overflow: "hidden",
+            };
+            const subTitle: React.CSSProperties = {
+              padding: "10px 14px 4px",
+              fontSize: 13,
               fontWeight: 700,
-              letterSpacing: "0.09em",
-              textTransform: "uppercase",
-              color: "var(--teal-700, #1d6c7b)",
+              color: "var(--teal-900, #0f4a56)",
             };
             return (
               <>
-              <div style={subhead}>{tr("Shift Hours")}</div>
+              <div style={subCard}>
+              <div style={subTitle}>{tr("Shift Hours")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
@@ -4416,8 +4424,10 @@ export default function FormulaEditor({
                   </tr>
                 </tbody>
               </table>
+              </div>
               {/* v58.4: Man Hours — crew counts per phase. */}
-              <div style={subhead}>{tr("Man Hours")}</div>
+              <div style={subCard}>
+              <div style={subTitle}>{tr("Man Hours")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
@@ -4454,6 +4464,7 @@ export default function FormulaEditor({
                   ))}
                 </tbody>
               </table>
+              </div>
               </>
             );
           })()}
