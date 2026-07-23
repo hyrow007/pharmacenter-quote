@@ -4294,9 +4294,25 @@ export default function FormulaEditor({
                     </td>
                     {cols.map((c) => (
                       <td key={c.label} style={{ ...ltd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
-                        {(c.shifts * c.hours).toLocaleString("en-US", {
-                          maximumFractionDigits: 1,
-                        })}
+                        {/* Read-only input with the same chrome/width as
+                            the editable cells so the digits line up in
+                            a straight column. */}
+                        <input
+                          readOnly
+                          tabIndex={-1}
+                          value={(c.shifts * c.hours).toLocaleString("en-US", {
+                            maximumFractionDigits: 1,
+                          })}
+                          className="pricing__input"
+                          style={{
+                            width: 100,
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                            fontWeight: 700,
+                            color: "var(--teal-900, #0f4a56)",
+                            pointerEvents: "none",
+                          }}
+                        />
                       </td>
                     ))}
                   </tr>
