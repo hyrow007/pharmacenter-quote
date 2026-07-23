@@ -4249,6 +4249,25 @@ export default function FormulaEditor({
               fontWeight: 600,
               color: "var(--ink-1, #1f2a2d)",
             };
+            // v58.3: read-only sum cell — same number-input chrome as the
+            // editable cells so digits column-align (spinner gutter).
+            const sumCell = (v: number | null) => (
+              <input
+                type="number"
+                readOnly
+                tabIndex={-1}
+                value={v === null ? "" : Math.round(v * 10) / 10}
+                className="pricing__input"
+                style={{
+                  width: 100,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  pointerEvents: "none",
+                }}
+              />
+            );
             return (
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -4259,6 +4278,7 @@ export default function FormulaEditor({
                         {tr(c.label)}
                       </th>
                     ))}
+                    <th style={lth}>{tr("Total")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4274,6 +4294,9 @@ export default function FormulaEditor({
                         />
                       </td>
                     ))}
+                    <td style={ltd}>
+                      {sumCell(cols.reduce((s, c) => s + c.shifts, 0))}
+                    </td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
                     <td style={{ ...lth, textAlign: "left" }}>{tr("Hours per Shift")}</td>
@@ -4287,6 +4310,9 @@ export default function FormulaEditor({
                         />
                       </td>
                     ))}
+                    {/* Summing hours-per-shift across phases isn't
+                        meaningful — left blank. */}
+                    <td style={ltd}>{sumCell(null)}</td>
                   </tr>
                   <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
                     <td style={{ ...lth, textAlign: "left", color: "var(--teal-900, #0f4a56)" }}>
@@ -4317,6 +4343,9 @@ export default function FormulaEditor({
                         />
                       </td>
                     ))}
+                    <td style={ltd}>
+                      {sumCell(cols.reduce((s, c) => s + c.shifts * c.hours, 0))}
+                    </td>
                   </tr>
                 </tbody>
               </table>
