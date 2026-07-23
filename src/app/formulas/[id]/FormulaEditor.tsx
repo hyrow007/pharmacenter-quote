@@ -461,6 +461,9 @@ type Props = {
   // it stamps). Saves cut revisions without bumping the visible number;
   // the Issue button assigns the next issueNum.
   initialIssue: { issueNum: number; revisionNum: number };
+  /** v58.6: ADP-synced default hourly rates for the Direct Labor Costs
+   *  card (Line Leader / Line Operator reference employees). */
+  laborRateDefaults?: { leader: number | null; operator: number | null };
 };
 
 type Tab = "bench" | "scale" | "cost";
@@ -486,6 +489,7 @@ export default function FormulaEditor({
   initialSavedSolutions = [],
   currentUserEmail,
   initialIssue,
+  laborRateDefaults,
 }: Props) {
   const lang = useLang();
   const tr = makeTr(lang);
@@ -766,6 +770,13 @@ export default function FormulaEditor({
   const [cleaningOperators, setCleaningOperators] = useState<number | null>(
     seedVersion.costing?.cleaningOperators || null,
   );
+  // v58.6: hourly-rate overrides (null = ADP-synced default).
+  const [leaderRate, setLeaderRate] = useState<number | null>(
+    seedVersion.costing?.leaderRate || null,
+  );
+  const [operatorRate, setOperatorRate] = useState<number | null>(
+    seedVersion.costing?.operatorRate || null,
+  );
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
@@ -794,6 +805,8 @@ export default function FormulaEditor({
       setupOperators,
       productionOperators,
       cleaningOperators,
+      leaderRate,
+      operatorRate,
     };
   }, [
     costingDec,
@@ -811,6 +824,8 @@ export default function FormulaEditor({
     setupOperators,
     productionOperators,
     cleaningOperators,
+    leaderRate,
+    operatorRate,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -911,6 +926,8 @@ export default function FormulaEditor({
               setupOperators: seed.costing.setupOperators || null,
               productionOperators: seed.costing.productionOperators || null,
               cleaningOperators: seed.costing.cleaningOperators || null,
+              leaderRate: seed.costing.leaderRate || null,
+              operatorRate: seed.costing.operatorRate || null,
             }
           : {
               dec: 3,
@@ -928,6 +945,8 @@ export default function FormulaEditor({
               setupOperators: null,
               productionOperators: null,
               cleaningOperators: null,
+              leaderRate: null,
+              operatorRate: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4470,6 +4489,37 @@ export default function FormulaEditor({
                   ))}
                 </tbody>
               </table>
+              </div>
+              {/* v58.6: Hourly Rates — defaults come from ADP (the two
+                  reference employees, refreshed nightly); typing a
+                  value overrides and saves with the formula. */}
+              <div style={subCard}>
+              <div style={subTitle}>{tr("Hourly Rates")}</div>
+              <div
+                style={{
+                  padding: 14,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <ParamBlock label="Line Leader ($/hr)">
+                  <NumberInput
+                    value={leaderRate ?? laborRateDefaults?.leader ?? 0}
+                    onChange={(n) => setLeaderRate(n)}
+                    step="0.01"
+                    min={0}
+                  />
+                </ParamBlock>
+                <ParamBlock label="Line Operator ($/hr)">
+                  <NumberInput
+                    value={operatorRate ?? laborRateDefaults?.operator ?? 0}
+                    onChange={(n) => setOperatorRate(n)}
+                    step="0.01"
+                    min={0}
+                  />
+                </ParamBlock>
+              </div>
               </div>
               </>
             );

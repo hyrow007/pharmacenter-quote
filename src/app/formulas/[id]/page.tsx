@@ -132,6 +132,29 @@ export default async function FormulaEditorPage({
         };
   const isDraft = formula.latestVersionNum > issue.revisionNum;
 
+  // v58.6: default hourly rates for the Direct Labor Costs card — read
+  // from the ADP-synced labor_rates table via two reference employees
+  // (per operator direction: Lacruz = Line Leader, Oquendo = Line
+  // Operator). Errors (table missing, people renamed) degrade to null;
+  // the card shows 0 until an override is typed.
+  const LINE_LEADER_ADP_ID = "lacruz anchicoque, leonardo arturo";
+  const LINE_OPERATOR_ADP_ID = "oquendo diaz, leticia c";
+  let laborRateDefaults: { leader: number | null; operator: number | null } = {
+    leader: null,
+    operator: null,
+  };
+  try {
+    const { data: lrRows } = await supabase
+      .from("labor_rates")
+      .select("adp_id, hourly_rate")
+      .in("adp_id", [LINE_LEADER_ADP_ID, LINE_OPERATOR_ADP_ID]);
+    for (const r of lrRows ?? []) {
+      const rate = r.hourly_rate === null ? null : Number(r.hourly_rate);
+      if (r.adp_id === LINE_LEADER_ADP_ID) laborRateDefaults.leader = rate;
+      if (r.adp_id === LINE_OPERATOR_ADP_ID) laborRateDefaults.operator = rate;
+    }
+  } catch {}
+
   // Curated raw_materials rows — full data (cost, solids, category, notes).
   const curatedRawMaterials: RawMaterialOption[] = (rmRes.data ?? []).map((r) => ({
     id: r.id,
@@ -325,6 +348,7 @@ export default async function FormulaEditorPage({
               initialSavedSolutions={savedSolutions}
               currentUserEmail={user.email!}
               initialIssue={issue}
+              laborRateDefaults={laborRateDefaults}
             />
           </I18nProvider>
         </div>

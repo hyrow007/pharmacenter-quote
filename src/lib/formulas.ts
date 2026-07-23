@@ -437,6 +437,10 @@ export type GummyFormulaCosting = {
   setupOperators?: number | null;
   productionOperators?: number | null;
   cleaningOperators?: number | null;
+  /** v58.6: hourly-rate overrides for the two line roles. Null = use
+   *  the ADP-synced default (reference employees in labor_rates). */
+  leaderRate?: number | null;
+  operatorRate?: number | null;
 };
 
 // -----------------------------------------------------------------------------
