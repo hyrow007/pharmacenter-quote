@@ -4564,7 +4564,7 @@ export default function FormulaEditor({
                   reference employees, refreshed nightly); typing a
                   value overrides and saves with the formula. */}
               <div style={subCard}>
-              <div style={subTitle}>{tr("Rates and Costs")}</div>
+              <div style={subTitle}>{tr("Pay Rates")}</div>
               {/* v59.1: rows mirror Man Hours. Base rates default from
                   ADP; Payroll Tax % (FICA 7.65 + FUTA/FL SUTA ≈ 8.5)
                   and Workers' Comp % (≈4) are editable defaults.
@@ -4664,6 +4664,20 @@ export default function FormulaEditor({
                   </table>
                 );
               })()}
+              </div>
+              {/* v59.2: Batch Labor Costs — placeholder; content to be
+                  defined with the operator. */}
+              <div style={subCard}>
+              <div style={subTitle}>{tr("Batch Labor Costs")}</div>
+              <div
+                style={{
+                  padding: "14px 16px",
+                  fontSize: 12.5,
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                —
+              </div>
               </div>
               </>
             );
