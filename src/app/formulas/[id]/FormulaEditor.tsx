@@ -4297,12 +4297,14 @@ export default function FormulaEditor({
                         {/* Read-only input with the same chrome/width as
                             the editable cells so the digits line up in
                             a straight column. */}
+                        {/* type="number" like the editable cells so
+                            Chrome's spinner gutter insets the digits
+                            identically. */}
                         <input
+                          type="number"
                           readOnly
                           tabIndex={-1}
-                          value={(c.shifts * c.hours).toLocaleString("en-US", {
-                            maximumFractionDigits: 1,
-                          })}
+                          value={Math.round(c.shifts * c.hours * 10) / 10}
                           className="pricing__input"
                           style={{
                             width: 100,
