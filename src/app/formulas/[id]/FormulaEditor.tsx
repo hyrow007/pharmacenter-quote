@@ -4375,6 +4375,54 @@ export default function FormulaEditor({
                 }}
               />
             );
+            // v59.3: read-only $ cell — same chrome/alignment as sumCell.
+            const moneyCell = (v: number) => (
+              <input
+                type="text"
+                readOnly
+                tabIndex={-1}
+                value={v.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                })}
+                className="pricing__input"
+                style={{
+                  width: 100,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  pointerEvents: "none",
+                  paddingRight: 14,
+                }}
+              />
+            );
+            // v59.3: shared burden math for Pay Rates + Batch Labor Costs.
+            const rateRows = [
+              {
+                label: "Line Leaders",
+                crew: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+                base: leaderRate ?? laborRateDefaults?.leader ?? 0,
+                setBase: setLeaderRate,
+                tax: leaderTaxPct ?? 8.5,
+                setTax: setLeaderTaxPct,
+                wc: leaderWcPct ?? 4,
+                setWc: setLeaderWcPct,
+              },
+              {
+                label: "Line Operators",
+                crew: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+                base: operatorRate ?? laborRateDefaults?.operator ?? 0,
+                setBase: setOperatorRate,
+                tax: operatorTaxPct ?? 8.5,
+                setTax: setOperatorTaxPct,
+                wc: operatorWcPct ?? 4,
+                setWc: setOperatorWcPct,
+              },
+            ].map((r) => {
+              const burdened = r.base * (1 + r.tax / 100 + r.wc / 100);
+              return { ...r, burdened };
+            });
             // v58.4: Man Hours crew rows (per phase, same column order
             // as `cols`).
             const crewRows = [
@@ -4570,47 +4618,6 @@ export default function FormulaEditor({
                   and Workers' Comp % (≈4) are editable defaults.
                   Burdened Rate = base × (1 + tax% + wc%). */}
               {(() => {
-                const moneyCell = (v: number) => (
-                  <input
-                    type="text"
-                    readOnly
-                    tabIndex={-1}
-                    value={v.toLocaleString("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                    })}
-                    className="pricing__input"
-                    style={{
-                      width: 100,
-                      textAlign: "right",
-                      fontVariantNumeric: "tabular-nums",
-                      fontWeight: 700,
-                      color: "var(--teal-900, #0f4a56)",
-                      pointerEvents: "none",
-                      paddingRight: 14,
-                    }}
-                  />
-                );
-                const rateRows = [
-                  {
-                    label: "Line Leaders",
-                    base: leaderRate ?? laborRateDefaults?.leader ?? 0,
-                    setBase: setLeaderRate,
-                    tax: leaderTaxPct ?? 8.5,
-                    setTax: setLeaderTaxPct,
-                    wc: leaderWcPct ?? 4,
-                    setWc: setLeaderWcPct,
-                  },
-                  {
-                    label: "Line Operators",
-                    base: operatorRate ?? laborRateDefaults?.operator ?? 0,
-                    setBase: setOperatorRate,
-                    tax: operatorTaxPct ?? 8.5,
-                    setTax: setOperatorTaxPct,
-                    wc: operatorWcPct ?? 4,
-                    setWc: setOperatorWcPct,
-                  },
-                ];
                 return (
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                     <thead>
@@ -4653,11 +4660,7 @@ export default function FormulaEditor({
                               min={0}
                             />
                           </td>
-                          <td style={ltd}>
-                            {moneyCell(
-                              row.base * (1 + row.tax / 100 + row.wc / 100),
-                            )}
-                          </td>
+                          <td style={ltd}>{moneyCell(row.burdened)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -4665,19 +4668,64 @@ export default function FormulaEditor({
                 );
               })()}
               </div>
-              {/* v59.2: Batch Labor Costs — placeholder; content to be
-                  defined with the operator. */}
+              {/* v59.3: Batch Labor Costs — Man Hours (all phases) ×
+                  Burdened Rate per role, with a grand total. Read-only. */}
               <div style={subCard}>
               <div style={subTitle}>{tr("Batch Labor Costs")}</div>
-              <div
-                style={{
-                  padding: "14px 16px",
-                  fontSize: 12.5,
-                  color: "var(--ink-3, #8a9498)",
-                }}
-              >
-                —
-              </div>
+              {(() => {
+                const laborRows = rateRows.map((r) => {
+                  const manHours = cols.reduce(
+                    (s, c, i) => s + r.crew[i] * c.shifts * c.hours,
+                    0,
+                  );
+                  return { ...r, manHours, total: manHours * r.burdened };
+                });
+                const grand = laborRows.reduce((s, r) => s + r.total, 0);
+                return (
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                        <th style={{ ...lth, textAlign: "left" }} />
+                        <th style={{ ...lth, width: 170 }}>{tr("Man Hours")}</th>
+                        <th style={{ ...lth, width: 170 }}>{tr("Burdened Rate")}</th>
+                        {/* spacer keeps Total in the shared right-most
+                            column position. */}
+                        <th style={{ ...lth, width: 170 }} />
+                        <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {laborRows.map((row) => (
+                        <tr
+                          key={row.label}
+                          style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                        >
+                          <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
+                          <td style={ltd}>{sumCell(row.manHours)}</td>
+                          <td style={ltd}>{moneyCell(row.burdened)}</td>
+                          <td style={ltd} />
+                          <td style={ltd}>{moneyCell(row.total)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                        <td
+                          style={{
+                            ...lth,
+                            textAlign: "left",
+                            color: "var(--teal-900, #0f4a56)",
+                          }}
+                        >
+                          {tr("Grand Total")}
+                        </td>
+                        <td style={ltd} />
+                        <td style={ltd} />
+                        <td style={ltd} />
+                        <td style={ltd}>{moneyCell(grand)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })()}
               </div>
               </>
             );

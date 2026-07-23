@@ -125,6 +125,7 @@ const es: Record<string, string> = {
     "Mezcla primaria cocida transferida al tanque CSA",
   "CFA Batch": "Lote CSA",
   "Grand Total CFA Batch": "Gran total de lote CSA",
+  "Grand Total": "Gran total",
   "Scaled to the CFA Batch Size — the transferred cooked primary blend plus the secondary and final additions.":
     "Escalado al tamaño de lote CSA — la mezcla primaria cocida transferida más las adiciones secundarias y finales.",
   "Total transferred to CFA tank": "Total transferido al tanque CSA",
