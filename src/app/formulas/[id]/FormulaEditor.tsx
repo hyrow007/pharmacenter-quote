@@ -4344,16 +4344,19 @@ export default function FormulaEditor({
               <>
               <div style={subCard}>
               <div style={subTitle}>{tr("Shift Hours")}</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    {/* Fixed data-column widths (tableLayout: fixed) so
+                        both sub-tables' columns land on identical
+                        x-positions regardless of label length. */}
                     <th style={{ ...lth, textAlign: "left" }} />
                     {cols.map((c) => (
-                      <th key={c.label} style={lth}>
+                      <th key={c.label} style={{ ...lth, width: 170 }}>
                         {tr(c.label)}
                       </th>
                     ))}
-                    <th style={lth}>{tr("Total")}</th>
+                    <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4428,16 +4431,19 @@ export default function FormulaEditor({
               {/* v58.4: Man Hours — crew counts per phase. */}
               <div style={subCard}>
               <div style={subTitle}>{tr("Man Hours")}</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    {/* Fixed data-column widths (tableLayout: fixed) so
+                        both sub-tables' columns land on identical
+                        x-positions regardless of label length. */}
                     <th style={{ ...lth, textAlign: "left" }} />
                     {cols.map((c) => (
-                      <th key={c.label} style={lth}>
+                      <th key={c.label} style={{ ...lth, width: 170 }}>
                         {tr(c.label)}
                       </th>
                     ))}
-                    <th style={lth}>{tr("Total")}</th>
+                    <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
                   </tr>
                 </thead>
                 <tbody>
