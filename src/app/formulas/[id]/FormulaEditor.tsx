@@ -777,6 +777,19 @@ export default function FormulaEditor({
   const [operatorRate, setOperatorRate] = useState<number | null>(
     seedVersion.costing?.operatorRate || null,
   );
+  // v59.1: labor burden overrides (null = defaults: tax 8.5%, WC 4%).
+  const [leaderTaxPct, setLeaderTaxPct] = useState<number | null>(
+    seedVersion.costing?.leaderTaxPct || null,
+  );
+  const [operatorTaxPct, setOperatorTaxPct] = useState<number | null>(
+    seedVersion.costing?.operatorTaxPct || null,
+  );
+  const [leaderWcPct, setLeaderWcPct] = useState<number | null>(
+    seedVersion.costing?.leaderWcPct || null,
+  );
+  const [operatorWcPct, setOperatorWcPct] = useState<number | null>(
+    seedVersion.costing?.operatorWcPct || null,
+  );
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
@@ -807,6 +820,10 @@ export default function FormulaEditor({
       cleaningOperators,
       leaderRate,
       operatorRate,
+      leaderTaxPct,
+      operatorTaxPct,
+      leaderWcPct,
+      operatorWcPct,
     };
   }, [
     costingDec,
@@ -826,6 +843,10 @@ export default function FormulaEditor({
     cleaningOperators,
     leaderRate,
     operatorRate,
+    leaderTaxPct,
+    operatorTaxPct,
+    leaderWcPct,
+    operatorWcPct,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -928,6 +949,10 @@ export default function FormulaEditor({
               cleaningOperators: seed.costing.cleaningOperators || null,
               leaderRate: seed.costing.leaderRate || null,
               operatorRate: seed.costing.operatorRate || null,
+              leaderTaxPct: seed.costing.leaderTaxPct || null,
+              operatorTaxPct: seed.costing.operatorTaxPct || null,
+              leaderWcPct: seed.costing.leaderWcPct || null,
+              operatorWcPct: seed.costing.operatorWcPct || null,
             }
           : {
               dec: 3,
@@ -947,6 +972,10 @@ export default function FormulaEditor({
               cleaningOperators: null,
               leaderRate: null,
               operatorRate: null,
+              leaderTaxPct: null,
+              operatorTaxPct: null,
+              leaderWcPct: null,
+              operatorWcPct: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4536,31 +4565,105 @@ export default function FormulaEditor({
                   value overrides and saves with the formula. */}
               <div style={subCard}>
               <div style={subTitle}>{tr("Rates and Costs")}</div>
-              <div
-                style={{
-                  padding: 14,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 14,
-                }}
-              >
-                <ParamBlock label="Line Leader ($/hr)">
-                  <NumberInput
-                    value={leaderRate ?? laborRateDefaults?.leader ?? 0}
-                    onChange={(n) => setLeaderRate(n)}
-                    step="0.01"
-                    min={0}
+              {/* v59.1: rows mirror Man Hours. Base rates default from
+                  ADP; Payroll Tax % (FICA 7.65 + FUTA/FL SUTA ≈ 8.5)
+                  and Workers' Comp % (≈4) are editable defaults.
+                  Burdened Rate = base × (1 + tax% + wc%). */}
+              {(() => {
+                const moneyCell = (v: number) => (
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    value={v.toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    })}
+                    className="pricing__input"
+                    style={{
+                      width: 100,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: "var(--teal-900, #0f4a56)",
+                      pointerEvents: "none",
+                      paddingRight: 14,
+                    }}
                   />
-                </ParamBlock>
-                <ParamBlock label="Line Operator ($/hr)">
-                  <NumberInput
-                    value={operatorRate ?? laborRateDefaults?.operator ?? 0}
-                    onChange={(n) => setOperatorRate(n)}
-                    step="0.01"
-                    min={0}
-                  />
-                </ParamBlock>
-              </div>
+                );
+                const rateRows = [
+                  {
+                    label: "Line Leaders",
+                    base: leaderRate ?? laborRateDefaults?.leader ?? 0,
+                    setBase: setLeaderRate,
+                    tax: leaderTaxPct ?? 8.5,
+                    setTax: setLeaderTaxPct,
+                    wc: leaderWcPct ?? 4,
+                    setWc: setLeaderWcPct,
+                  },
+                  {
+                    label: "Line Operators",
+                    base: operatorRate ?? laborRateDefaults?.operator ?? 0,
+                    setBase: setOperatorRate,
+                    tax: operatorTaxPct ?? 8.5,
+                    setTax: setOperatorTaxPct,
+                    wc: operatorWcPct ?? 4,
+                    setWc: setOperatorWcPct,
+                  },
+                ];
+                return (
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                        <th style={{ ...lth, textAlign: "left" }} />
+                        <th style={{ ...lth, width: 170 }}>{tr("Hourly Base Rate")}</th>
+                        <th style={{ ...lth, width: 170 }}>{tr("Payroll Tax %")}</th>
+                        <th style={{ ...lth, width: 170 }}>{tr("Workers' Comp %")}</th>
+                        <th style={{ ...lth, width: 170 }}>{tr("Burdened Rate")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rateRows.map((row) => (
+                        <tr
+                          key={row.label}
+                          style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                        >
+                          <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
+                          <td style={ltd}>
+                            <NumberInput
+                              value={row.base}
+                              onChange={(n) => row.setBase(n)}
+                              step="0.01"
+                              min={0}
+                            />
+                          </td>
+                          <td style={ltd}>
+                            <NumberInput
+                              value={row.tax}
+                              onChange={(n) => row.setTax(n)}
+                              step="0.1"
+                              min={0}
+                            />
+                          </td>
+                          <td style={ltd}>
+                            <NumberInput
+                              value={row.wc}
+                              onChange={(n) => row.setWc(n)}
+                              step="0.1"
+                              min={0}
+                            />
+                          </td>
+                          <td style={ltd}>
+                            {moneyCell(
+                              row.base * (1 + row.tax / 100 + row.wc / 100),
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
               </div>
               </>
             );

@@ -441,6 +441,13 @@ export type GummyFormulaCosting = {
    *  the ADP-synced default (reference employees in labor_rates). */
   leaderRate?: number | null;
   operatorRate?: number | null;
+  /** v59.1: labor burden — employer payroll tax % (FICA+FUTA+FL SUTA,
+   *  default 8.5) and workers' comp % (default 4) per role. Null = use
+   *  the default. Burdened rate = base × (1 + tax% + wc%). */
+  leaderTaxPct?: number | null;
+  operatorTaxPct?: number | null;
+  leaderWcPct?: number | null;
+  operatorWcPct?: number | null;
 };
 
 // -----------------------------------------------------------------------------
