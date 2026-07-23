@@ -3329,6 +3329,11 @@ export default function FormulaEditor({
                   fontWeight: 700,
                   cursor: saving ? "wait" : anyDirty ? "pointer" : "not-allowed",
                   whiteSpace: "nowrap",
+                  // v58.7: reserve width for the widest label
+                  // ("Saving…" / "Guardado") so the label swap doesn't
+                  // widen the row and wrap the button block to a new
+                  // line mid-save.
+                  minWidth: 110,
                 }}
               >
                 {/* v54: saves log a revision without bumping the visible
@@ -3361,6 +3366,9 @@ export default function FormulaEditor({
                   cursor:
                     issuing ? "wait" : anyDirty || isDraft ? "pointer" : "not-allowed",
                   whiteSpace: "nowrap",
+                  // v58.7: same width reservation as Save — "Issuing…"
+                  // must not reflow the row.
+                  minWidth: 110,
                 }}
               >
                 {issuing
