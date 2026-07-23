@@ -4535,7 +4535,7 @@ export default function FormulaEditor({
                   reference employees, refreshed nightly); typing a
                   value overrides and saves with the formula. */}
               <div style={subCard}>
-              <div style={subTitle}>{tr("Hourly Rates")}</div>
+              <div style={subTitle}>{tr("Rates and Costs")}</div>
               <div
                 style={{
                   padding: 14,
