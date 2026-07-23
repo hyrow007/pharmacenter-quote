@@ -4499,6 +4499,43 @@ export default function FormulaEditor({
                 </tbody>
               </table>
               </div>
+              {/* v58.9: Man Hours — computed: crew QTY × that phase's
+                  total hours (shifts × hours per shift). Read-only. */}
+              <div style={subCard}>
+              <div style={subTitle}>{tr("Man Hours")}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    <th style={{ ...lth, textAlign: "left" }} />
+                    {cols.map((c) => (
+                      <th key={c.label} style={{ ...lth, width: 170 }}>
+                        {tr(c.label)}
+                      </th>
+                    ))}
+                    <th style={{ ...lth, width: 170 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "Line Leaders Man Hours", crew: crewRows[0].vals },
+                    { label: "Line Operators Man Hours", crew: crewRows[1].vals },
+                  ].map((row) => (
+                    <tr
+                      key={row.label}
+                      style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                    >
+                      <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
+                      {cols.map((c, i) => (
+                        <td key={c.label} style={ltd}>
+                          {sumCell(row.crew[i] * c.shifts * c.hours)}
+                        </td>
+                      ))}
+                      <td style={ltd} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
               {/* v58.6: Hourly Rates — defaults come from ADP (the two
                   reference employees, refreshed nightly); typing a
                   value overrides and saves with the formula. */}
