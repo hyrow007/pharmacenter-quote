@@ -4470,7 +4470,10 @@ export default function FormulaEditor({
                         {tr(c.label)}
                       </th>
                     ))}
-                    <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
+                    {/* No Total for crew counts — empty 170px column
+                        keeps the phase columns aligned with Shift
+                        Hours. */}
+                    <th style={{ ...lth, width: 170 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -4490,9 +4493,7 @@ export default function FormulaEditor({
                           />
                         </td>
                       ))}
-                      <td style={ltd}>
-                        {sumCell(row.vals.reduce((s, v) => s + v, 0))}
-                      </td>
+                      <td style={ltd} />
                     </tr>
                   ))}
                 </tbody>
