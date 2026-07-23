@@ -3988,8 +3988,8 @@ export default function FormulaEditor({
                     {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
                     {sortableTh(tr("Batch Total"), "batch", { ...qth, width: 120 })}
-                    {/* Price per Gummy = Batch Total ÷ Target Yield. */}
-                    {sortableTh(tr("Price per Gummy"), "gummy", { ...qth, width: 110 })}
+                    {/* Cost per Gummy = Batch Total ÷ Target Yield. */}
+                    {sortableTh(tr("Cost per Gummy"), "gummy", { ...qth, width: 110 })}
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
