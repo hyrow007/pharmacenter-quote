@@ -737,8 +737,18 @@ export default function FormulaEditor({
   const [cleaningDays, setCleaningDays] = useState<number | null>(
     seedVersion.costing?.cleaningDays || null,
   );
-  // Whole-day rounding rule: fractions of .25 and up round up to an
-  // additional day; .24 and below round down.
+  // v58.1: hours per shift per phase (null = default 8h).
+  const [setupHours, setSetupHours] = useState<number | null>(
+    seedVersion.costing?.setupHours || null,
+  );
+  const [productionHours, setProductionHours] = useState<number | null>(
+    seedVersion.costing?.productionHours || null,
+  );
+  const [cleaningHours, setCleaningHours] = useState<number | null>(
+    seedVersion.costing?.cleaningHours || null,
+  );
+  // Whole-shift rounding rule: fractions of .25 and up round up to an
+  // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
     x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) > 0.24 ? 1 : 0);
   // v57.4: normalized costing blob — what Save writes and what the dirty
@@ -756,6 +766,9 @@ export default function FormulaEditor({
       setupDays,
       productionDays,
       cleaningDays,
+      setupHours,
+      productionHours,
+      cleaningHours,
     };
   }, [
     costingDec,
@@ -764,6 +777,9 @@ export default function FormulaEditor({
     setupDays,
     productionDays,
     cleaningDays,
+    setupHours,
+    productionHours,
+    cleaningHours,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -855,6 +871,9 @@ export default function FormulaEditor({
               setupDays: seed.costing.setupDays || null,
               productionDays: seed.costing.productionDays || null,
               cleaningDays: seed.costing.cleaningDays || null,
+              setupHours: seed.costing.setupHours || null,
+              productionHours: seed.costing.productionHours || null,
+              cleaningHours: seed.costing.cleaningHours || null,
             }
           : {
               dec: 3,
@@ -863,6 +882,9 @@ export default function FormulaEditor({
               setupDays: null,
               productionDays: null,
               cleaningDays: null,
+              setupHours: null,
+              productionHours: null,
+              cleaningHours: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4167,54 +4189,119 @@ export default function FormulaEditor({
           >
             {tr("Direct Labor Costs")}
           </div>
-          {/* v57.8: three presets, all whole days (>.24 rounds up).
-              Defaults: Setup = 1; Production = Target Yield ÷ Daily
-              Yield (scale-up model); Cleaning = Production ÷ 4 (Friday
-              teardown / deep clean). Setup & Cleaning stay editable —
-              a typed value overrides the default and saves with the
-              formula. */}
+          {/* v58.1: matrix layout — phases across the top (Setup /
+              Production / Cleaning), Shifts / Hours per Shift / Total
+              Hours down the side. Shifts follow the day rules (Setup =
+              1; Production = Target Yield ÷ Daily Yield; Cleaning =
+              Production ÷ 4; whole numbers, >.24 rounds up) and stay
+              editable — a typed value overrides and saves. Hours per
+              shift default to 8. */}
           {(() => {
-            const prodDaysDefault = roundDays(
+            const prodShiftsDefault = roundDays(
               scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
             );
-            // Effective production days (override wins) feeds the
-            // cleaning default so ÷4 tracks what's actually planned.
-            const prodDays = productionDays ?? prodDaysDefault;
-            const cleaningDefault = roundDays(prodDays / 4);
+            const setupShifts = setupDays ?? 1;
+            const prodShifts = productionDays ?? prodShiftsDefault;
+            const cleanShifts = cleaningDays ?? roundDays(prodShifts / 4);
+            const cols: Array<{
+              label: string;
+              shifts: number;
+              setShifts: (n: number | null) => void;
+              hours: number;
+              setHours: (n: number | null) => void;
+            }> = [
+              {
+                label: "Setup",
+                shifts: setupShifts,
+                setShifts: setSetupDays,
+                hours: setupHours ?? 8,
+                setHours: setSetupHours,
+              },
+              {
+                label: "Production",
+                shifts: prodShifts,
+                setShifts: setProductionDays,
+                hours: productionHours ?? 8,
+                setHours: setProductionHours,
+              },
+              {
+                label: "Cleaning",
+                shifts: cleanShifts,
+                setShifts: setCleaningDays,
+                hours: cleaningHours ?? 8,
+                setHours: setCleaningHours,
+              },
+            ];
+            const lth: React.CSSProperties = {
+              padding: "8px 12px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              textAlign: "right",
+            };
+            const ltd: React.CSSProperties = {
+              padding: "8px 12px",
+              fontSize: 13,
+              textAlign: "right",
+              fontVariantNumeric: "tabular-nums",
+              fontWeight: 600,
+              color: "var(--ink-1, #1f2a2d)",
+            };
             return (
-              <div
-                style={{
-                  padding: 14,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 14,
-                }}
-              >
-                <ParamBlock label="Setup Days">
-                  <NumberInput
-                    value={setupDays ?? 1}
-                    onChange={(n) => setSetupDays(roundDays(n))}
-                    step="1"
-                    min={0}
-                  />
-                </ParamBlock>
-                <ParamBlock label="Production Days">
-                  <NumberInput
-                    value={prodDays}
-                    onChange={(n) => setProductionDays(roundDays(n))}
-                    step="1"
-                    min={0}
-                  />
-                </ParamBlock>
-                <ParamBlock label="Cleaning Days">
-                  <NumberInput
-                    value={cleaningDays ?? cleaningDefault}
-                    onChange={(n) => setCleaningDays(roundDays(n))}
-                    step="1"
-                    min={0}
-                  />
-                </ParamBlock>
-              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                    <th style={{ ...lth, textAlign: "left" }} />
+                    {cols.map((c) => (
+                      <th key={c.label} style={lth}>
+                        {tr(c.label)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
+                    <td style={{ ...lth, textAlign: "left" }}>{tr("Shifts")}</td>
+                    {cols.map((c) => (
+                      <td key={c.label} style={ltd}>
+                        <NumberInput
+                          value={c.shifts}
+                          onChange={(n) => c.setShifts(roundDays(n))}
+                          step="1"
+                          min={0}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}>
+                    <td style={{ ...lth, textAlign: "left" }}>{tr("Hours per Shift")}</td>
+                    {cols.map((c) => (
+                      <td key={c.label} style={ltd}>
+                        <NumberInput
+                          value={c.hours}
+                          onChange={(n) => c.setHours(n)}
+                          step="0.5"
+                          min={0}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                    <td style={{ ...lth, textAlign: "left", color: "var(--teal-900, #0f4a56)" }}>
+                      {tr("Total Hours")}
+                    </td>
+                    {cols.map((c) => (
+                      <td key={c.label} style={{ ...ltd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
+                        {(c.shifts * c.hours).toLocaleString("en-US", {
+                          maximumFractionDigits: 1,
+                        })}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             );
           })()}
         </div>

@@ -418,13 +418,18 @@ export type GummyFormulaCosting = {
   sources?: Record<string, string>;
   /** Manual $/kg per ingredient key. */
   manualCosts?: Record<string, number>;
-  /** v57.8: Direct Labor Costs presets. Production Days is derived from
-   *  the scale-up model. Null/absent = use the default rule (Setup = 1;
-   *  Cleaning = Production Days ÷ 4, Friday teardown); a number is an
-   *  operator override. Whole days only (>.24 rounds up). */
+  /** v57.8/v58.1: Direct Labor Costs presets — SHIFT counts per phase
+   *  (field names kept from the original "days" iteration for backward
+   *  compat). Null/absent = default rule (Setup = 1; Production = scale-up
+   *  model; Cleaning = Production ÷ 4, Friday teardown); a number is an
+   *  operator override. Whole shifts only (>.24 rounds up). */
   setupDays?: number | null;
   productionDays?: number | null;
   cleaningDays?: number | null;
+  /** v58.1: hours per shift per phase. Null = default (8h). */
+  setupHours?: number | null;
+  productionHours?: number | null;
+  cleaningHours?: number | null;
 };
 
 // -----------------------------------------------------------------------------
