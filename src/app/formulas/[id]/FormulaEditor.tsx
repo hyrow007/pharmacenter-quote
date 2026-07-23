@@ -4319,14 +4319,21 @@ export default function FormulaEditor({
               fontWeight: 600,
               color: "var(--ink-1, #1f2a2d)",
             };
-            // v58.3: read-only sum cell — same number-input chrome as the
-            // editable cells so digits column-align (spinner gutter).
+            // v58.3/v59: read-only sum cell. type="text" so thousands
+            // get comma grouping (number inputs reject commas); the
+            // 14px right padding mirrors the spinner gutter Chrome
+            // reserves in the editable type="number" cells so digits
+            // still column-align.
             const sumCell = (v: number | null) => (
               <input
-                type="number"
+                type="text"
                 readOnly
                 tabIndex={-1}
-                value={v === null ? "" : Math.round(v * 10) / 10}
+                value={
+                  v === null
+                    ? ""
+                    : (Math.round(v * 10) / 10).toLocaleString("en-US")
+                }
                 className="pricing__input"
                 style={{
                   width: 100,
@@ -4335,6 +4342,7 @@ export default function FormulaEditor({
                   fontWeight: 700,
                   color: "var(--teal-900, #0f4a56)",
                   pointerEvents: "none",
+                  paddingRight: 14,
                 }}
               />
             );
@@ -4425,27 +4433,7 @@ export default function FormulaEditor({
                     </td>
                     {cols.map((c) => (
                       <td key={c.label} style={{ ...ltd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
-                        {/* Read-only input with the same chrome/width as
-                            the editable cells so the digits line up in
-                            a straight column. */}
-                        {/* type="number" like the editable cells so
-                            Chrome's spinner gutter insets the digits
-                            identically. */}
-                        <input
-                          type="number"
-                          readOnly
-                          tabIndex={-1}
-                          value={Math.round(c.shifts * c.hours * 10) / 10}
-                          className="pricing__input"
-                          style={{
-                            width: 100,
-                            textAlign: "right",
-                            fontVariantNumeric: "tabular-nums",
-                            fontWeight: 700,
-                            color: "var(--teal-900, #0f4a56)",
-                            pointerEvents: "none",
-                          }}
-                        />
+                        {sumCell(c.shifts * c.hours)}
                       </td>
                     ))}
                     <td style={ltd}>
