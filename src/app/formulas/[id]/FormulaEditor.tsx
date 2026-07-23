@@ -4512,7 +4512,7 @@ export default function FormulaEditor({
                         {tr(c.label)}
                       </th>
                     ))}
-                    <th style={{ ...lth, width: 170 }} />
+                    <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4530,7 +4530,14 @@ export default function FormulaEditor({
                           {sumCell(row.crew[i] * c.shifts * c.hours)}
                         </td>
                       ))}
-                      <td style={ltd} />
+                      <td style={ltd}>
+                        {sumCell(
+                          cols.reduce(
+                            (s, c, i) => s + row.crew[i] * c.shifts * c.hours,
+                            0,
+                          ),
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
