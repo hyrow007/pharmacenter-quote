@@ -4455,9 +4455,9 @@ export default function FormulaEditor({
                 </tbody>
               </table>
               </div>
-              {/* v58.4: Man Hours — crew counts per phase. */}
+              {/* v58.4: Line Crew — crew counts per phase. */}
               <div style={subCard}>
-              <div style={subTitle}>{tr("Man Hours")}</div>
+              <div style={subTitle}>{tr("Line Crew")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>

@@ -86,6 +86,7 @@ const es: Record<string, string> = {
   "Total Hours": "Horas totales",
   "Shift Hours": "Horas de turno",
   "Man Hours": "Horas hombre",
+  "Line Crew": "Equipo de línea",
   "QTY of Line Leaders": "Cant. de líderes de línea",
   "QTY of Line Operators": "Cant. de operadores de línea",
   "Hourly Rates": "Tarifas por hora",
