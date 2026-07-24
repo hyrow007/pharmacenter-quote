@@ -21,7 +21,7 @@ import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
 
 // v51.5: formula pages carry their own tab title — the root layout's
 // "PharmaCenter — Quote" was showing on the formula subdomain.
-export const metadata = { title: "PharmaCenter — Formulas" };
+export const metadata = { title: "Formulas" };
 
 export default async function FormulasPage() {
   const lang = await getLangFromCookie();

@@ -26,7 +26,7 @@ import {
 
 // v51.5: tab title for the editor. Static "Formulas" branding — the
 // page itself renders the formula number prominently.
-export const metadata = { title: "PharmaCenter — Formulas" };
+export const metadata = { title: "Formulas" };
 
 export default async function FormulaEditorPage({
   params,
