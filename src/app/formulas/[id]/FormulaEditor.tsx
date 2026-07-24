@@ -6502,9 +6502,6 @@ function CostTab({
           {laborCostPerGummy !== null ? usd.format(laborCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
-      <ParamBlock label="$ / gummy (raw)">
-        <ReadOnly>{usd.format(cost.dollarsPerGummy)}</ReadOnly>
-      </ParamBlock>
       <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           type="button"
