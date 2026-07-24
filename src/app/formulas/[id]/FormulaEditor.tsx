@@ -4376,7 +4376,8 @@ export default function FormulaEditor({
               />
             );
             // v59.3: read-only $ cell — same chrome/alignment as sumCell.
-            const moneyCell = (v: number) => (
+            // Optional dec for sub-cent amounts (cost per gummy).
+            const moneyCell = (v: number, dec: number = 2) => (
               <input
                 type="text"
                 readOnly
@@ -4384,6 +4385,8 @@ export default function FormulaEditor({
                 value={v.toLocaleString("en-US", {
                   style: "currency",
                   currency: "USD",
+                  minimumFractionDigits: dec,
+                  maximumFractionDigits: dec,
                 })}
                 className="pricing__input"
                 style={{
@@ -4688,10 +4691,9 @@ export default function FormulaEditor({
                         <th style={{ ...lth, textAlign: "left" }} />
                         <th style={{ ...lth, width: 170 }}>{tr("Man Hours")}</th>
                         <th style={{ ...lth, width: 170 }}>{tr("Burdened Rate")}</th>
-                        {/* spacer keeps Total in the shared right-most
-                            column position. */}
-                        <th style={{ ...lth, width: 170 }} />
-                        <th style={{ ...lth, width: 170 }}>{tr("Total")}</th>
+                        <th style={{ ...lth, width: 170 }}>{tr("Batch Total")}</th>
+                        {/* Cost per Gummy = row total ÷ Target Yield. */}
+                        <th style={{ ...lth, width: 170 }}>{tr("Cost per Gummy")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4703,8 +4705,13 @@ export default function FormulaEditor({
                           <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
                           <td style={ltd}>{sumCell(row.manHours)}</td>
                           <td style={ltd}>{moneyCell(row.burdened)}</td>
-                          <td style={ltd} />
                           <td style={ltd}>{moneyCell(row.total)}</td>
+                          <td style={ltd}>
+                            {moneyCell(
+                              targetYieldUnits > 0 ? row.total / targetYieldUnits : 0,
+                              4,
+                            )}
+                          </td>
                         </tr>
                       ))}
                       <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
@@ -4719,8 +4726,13 @@ export default function FormulaEditor({
                         </td>
                         <td style={ltd} />
                         <td style={ltd} />
-                        <td style={ltd} />
                         <td style={ltd}>{moneyCell(grand)}</td>
+                        <td style={ltd}>
+                          {moneyCell(
+                            targetYieldUnits > 0 ? grand / targetYieldUnits : 0,
+                            4,
+                          )}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
