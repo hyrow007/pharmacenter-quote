@@ -6477,6 +6477,9 @@ function CostTab({
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
         gap: 14,
+        // v59.6: bottom-align blocks so the $ values sit on one
+        // baseline even when a long label wraps to two lines.
+        alignItems: "end",
       }}
     >
       {/* v57.5: Target Yield (Scale up tab) reflected here so the
