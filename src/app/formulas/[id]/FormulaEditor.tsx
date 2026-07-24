@@ -474,12 +474,8 @@ const usd = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 4,
   maximumFractionDigits: 4,
 });
-const usdShort = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+// (usdShort removed in v59.5 — its last consumer, the Daily material $
+// readout, was retired from the top costing card.)
 
 export default function FormulaEditor({
   initialFormula,
@@ -1950,6 +1946,43 @@ export default function FormulaEditor({
       costSum,
       costMissing,
     };
+  })();
+  // v59.5: Direct Labor Cost / gummy for the top card — same math as
+  // the Batch Labor Costs sub-card (crew × shift hours × burdened
+  // rates ÷ Target Yield).
+  const laborCostPerGummy = (() => {
+    const prodShifts =
+      productionDays ??
+      roundDays(scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0);
+    const shifts = [
+      setupDays ?? 1,
+      prodShifts,
+      cleaningDays ?? roundDays(prodShifts / 4),
+    ];
+    const hours = [setupHours ?? 8, productionHours ?? 8, cleaningHours ?? 8];
+    const phaseHours = shifts.map((s, i) => s * hours[i]);
+    const roles = [
+      {
+        crew: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+        base: leaderRate ?? laborRateDefaults?.leader ?? 0,
+        tax: leaderTaxPct ?? 8.5,
+        wc: leaderWcPct ?? 4,
+      },
+      {
+        crew: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+        base: operatorRate ?? laborRateDefaults?.operator ?? 0,
+        tax: operatorTaxPct ?? 8.5,
+        wc: operatorWcPct ?? 4,
+      },
+    ];
+    const grand = roles.reduce(
+      (s, r) =>
+        s +
+        r.crew.reduce((a, c, i) => a + c * phaseHours[i], 0) *
+          (r.base * (1 + r.tax / 100 + r.wc / 100)),
+      0,
+    );
+    return targetYieldUnits > 0 ? grand / targetYieldUnits : null;
   })();
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
@@ -3837,15 +3870,13 @@ export default function FormulaEditor({
       {tab === "cost" && !printing && (
         <CostTab
           cost={cost}
-          gummyPieceWeightG={gummyPieceWeightG}
-          batchKg={batchKg}
-          batchesPerDay={batchesPerDay}
           targetYieldUnits={targetYieldUnits}
           materialCostPerGummy={
             !costingModel.costMissing && targetYieldUnits > 0
               ? costingModel.costSum / targetYieldUnits
               : null
           }
+          laborCostPerGummy={laborCostPerGummy}
         />
       )}
 
@@ -6405,11 +6436,9 @@ function ScaleUpBlendCards({
 
 function CostTab({
   cost,
-  gummyPieceWeightG,
-  batchKg,
-  batchesPerDay,
   targetYieldUnits,
   materialCostPerGummy,
+  laborCostPerGummy,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -6417,19 +6446,14 @@ function CostTab({
     dailyEffectiveYield: number;
     hasCompleteCosts: boolean;
   };
-  gummyPieceWeightG: number;
-  batchKg: number;
-  batchesPerDay: number;
   /** v57.5: Target Yield from the Scale up tab — shown as QTY (Gummies). */
   targetYieldUnits: number;
   /** v57.6: costing-table grand total ÷ Target Yield. Null = "—" (an
    *  ingredient has the line, or no target yield). */
   materialCostPerGummy: number | null;
+  /** v59.5: Batch Labor Costs grand total ÷ Target Yield. */
+  laborCostPerGummy: number | null;
 }) {
-  const dailyGummies =
-    gummyPieceWeightG > 0 ? (batchKg * batchesPerDay * 1000) / gummyPieceWeightG : 0;
-  const dailyEffectiveCost = cost.effectiveDollarsPerGummy * dailyGummies;
-
   const [copying, setCopying] = useState(false);
   async function copyToClipboard(text: string) {
     setCopying(true);
@@ -6471,23 +6495,15 @@ function CostTab({
           {materialCostPerGummy !== null ? usd.format(materialCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
+      {/* v59.5: labor mirror of the material readout — Batch Labor
+          Costs grand total ÷ Target Yield. */}
+      <ParamBlock label="Direct Labor Cost / gummy">
+        <ReadOnly>
+          {laborCostPerGummy !== null ? usd.format(laborCostPerGummy) : "—"}
+        </ReadOnly>
+      </ParamBlock>
       <ParamBlock label="$ / gummy (raw)">
         <ReadOnly>{usd.format(cost.dollarsPerGummy)}</ReadOnly>
-      </ParamBlock>
-      <ParamBlock label="$ / gummy (w/ daily loss)">
-        <ReadOnly>{usd.format(cost.effectiveDollarsPerGummy)}</ReadOnly>
-      </ParamBlock>
-      <ParamBlock label="Daily material $">
-        <ReadOnly>{usdShort.format(dailyEffectiveCost)}</ReadOnly>
-      </ParamBlock>
-      <ParamBlock label="Complete costs?">
-        <ReadOnly>
-          {cost.hasCompleteCosts ? (
-            <span style={{ color: "var(--teal-700, #1d6c7b)" }}>Yes</span>
-          ) : (
-            <span style={{ color: "#8b2f2f" }}>Missing $/kg</span>
-          )}
-        </ReadOnly>
       </ParamBlock>
       <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
