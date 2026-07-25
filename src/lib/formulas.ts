@@ -448,6 +448,11 @@ export type GummyFormulaCosting = {
   operatorTaxPct?: number | null;
   leaderWcPct?: number | null;
   operatorWcPct?: number | null;
+  /** v60: factory overhead allocation — monthly overhead $ spread over
+   *  working days/month (default 21), charged to the batch by its
+   *  total shift-days. Null = unset (overhead card shows $0). */
+  monthlyOverhead?: number | null;
+  workingDaysPerMonth?: number | null;
 };
 
 // -----------------------------------------------------------------------------

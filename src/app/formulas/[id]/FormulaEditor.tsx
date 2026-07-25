@@ -786,6 +786,13 @@ export default function FormulaEditor({
   const [operatorWcPct, setOperatorWcPct] = useState<number | null>(
     seedVersion.costing?.operatorWcPct || null,
   );
+  // v60: factory overhead allocation inputs.
+  const [monthlyOverhead, setMonthlyOverhead] = useState<number | null>(
+    seedVersion.costing?.monthlyOverhead || null,
+  );
+  const [workingDaysPerMonth, setWorkingDaysPerMonth] = useState<number | null>(
+    seedVersion.costing?.workingDaysPerMonth || null,
+  );
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
@@ -820,6 +827,8 @@ export default function FormulaEditor({
       operatorTaxPct,
       leaderWcPct,
       operatorWcPct,
+      monthlyOverhead,
+      workingDaysPerMonth,
     };
   }, [
     costingDec,
@@ -843,6 +852,8 @@ export default function FormulaEditor({
     operatorTaxPct,
     leaderWcPct,
     operatorWcPct,
+    monthlyOverhead,
+    workingDaysPerMonth,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -949,6 +960,8 @@ export default function FormulaEditor({
               operatorTaxPct: seed.costing.operatorTaxPct || null,
               leaderWcPct: seed.costing.leaderWcPct || null,
               operatorWcPct: seed.costing.operatorWcPct || null,
+              monthlyOverhead: seed.costing.monthlyOverhead || null,
+              workingDaysPerMonth: seed.costing.workingDaysPerMonth || null,
             }
           : {
               dec: 3,
@@ -972,6 +985,8 @@ export default function FormulaEditor({
               operatorTaxPct: null,
               leaderWcPct: null,
               operatorWcPct: null,
+              monthlyOverhead: null,
+              workingDaysPerMonth: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4771,6 +4786,116 @@ export default function FormulaEditor({
               })()}
               </div>
               </>
+            );
+          })()}
+        </div>
+      ) : null}
+
+      {/* v60: Overhead Costs — monthly factory overhead (rent,
+          utilities, depreciation, indirect labor, insurance) spread
+          over working days and charged to this batch by its total
+          shift-days. SG&A deliberately excluded — margin's job. */}
+      {tab === "cost" && !printing ? (
+        <div
+          style={{
+            marginBottom: 14,
+            border: "1px solid var(--line, #e3dcc9)",
+            borderRadius: 8,
+            background: "var(--paper, #fffdf8)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 16px",
+              fontSize: 14.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+            }}
+          >
+            {tr("Overhead Costs")}
+          </div>
+          {(() => {
+            const prodShifts =
+              productionDays ??
+              roundDays(
+                scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
+              );
+            const batchDays =
+              (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
+            const workDays = workingDaysPerMonth ?? 21;
+            const overheadPerDay =
+              workDays > 0 ? (monthlyOverhead ?? 0) / workDays : 0;
+            const batchOverhead = overheadPerDay * batchDays;
+            const perGummy =
+              targetYieldUnits > 0 ? batchOverhead / targetYieldUnits : 0;
+            const ro = (v: string) => (
+              <input
+                readOnly
+                tabIndex={-1}
+                value={v}
+                className="pricing__input"
+                style={{
+                  width: 120,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  pointerEvents: "none",
+                }}
+              />
+            );
+            return (
+              <div
+                style={{
+                  padding: 14,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 14,
+                  alignItems: "end",
+                }}
+              >
+                <ParamBlock label="Monthly Factory Overhead ($)">
+                  <NumberInput
+                    value={monthlyOverhead ?? 0}
+                    onChange={(n) => setMonthlyOverhead(n)}
+                    step="100"
+                    min={0}
+                  />
+                </ParamBlock>
+                <ParamBlock label="Working Days / Month">
+                  <NumberInput
+                    value={workingDaysPerMonth ?? 21}
+                    onChange={(n) => setWorkingDaysPerMonth(n)}
+                    step="1"
+                    min={1}
+                  />
+                </ParamBlock>
+                <ParamBlock label="Batch Days">
+                  {ro(batchDays.toLocaleString("en-US"))}
+                </ParamBlock>
+                <ParamBlock label="Batch Overhead">
+                  {ro(
+                    batchOverhead.toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    }),
+                  )}
+                </ParamBlock>
+                <ParamBlock label="Cost per Gummy">
+                  {ro(
+                    perGummy.toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 4,
+                      maximumFractionDigits: 4,
+                    }),
+                  )}
+                </ParamBlock>
+              </div>
             );
           })()}
         </div>
