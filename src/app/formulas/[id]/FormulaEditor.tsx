@@ -7383,6 +7383,7 @@ function CostTab({
   overheadCostPerGummy,
   topDec,
   onTopDecChange,
+  pieceWeightG,
 }: {
   cost: {
     dollarsPerGummy: number;
