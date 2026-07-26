@@ -3033,13 +3033,14 @@ export default function FormulaEditor({
             width: 100% !important;
           }
           /* v66.3: costing sheet packing — mirror the bench blend
-             rules. Each sub-card (title + table) is a keep-together
-             unit that jumps whole to the next page when it doesn't
-             fit; the QTY + Costs pair stays together; a card's cream
-             title band can never strand at a page bottom away from
-             its first rows. */
+             rules. v66.5: MAIN cards are the keep-together unit (user
+             request) — each whole card (Costs pair, Material, Direct
+             Labor, Overhead) jumps to a fresh page when it doesn't
+             fit, instead of splitting between sub-cards. Sub-cards
+             stay marked too as the fallback boundary if a card ever
+             outgrows a full page. */
           .fe-cost-sub,
-          .fe-cost-card[style*="display: flex"] {
+          .fe-cost-card {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
