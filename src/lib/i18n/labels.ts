@@ -96,6 +96,7 @@ const es: Record<string, string> = {
   "Monthly Factory Overhead ($)": "Gastos generales mensuales de fábrica ($)",
   "Monthly Factory Overhead": "Gastos generales mensuales de fábrica",
   Rent: "Alquiler",
+  "Lease Expenses": "Gastos de arrendamiento",
   "Indirect Labor": "Mano de obra indirecta",
   "Other Expenses": "Otros gastos",
   Item: "Concepto",

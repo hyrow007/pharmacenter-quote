@@ -4934,7 +4934,7 @@ export default function FormulaEditor({
               list: OverheadItem[];
               setList: React.Dispatch<React.SetStateAction<OverheadItem[]>>;
             }> = [
-              { title: "Rent", list: overheadRent, setList: setOverheadRent },
+              { title: "Lease Expenses", list: overheadRent, setList: setOverheadRent },
               { title: "Indirect Labor", list: overheadIndirect, setList: setOverheadIndirect },
               { title: "Other Expenses", list: overheadOther, setList: setOverheadOther },
             ];
@@ -4951,6 +4951,39 @@ export default function FormulaEditor({
               workDays > 0 ? (totalMonthly / workDays) * batchDays : 0;
             const perGummy =
               targetYieldUnits > 0 ? batchOverhead / targetYieldUnits : 0;
+            // Per-line contribution to cost per gummy: monthly charged →
+            // batch share → ÷ target yield.
+            const perGummyOf = (charged: number) =>
+              workDays > 0 && targetYieldUnits > 0
+                ? ((charged / workDays) * batchDays) / targetYieldUnits
+                : 0;
+            // v60.2: comma-grouped money input. Uncontrolled + commit on
+            // blur so grouping doesn't fight the cursor mid-typing; the
+            // key remounts it with fresh formatting after each commit.
+            const commaMoneyInput = (
+              value: number,
+              onCommit: (n: number) => void,
+              rowKey: string,
+            ) => (
+              <input
+                key={rowKey + ":" + value}
+                type="text"
+                inputMode="decimal"
+                defaultValue={value.toLocaleString("en-US", {
+                  maximumFractionDigits: 2,
+                })}
+                onBlur={(e) => {
+                  const n = Number(e.target.value.replace(/[^0-9.\-]/g, ""));
+                  onCommit(Number.isFinite(n) ? Math.max(0, n) : 0);
+                }}
+                className="pricing__input"
+                style={{
+                  width: 110,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              />
+            );
             return (
               <>
                 {groups.map((g) => (
@@ -4961,8 +4994,9 @@ export default function FormulaEditor({
                         <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
                           <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
                           <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
-                          <th style={{ ...oth, width: 130 }}>{tr("Share %")}</th>
+                          <th style={{ ...oth, width: 120 }}>{tr("Share %")}</th>
                           <th style={{ ...oth, width: 150 }}>{tr("Charged")}</th>
+                          <th style={{ ...oth, width: 140 }}>{tr("Cost per Gummy")}</th>
                           <th style={{ ...oth, width: 44 }} />
                         </tr>
                       </thead>
@@ -4989,18 +5023,16 @@ export default function FormulaEditor({
                               />
                             </td>
                             <td style={otd}>
-                              <NumberInput
-                                value={row.monthly}
-                                onChange={(n) =>
+                              {commaMoneyInput(
+                                row.monthly,
+                                (n) =>
                                   g.setList((prev) =>
                                     prev.map((r, j) =>
-                                      j === i ? { ...r, monthly: Math.max(0, n) } : r,
+                                      j === i ? { ...r, monthly: n } : r,
                                     ),
-                                  )
-                                }
-                                step="0.01"
-                                min={0}
-                              />
+                                  ),
+                                g.title + i,
+                              )}
                             </td>
                             <td style={otd}>
                               <NumberInput
@@ -5020,6 +5052,12 @@ export default function FormulaEditor({
                             </td>
                             <td style={otd}>
                               {roMoney(row.monthly * (row.sharePct / 100))}
+                            </td>
+                            <td style={otd}>
+                              {roMoney(
+                                perGummyOf(row.monthly * (row.sharePct / 100)),
+                                4,
+                              )}
                             </td>
                             <td style={otd}>
                               <button
@@ -5071,6 +5109,9 @@ export default function FormulaEditor({
                             {tr("Subtotal")}
                           </td>
                           <td style={otd}>{roMoney(chargedOf(g.list))}</td>
+                          <td style={otd}>
+                            {roMoney(perGummyOf(chargedOf(g.list)), 4)}
+                          </td>
                           <td style={otd} />
                         </tr>
                       </tbody>
