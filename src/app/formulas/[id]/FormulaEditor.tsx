@@ -5104,22 +5104,22 @@ export default function FormulaEditor({
                             </>
                           ) : g.mode === "labor" ? (
                             <>
-                              <th style={{ ...oth, width: 80 }}>{tr("Pay Type")}</th>
-                              <th style={{ ...oth, width: 55 }}>{tr("QTY")}</th>
-                              <th style={{ ...oth, width: 95 }}>{tr("Base Pay")}</th>
-                              <th style={{ ...oth, width: 80 }}>{tr("Payroll Tax %")}</th>
-                              <th style={{ ...oth, width: 85 }}>{tr("Workers' Comp %")}</th>
-                              <th style={{ ...oth, width: 115 }}>{tr("Burdened Rate")}</th>
-                              <th style={{ ...oth, width: 90 }}>{tr("Hours / Month")}</th>
-                              <th style={{ ...oth, width: 115 }}>{tr("Monthly ($)")}</th>
+                              <th style={{ ...oth, width: 78 }}>{tr("Pay Type")}</th>
+                              <th style={{ ...oth, width: 50 }}>{tr("QTY")}</th>
+                              <th style={{ ...oth, width: 92 }}>{tr("Base Pay")}</th>
+                              <th style={{ ...oth, width: 75 }}>{tr("Payroll Tax %")}</th>
+                              <th style={{ ...oth, width: 80 }}>{tr("Workers' Comp %")}</th>
+                              <th style={{ ...oth, width: 112 }}>{tr("Burdened Rate")}</th>
+                              <th style={{ ...oth, width: 88 }}>{tr("Hours / Month")}</th>
+                              <th style={{ ...oth, width: 110 }}>{tr("Monthly ($)")}</th>
                             </>
                           ) : (
                             <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
                           )}
-                          <th style={{ ...oth, width: 80 }}>{tr("Share %")}</th>
-                          <th style={{ ...oth, width: 125 }}>{tr("Allocated ($)")}</th>
-                          <th style={{ ...oth, width: 110 }}>{tr("Cost per Gummy")}</th>
-                          <th style={{ ...oth, width: 44 }} />
+                          <th style={{ ...oth, width: 75 }}>{tr("Share %")}</th>
+                          <th style={{ ...oth, width: 115 }}>{tr("Allocated ($)")}</th>
+                          <th style={{ ...oth, width: 105 }}>{tr("Cost per Gummy")}</th>
+                          <th style={{ ...oth, width: 36 }} />
                         </tr>
                       </thead>
                       <tbody>
