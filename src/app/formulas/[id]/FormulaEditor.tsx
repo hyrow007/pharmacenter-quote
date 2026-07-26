@@ -5428,51 +5428,54 @@ export default function FormulaEditor({
                     working days and charged by batch days. v63: its own
                     sub-card, matching the expense cards above. */}
                 <div style={subCard}>
-                <div style={subTitle}>{tr("Batch Allocation")}</div>
-                <div
-                  style={{
-                    padding: 14,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: 14,
-                    alignItems: "end",
-                  }}
-                >
-                  <ParamBlock label="Monthly Factory Overhead">
-                    {roMoney(totalMonthly)}
-                  </ParamBlock>
-                  <ParamBlock label="Working Days / Month">
-                    <NumberInput
-                      value={workingDaysPerMonth ?? 21}
-                      onChange={(n) => setWorkingDaysPerMonth(n)}
-                      step="1"
-                      min={1}
-                    />
-                  </ParamBlock>
-                  <ParamBlock label="Batch Days">
-                    <input
-                      readOnly
-                      tabIndex={-1}
-                      value={batchDays.toLocaleString("en-US")}
-                      className="pricing__input"
-                      style={{
-                        width: 110,
-                        textAlign: "right",
-                        fontVariantNumeric: "tabular-nums",
-                        fontWeight: 700,
-                        color: "var(--teal-900, #0f4a56)",
-                        pointerEvents: "none",
-                        paddingRight: 14,
-                      }}
-                    />
-                  </ParamBlock>
-                  <ParamBlock label="Batch Overhead">
-                    {roMoney(batchOverhead)}
-                  </ParamBlock>
-                  <ParamBlock label="Cost per Gummy">
-                    {roMoney(perGummy, overheadDec + 2)}
-                  </ParamBlock>
-                </div>
+                  <div style={subTitle}>{tr("Batch Allocation")}</div>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      tableLayout: "fixed",
+                    }}
+                  >
+                    <thead>
+                      <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                        <th style={othNW}>{tr("Monthly Factory Overhead")}</th>
+                        <th style={othNW}>{tr("Working Days / Month")}</th>
+                        <th style={othNW}>{tr("Batch Days")}</th>
+                        <th style={othNW}>{tr("Batch Overhead")}</th>
+                        <th style={othNW}>{tr("Cost per Gummy")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={otd}>{roMoney(totalMonthly)}</td>
+                        <td style={otd}>
+                          {cellNum(workingDaysPerMonth ?? 21, (n) =>
+                            setWorkingDaysPerMonth(Math.max(1, Math.round(n))),
+                          )}
+                        </td>
+                        <td style={otd}>
+                          <input
+                            readOnly
+                            tabIndex={-1}
+                            value={batchDays.toLocaleString("en-US")}
+                            className="pricing__input"
+                            style={{
+                              width: "100%",
+                              minWidth: 0,
+                              textAlign: "right",
+                              fontVariantNumeric: "tabular-nums",
+                              fontWeight: 700,
+                              color: "var(--teal-900, #0f4a56)",
+                              pointerEvents: "none",
+                              paddingRight: 14,
+                            }}
+                          />
+                        </td>
+                        <td style={otd}>{roMoney(batchOverhead)}</td>
+                        <td style={otd}>{roMoney(perGummy, overheadDec + 2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
                 {/* v60.4: decimal picker — bottom-right, same placement
                     convention as Material Costs. */}
