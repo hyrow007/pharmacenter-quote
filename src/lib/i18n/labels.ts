@@ -108,6 +108,7 @@ const es: Record<string, string> = {
   "Pay Type": "Tipo de pago",
   "Base ($/mo)": "Base ($/mes)",
   "QB Acct #": "Cuenta QB #",
+  "Batch Allocation": "Asignación por lote",
   "CAM ($/mo)": "CAM ($/mes)",
   "Allocated ($/mo)": "Asignado ($/mes)",
   Hourly: "Por hora",

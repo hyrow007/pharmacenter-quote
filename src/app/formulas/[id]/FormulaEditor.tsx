@@ -5425,7 +5425,10 @@ export default function FormulaEditor({
                   </div>
                 ))}
                 {/* Allocation — total of the three sub-cards spread over
-                    working days and charged by batch days. */}
+                    working days and charged by batch days. v63: its own
+                    sub-card, matching the expense cards above. */}
+                <div style={subCard}>
+                <div style={subTitle}>{tr("Batch Allocation")}</div>
                 <div
                   style={{
                     padding: 14,
@@ -5469,6 +5472,7 @@ export default function FormulaEditor({
                   <ParamBlock label="Cost per Gummy">
                     {roMoney(perGummy, overheadDec + 2)}
                   </ParamBlock>
+                </div>
                 </div>
                 {/* v60.4: decimal picker — bottom-right, same placement
                     convention as Material Costs. */}
