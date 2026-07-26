@@ -5438,10 +5438,16 @@ export default function FormulaEditor({
                   >
                     <thead>
                       <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
-                        <th style={othNW}>{tr("Monthly Allocated Overhead")}</th>
-                        <th style={othNW}>{tr("Working Days / Month")}</th>
-                        <th style={othNW}>{tr("Daily Allocated Overhead")}</th>
-                        <th style={othNW}>{tr("Batch Days")}</th>
+                        <th style={{ ...othNW, width: "20%" }}>
+                          {tr("Monthly Allocated Overhead")}
+                        </th>
+                        <th style={{ ...othNW, width: "16%" }}>
+                          {tr("Working Days / Month")}
+                        </th>
+                        <th style={{ ...othNW, width: "19%" }}>
+                          {tr("Daily Allocated Overhead")}
+                        </th>
+                        <th style={{ ...othNW, width: "12%" }}>{tr("Batch Days")}</th>
                         <th style={othNW}>{tr("Batch Overhead")}</th>
                         <th style={othNW}>{tr("Cost per Gummy")}</th>
                       </tr>
