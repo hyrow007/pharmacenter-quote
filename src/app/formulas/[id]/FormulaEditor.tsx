@@ -755,6 +755,12 @@ export default function FormulaEditor({
   // view preference, not formula data.
   const [costSortKey, setCostSortKey] = useState<string | null>(null);
   const [costSortDir, setCostSortDir] = useState<"asc" | "desc">("asc");
+  /* v64: overhead sub-card sorting. Clicking a relevant column header
+     physically reorders that card's list (persists on save). Tracks the
+     last-clicked card+column so a second click flips direction. */
+  const [ovSort, setOvSort] = useState<{ g: string; k: string; dir: 1 | -1 } | null>(
+    null,
+  );
   // v56.4: per-ingredient cost source (keyed by the costing table's
   // dedup key). v57.4: persisted on the version (costing jsonb).
   const [costSourceByKey, setCostSourceByKey] = useState<Record<string, string>>(
@@ -5065,6 +5071,74 @@ export default function FormulaEditor({
               workDays > 0 && targetYieldUnits > 0
                 ? ((charged / workDays) * batchDays) / targetYieldUnits
                 : 0;
+            /* v64: sortable columns. Clicking a header physically reorders
+               the card's row list (so the order saves with the formula);
+               clicking the same header again flips the direction. Only
+               columns whose ordering is meaningful get the treatment —
+               e.g. Cost per Gummy is skipped (same order as Allocated),
+               as are Pay Type / tax % / WC % / hours (near-constant). */
+            const rowVal = (
+              r: OverheadItem,
+              mode: GroupMode | undefined,
+              key: string,
+            ): number | string => {
+              switch (key) {
+                case "label":
+                  return (r.label || "").toLowerCase();
+                case "qb":
+                  return (r.qbAccount || "").toLowerCase();
+                case "base":
+                  return r.monthly;
+                case "cam":
+                  return r.cam ?? 0;
+                case "qty":
+                  return r.qty ?? 1;
+                case "rate":
+                  return effRate(r);
+                case "burdened":
+                  return burdenedOf(r);
+                case "monthly":
+                  return rowTotal(r, mode);
+                case "share":
+                  return r.sharePct;
+                case "allocated":
+                  return rowTotal(r, mode) * (r.sharePct / 100);
+                default:
+                  return 0;
+              }
+            };
+            const sortBy = (g: (typeof groups)[number], key: string) => {
+              const dir: 1 | -1 =
+                ovSort && ovSort.g === g.title && ovSort.k === key
+                  ? ((ovSort.dir * -1) as 1 | -1)
+                  : 1;
+              setOvSort({ g: g.title, k: key, dir });
+              g.setList((prev) =>
+                [...prev].sort((a, b) => {
+                  const va = rowVal(a, g.mode, key);
+                  const vb = rowVal(b, g.mode, key);
+                  return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+                }),
+              );
+            };
+            const sTh = (
+              g: (typeof groups)[number],
+              key: string,
+              label: string,
+              style: React.CSSProperties,
+            ) => {
+              const active = ovSort && ovSort.g === g.title && ovSort.k === key;
+              return (
+                <th
+                  style={{ ...style, cursor: "pointer", userSelect: "none" }}
+                  onClick={() => sortBy(g, key)}
+                  title={tr("Sort")}
+                >
+                  {tr(label)}
+                  {active ? (ovSort!.dir === 1 ? " ▲" : " ▼") : ""}
+                </th>
+              );
+            };
             // v60.2: comma-grouped money input. Uncontrolled + commit on
             // blur so grouping doesn't fight the cursor mid-typing; the
             // key remounts it with fresh formatting after each commit.
@@ -5101,45 +5175,37 @@ export default function FormulaEditor({
                     <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                       <thead>
                         <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
-                          <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
+                          {sTh(g, "label", "Item", { ...oth, textAlign: "left" })}
                           {g.mode === "lease" ? (
                             <>
-                              <th style={{ ...othNW, width: 130 }}>{tr("Base ($/mo)")}</th>
-                              <th style={{ ...othNW, width: 130 }}>{tr("CAM ($/mo)")}</th>
+                              {sTh(g, "base", "Base ($/mo)", { ...othNW, width: 130 })}
+                              {sTh(g, "cam", "CAM ($/mo)", { ...othNW, width: 130 })}
                             </>
                           ) : g.mode === "labor" ? (
                             <>
                               <th style={{ ...oth, width: 78 }}>{tr("Pay Type")}</th>
-                              <th style={{ ...oth, width: 50 }}>{tr("QTY")}</th>
-                              <th style={{ ...oth, width: 92 }}>{tr("Base Pay")}</th>
+                              {sTh(g, "qty", "QTY", { ...oth, width: 50 })}
+                              {sTh(g, "rate", "Base Pay", { ...oth, width: 92 })}
                               <th style={{ ...oth, width: 75 }}>{tr("Payroll Tax %")}</th>
                               <th style={{ ...oth, width: 80 }}>{tr("Workers' Comp %")}</th>
-                              <th style={{ ...oth, width: 112 }}>{tr("Burdened Rate")}</th>
+                              {sTh(g, "burdened", "Burdened Rate", { ...oth, width: 112 })}
                               <th style={{ ...oth, width: 88 }}>{tr("Hours / Month")}</th>
-                              <th style={{ ...oth, width: 110 }}>{tr("Monthly ($)")}</th>
+                              {sTh(g, "monthly", "Monthly ($)", { ...oth, width: 110 })}
                             </>
                           ) : (
                             <>
-                              <th style={{ ...othNW, width: 100 }}>{tr("QB Acct #")}</th>
-                              <th style={{ ...othNW, width: 130 }}>{tr("Monthly ($)")}</th>
+                              {sTh(g, "qb", "QB Acct #", { ...othNW, width: 100 })}
+                              {sTh(g, "monthly", "Monthly ($)", { ...othNW, width: 130 })}
                             </>
                           )}
-                          <th
-                            style={{
-                              ...(g.mode === "labor" ? oth : othNW),
-                              width: g.mode === "labor" ? 75 : 90,
-                            }}
-                          >
-                            {tr("Share %")}
-                          </th>
-                          <th
-                            style={{
-                              ...(g.mode === "labor" ? oth : othNW),
-                              width: g.mode === "labor" ? 115 : 150,
-                            }}
-                          >
-                            {tr("Allocated ($/mo)")}
-                          </th>
+                          {sTh(g, "share", "Share %", {
+                            ...(g.mode === "labor" ? oth : othNW),
+                            width: g.mode === "labor" ? 75 : 90,
+                          })}
+                          {sTh(g, "allocated", "Allocated ($/mo)", {
+                            ...(g.mode === "labor" ? oth : othNW),
+                            width: g.mode === "labor" ? 115 : 150,
+                          })}
                           <th
                             style={{
                               ...(g.mode === "labor" ? oth : othNW),

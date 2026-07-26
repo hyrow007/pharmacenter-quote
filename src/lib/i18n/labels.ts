@@ -109,6 +109,7 @@ const es: Record<string, string> = {
   "Base ($/mo)": "Base ($/mes)",
   "QB Acct #": "Cuenta QB #",
   "Batch Allocation": "Asignación por lote",
+  Sort: "Ordenar",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",
