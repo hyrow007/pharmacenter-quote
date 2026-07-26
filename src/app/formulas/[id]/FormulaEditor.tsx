@@ -87,7 +87,8 @@ const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
   { label: "Quality Tech", monthly: 0, payType: "hourly", rate: 17.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
   { label: "Quality Tech II", monthly: 0, payType: "hourly", rate: 15.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
   { label: "Warehouse Staff", monthly: 0, payType: "hourly", rate: 15.0, qty: 3, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Purchasing Logistics", monthly: 0, payType: "hourly", rate: 10.05, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  // Part-time salaried: $803.68 biweekly (ADP Base Rate) × 26 / 12 = $1,741.31/mo
+  { label: "Purchasing Logistics", monthly: 0, payType: "salary", rate: 1741.31, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
 ];
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
