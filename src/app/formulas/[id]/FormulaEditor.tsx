@@ -4003,7 +4003,7 @@ export default function FormulaEditor({
         <div
           style={{
             marginBottom: 14,
-            border: "1px solid var(--line, #e3dcc9)",
+            border: "1px solid var(--teal-700, #1d6c7b)",
             borderRadius: 8,
             background: "var(--paper, #fffdf8)",
             overflow: "hidden",
@@ -4017,7 +4017,8 @@ export default function FormulaEditor({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
-              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+              background: "var(--cream, #f6efe3)",
+              borderBottom: "2px solid var(--teal-700, #1d6c7b)",
             }}
           >
             {tr("Material Costs")}
@@ -4396,7 +4397,7 @@ export default function FormulaEditor({
         <div
           style={{
             marginBottom: 14,
-            border: "1px solid var(--line, #e3dcc9)",
+            border: "1px solid var(--teal-700, #1d6c7b)",
             borderRadius: 8,
             background: "var(--paper, #fffdf8)",
             overflow: "hidden",
@@ -4410,7 +4411,8 @@ export default function FormulaEditor({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
-              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+              background: "var(--cream, #f6efe3)",
+              borderBottom: "2px solid var(--teal-700, #1d6c7b)",
             }}
           >
             {tr("Direct Labor Costs")}
@@ -4894,7 +4896,7 @@ export default function FormulaEditor({
         <div
           style={{
             marginBottom: 14,
-            border: "1px solid var(--line, #e3dcc9)",
+            border: "1px solid var(--teal-700, #1d6c7b)",
             borderRadius: 8,
             background: "var(--paper, #fffdf8)",
             overflow: "hidden",
@@ -4908,7 +4910,8 @@ export default function FormulaEditor({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
-              borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+              background: "var(--cream, #f6efe3)",
+              borderBottom: "2px solid var(--teal-700, #1d6c7b)",
             }}
           >
             {tr("Overhead Costs")}
