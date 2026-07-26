@@ -5438,8 +5438,9 @@ export default function FormulaEditor({
                   >
                     <thead>
                       <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
-                        <th style={othNW}>{tr("Monthly Factory Overhead")}</th>
+                        <th style={othNW}>{tr("Monthly Allocated Overhead")}</th>
                         <th style={othNW}>{tr("Working Days / Month")}</th>
+                        <th style={othNW}>{tr("Daily Allocated Overhead")}</th>
                         <th style={othNW}>{tr("Batch Days")}</th>
                         <th style={othNW}>{tr("Batch Overhead")}</th>
                         <th style={othNW}>{tr("Cost per Gummy")}</th>
@@ -5452,6 +5453,9 @@ export default function FormulaEditor({
                           {cellNum(workingDaysPerMonth ?? 21, (n) =>
                             setWorkingDaysPerMonth(Math.max(1, Math.round(n))),
                           )}
+                        </td>
+                        <td style={otd}>
+                          {roMoney(totalMonthly / (workingDaysPerMonth ?? 21))}
                         </td>
                         <td style={otd}>
                           <input
