@@ -823,6 +823,13 @@ export default function FormulaEditor({
   const [workingDaysPerMonth, setWorkingDaysPerMonth] = useState<number | null>(
     seedVersion.costing?.workingDaysPerMonth || null,
   );
+  // v60.3: decimal pickers for the labor + overhead cards.
+  const [laborDec, setLaborDec] = useState<number>(
+    seedVersion.costing?.laborDec ?? 2,
+  );
+  const [overheadDec, setOverheadDec] = useState<number>(
+    seedVersion.costing?.overheadDec ?? 2,
+  );
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
@@ -872,6 +879,8 @@ export default function FormulaEditor({
       overheadRent,
       overheadIndirect,
       overheadOther,
+      laborDec,
+      overheadDec,
     };
   }, [
     costingDec,
@@ -900,6 +909,8 @@ export default function FormulaEditor({
     overheadRent,
     overheadIndirect,
     overheadOther,
+    laborDec,
+    overheadDec,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1012,6 +1023,8 @@ export default function FormulaEditor({
               overheadIndirect:
                 seed.costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: seed.costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
+              laborDec: seed.costing.laborDec ?? 2,
+              overheadDec: seed.costing.overheadDec ?? 2,
             }
           : {
               dec: 3,
@@ -1040,6 +1053,8 @@ export default function FormulaEditor({
               overheadRent: OVERHEAD_RENT_DEFAULTS,
               overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: OVERHEAD_OTHER_DEFAULTS,
+              laborDec: 2,
+              overheadDec: 2,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4383,9 +4398,14 @@ export default function FormulaEditor({
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
             {tr("Direct Labor Costs")}
+            {/* v60.3: decimal picker for all computed figures below. */}
+            <DecimalPicker value={laborDec} onChange={setLaborDec} />
           </div>
           {/* v58.1: matrix layout — phases across the top (Setup /
               Production / Cleaning), Shifts / Hours per Shift / Total
@@ -4460,7 +4480,10 @@ export default function FormulaEditor({
                 value={
                   v === null
                     ? ""
-                    : (Math.round(v * 10) / 10).toLocaleString("en-US")
+                    : v.toLocaleString("en-US", {
+                        minimumFractionDigits: laborDec,
+                        maximumFractionDigits: laborDec,
+                      })
                 }
                 className="pricing__input"
                 style={{
@@ -4476,7 +4499,7 @@ export default function FormulaEditor({
             );
             // v59.3: read-only $ cell — same chrome/alignment as sumCell.
             // Optional dec for sub-cent amounts (cost per gummy).
-            const moneyCell = (v: number, dec: number = 2) => (
+            const moneyCell = (v: number, dec: number = laborDec) => (
               <input
                 type="text"
                 readOnly
@@ -4808,7 +4831,7 @@ export default function FormulaEditor({
                           <td style={ltd}>
                             {moneyCell(
                               targetYieldUnits > 0 ? row.total / targetYieldUnits : 0,
-                              4,
+                              laborDec + 2,
                             )}
                           </td>
                         </tr>
@@ -4829,7 +4852,7 @@ export default function FormulaEditor({
                         <td style={ltd}>
                           {moneyCell(
                             targetYieldUnits > 0 ? grand / targetYieldUnits : 0,
-                            4,
+                            laborDec + 2,
                           )}
                         </td>
                       </tr>
@@ -4867,9 +4890,14 @@ export default function FormulaEditor({
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
             {tr("Overhead Costs")}
+            {/* v60.3: decimal picker for all computed figures below. */}
+            <DecimalPicker value={overheadDec} onChange={setOverheadDec} />
           </div>
           {(() => {
             // v60.1: itemized sub-cards. Monthly overhead = Σ of every
@@ -4904,7 +4932,7 @@ export default function FormulaEditor({
               fontWeight: 600,
               color: "var(--ink-1, #1f2a2d)",
             };
-            const roMoney = (v: number, dec = 2) => (
+            const roMoney = (v: number, dec = overheadDec) => (
               <input
                 type="text"
                 readOnly
@@ -5056,7 +5084,7 @@ export default function FormulaEditor({
                             <td style={otd}>
                               {roMoney(
                                 perGummyOf(row.monthly * (row.sharePct / 100)),
-                                4,
+                                overheadDec + 2,
                               )}
                             </td>
                             <td style={otd}>
@@ -5110,7 +5138,7 @@ export default function FormulaEditor({
                           </td>
                           <td style={otd}>{roMoney(chargedOf(g.list))}</td>
                           <td style={otd}>
-                            {roMoney(perGummyOf(chargedOf(g.list)), 4)}
+                            {roMoney(perGummyOf(chargedOf(g.list)), overheadDec + 2)}
                           </td>
                           <td style={otd} />
                         </tr>
@@ -5161,7 +5189,7 @@ export default function FormulaEditor({
                     {roMoney(batchOverhead)}
                   </ParamBlock>
                   <ParamBlock label="Cost per Gummy">
-                    {roMoney(perGummy, 4)}
+                    {roMoney(perGummy, overheadDec + 2)}
                   </ParamBlock>
                 </div>
               </>

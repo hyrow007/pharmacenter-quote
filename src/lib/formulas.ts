@@ -460,6 +460,11 @@ export type GummyFormulaCosting = {
   overheadRent?: OverheadItem[] | null;
   overheadIndirect?: OverheadItem[] | null;
   overheadOther?: OverheadItem[] | null;
+  /** v60.3: decimal precision for the Direct Labor Costs and Overhead
+   *  Costs cards' computed figures (money shows this many decimals;
+   *  per-gummy readouts show +2). Null = default 2. */
+  laborDec?: number | null;
+  overheadDec?: number | null;
 };
 
 /** One overhead line item (v60.1). */
