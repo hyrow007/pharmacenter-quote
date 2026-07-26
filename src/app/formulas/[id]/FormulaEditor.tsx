@@ -2989,7 +2989,7 @@ export default function FormulaEditor({
           .fe-cost-card td {
             display: table-cell !important;
             width: auto !important;
-            padding: 2px 5px !important;
+            padding: 2px 3px !important;
             vertical-align: baseline !important;
           }
           .fe-cost-card thead tr {
@@ -2998,15 +2998,28 @@ export default function FormulaEditor({
           .fe-cost-card tbody tr {
             border-bottom: 0.5pt solid #d6d1c2 !important;
           }
+          /* Headers wrap at WORD boundaries only — the global
+             break-word rule shattered "Workers' Comp %" into a
+             one-letter-per-line stack inside narrow auto columns. */
           .fe-cost-card thead th {
-            font-size: 7.5pt !important;
+            font-size: 6.5pt !important;
+            letter-spacing: 0.02em !important;
             text-align: right !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+            hyphens: none !important;
           }
           .fe-cost-card thead th:first-child { text-align: left !important; }
           .fe-cost-card td,
           .fe-cost-card td input,
           .fe-cost-card td select {
-            font-size: 8.5pt !important;
+            font-size: 8pt !important;
+          }
+          /* Wide tables (Indirect Labor is 12 columns) must never clip
+             behind the card's on-screen overflow:hidden. */
+          .fe-cost-card,
+          .fe-cost-sub {
+            overflow: visible !important;
           }
           .fe-cost-card input,
           .fe-cost-card select {
