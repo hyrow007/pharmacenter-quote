@@ -4938,6 +4938,7 @@ export default function FormulaEditor({
               color: "var(--ink-3, #8a9498)",
               textAlign: "right",
             };
+            const othNW: React.CSSProperties = { ...oth, whiteSpace: "nowrap" };
             const otd: React.CSSProperties = {
               padding: "6px 12px",
               fontSize: 13,
@@ -5100,8 +5101,8 @@ export default function FormulaEditor({
                           <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
                           {g.mode === "lease" ? (
                             <>
-                              <th style={{ ...oth, width: 130 }}>{tr("Base ($/mo)")}</th>
-                              <th style={{ ...oth, width: 130 }}>{tr("CAM ($/mo)")}</th>
+                              <th style={{ ...othNW, width: 130 }}>{tr("Base ($/mo)")}</th>
+                              <th style={{ ...othNW, width: 130 }}>{tr("CAM ($/mo)")}</th>
                             </>
                           ) : g.mode === "labor" ? (
                             <>
@@ -5116,13 +5117,34 @@ export default function FormulaEditor({
                             </>
                           ) : (
                             <>
-                              <th style={{ ...oth, width: 90 }}>{tr("QB Acct #")}</th>
-                              <th style={{ ...oth, width: 140 }}>{tr("Monthly ($)")}</th>
+                              <th style={{ ...othNW, width: 100 }}>{tr("QB Acct #")}</th>
+                              <th style={{ ...othNW, width: 130 }}>{tr("Monthly ($)")}</th>
                             </>
                           )}
-                          <th style={{ ...oth, width: 75 }}>{tr("Share %")}</th>
-                          <th style={{ ...oth, width: 115 }}>{tr("Allocated ($/mo)")}</th>
-                          <th style={{ ...oth, width: 105 }}>{tr("Cost per Gummy")}</th>
+                          <th
+                            style={{
+                              ...(g.mode === "labor" ? oth : othNW),
+                              width: g.mode === "labor" ? 75 : 90,
+                            }}
+                          >
+                            {tr("Share %")}
+                          </th>
+                          <th
+                            style={{
+                              ...(g.mode === "labor" ? oth : othNW),
+                              width: g.mode === "labor" ? 115 : 150,
+                            }}
+                          >
+                            {tr("Allocated ($/mo)")}
+                          </th>
+                          <th
+                            style={{
+                              ...(g.mode === "labor" ? oth : othNW),
+                              width: g.mode === "labor" ? 105 : 140,
+                            }}
+                          >
+                            {tr("Cost per Gummy")}
+                          </th>
                           <th style={{ ...oth, width: 36 }} />
                         </tr>
                       </thead>
