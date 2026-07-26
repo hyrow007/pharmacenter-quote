@@ -4110,6 +4110,7 @@ export default function FormulaEditor({
           overheadCostPerGummy={overheadCostPerGummy}
           topDec={topDec}
           onTopDecChange={setTopDec}
+          pieceWeightG={gummyPieceWeightG}
         />
       )}
 
@@ -7401,6 +7402,9 @@ function CostTab({
   /** v65: decimal places for the per-gummy readouts (persisted). */
   topDec: number;
   onTopDecChange: React.Dispatch<React.SetStateAction<number>>;
+  /** v66.4: finished piece weight (dry, g) — converts true cost per
+   *  gummy into cost per kg of bulk gummies. */
+  pieceWeightG: number;
 }) {
   const trTitle = makeTr(useLang());
   // v66.2: shared shells for the QTY mini card + Costs card pair.
@@ -7433,6 +7437,20 @@ function CostTab({
     laborCostPerGummy !== null &&
     overheadCostPerGummy !== null
       ? materialCostPerGummy + laborCostPerGummy + overheadCostPerGummy
+      : null;
+  // v66.4: macro readouts — larger denominations print at plain 2
+  // decimals (the picker keeps driving the per-gummy figures).
+  const fmt2 = (v: number) =>
+    v.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const costPerThousand = trueCost !== null ? trueCost * 1000 : null;
+  const costPerKg =
+    trueCost !== null && pieceWeightG > 0
+      ? trueCost * (1000 / pieceWeightG)
       : null;
   return (
     <div
@@ -7501,6 +7519,15 @@ function CostTab({
           Blank if any component is unresolved (same line rule). */}
       <ParamBlock label="True Cost / gummy" nowrap>
         <ReadOnly>{trueCost !== null ? fmt(trueCost) : "—"}</ReadOnly>
+      </ParamBlock>
+      {/* v66.4: macro denominations of the true cost. */}
+      <ParamBlock label="Cost per Thousand" nowrap>
+        <ReadOnly>
+          {costPerThousand !== null ? fmt2(costPerThousand) : "—"}
+        </ReadOnly>
+      </ParamBlock>
+      <ParamBlock label="Cost per Kg" nowrap>
+        <ReadOnly>{costPerKg !== null ? fmt2(costPerKg) : "—"}</ReadOnly>
       </ParamBlock>
       <div
         style={{

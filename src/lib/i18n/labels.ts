@@ -113,6 +113,8 @@ const es: Record<string, string> = {
   "Overhead Cost / gummy": "Gastos generales / gomita",
   "True Cost / gummy": "Costo real / gomita",
   Costs: "Costos",
+  "Cost per Thousand": "Costo por millar",
+  "Cost per Kg": "Costo por kg",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",
