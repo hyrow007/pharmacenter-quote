@@ -470,8 +470,11 @@ export type GummyFormulaCosting = {
 /** One overhead line item (v60.1). */
 export type OverheadItem = {
   label: string;
-  /** Full monthly cost in $. */
+  /** Full monthly cost in $ (for lease rows: the BASE rent). */
   monthly: number;
+  /** v60.5: CAM / additional rent in $ — lease rows only. Effective
+   *  monthly total = monthly + (cam ?? 0). */
+  cam?: number | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };

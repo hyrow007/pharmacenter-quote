@@ -69,8 +69,8 @@ import {
 // the starting point when a version has no saved overhead lists.
 // -----------------------------------------------------------------------------
 const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
-  { label: "Suite 400 (base + CAM)", monthly: 5957.81, sharePct: 100 },
-  { label: "Suite 500/600 (base + CAM)", monthly: 17219.86, sharePct: 50 },
+  { label: "Suite 400", monthly: 4182.08, cam: 1775.73, sharePct: 100 },
+  { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
 ];
 const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
   { label: "Production Manager", monthly: 5092, sharePct: 25 },
@@ -4956,14 +4956,22 @@ export default function FormulaEditor({
                 }}
               />
             );
+            // Effective monthly total per row (lease rows add CAM).
+            const rowTotal = (r: OverheadItem) => r.monthly + (r.cam ?? 0);
             const chargedOf = (list: OverheadItem[]) =>
-              list.reduce((s, r) => s + r.monthly * (r.sharePct / 100), 0);
+              list.reduce((s, r) => s + rowTotal(r) * (r.sharePct / 100), 0);
             const groups: Array<{
               title: string;
               list: OverheadItem[];
               setList: React.Dispatch<React.SetStateAction<OverheadItem[]>>;
+              hasCam?: boolean;
             }> = [
-              { title: "Lease Expenses", list: overheadRent, setList: setOverheadRent },
+              {
+                title: "Lease Expenses",
+                list: overheadRent,
+                setList: setOverheadRent,
+                hasCam: true,
+              },
               { title: "Indirect Labor", list: overheadIndirect, setList: setOverheadIndirect },
               { title: "Other Expenses", list: overheadOther, setList: setOverheadOther },
             ];
@@ -5022,7 +5030,14 @@ export default function FormulaEditor({
                       <thead>
                         <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
                           <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
-                          <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
+                          {g.hasCam ? (
+                            <>
+                              <th style={{ ...oth, width: 130 }}>{tr("Base ($)")}</th>
+                              <th style={{ ...oth, width: 130 }}>{tr("CAM ($)")}</th>
+                            </>
+                          ) : (
+                            <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
+                          )}
                           <th style={{ ...oth, width: 120 }}>{tr("Share %")}</th>
                           <th style={{ ...oth, width: 150 }}>{tr("Charged")}</th>
                           <th style={{ ...oth, width: 140 }}>{tr("Cost per Gummy")}</th>
@@ -5063,6 +5078,20 @@ export default function FormulaEditor({
                                 g.title + i,
                               )}
                             </td>
+                            {g.hasCam ? (
+                              <td style={otd}>
+                                {commaMoneyInput(
+                                  row.cam ?? 0,
+                                  (n) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i ? { ...r, cam: n } : r,
+                                      ),
+                                    ),
+                                  g.title + i + "cam",
+                                )}
+                              </td>
+                            ) : null}
                             <td style={otd}>
                               <NumberInput
                                 value={row.sharePct}
@@ -5080,11 +5109,11 @@ export default function FormulaEditor({
                               />
                             </td>
                             <td style={otd}>
-                              {roMoney(row.monthly * (row.sharePct / 100))}
+                              {roMoney(rowTotal(row) * (row.sharePct / 100))}
                             </td>
                             <td style={otd}>
                               {roMoney(
-                                perGummyOf(row.monthly * (row.sharePct / 100)),
+                                perGummyOf(rowTotal(row) * (row.sharePct / 100)),
                                 overheadDec + 2,
                               )}
                             </td>
@@ -5134,6 +5163,7 @@ export default function FormulaEditor({
                             </button>
                           </td>
                           <td style={otd} />
+                          {g.hasCam ? <td style={otd} /> : null}
                           <td style={{ ...oth, color: "var(--teal-900, #0f4a56)" }}>
                             {tr("Subtotal")}
                           </td>

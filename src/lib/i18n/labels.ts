@@ -101,6 +101,8 @@ const es: Record<string, string> = {
   "Other Expenses": "Otros gastos",
   Item: "Concepto",
   "Monthly ($)": "Mensual ($)",
+  "Base ($)": "Base ($)",
+  "CAM ($)": "CAM ($)",
   "Share %": "% asignado",
   Charged: "Cargado",
   "+ Add line": "+ Agregar línea",
