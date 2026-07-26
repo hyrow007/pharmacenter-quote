@@ -93,13 +93,13 @@ const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
 const OVERHEAD_OTHER_DEFAULTS: OverheadItem[] = [
-  { label: "Gas & Electricity", monthly: 4497, sharePct: 30 },
+  { label: "Electricity", monthly: 4497, sharePct: 30 },
   { label: "Warehouse Supplies & Tools", monthly: 2525, sharePct: 40 },
   { label: "Licenses & Permits", monthly: 2428, sharePct: 40 },
   { label: "Insurance (liability + property)", monthly: 3281, sharePct: 40 },
   { label: "Repairs & Maintenance", monthly: 1278, sharePct: 40 },
   { label: "Cleaning", monthly: 675, sharePct: 40 },
-  { label: "Utilities & Services", monthly: 291, sharePct: 40 },
+  { label: "Other Utilities & Services", monthly: 291, sharePct: 40 },
 ];
 
 // Raw-material catalog option surfaced to the editor. Serialised from
