@@ -485,6 +485,10 @@ export type OverheadItem = {
   hours?: number | null;
   /** v60.8: people in this rate class (labor rows; default 1). */
   qty?: number | null;
+  /** v61: pay type for labor rows. "hourly" (default): `rate` is $/hr
+   *  and monthly = rate × burden × hours × qty. "salary": `rate` is the
+   *  MONTHLY salary per person and monthly = rate × burden × qty. */
+  payType?: "hourly" | "salary" | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };

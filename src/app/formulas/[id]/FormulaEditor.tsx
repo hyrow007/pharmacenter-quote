@@ -78,14 +78,16 @@ const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
 // One row per rate class (per-person rate × QTY), pulled from the ADP
 // sync. Quality has three classes; Warehouse is three people at one
 // rate. Labels are editable if the class names should differ.
+// Salaried roles (per ADP: paid biweekly salaries) carry their MONTHLY
+// salary in `rate` with payType "salary"; hourly roles carry $/hr.
 const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
-  { label: "Production Manager", monthly: 0, rate: 26.11, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Plant Mechanic", monthly: 0, rate: 26.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Manager", monthly: 0, rate: 30.29, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Tech", monthly: 0, rate: 17.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Tech II", monthly: 0, rate: 15.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Warehouse Staff", monthly: 0, rate: 15.0, qty: 3, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Production Manager", monthly: 0, payType: "salary", rate: 4525.41, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Plant Mechanic", monthly: 0, payType: "hourly", rate: 26.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Manager", monthly: 0, payType: "salary", rate: 5250.01, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Tech", monthly: 0, payType: "hourly", rate: 17.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Tech II", monthly: 0, payType: "hourly", rate: 15.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Warehouse Staff", monthly: 0, payType: "hourly", rate: 15.0, qty: 3, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Purchasing Logistics", monthly: 0, payType: "hourly", rate: 10.05, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
 ];
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
@@ -5010,7 +5012,9 @@ export default function FormulaEditor({
             type GroupMode = "lease" | "labor" | undefined;
             const rowTotal = (r: OverheadItem, mode?: GroupMode) =>
               mode === "labor"
-                ? burdenedOf(r) * (r.hours ?? H) * (r.qty ?? 1)
+                ? r.payType === "salary"
+                  ? burdenedOf(r) * (r.qty ?? 1)
+                  : burdenedOf(r) * (r.hours ?? H) * (r.qty ?? 1)
                 : r.monthly + (r.cam ?? 0);
             const chargedOf = (list: OverheadItem[], mode?: GroupMode) =>
               list.reduce((s, r) => s + rowTotal(r, mode) * (r.sharePct / 100), 0);
@@ -5100,8 +5104,9 @@ export default function FormulaEditor({
                             </>
                           ) : g.mode === "labor" ? (
                             <>
-                              <th style={{ ...oth, width: 60 }}>{tr("QTY")}</th>
-                              <th style={{ ...oth, width: 95 }}>{tr("Hourly Base Rate")}</th>
+                              <th style={{ ...oth, width: 85 }}>{tr("Pay Type")}</th>
+                              <th style={{ ...oth, width: 55 }}>{tr("QTY")}</th>
+                              <th style={{ ...oth, width: 95 }}>{tr("Base Pay")}</th>
                               <th style={{ ...oth, width: 80 }}>{tr("Payroll Tax %")}</th>
                               <th style={{ ...oth, width: 90 }}>{tr("Workers' Comp %")}</th>
                               <th style={{ ...oth, width: 95 }}>{tr("Burdened Rate")}</th>
@@ -5141,6 +5146,30 @@ export default function FormulaEditor({
                             </td>
                             {g.mode === "labor" ? (
                               <>
+                                <td style={otd}>
+                                  <select
+                                    value={row.payType ?? "hourly"}
+                                    onChange={(e) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                payType: e.target.value as
+                                                  | "hourly"
+                                                  | "salary",
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    className="pricing__input"
+                                    style={{ width: "100%", minWidth: 0, fontSize: 12 }}
+                                  >
+                                    <option value="hourly">{tr("Hourly")}</option>
+                                    <option value="salary">{tr("Salary")}</option>
+                                  </select>
+                                </td>
                                 <td style={otd}>
                                   {cellNum(row.qty ?? 1, (n) =>
                                     g.setList((prev) =>
@@ -5190,13 +5219,15 @@ export default function FormulaEditor({
                                 </td>
                                 <td style={otd}>{roMoney(burdenedOf(row))}</td>
                                 <td style={otd}>
-                                  {cellNum(row.hours ?? H, (n) =>
-                                    g.setList((prev) =>
-                                      prev.map((r, j) =>
-                                        j === i ? { ...r, hours: n } : r,
-                                      ),
-                                    ),
-                                  )}
+                                  {row.payType === "salary"
+                                    ? "—"
+                                    : cellNum(row.hours ?? H, (n) =>
+                                        g.setList((prev) =>
+                                          prev.map((r, j) =>
+                                            j === i ? { ...r, hours: n } : r,
+                                          ),
+                                        ),
+                                      )}
                                 </td>
                                 <td style={otd}>{roMoney(rowTotal(row, "labor"))}</td>
                               </>
@@ -5283,6 +5314,7 @@ export default function FormulaEditor({
                                     ? {
                                         label: "",
                                         monthly: 0,
+                                        payType: "hourly" as const,
                                         rate: 0,
                                         qty: 1,
                                         taxPct: 8.5,
@@ -5311,6 +5343,7 @@ export default function FormulaEditor({
                           {g.mode === "lease" ? <td style={otd} /> : null}
                           {g.mode === "labor" ? (
                             <>
+                              <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />
