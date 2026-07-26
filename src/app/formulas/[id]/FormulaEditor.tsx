@@ -3019,6 +3019,22 @@ export default function FormulaEditor({
             text-align: left !important;
             width: 100% !important;
           }
+          /* v66.3: costing sheet packing — mirror the bench blend
+             rules. Each sub-card (title + table) is a keep-together
+             unit that jumps whole to the next page when it doesn't
+             fit; the QTY + Costs pair stays together; a card's cream
+             title band can never strand at a page bottom away from
+             its first rows. */
+          .fe-cost-sub,
+          .fe-cost-card[style*="display: flex"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .fe-cost-card > div:first-child,
+          .fe-cost-sub > div:first-child {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+          }
 
           /* Identity row (Product Code · Name · Shape · Flavor) — force
              everything onto one line for print. On-screen the Product
@@ -4699,7 +4715,7 @@ export default function FormulaEditor({
             };
             return (
               <>
-              <div style={subCard}>
+              <div className="fe-cost-sub" style={subCard}>
               <div style={subTitle}>{tr("Shift Hours")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
@@ -4766,7 +4782,7 @@ export default function FormulaEditor({
               </table>
               </div>
               {/* v58.4: Line Crew — crew counts per phase. */}
-              <div style={subCard}>
+              <div className="fe-cost-sub" style={subCard}>
               <div style={subTitle}>{tr("Line Crew")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
@@ -4811,7 +4827,7 @@ export default function FormulaEditor({
               </div>
               {/* v58.9: Man Hours — computed: crew QTY × that phase's
                   total hours (shifts × hours per shift). Read-only. */}
-              <div style={subCard}>
+              <div className="fe-cost-sub" style={subCard}>
               <div style={subTitle}>{tr("Man Hours")}</div>
               <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
@@ -4856,7 +4872,7 @@ export default function FormulaEditor({
               {/* v58.6: Hourly Rates — defaults come from ADP (the two
                   reference employees, refreshed nightly); typing a
                   value overrides and saves with the formula. */}
-              <div style={subCard}>
+              <div className="fe-cost-sub" style={subCard}>
               <div style={subTitle}>{tr("Pay Rates")}</div>
               {/* v59.1: rows mirror Man Hours. Base rates default from
                   ADP; Payroll Tax % (FICA 7.65 + FUTA/FL SUTA ≈ 8.5)
@@ -4915,7 +4931,7 @@ export default function FormulaEditor({
               </div>
               {/* v59.3: Batch Labor Costs — Man Hours (all phases) ×
                   Burdened Rate per role, with a grand total. Read-only. */}
-              <div style={subCard}>
+              <div className="fe-cost-sub" style={subCard}>
               <div style={subTitle}>{tr("Batch Labor Costs")}</div>
               {(() => {
                 const laborRows = rateRows.map((r) => {
@@ -5275,7 +5291,7 @@ export default function FormulaEditor({
             return (
               <>
                 {groups.map((g) => (
-                  <div key={g.title} style={subCard}>
+                  <div key={g.title} className="fe-cost-sub" style={subCard}>
                     <div style={subTitle}>{tr(g.title)}</div>
                     <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                       <thead>
@@ -5601,7 +5617,7 @@ export default function FormulaEditor({
                 {/* Allocation — total of the three sub-cards spread over
                     working days and charged by batch days. v63: its own
                     sub-card, matching the expense cards above. */}
-                <div style={subCard}>
+                <div className="fe-cost-sub" style={subCard}>
                   <div style={subTitle}>{tr("Batch Allocation")}</div>
                   <table
                     style={{
