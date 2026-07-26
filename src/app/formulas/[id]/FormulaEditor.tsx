@@ -55,11 +55,39 @@ import {
   type IdentityDiff,
   type LabelClaim,
   type LabelClaimUnit,
+  type OverheadItem,
   type SavedSolution,
   type SolutionComponent,
   type VersionDiff,
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
+
+// -----------------------------------------------------------------------------
+// v60.1: default overhead line items — worked out with the operator from
+// the lease ledgers, ADP roster (burdened at tax 8.5% + WC 4%), and the
+// Jan–Jun 2026 P&L averages. All editable per formula; these are just
+// the starting point when a version has no saved overhead lists.
+// -----------------------------------------------------------------------------
+const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
+  { label: "Suite 400 (base + CAM)", monthly: 5957.81, sharePct: 100 },
+  { label: "Suite 500/600 (base + CAM)", monthly: 17219.86, sharePct: 50 },
+];
+const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
+  { label: "Production Manager", monthly: 5092, sharePct: 25 },
+  { label: "Plant Mechanic", monthly: 5070, sharePct: 25 },
+  { label: "Quality Department", monthly: 12146, sharePct: 25 },
+  { label: "Warehouse Department", monthly: 8775, sharePct: 25 },
+  { label: "Purchasing Logistics", monthly: 1960, sharePct: 25 },
+];
+const OVERHEAD_OTHER_DEFAULTS: OverheadItem[] = [
+  { label: "Gas & Electricity", monthly: 4497, sharePct: 30 },
+  { label: "Warehouse Supplies & Tools", monthly: 2525, sharePct: 40 },
+  { label: "Licenses & Permits", monthly: 2428, sharePct: 40 },
+  { label: "Insurance (liability + property)", monthly: 3281, sharePct: 40 },
+  { label: "Repairs & Maintenance", monthly: 1278, sharePct: 40 },
+  { label: "Cleaning", monthly: 675, sharePct: 40 },
+  { label: "Utilities & Services", monthly: 291, sharePct: 40 },
+];
 
 // Raw-material catalog option surfaced to the editor. Serialised from
 // server so the client doesn't need a separate fetch.
@@ -786,12 +814,24 @@ export default function FormulaEditor({
   const [operatorWcPct, setOperatorWcPct] = useState<number | null>(
     seedVersion.costing?.operatorWcPct || null,
   );
-  // v60: factory overhead allocation inputs.
-  const [monthlyOverhead, setMonthlyOverhead] = useState<number | null>(
+  // v60: factory overhead allocation inputs. monthlyOverhead is legacy
+  // (v60.1 derives the total from the itemized lists) — carried in the
+  // payload for compat, no setter needed.
+  const [monthlyOverhead] = useState<number | null>(
     seedVersion.costing?.monthlyOverhead || null,
   );
   const [workingDaysPerMonth, setWorkingDaysPerMonth] = useState<number | null>(
     seedVersion.costing?.workingDaysPerMonth || null,
+  );
+  // v60.1: itemized overhead sub-cards.
+  const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
+    () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
+  );
+  const [overheadIndirect, setOverheadIndirect] = useState<OverheadItem[]>(
+    () => seedVersion.costing?.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
+  );
+  const [overheadOther, setOverheadOther] = useState<OverheadItem[]>(
+    () => seedVersion.costing?.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
   );
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
@@ -829,6 +869,9 @@ export default function FormulaEditor({
       operatorWcPct,
       monthlyOverhead,
       workingDaysPerMonth,
+      overheadRent,
+      overheadIndirect,
+      overheadOther,
     };
   }, [
     costingDec,
@@ -854,6 +897,9 @@ export default function FormulaEditor({
     operatorWcPct,
     monthlyOverhead,
     workingDaysPerMonth,
+    overheadRent,
+    overheadIndirect,
+    overheadOther,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -962,6 +1008,10 @@ export default function FormulaEditor({
               operatorWcPct: seed.costing.operatorWcPct || null,
               monthlyOverhead: seed.costing.monthlyOverhead || null,
               workingDaysPerMonth: seed.costing.workingDaysPerMonth || null,
+              overheadRent: seed.costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
+              overheadIndirect:
+                seed.costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
+              overheadOther: seed.costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
             }
           : {
               dec: 3,
@@ -987,6 +1037,9 @@ export default function FormulaEditor({
               operatorWcPct: null,
               monthlyOverhead: null,
               workingDaysPerMonth: null,
+              overheadRent: OVERHEAD_RENT_DEFAULTS,
+              overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
+              overheadOther: OVERHEAD_OTHER_DEFAULTS,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4819,6 +4872,73 @@ export default function FormulaEditor({
             {tr("Overhead Costs")}
           </div>
           {(() => {
+            // v60.1: itemized sub-cards. Monthly overhead = Σ of every
+            // line's monthly × share%.
+            const subCard: React.CSSProperties = {
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              margin: "12px 14px",
+              background: "var(--paper, #fffdf8)",
+              overflow: "hidden",
+            };
+            const subTitle: React.CSSProperties = {
+              padding: "10px 14px 4px",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+            };
+            const oth: React.CSSProperties = {
+              padding: "8px 12px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              textAlign: "right",
+            };
+            const otd: React.CSSProperties = {
+              padding: "6px 12px",
+              fontSize: 13,
+              textAlign: "right",
+              fontVariantNumeric: "tabular-nums",
+              fontWeight: 600,
+              color: "var(--ink-1, #1f2a2d)",
+            };
+            const roMoney = (v: number, dec = 2) => (
+              <input
+                type="text"
+                readOnly
+                tabIndex={-1}
+                value={v.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: dec,
+                  maximumFractionDigits: dec,
+                })}
+                className="pricing__input"
+                style={{
+                  width: 110,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  pointerEvents: "none",
+                  paddingRight: 14,
+                }}
+              />
+            );
+            const chargedOf = (list: OverheadItem[]) =>
+              list.reduce((s, r) => s + r.monthly * (r.sharePct / 100), 0);
+            const groups: Array<{
+              title: string;
+              list: OverheadItem[];
+              setList: React.Dispatch<React.SetStateAction<OverheadItem[]>>;
+            }> = [
+              { title: "Rent", list: overheadRent, setList: setOverheadRent },
+              { title: "Indirect Labor", list: overheadIndirect, setList: setOverheadIndirect },
+              { title: "Other Expenses", list: overheadOther, setList: setOverheadOther },
+            ];
+            const totalMonthly = groups.reduce((s, g) => s + chargedOf(g.list), 0);
             const prodShifts =
               productionDays ??
               roundDays(
@@ -4827,75 +4947,183 @@ export default function FormulaEditor({
             const batchDays =
               (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
             const workDays = workingDaysPerMonth ?? 21;
-            const overheadPerDay =
-              workDays > 0 ? (monthlyOverhead ?? 0) / workDays : 0;
-            const batchOverhead = overheadPerDay * batchDays;
+            const batchOverhead =
+              workDays > 0 ? (totalMonthly / workDays) * batchDays : 0;
             const perGummy =
               targetYieldUnits > 0 ? batchOverhead / targetYieldUnits : 0;
-            const ro = (v: string) => (
-              <input
-                readOnly
-                tabIndex={-1}
-                value={v}
-                className="pricing__input"
-                style={{
-                  width: 120,
-                  textAlign: "right",
-                  fontVariantNumeric: "tabular-nums",
-                  fontWeight: 700,
-                  color: "var(--teal-900, #0f4a56)",
-                  pointerEvents: "none",
-                }}
-              />
-            );
             return (
-              <div
-                style={{
-                  padding: 14,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 14,
-                  alignItems: "end",
-                }}
-              >
-                <ParamBlock label="Monthly Factory Overhead ($)">
-                  <NumberInput
-                    value={monthlyOverhead ?? 0}
-                    onChange={(n) => setMonthlyOverhead(n)}
-                    step="100"
-                    min={0}
-                  />
-                </ParamBlock>
-                <ParamBlock label="Working Days / Month">
-                  <NumberInput
-                    value={workingDaysPerMonth ?? 21}
-                    onChange={(n) => setWorkingDaysPerMonth(n)}
-                    step="1"
-                    min={1}
-                  />
-                </ParamBlock>
-                <ParamBlock label="Batch Days">
-                  {ro(batchDays.toLocaleString("en-US"))}
-                </ParamBlock>
-                <ParamBlock label="Batch Overhead">
-                  {ro(
-                    batchOverhead.toLocaleString("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                    }),
-                  )}
-                </ParamBlock>
-                <ParamBlock label="Cost per Gummy">
-                  {ro(
-                    perGummy.toLocaleString("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                      minimumFractionDigits: 4,
-                      maximumFractionDigits: 4,
-                    }),
-                  )}
-                </ParamBlock>
-              </div>
+              <>
+                {groups.map((g) => (
+                  <div key={g.title} style={subCard}>
+                    <div style={subTitle}>{tr(g.title)}</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                          <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
+                          <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
+                          <th style={{ ...oth, width: 130 }}>{tr("Share %")}</th>
+                          <th style={{ ...oth, width: 150 }}>{tr("Charged")}</th>
+                          <th style={{ ...oth, width: 44 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.list.map((row, i) => (
+                          <tr
+                            key={i}
+                            style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                          >
+                            <td style={{ ...otd, textAlign: "left" }}>
+                              <input
+                                type="text"
+                                value={row.label}
+                                onChange={(e) =>
+                                  g.setList((prev) =>
+                                    prev.map((r, j) =>
+                                      j === i ? { ...r, label: e.target.value } : r,
+                                    ),
+                                  )
+                                }
+                                className="pricing__input"
+                                style={{ width: "100%", fontSize: 13 }}
+                                placeholder="Expense name"
+                              />
+                            </td>
+                            <td style={otd}>
+                              <NumberInput
+                                value={row.monthly}
+                                onChange={(n) =>
+                                  g.setList((prev) =>
+                                    prev.map((r, j) =>
+                                      j === i ? { ...r, monthly: Math.max(0, n) } : r,
+                                    ),
+                                  )
+                                }
+                                step="0.01"
+                                min={0}
+                              />
+                            </td>
+                            <td style={otd}>
+                              <NumberInput
+                                value={row.sharePct}
+                                onChange={(n) =>
+                                  g.setList((prev) =>
+                                    prev.map((r, j) =>
+                                      j === i
+                                        ? { ...r, sharePct: Math.min(100, Math.max(0, n)) }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                                step="5"
+                                min={0}
+                              />
+                            </td>
+                            <td style={otd}>
+                              {roMoney(row.monthly * (row.sharePct / 100))}
+                            </td>
+                            <td style={otd}>
+                              <button
+                                type="button"
+                                title="Remove line"
+                                onClick={() =>
+                                  g.setList((prev) => prev.filter((_, j) => j !== i))
+                                }
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--ink-3, #8a9498)",
+                                  cursor: "pointer",
+                                  fontSize: 14,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                          <td style={{ ...oth, textAlign: "left", color: "var(--teal-900, #0f4a56)" }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                g.setList((prev) => [
+                                  ...prev,
+                                  { label: "", monthly: 0, sharePct: 100 },
+                                ])
+                              }
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                color: "var(--teal-700, #1d6c7b)",
+                                cursor: "pointer",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                letterSpacing: "0.06em",
+                                padding: 0,
+                              }}
+                            >
+                              {tr("+ Add line")}
+                            </button>
+                          </td>
+                          <td style={otd} />
+                          <td style={{ ...oth, color: "var(--teal-900, #0f4a56)" }}>
+                            {tr("Subtotal")}
+                          </td>
+                          <td style={otd}>{roMoney(chargedOf(g.list))}</td>
+                          <td style={otd} />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+                {/* Allocation — total of the three sub-cards spread over
+                    working days and charged by batch days. */}
+                <div
+                  style={{
+                    padding: 14,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 14,
+                    alignItems: "end",
+                  }}
+                >
+                  <ParamBlock label="Monthly Factory Overhead">
+                    {roMoney(totalMonthly)}
+                  </ParamBlock>
+                  <ParamBlock label="Working Days / Month">
+                    <NumberInput
+                      value={workingDaysPerMonth ?? 21}
+                      onChange={(n) => setWorkingDaysPerMonth(n)}
+                      step="1"
+                      min={1}
+                    />
+                  </ParamBlock>
+                  <ParamBlock label="Batch Days">
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      value={batchDays.toLocaleString("en-US")}
+                      className="pricing__input"
+                      style={{
+                        width: 110,
+                        textAlign: "right",
+                        fontVariantNumeric: "tabular-nums",
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        pointerEvents: "none",
+                        paddingRight: 14,
+                      }}
+                    />
+                  </ParamBlock>
+                  <ParamBlock label="Batch Overhead">
+                    {roMoney(batchOverhead)}
+                  </ParamBlock>
+                  <ParamBlock label="Cost per Gummy">
+                    {roMoney(perGummy, 4)}
+                  </ParamBlock>
+                </div>
+              </>
             );
           })()}
         </div>

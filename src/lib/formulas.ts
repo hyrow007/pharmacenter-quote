@@ -453,6 +453,22 @@ export type GummyFormulaCosting = {
    *  total shift-days. Null = unset (overhead card shows $0). */
   monthlyOverhead?: number | null;
   workingDaysPerMonth?: number | null;
+  /** v60.1: itemized overhead sub-cards (Rent / Indirect Labor / Other
+   *  Expenses). Null = use the built-in defaults (worked out from the
+   *  leases, ADP roster, and 2026 P&Ls). Monthly overhead = Σ monthly ×
+   *  share%. */
+  overheadRent?: OverheadItem[] | null;
+  overheadIndirect?: OverheadItem[] | null;
+  overheadOther?: OverheadItem[] | null;
+};
+
+/** One overhead line item (v60.1). */
+export type OverheadItem = {
+  label: string;
+  /** Full monthly cost in $. */
+  monthly: number;
+  /** Share charged to bulk-gummy production, 0–100. */
+  sharePct: number;
 };
 
 // -----------------------------------------------------------------------------
