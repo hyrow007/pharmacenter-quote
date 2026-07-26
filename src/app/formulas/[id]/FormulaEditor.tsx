@@ -7374,6 +7374,24 @@ function CostTab({
   onTopDecChange: React.Dispatch<React.SetStateAction<number>>;
 }) {
   const trTitle = makeTr(useLang());
+  // v66.2: shared shells for the QTY mini card + Costs card pair.
+  const shell: React.CSSProperties = {
+    border: "1px solid var(--teal-700, #1d6c7b)",
+    borderRadius: 8,
+    background: "var(--paper, #fffdf8)",
+    overflow: "hidden",
+  };
+  const band: React.CSSProperties = {
+    padding: "12px 16px",
+    fontSize: 14.5,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "var(--teal-900, #0f4a56)",
+    background: "var(--cream, #f6efe3)",
+    borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+    whiteSpace: "nowrap",
+  };
   const fmt = (v: number) =>
     v.toLocaleString("en-US", {
       style: "currency",
@@ -7392,27 +7410,33 @@ function CostTab({
       className="fe-cost-card"
       style={{
         marginBottom: 14,
-        border: "1px solid var(--teal-700, #1d6c7b)",
-        borderRadius: 8,
-        background: "var(--paper, #fffdf8)",
-        overflow: "hidden",
+        display: "flex",
+        gap: 14,
+        flexWrap: "wrap",
+        alignItems: "stretch",
       }}
     >
-      {/* v66.1: titled like the other costing cards. */}
-      <div
-        style={{
-          padding: "12px 16px",
-          fontSize: 14.5,
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "var(--teal-900, #0f4a56)",
-          background: "var(--cream, #f6efe3)",
-          borderBottom: "2px solid var(--teal-700, #1d6c7b)",
-        }}
-      >
-        {trTitle("Costs")}
+      {/* v66.2: QTY (Gummies) as its own mini card beside Costs. */}
+      <div style={{ ...shell, flex: "0 1 auto", minWidth: 190 }}>
+        <div style={band}>{trTitle("QTY (Gummies)")}</div>
+        <div style={{ padding: 14, display: "flex", alignItems: "flex-end" }}>
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {targetYieldUnits > 0
+              ? Math.round(targetYieldUnits).toLocaleString("en-US")
+              : "—"}
+          </div>
+        </div>
       </div>
+      {/* v66.1: titled like the other costing cards. */}
+      <div style={{ ...shell, flex: "1 1 560px" }}>
+      <div style={band}>{trTitle("Costs")}</div>
       <div
         style={{
           padding: 14,
@@ -7424,15 +7448,6 @@ function CostTab({
           alignItems: "end",
         }}
       >
-      {/* v57.5: Target Yield (Scale up tab) reflected here so the
-          quantity the costing math runs against is visible up top. */}
-      <ParamBlock label="QTY (Gummies)" nowrap>
-        <ReadOnly>
-          {targetYieldUnits > 0
-            ? Math.round(targetYieldUnits).toLocaleString("en-US")
-            : "—"}
-        </ReadOnly>
-      </ParamBlock>
       {/* v57.6: costing-table grand total ÷ Target Yield — the same
           line rule as the table (any "—" ingredient blanks this). */}
       <ParamBlock label="Material cost / gummy" nowrap>
@@ -7466,6 +7481,7 @@ function CostTab({
         }}
       >
         <DecimalPicker value={topDec} onChange={onTopDecChange} />
+      </div>
       </div>
       </div>
     </div>
