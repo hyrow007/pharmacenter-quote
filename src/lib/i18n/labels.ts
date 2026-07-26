@@ -103,6 +103,7 @@ const es: Record<string, string> = {
   "Monthly ($)": "Mensual ($)",
   "Base ($)": "Base ($)",
   "CAM ($)": "CAM ($)",
+  "Hours / Month": "Horas / mes",
   "Share %": "% asignado",
   Charged: "Cargado",
   "Allocated ($)": "Asignado ($)",

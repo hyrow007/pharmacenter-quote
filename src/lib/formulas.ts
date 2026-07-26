@@ -481,6 +481,8 @@ export type OverheadItem = {
   rate?: number | null;
   taxPct?: number | null;
   wcPct?: number | null;
+  /** v60.7: working hours per month for labor rows (default 173.33). */
+  hours?: number | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };

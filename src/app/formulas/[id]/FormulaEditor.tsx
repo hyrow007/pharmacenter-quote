@@ -76,11 +76,11 @@ const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
 // active rates) + burden %, like the Pay Rates card. monthly is unused
 // when `rate` is set (kept 0 for the type).
 const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
-  { label: "Production Manager", monthly: 0, rate: 26.11, taxPct: 8.5, wcPct: 4, sharePct: 25 },
-  { label: "Plant Mechanic", monthly: 0, rate: 26.0, taxPct: 8.5, wcPct: 4, sharePct: 25 },
-  { label: "Quality Department", monthly: 0, rate: 62.29, taxPct: 8.5, wcPct: 4, sharePct: 25 },
-  { label: "Warehouse Department", monthly: 0, rate: 45.0, taxPct: 8.5, wcPct: 4, sharePct: 25 },
-  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, taxPct: 8.5, wcPct: 4, sharePct: 25 },
+  { label: "Production Manager", monthly: 0, rate: 26.11, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Plant Mechanic", monthly: 0, rate: 26.0, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Department", monthly: 0, rate: 62.29, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Warehouse Department", monthly: 0, rate: 45.0, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
 ];
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
@@ -4977,7 +4977,9 @@ export default function FormulaEditor({
             // burdened hourly rate; lease rows add CAM.
             type GroupMode = "lease" | "labor" | undefined;
             const rowTotal = (r: OverheadItem, mode?: GroupMode) =>
-              mode === "labor" ? burdenedOf(r) * H : r.monthly + (r.cam ?? 0);
+              mode === "labor"
+                ? burdenedOf(r) * (r.hours ?? H)
+                : r.monthly + (r.cam ?? 0);
             const chargedOf = (list: OverheadItem[], mode?: GroupMode) =>
               list.reduce((s, r) => s + rowTotal(r, mode) * (r.sharePct / 100), 0);
             const groups: Array<{
@@ -5065,10 +5067,12 @@ export default function FormulaEditor({
                             </>
                           ) : g.mode === "labor" ? (
                             <>
-                              <th style={{ ...oth, width: 120 }}>{tr("Hourly Base Rate")}</th>
-                              <th style={{ ...oth, width: 100 }}>{tr("Payroll Tax %")}</th>
-                              <th style={{ ...oth, width: 110 }}>{tr("Workers' Comp %")}</th>
-                              <th style={{ ...oth, width: 110 }}>{tr("Burdened Rate")}</th>
+                              <th style={{ ...oth, width: 110 }}>{tr("Hourly Base Rate")}</th>
+                              <th style={{ ...oth, width: 90 }}>{tr("Payroll Tax %")}</th>
+                              <th style={{ ...oth, width: 100 }}>{tr("Workers' Comp %")}</th>
+                              <th style={{ ...oth, width: 100 }}>{tr("Burdened Rate")}</th>
+                              <th style={{ ...oth, width: 90 }}>{tr("Hours / Month")}</th>
+                              <th style={{ ...oth, width: 130 }}>{tr("Monthly ($)")}</th>
                             </>
                           ) : (
                             <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
@@ -5144,6 +5148,21 @@ export default function FormulaEditor({
                                   />
                                 </td>
                                 <td style={otd}>{roMoney(burdenedOf(row))}</td>
+                                <td style={otd}>
+                                  <NumberInput
+                                    value={row.hours ?? H}
+                                    onChange={(n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, hours: n } : r,
+                                        ),
+                                      )
+                                    }
+                                    step="1"
+                                    min={0}
+                                  />
+                                </td>
+                                <td style={otd}>{roMoney(rowTotal(row, "labor"))}</td>
                               </>
                             ) : (
                               <td style={otd}>
@@ -5233,6 +5252,7 @@ export default function FormulaEditor({
                                         rate: 0,
                                         taxPct: 8.5,
                                         wcPct: 4,
+                                        hours: 173.33,
                                         sharePct: 100,
                                       }
                                     : { label: "", monthly: 0, sharePct: 100 },
@@ -5256,6 +5276,8 @@ export default function FormulaEditor({
                           {g.mode === "lease" ? <td style={otd} /> : null}
                           {g.mode === "labor" ? (
                             <>
+                              <td style={otd} />
+                              <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />
