@@ -4956,13 +4956,40 @@ export default function FormulaEditor({
                 })}
                 className="pricing__input"
                 style={{
-                  width: 110,
+                  width: "100%",
+                  minWidth: 0,
                   textAlign: "right",
                   fontVariantNumeric: "tabular-nums",
                   fontWeight: 700,
                   color: "var(--teal-900, #0f4a56)",
                   pointerEvents: "none",
                   paddingRight: 14,
+                }}
+              />
+            );
+            // v60.9: numeric cell input sized to its column — the shared
+            // NumberInput's fixed 100px width overflowed the narrower
+            // labor columns and visually blended with neighbors.
+            const cellNum = (
+              value: number,
+              onChange: (n: number) => void,
+              step = "1",
+            ) => (
+              <input
+                type="number"
+                value={value}
+                step={step}
+                min={0}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  onChange(Number.isFinite(n) ? n : 0);
+                }}
+                className="pricing__input"
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               />
             );
@@ -5050,7 +5077,8 @@ export default function FormulaEditor({
                 }}
                 className="pricing__input"
                 style={{
-                  width: 110,
+                  width: "100%",
+                  minWidth: 0,
                   textAlign: "right",
                   fontVariantNumeric: "tabular-nums",
                 }}
@@ -5114,20 +5142,15 @@ export default function FormulaEditor({
                             {g.mode === "labor" ? (
                               <>
                                 <td style={otd}>
-                                  <NumberInput
-                                    value={row.qty ?? 1}
-                                    onChange={(n) =>
-                                      g.setList((prev) =>
-                                        prev.map((r, j) =>
-                                          j === i
-                                            ? { ...r, qty: Math.max(0, Math.round(n)) }
-                                            : r,
-                                        ),
-                                      )
-                                    }
-                                    step="1"
-                                    min={0}
-                                  />
+                                  {cellNum(row.qty ?? 1, (n) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i
+                                          ? { ...r, qty: Math.max(0, Math.round(n)) }
+                                          : r,
+                                      ),
+                                    ),
+                                  )}
                                 </td>
                                 <td style={otd}>
                                   {commaMoneyInput(
@@ -5142,47 +5165,38 @@ export default function FormulaEditor({
                                   )}
                                 </td>
                                 <td style={otd}>
-                                  <NumberInput
-                                    value={row.taxPct ?? 8.5}
-                                    onChange={(n) =>
+                                  {cellNum(
+                                    row.taxPct ?? 8.5,
+                                    (n) =>
                                       g.setList((prev) =>
                                         prev.map((r, j) =>
                                           j === i ? { ...r, taxPct: n } : r,
                                         ),
-                                      )
-                                    }
-                                    step="0.1"
-                                    min={0}
-                                  />
+                                      ),
+                                    "0.1",
+                                  )}
                                 </td>
                                 <td style={otd}>
-                                  <NumberInput
-                                    value={row.wcPct ?? 4}
-                                    onChange={(n) =>
+                                  {cellNum(
+                                    row.wcPct ?? 4,
+                                    (n) =>
                                       g.setList((prev) =>
                                         prev.map((r, j) =>
                                           j === i ? { ...r, wcPct: n } : r,
                                         ),
-                                      )
-                                    }
-                                    step="0.1"
-                                    min={0}
-                                  />
+                                      ),
+                                    "0.1",
+                                  )}
                                 </td>
                                 <td style={otd}>{roMoney(burdenedOf(row))}</td>
                                 <td style={otd}>
-                                  <NumberInput
-                                    value={row.hours ?? H}
-                                    onChange={(n) =>
-                                      g.setList((prev) =>
-                                        prev.map((r, j) =>
-                                          j === i ? { ...r, hours: n } : r,
-                                        ),
-                                      )
-                                    }
-                                    step="1"
-                                    min={0}
-                                  />
+                                  {cellNum(row.hours ?? H, (n) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i ? { ...r, hours: n } : r,
+                                      ),
+                                    ),
+                                  )}
                                 </td>
                                 <td style={otd}>{roMoney(rowTotal(row, "labor"))}</td>
                               </>
@@ -5215,20 +5229,18 @@ export default function FormulaEditor({
                               </td>
                             ) : null}
                             <td style={otd}>
-                              <NumberInput
-                                value={row.sharePct}
-                                onChange={(n) =>
+                              {cellNum(
+                                row.sharePct,
+                                (n) =>
                                   g.setList((prev) =>
                                     prev.map((r, j) =>
                                       j === i
                                         ? { ...r, sharePct: Math.min(100, Math.max(0, n)) }
                                         : r,
                                     ),
-                                  )
-                                }
-                                step="5"
-                                min={0}
-                              />
+                                  ),
+                                "5",
+                              )}
                             </td>
                             <td style={otd}>
                               {roMoney(rowTotal(row, g.mode) * (row.sharePct / 100))}
