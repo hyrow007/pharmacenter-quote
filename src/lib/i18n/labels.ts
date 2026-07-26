@@ -104,6 +104,7 @@ const es: Record<string, string> = {
   "Base ($)": "Base ($)",
   "CAM ($)": "CAM ($)",
   "Hours / Month": "Horas / mes",
+  QTY: "Cant.",
   "Share %": "% asignado",
   Charged: "Cargado",
   "Allocated ($)": "Asignado ($)",

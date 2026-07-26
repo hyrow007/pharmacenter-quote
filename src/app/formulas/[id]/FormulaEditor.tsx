@@ -75,12 +75,17 @@ const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
 // Indirect labor rows carry hourly rates (sum of the ADP department's
 // active rates) + burden %, like the Pay Rates card. monthly is unused
 // when `rate` is set (kept 0 for the type).
+// One row per rate class (per-person rate × QTY), pulled from the ADP
+// sync. Quality has three classes; Warehouse is three people at one
+// rate. Labels are editable if the class names should differ.
 const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
-  { label: "Production Manager", monthly: 0, rate: 26.11, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Plant Mechanic", monthly: 0, rate: 26.0, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Department", monthly: 0, rate: 62.29, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Warehouse Department", monthly: 0, rate: 45.0, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Production Manager", monthly: 0, rate: 26.11, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Plant Mechanic", monthly: 0, rate: 26.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Manager", monthly: 0, rate: 30.29, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Tech", monthly: 0, rate: 17.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Quality Tech II", monthly: 0, rate: 15.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Warehouse Staff", monthly: 0, rate: 15.0, qty: 3, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
+  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
 ];
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
@@ -4978,7 +4983,7 @@ export default function FormulaEditor({
             type GroupMode = "lease" | "labor" | undefined;
             const rowTotal = (r: OverheadItem, mode?: GroupMode) =>
               mode === "labor"
-                ? burdenedOf(r) * (r.hours ?? H)
+                ? burdenedOf(r) * (r.hours ?? H) * (r.qty ?? 1)
                 : r.monthly + (r.cam ?? 0);
             const chargedOf = (list: OverheadItem[], mode?: GroupMode) =>
               list.reduce((s, r) => s + rowTotal(r, mode) * (r.sharePct / 100), 0);
@@ -5067,6 +5072,7 @@ export default function FormulaEditor({
                             </>
                           ) : g.mode === "labor" ? (
                             <>
+                              <th style={{ ...oth, width: 70 }}>{tr("QTY")}</th>
                               <th style={{ ...oth, width: 110 }}>{tr("Hourly Base Rate")}</th>
                               <th style={{ ...oth, width: 90 }}>{tr("Payroll Tax %")}</th>
                               <th style={{ ...oth, width: 100 }}>{tr("Workers' Comp %")}</th>
@@ -5107,6 +5113,22 @@ export default function FormulaEditor({
                             </td>
                             {g.mode === "labor" ? (
                               <>
+                                <td style={otd}>
+                                  <NumberInput
+                                    value={row.qty ?? 1}
+                                    onChange={(n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i
+                                            ? { ...r, qty: Math.max(0, Math.round(n)) }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    step="1"
+                                    min={0}
+                                  />
+                                </td>
                                 <td style={otd}>
                                   {commaMoneyInput(
                                     effRate(row),
@@ -5250,6 +5272,7 @@ export default function FormulaEditor({
                                         label: "",
                                         monthly: 0,
                                         rate: 0,
+                                        qty: 1,
                                         taxPct: 8.5,
                                         wcPct: 4,
                                         hours: 173.33,
@@ -5276,6 +5299,7 @@ export default function FormulaEditor({
                           {g.mode === "lease" ? <td style={otd} /> : null}
                           {g.mode === "labor" ? (
                             <>
+                              <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />
                               <td style={otd} />

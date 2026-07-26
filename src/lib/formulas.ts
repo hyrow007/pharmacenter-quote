@@ -483,6 +483,8 @@ export type OverheadItem = {
   wcPct?: number | null;
   /** v60.7: working hours per month for labor rows (default 173.33). */
   hours?: number | null;
+  /** v60.8: people in this rate class (labor rows; default 1). */
+  qty?: number | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };
