@@ -111,6 +111,7 @@ const es: Record<string, string> = {
   "Batch Allocation": "Asignación por lote",
   Sort: "Ordenar",
   "Overhead Cost / gummy": "Gastos generales / gomita",
+  "True Cost / gummy": "Costo real / gomita",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",

@@ -849,6 +849,8 @@ export default function FormulaEditor({
   const [overheadDec, setOverheadDec] = useState<number>(
     seedVersion.costing?.overheadDec ?? 2,
   );
+  // v65: decimal picker for the top summary card's per-gummy readouts.
+  const [topDec, setTopDec] = useState<number>(seedVersion.costing?.topDec ?? 4);
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
@@ -900,6 +902,7 @@ export default function FormulaEditor({
       overheadOther,
       laborDec,
       overheadDec,
+      topDec,
     };
   }, [
     costingDec,
@@ -930,6 +933,7 @@ export default function FormulaEditor({
     overheadOther,
     laborDec,
     overheadDec,
+    topDec,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1044,6 +1048,7 @@ export default function FormulaEditor({
               overheadOther: seed.costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
               laborDec: seed.costing.laborDec ?? 2,
               overheadDec: seed.costing.overheadDec ?? 2,
+              topDec: seed.costing.topDec ?? 4,
             }
           : {
               dec: 3,
@@ -1074,6 +1079,7 @@ export default function FormulaEditor({
               overheadOther: OVERHEAD_OTHER_DEFAULTS,
               laborDec: 2,
               overheadDec: 2,
+              topDec: 4,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4016,6 +4022,8 @@ export default function FormulaEditor({
           }
           laborCostPerGummy={laborCostPerGummy}
           overheadCostPerGummy={overheadCostPerGummy}
+          topDec={topDec}
+          onTopDecChange={setTopDec}
         />
       )}
 
@@ -7289,7 +7297,23 @@ function CostTab({
   laborCostPerGummy: number | null;
   /** v65: Overhead Costs Batch Allocation ÷ Target Yield. */
   overheadCostPerGummy: number | null;
+  /** v65: decimal places for the per-gummy readouts (persisted). */
+  topDec: number;
+  onTopDecChange: React.Dispatch<React.SetStateAction<number>>;
 }) {
+  const fmt = (v: number) =>
+    v.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: topDec,
+      maximumFractionDigits: topDec,
+    });
+  const trueCost =
+    materialCostPerGummy !== null &&
+    laborCostPerGummy !== null &&
+    overheadCostPerGummy !== null
+      ? materialCostPerGummy + laborCostPerGummy + overheadCostPerGummy
+      : null;
   return (
     <div
       style={{
@@ -7319,22 +7343,36 @@ function CostTab({
           line rule as the table (any "—" ingredient blanks this). */}
       <ParamBlock label="Material cost / gummy">
         <ReadOnly>
-          {materialCostPerGummy !== null ? usd.format(materialCostPerGummy) : "—"}
+          {materialCostPerGummy !== null ? fmt(materialCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       {/* v59.5: labor mirror of the material readout — Batch Labor
           Costs grand total ÷ Target Yield. */}
       <ParamBlock label="Direct Labor Cost / gummy">
         <ReadOnly>
-          {laborCostPerGummy !== null ? usd.format(laborCostPerGummy) : "—"}
+          {laborCostPerGummy !== null ? fmt(laborCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       {/* v65: overhead mirror — Batch Allocation cost per gummy. */}
       <ParamBlock label="Overhead Cost / gummy">
         <ReadOnly>
-          {overheadCostPerGummy !== null ? usd.format(overheadCostPerGummy) : "—"}
+          {overheadCostPerGummy !== null ? fmt(overheadCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
+      {/* v65: the all-in number — material + direct labor + overhead.
+          Blank if any component is unresolved (same line rule). */}
+      <ParamBlock label="True Cost / gummy">
+        <ReadOnly>{trueCost !== null ? fmt(trueCost) : "—"}</ReadOnly>
+      </ParamBlock>
+      <div
+        style={{
+          gridColumn: "1 / -1",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <DecimalPicker value={topDec} onChange={onTopDecChange} />
+      </div>
     </div>
   );
 }

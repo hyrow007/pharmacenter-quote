@@ -464,6 +464,8 @@ export type GummyFormulaCosting = {
    *  Costs cards' computed figures (money shows this many decimals;
    *  per-gummy readouts show +2). Null = default 2. */
   laborDec?: number | null;
+  /** v65: decimals for the top summary card's per-gummy readouts (default 4). */
+  topDec?: number | null;
   overheadDec?: number | null;
 };
 
