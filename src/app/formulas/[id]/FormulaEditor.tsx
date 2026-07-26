@@ -5259,6 +5259,7 @@ export default function FormulaEditor({
                               </>
                             ) : (
                               <>
+                                {g.mode === "lease" ? null : (
                                 <td style={otd}>
                                   <input
                                     type="text"
@@ -5283,6 +5284,7 @@ export default function FormulaEditor({
                                     placeholder="—"
                                   />
                                 </td>
+                                )}
                                 <td style={otd}>
                                   {commaMoneyInput(
                                     row.monthly,
