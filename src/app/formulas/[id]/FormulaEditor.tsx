@@ -6357,7 +6357,16 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 // vertical (BenchTopReadout) and the scale-up header cards absorbed the
 // params (see MetricCard / MetricReadout / MetricInputRow).
 
-function ParamBlock({ label, children }: { label: string; children: React.ReactNode }) {
+function ParamBlock({
+  label,
+  children,
+  nowrap,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** v66.1: keep the label on a single line (Costs summary card). */
+  nowrap?: boolean;
+}) {
   const tr = makeTr(useLang());
   return (
     <div>
@@ -6369,6 +6378,7 @@ function ParamBlock({ label, children }: { label: string; children: React.ReactN
           textTransform: "uppercase",
           color: "var(--ink-3, #8a9498)",
           marginBottom: 4,
+          ...(nowrap ? { whiteSpace: "nowrap" as const } : {}),
         }}
       >
         {tr(label)}
@@ -7363,6 +7373,7 @@ function CostTab({
   topDec: number;
   onTopDecChange: React.Dispatch<React.SetStateAction<number>>;
 }) {
+  const trTitle = makeTr(useLang());
   const fmt = (v: number) =>
     v.toLocaleString("en-US", {
       style: "currency",
@@ -7381,21 +7392,41 @@ function CostTab({
       className="fe-cost-card"
       style={{
         marginBottom: 14,
-        padding: 14,
-        border: "1px solid var(--line, #e3dcc9)",
+        border: "1px solid var(--teal-700, #1d6c7b)",
         borderRadius: 8,
         background: "var(--paper, #fffdf8)",
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: 14,
-        // v59.6: bottom-align blocks so the $ values sit on one
-        // baseline even when a long label wraps to two lines.
-        alignItems: "end",
+        overflow: "hidden",
       }}
     >
+      {/* v66.1: titled like the other costing cards. */}
+      <div
+        style={{
+          padding: "12px 16px",
+          fontSize: 14.5,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--teal-900, #0f4a56)",
+          background: "var(--cream, #f6efe3)",
+          borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+        }}
+      >
+        {trTitle("Costs")}
+      </div>
+      <div
+        style={{
+          padding: 14,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: 14,
+          // v59.6: bottom-align blocks so the $ values sit on one
+          // baseline even when a long label wraps to two lines.
+          alignItems: "end",
+        }}
+      >
       {/* v57.5: Target Yield (Scale up tab) reflected here so the
           quantity the costing math runs against is visible up top. */}
-      <ParamBlock label="QTY (Gummies)">
+      <ParamBlock label="QTY (Gummies)" nowrap>
         <ReadOnly>
           {targetYieldUnits > 0
             ? Math.round(targetYieldUnits).toLocaleString("en-US")
@@ -7404,27 +7435,27 @@ function CostTab({
       </ParamBlock>
       {/* v57.6: costing-table grand total ÷ Target Yield — the same
           line rule as the table (any "—" ingredient blanks this). */}
-      <ParamBlock label="Material cost / gummy">
+      <ParamBlock label="Material cost / gummy" nowrap>
         <ReadOnly>
           {materialCostPerGummy !== null ? fmt(materialCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       {/* v59.5: labor mirror of the material readout — Batch Labor
           Costs grand total ÷ Target Yield. */}
-      <ParamBlock label="Direct Labor Cost / gummy">
+      <ParamBlock label="Direct Labor Cost / gummy" nowrap>
         <ReadOnly>
           {laborCostPerGummy !== null ? fmt(laborCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       {/* v65: overhead mirror — Batch Allocation cost per gummy. */}
-      <ParamBlock label="Overhead Cost / gummy">
+      <ParamBlock label="Overhead Cost / gummy" nowrap>
         <ReadOnly>
           {overheadCostPerGummy !== null ? fmt(overheadCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
       {/* v65: the all-in number — material + direct labor + overhead.
           Blank if any component is unresolved (same line rule). */}
-      <ParamBlock label="True Cost / gummy">
+      <ParamBlock label="True Cost / gummy" nowrap>
         <ReadOnly>{trueCost !== null ? fmt(trueCost) : "—"}</ReadOnly>
       </ParamBlock>
       <div
@@ -7435,6 +7466,7 @@ function CostTab({
         }}
       >
         <DecimalPicker value={topDec} onChange={onTopDecChange} />
+      </div>
       </div>
     </div>
   );

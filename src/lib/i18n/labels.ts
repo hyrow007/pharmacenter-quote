@@ -112,6 +112,7 @@ const es: Record<string, string> = {
   Sort: "Ordenar",
   "Overhead Cost / gummy": "Gastos generales / gomita",
   "True Cost / gummy": "Costo real / gomita",
+  Costs: "Costos",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",
