@@ -5100,8 +5100,8 @@ export default function FormulaEditor({
                           <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
                           {g.mode === "lease" ? (
                             <>
-                              <th style={{ ...oth, width: 130 }}>{tr("Base ($)")}</th>
-                              <th style={{ ...oth, width: 130 }}>{tr("CAM ($)")}</th>
+                              <th style={{ ...oth, width: 130 }}>{tr("Base ($/mo)")}</th>
+                              <th style={{ ...oth, width: 130 }}>{tr("CAM ($/mo)")}</th>
                             </>
                           ) : g.mode === "labor" ? (
                             <>
@@ -5118,7 +5118,7 @@ export default function FormulaEditor({
                             <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
                           )}
                           <th style={{ ...oth, width: 75 }}>{tr("Share %")}</th>
-                          <th style={{ ...oth, width: 115 }}>{tr("Allocated ($)")}</th>
+                          <th style={{ ...oth, width: 115 }}>{tr("Allocated ($/mo)")}</th>
                           <th style={{ ...oth, width: 105 }}>{tr("Cost per Gummy")}</th>
                           <th style={{ ...oth, width: 36 }} />
                         </tr>
