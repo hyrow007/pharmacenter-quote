@@ -2964,6 +2964,62 @@ export default function FormulaEditor({
             -webkit-appearance: none !important;
           }
 
+          /* ---- v66: Costing print sheet ----
+             The bench print treatment above turns every <tr> into a
+             fixed 5-track grid; costing tables carry 6–13 columns, so
+             inside .fe-cost-card we restore real table rendering and
+             let the engine autosize columns to the page. Inputs shrink
+             to their value via field-sizing so numeric columns hug
+             their numbers instead of printing form-sized boxes. */
+          .fe-cost-card table {
+            display: table !important;
+            table-layout: auto !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .fe-cost-card thead { display: table-header-group !important; }
+          .fe-cost-card tbody { display: table-row-group !important; }
+          .fe-cost-card tr {
+            display: table-row !important;
+            padding: 0 !important;
+          }
+          .fe-cost-card th,
+          .fe-cost-card td {
+            display: table-cell !important;
+            width: auto !important;
+            padding: 2px 5px !important;
+            vertical-align: baseline !important;
+          }
+          .fe-cost-card thead tr {
+            border-bottom: 1pt solid #000 !important;
+          }
+          .fe-cost-card tbody tr {
+            border-bottom: 0.5pt solid #d6d1c2 !important;
+          }
+          .fe-cost-card thead th {
+            font-size: 7.5pt !important;
+            text-align: right !important;
+          }
+          .fe-cost-card thead th:first-child { text-align: left !important; }
+          .fe-cost-card td,
+          .fe-cost-card td input,
+          .fe-cost-card td select {
+            font-size: 8.5pt !important;
+          }
+          .fe-cost-card input,
+          .fe-cost-card select {
+            width: auto !important;
+            max-width: 100% !important;
+            field-sizing: content !important;
+            text-align: right !important;
+          }
+          .fe-cost-card td:first-child input {
+            text-align: left !important;
+            width: 100% !important;
+          }
+
           /* Identity row (Product Code · Name · Shape · Flavor) — force
              everything onto one line for print. On-screen the Product
              Code column is 260px to fit the TBD/Existing radios plus
@@ -3673,8 +3729,9 @@ export default function FormulaEditor({
           When `printing` is on we always show the Bench top view — the
           print output is scoped to bench per the R&D spec-sheet spec. */}
       {/* v55: printing from the Scale up tab prints the SCALE-UP sheet;
+          v66: printing from the Costing tab prints the COSTING sheet;
           every other tab prints the bench sheet as before. */}
-      {(tab === "bench" || (printing && tab !== "scale")) && (
+      {(tab === "bench" || (printing && tab !== "scale" && tab !== "cost")) && (
         <>
           <BenchTopTab
             benchBatchG={benchBatchG}
@@ -4011,7 +4068,7 @@ export default function FormulaEditor({
           })()}
         </dl>
       )}
-      {tab === "cost" && !printing && (
+      {tab === "cost" && (
         <CostTab
           cost={cost}
           targetYieldUnits={targetYieldUnits}
@@ -4050,8 +4107,9 @@ export default function FormulaEditor({
           pre-cook AND secondary collapses to one line). Quantities and
           cost columns layer on next; the legacy editable IngredientTable
           is retired from this tab. */}
-      {tab === "cost" && !printing ? (
+      {tab === "cost" ? (
         <div
+          className="fe-cost-card"
           style={{
             marginBottom: 14,
             border: "1px solid var(--teal-700, #1d6c7b)",
@@ -4444,8 +4502,9 @@ export default function FormulaEditor({
 
       {/* v57.7: Labor Costs — placeholder card below Material Costs;
           content to be defined with the operator. */}
-      {tab === "cost" && !printing ? (
+      {tab === "cost" ? (
         <div
+          className="fe-cost-card"
           style={{
             marginBottom: 14,
             border: "1px solid var(--teal-700, #1d6c7b)",
@@ -4943,8 +5002,9 @@ export default function FormulaEditor({
           utilities, depreciation, indirect labor, insurance) spread
           over working days and charged to this batch by its total
           shift-days. SG&A deliberately excluded — margin's job. */}
-      {tab === "cost" && !printing ? (
+      {tab === "cost" ? (
         <div
+          className="fe-cost-card"
           style={{
             marginBottom: 14,
             border: "1px solid var(--teal-700, #1d6c7b)",
@@ -7318,6 +7378,7 @@ function CostTab({
       : null;
   return (
     <div
+      className="fe-cost-card"
       style={{
         marginBottom: 14,
         padding: 14,
