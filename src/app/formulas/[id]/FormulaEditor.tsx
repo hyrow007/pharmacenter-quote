@@ -72,13 +72,18 @@ const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
   { label: "Suite 400", monthly: 4182.08, cam: 1775.73, sharePct: 100 },
   { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
 ];
+// Indirect labor rows carry hourly rates (sum of the ADP department's
+// active rates) + burden %, like the Pay Rates card. monthly is unused
+// when `rate` is set (kept 0 for the type).
 const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
-  { label: "Production Manager", monthly: 5092, sharePct: 25 },
-  { label: "Plant Mechanic", monthly: 5070, sharePct: 25 },
-  { label: "Quality Department", monthly: 12146, sharePct: 25 },
-  { label: "Warehouse Department", monthly: 8775, sharePct: 25 },
-  { label: "Purchasing Logistics", monthly: 1960, sharePct: 25 },
+  { label: "Production Manager", monthly: 0, rate: 26.11, taxPct: 8.5, wcPct: 4, sharePct: 25 },
+  { label: "Plant Mechanic", monthly: 0, rate: 26.0, taxPct: 8.5, wcPct: 4, sharePct: 25 },
+  { label: "Quality Department", monthly: 0, rate: 62.29, taxPct: 8.5, wcPct: 4, sharePct: 25 },
+  { label: "Warehouse Department", monthly: 0, rate: 45.0, taxPct: 8.5, wcPct: 4, sharePct: 25 },
+  { label: "Purchasing Logistics", monthly: 0, rate: 10.05, taxPct: 8.5, wcPct: 4, sharePct: 25 },
 ];
+/** Working hours per month for indirect-labor monthly conversion. */
+const INDIRECT_HOURS_PER_MONTH = 173.33;
 const OVERHEAD_OTHER_DEFAULTS: OverheadItem[] = [
   { label: "Gas & Electricity", monthly: 4497, sharePct: 30 },
   { label: "Warehouse Supplies & Tools", monthly: 2525, sharePct: 40 },
@@ -4956,26 +4961,49 @@ export default function FormulaEditor({
                 }}
               />
             );
-            // Effective monthly total per row (lease rows add CAM).
-            const rowTotal = (r: OverheadItem) => r.monthly + (r.cam ?? 0);
-            const chargedOf = (list: OverheadItem[]) =>
-              list.reduce((s, r) => s + rowTotal(r) * (r.sharePct / 100), 0);
+            // v60.6: burden math for labor rows (mirrors Pay Rates).
+            // effRate back-derives an hourly rate for legacy rows saved
+            // with only a monthly burdened total.
+            const H = INDIRECT_HOURS_PER_MONTH;
+            const effRate = (r: OverheadItem) =>
+              r.rate ??
+              (r.monthly > 0
+                ? r.monthly /
+                  ((1 + (r.taxPct ?? 8.5) / 100 + (r.wcPct ?? 4) / 100) * H)
+                : 0);
+            const burdenedOf = (r: OverheadItem) =>
+              effRate(r) * (1 + (r.taxPct ?? 8.5) / 100 + (r.wcPct ?? 4) / 100);
+            // Effective monthly total per row: labor rows convert their
+            // burdened hourly rate; lease rows add CAM.
+            type GroupMode = "lease" | "labor" | undefined;
+            const rowTotal = (r: OverheadItem, mode?: GroupMode) =>
+              mode === "labor" ? burdenedOf(r) * H : r.monthly + (r.cam ?? 0);
+            const chargedOf = (list: OverheadItem[], mode?: GroupMode) =>
+              list.reduce((s, r) => s + rowTotal(r, mode) * (r.sharePct / 100), 0);
             const groups: Array<{
               title: string;
               list: OverheadItem[];
               setList: React.Dispatch<React.SetStateAction<OverheadItem[]>>;
-              hasCam?: boolean;
+              mode?: GroupMode;
             }> = [
               {
                 title: "Lease Expenses",
                 list: overheadRent,
                 setList: setOverheadRent,
-                hasCam: true,
+                mode: "lease",
               },
-              { title: "Indirect Labor", list: overheadIndirect, setList: setOverheadIndirect },
+              {
+                title: "Indirect Labor",
+                list: overheadIndirect,
+                setList: setOverheadIndirect,
+                mode: "labor",
+              },
               { title: "Other Expenses", list: overheadOther, setList: setOverheadOther },
             ];
-            const totalMonthly = groups.reduce((s, g) => s + chargedOf(g.list), 0);
+            const totalMonthly = groups.reduce(
+              (s, g) => s + chargedOf(g.list, g.mode),
+              0,
+            );
             const prodShifts =
               productionDays ??
               roundDays(
@@ -5030,10 +5058,17 @@ export default function FormulaEditor({
                       <thead>
                         <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
                           <th style={{ ...oth, textAlign: "left" }}>{tr("Item")}</th>
-                          {g.hasCam ? (
+                          {g.mode === "lease" ? (
                             <>
                               <th style={{ ...oth, width: 130 }}>{tr("Base ($)")}</th>
                               <th style={{ ...oth, width: 130 }}>{tr("CAM ($)")}</th>
+                            </>
+                          ) : g.mode === "labor" ? (
+                            <>
+                              <th style={{ ...oth, width: 120 }}>{tr("Hourly Base Rate")}</th>
+                              <th style={{ ...oth, width: 100 }}>{tr("Payroll Tax %")}</th>
+                              <th style={{ ...oth, width: 110 }}>{tr("Workers' Comp %")}</th>
+                              <th style={{ ...oth, width: 110 }}>{tr("Burdened Rate")}</th>
                             </>
                           ) : (
                             <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
@@ -5066,19 +5101,65 @@ export default function FormulaEditor({
                                 placeholder="Expense name"
                               />
                             </td>
-                            <td style={otd}>
-                              {commaMoneyInput(
-                                row.monthly,
-                                (n) =>
-                                  g.setList((prev) =>
-                                    prev.map((r, j) =>
-                                      j === i ? { ...r, monthly: n } : r,
+                            {g.mode === "labor" ? (
+                              <>
+                                <td style={otd}>
+                                  {commaMoneyInput(
+                                    effRate(row),
+                                    (n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, rate: n } : r,
+                                        ),
+                                      ),
+                                    g.title + i + "rate",
+                                  )}
+                                </td>
+                                <td style={otd}>
+                                  <NumberInput
+                                    value={row.taxPct ?? 8.5}
+                                    onChange={(n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, taxPct: n } : r,
+                                        ),
+                                      )
+                                    }
+                                    step="0.1"
+                                    min={0}
+                                  />
+                                </td>
+                                <td style={otd}>
+                                  <NumberInput
+                                    value={row.wcPct ?? 4}
+                                    onChange={(n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, wcPct: n } : r,
+                                        ),
+                                      )
+                                    }
+                                    step="0.1"
+                                    min={0}
+                                  />
+                                </td>
+                                <td style={otd}>{roMoney(burdenedOf(row))}</td>
+                              </>
+                            ) : (
+                              <td style={otd}>
+                                {commaMoneyInput(
+                                  row.monthly,
+                                  (n) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i ? { ...r, monthly: n } : r,
+                                      ),
                                     ),
-                                  ),
-                                g.title + i,
-                              )}
-                            </td>
-                            {g.hasCam ? (
+                                  g.title + i,
+                                )}
+                              </td>
+                            )}
+                            {g.mode === "lease" ? (
                               <td style={otd}>
                                 {commaMoneyInput(
                                   row.cam ?? 0,
@@ -5109,11 +5190,11 @@ export default function FormulaEditor({
                               />
                             </td>
                             <td style={otd}>
-                              {roMoney(rowTotal(row) * (row.sharePct / 100))}
+                              {roMoney(rowTotal(row, g.mode) * (row.sharePct / 100))}
                             </td>
                             <td style={otd}>
                               {roMoney(
-                                perGummyOf(rowTotal(row) * (row.sharePct / 100)),
+                                perGummyOf(rowTotal(row, g.mode) * (row.sharePct / 100)),
                                 overheadDec + 2,
                               )}
                             </td>
@@ -5145,7 +5226,16 @@ export default function FormulaEditor({
                               onClick={() =>
                                 g.setList((prev) => [
                                   ...prev,
-                                  { label: "", monthly: 0, sharePct: 100 },
+                                  g.mode === "labor"
+                                    ? {
+                                        label: "",
+                                        monthly: 0,
+                                        rate: 0,
+                                        taxPct: 8.5,
+                                        wcPct: 4,
+                                        sharePct: 100,
+                                      }
+                                    : { label: "", monthly: 0, sharePct: 100 },
                                 ])
                               }
                               style={{
@@ -5163,13 +5253,23 @@ export default function FormulaEditor({
                             </button>
                           </td>
                           <td style={otd} />
-                          {g.hasCam ? <td style={otd} /> : null}
+                          {g.mode === "lease" ? <td style={otd} /> : null}
+                          {g.mode === "labor" ? (
+                            <>
+                              <td style={otd} />
+                              <td style={otd} />
+                              <td style={otd} />
+                            </>
+                          ) : null}
                           <td style={{ ...oth, color: "var(--teal-900, #0f4a56)" }}>
                             {tr("Subtotal")}
                           </td>
-                          <td style={otd}>{roMoney(chargedOf(g.list))}</td>
+                          <td style={otd}>{roMoney(chargedOf(g.list, g.mode))}</td>
                           <td style={otd}>
-                            {roMoney(perGummyOf(chargedOf(g.list)), overheadDec + 2)}
+                            {roMoney(
+                              perGummyOf(chargedOf(g.list, g.mode)),
+                              overheadDec + 2,
+                            )}
                           </td>
                           <td style={otd} />
                         </tr>

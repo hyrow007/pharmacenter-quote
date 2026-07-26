@@ -475,6 +475,12 @@ export type OverheadItem = {
   /** v60.5: CAM / additional rent in $ — lease rows only. Effective
    *  monthly total = monthly + (cam ?? 0). */
   cam?: number | null;
+  /** v60.6: labor rows (Indirect Labor) — hourly base rate + burden,
+   *  mirroring the Pay Rates card. Effective monthly = rate ×
+   *  (1 + tax% + wc%) × 173.33 hrs. */
+  rate?: number | null;
+  taxPct?: number | null;
+  wcPct?: number | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };
