@@ -7281,6 +7281,8 @@ function CostTab({
   materialCostPerGummy,
   laborCostPerGummy,
   overheadCostPerGummy,
+  topDec,
+  onTopDecChange,
 }: {
   cost: {
     dollarsPerGummy: number;
