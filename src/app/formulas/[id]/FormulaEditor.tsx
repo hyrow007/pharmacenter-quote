@@ -5039,7 +5039,7 @@ export default function FormulaEditor({
                             <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
                           )}
                           <th style={{ ...oth, width: 120 }}>{tr("Share %")}</th>
-                          <th style={{ ...oth, width: 150 }}>{tr("Charged")}</th>
+                          <th style={{ ...oth, width: 150 }}>{tr("Allocated ($)")}</th>
                           <th style={{ ...oth, width: 140 }}>{tr("Cost per Gummy")}</th>
                           <th style={{ ...oth, width: 44 }} />
                         </tr>

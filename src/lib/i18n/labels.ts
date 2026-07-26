@@ -105,6 +105,7 @@ const es: Record<string, string> = {
   "CAM ($)": "CAM ($)",
   "Share %": "% asignado",
   Charged: "Cargado",
+  "Allocated ($)": "Asignado ($)",
   "+ Add line": "+ Agregar línea",
   Subtotal: "Subtotal",
   "Working Days / Month": "Días laborables / mes",
