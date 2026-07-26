@@ -2086,6 +2086,42 @@ export default function FormulaEditor({
     );
     return targetYieldUnits > 0 ? grand / targetYieldUnits : null;
   })();
+  // v65: Overhead Cost / gummy for the top card — same math as the
+  // Overhead Costs card's Batch Allocation (Σ allocated monthly ÷
+  // working days × batch days ÷ Target Yield).
+  const overheadCostPerGummy = (() => {
+    const H = INDIRECT_HOURS_PER_MONTH;
+    // Mirrors effRate/burdenedOf in the Overhead Costs card exactly so
+    // the top-card readout always matches the card's Batch Allocation.
+    const effRate = (r: OverheadItem) =>
+      r.rate ??
+      (r.monthly > 0
+        ? r.monthly / ((1 + (r.taxPct ?? 8.5) / 100 + (r.wcPct ?? 4) / 100) * H)
+        : 0);
+    const burdenedOf = (r: OverheadItem) =>
+      effRate(r) * (1 + (r.taxPct ?? 8.5) / 100 + (r.wcPct ?? 4) / 100);
+    const rowTotal = (r: OverheadItem, mode?: "lease" | "labor") =>
+      mode === "labor"
+        ? r.payType === "salary"
+          ? burdenedOf(r) * (r.qty ?? 1)
+          : burdenedOf(r) * (r.hours ?? H) * (r.qty ?? 1)
+        : r.monthly + (r.cam ?? 0);
+    const chargedOf = (list: OverheadItem[], mode?: "lease" | "labor") =>
+      list.reduce((s, r) => s + rowTotal(r, mode) * (r.sharePct / 100), 0);
+    const totalMonthly =
+      chargedOf(overheadRent, "lease") +
+      chargedOf(overheadIndirect, "labor") +
+      chargedOf(overheadOther);
+    const prodShifts =
+      productionDays ??
+      roundDays(scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0);
+    const batchDays =
+      (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
+    const workDays = workingDaysPerMonth ?? 21;
+    return workDays > 0 && targetYieldUnits > 0
+      ? ((totalMonthly / workDays) * batchDays) / targetYieldUnits
+      : null;
+  })();
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
   // capture element text via string-set (unsupported), but a plain string
@@ -3979,6 +4015,7 @@ export default function FormulaEditor({
               : null
           }
           laborCostPerGummy={laborCostPerGummy}
+          overheadCostPerGummy={overheadCostPerGummy}
         />
       )}
 
@@ -7232,10 +7269,10 @@ function ScaleUpBlendCards({
 }
 
 function CostTab({
-  cost,
   targetYieldUnits,
   materialCostPerGummy,
   laborCostPerGummy,
+  overheadCostPerGummy,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -7250,19 +7287,9 @@ function CostTab({
   materialCostPerGummy: number | null;
   /** v59.5: Batch Labor Costs grand total ÷ Target Yield. */
   laborCostPerGummy: number | null;
+  /** v65: Overhead Costs Batch Allocation ÷ Target Yield. */
+  overheadCostPerGummy: number | null;
 }) {
-  const [copying, setCopying] = useState(false);
-  async function copyToClipboard(text: string) {
-    setCopying(true);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // clipboard blocked — quietly ignore, user can still read the number
-    } finally {
-      setTimeout(() => setCopying(false), 600);
-    }
-  }
-
   return (
     <div
       style={{
@@ -7302,30 +7329,12 @@ function CostTab({
           {laborCostPerGummy !== null ? usd.format(laborCostPerGummy) : "—"}
         </ReadOnly>
       </ParamBlock>
-      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => copyToClipboard(cost.effectiveDollarsPerGummy.toFixed(4))}
-          disabled={!cost.hasCompleteCosts}
-          style={{
-            padding: "8px 14px",
-            background: "var(--sage-700, #5f8e3a)",
-            color: "#fff",
-            border: "1px solid var(--sage-700, #5f8e3a)",
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: cost.hasCompleteCosts ? "pointer" : "not-allowed",
-            opacity: cost.hasCompleteCosts ? 1 : 0.5,
-          }}
-        >
-          {copying ? "Copied" : "Copy $/gummy for pricing"}
-        </button>
-        <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)", alignSelf: "center" }}>
-          Paste into the Unit cost field on /pricing for this workflow&apos;s gummy
-          line item.
-        </div>
-      </div>
+      {/* v65: overhead mirror — Batch Allocation cost per gummy. */}
+      <ParamBlock label="Overhead Cost / gummy">
+        <ReadOnly>
+          {overheadCostPerGummy !== null ? usd.format(overheadCostPerGummy) : "—"}
+        </ReadOnly>
+      </ParamBlock>
     </div>
   );
 }

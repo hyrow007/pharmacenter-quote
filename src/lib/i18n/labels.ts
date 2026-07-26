@@ -110,6 +110,7 @@ const es: Record<string, string> = {
   "QB Acct #": "Cuenta QB #",
   "Batch Allocation": "Asignación por lote",
   Sort: "Ordenar",
+  "Overhead Cost / gummy": "Gastos generales / gomita",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",
