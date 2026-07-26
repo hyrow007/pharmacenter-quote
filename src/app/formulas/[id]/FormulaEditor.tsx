@@ -93,13 +93,13 @@ const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
 /** Working hours per month for indirect-labor monthly conversion. */
 const INDIRECT_HOURS_PER_MONTH = 173.33;
 const OVERHEAD_OTHER_DEFAULTS: OverheadItem[] = [
-  { label: "Electricity", monthly: 4497, sharePct: 30 },
-  { label: "Warehouse Supplies & Tools", monthly: 2525, sharePct: 40 },
-  { label: "Licenses & Permits", monthly: 2428, sharePct: 40 },
-  { label: "Insurance (liability + property)", monthly: 3281, sharePct: 40 },
-  { label: "Repairs & Maintenance", monthly: 1278, sharePct: 40 },
-  { label: "Cleaning", monthly: 675, sharePct: 40 },
-  { label: "Other Utilities & Services", monthly: 291, sharePct: 40 },
+  { label: "Electricity", monthly: 4497, qbAccount: "5135.30", sharePct: 30 },
+  { label: "Warehouse Supplies & Tools", monthly: 2525, qbAccount: "5195.19", sharePct: 40 },
+  { label: "Licenses & Permits", monthly: 2428, qbAccount: "5145.70", sharePct: 40 },
+  { label: "Insurance (liability + property)", monthly: 3281, qbAccount: "5130", sharePct: 40 },
+  { label: "Repairs & Maintenance", monthly: 1278, qbAccount: "5145", sharePct: 40 },
+  { label: "Cleaning", monthly: 675, qbAccount: "5135.05", sharePct: 40 },
+  { label: "Other Utilities & Services", monthly: 291, qbAccount: "5135", sharePct: 40 },
 ];
 
 // Raw-material catalog option surfaced to the editor. Serialised from
@@ -5115,7 +5115,10 @@ export default function FormulaEditor({
                               <th style={{ ...oth, width: 110 }}>{tr("Monthly ($)")}</th>
                             </>
                           ) : (
-                            <th style={{ ...oth, width: 150 }}>{tr("Monthly ($)")}</th>
+                            <>
+                              <th style={{ ...oth, width: 90 }}>{tr("QB Acct #")}</th>
+                              <th style={{ ...oth, width: 140 }}>{tr("Monthly ($)")}</th>
+                            </>
                           )}
                           <th style={{ ...oth, width: 75 }}>{tr("Share %")}</th>
                           <th style={{ ...oth, width: 115 }}>{tr("Allocated ($/mo)")}</th>
@@ -5233,18 +5236,44 @@ export default function FormulaEditor({
                                 <td style={otd}>{roMoney(rowTotal(row, "labor"))}</td>
                               </>
                             ) : (
-                              <td style={otd}>
-                                {commaMoneyInput(
-                                  row.monthly,
-                                  (n) =>
-                                    g.setList((prev) =>
-                                      prev.map((r, j) =>
-                                        j === i ? { ...r, monthly: n } : r,
+                              <>
+                                <td style={otd}>
+                                  <input
+                                    type="text"
+                                    value={row.qbAccount ?? ""}
+                                    onChange={(e) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i
+                                            ? { ...r, qbAccount: e.target.value }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    className="pricing__input"
+                                    style={{
+                                      width: "100%",
+                                      minWidth: 0,
+                                      fontSize: 12,
+                                      textAlign: "right",
+                                      fontFamily: "var(--mono, 'IBM Plex Mono', monospace)",
+                                    }}
+                                    placeholder="—"
+                                  />
+                                </td>
+                                <td style={otd}>
+                                  {commaMoneyInput(
+                                    row.monthly,
+                                    (n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, monthly: n } : r,
+                                        ),
                                       ),
-                                    ),
-                                  g.title + i,
-                                )}
-                              </td>
+                                    g.title + i,
+                                  )}
+                                </td>
+                              </>
                             )}
                             {g.mode === "lease" ? (
                               <td style={otd}>
@@ -5323,7 +5352,9 @@ export default function FormulaEditor({
                                         hours: 173.33,
                                         sharePct: 100,
                                       }
-                                    : { label: "", monthly: 0, sharePct: 100 },
+                                    : g.mode === "lease"
+                                      ? { label: "", monthly: 0, sharePct: 100 }
+                                      : { label: "", monthly: 0, qbAccount: "", sharePct: 100 },
                                 ])
                               }
                               style={{
@@ -5341,7 +5372,7 @@ export default function FormulaEditor({
                             </button>
                           </td>
                           <td style={otd} />
-                          {g.mode === "lease" ? <td style={otd} /> : null}
+                          {g.mode === "lease" || !g.mode ? <td style={otd} /> : null}
                           {g.mode === "labor" ? (
                             <>
                               <td style={otd} />

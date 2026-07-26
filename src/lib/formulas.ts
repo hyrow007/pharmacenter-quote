@@ -489,6 +489,8 @@ export type OverheadItem = {
    *  and monthly = rate × burden × hours × qty. "salary": `rate` is the
    *  MONTHLY salary per person and monthly = rate × burden × qty. */
   payType?: "hourly" | "salary" | null;
+  /** v62: QuickBooks account number for audit reference (e.g. "5135.30"). */
+  qbAccount?: string | null;
   /** Share charged to bulk-gummy production, 0–100. */
   sharePct: number;
 };
