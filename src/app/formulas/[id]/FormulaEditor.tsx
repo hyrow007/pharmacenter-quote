@@ -4398,14 +4398,9 @@ export default function FormulaEditor({
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
             }}
           >
             {tr("Direct Labor Costs")}
-            {/* v60.3: decimal picker for all computed figures below. */}
-            <DecimalPicker value={laborDec} onChange={setLaborDec} />
           </div>
           {/* v58.1: matrix layout — phases across the top (Setup /
               Production / Cleaning), Shifts / Hours per Shift / Total
@@ -4861,6 +4856,17 @@ export default function FormulaEditor({
                 );
               })()}
               </div>
+              {/* v60.4: decimal picker — bottom-right, same placement
+                  convention as Material Costs. */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  padding: "0 14px 12px",
+                }}
+              >
+                <DecimalPicker value={laborDec} onChange={setLaborDec} />
+              </div>
               </>
             );
           })()}
@@ -4890,14 +4896,9 @@ export default function FormulaEditor({
               textTransform: "uppercase",
               color: "var(--teal-900, #0f4a56)",
               borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
             }}
           >
             {tr("Overhead Costs")}
-            {/* v60.3: decimal picker for all computed figures below. */}
-            <DecimalPicker value={overheadDec} onChange={setOverheadDec} />
           </div>
           {(() => {
             // v60.1: itemized sub-cards. Monthly overhead = Σ of every
@@ -5191,6 +5192,17 @@ export default function FormulaEditor({
                   <ParamBlock label="Cost per Gummy">
                     {roMoney(perGummy, overheadDec + 2)}
                   </ParamBlock>
+                </div>
+                {/* v60.4: decimal picker — bottom-right, same placement
+                    convention as Material Costs. */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    padding: "0 14px 12px",
+                  }}
+                >
+                  <DecimalPicker value={overheadDec} onChange={setOverheadDec} />
                 </div>
               </>
             );
