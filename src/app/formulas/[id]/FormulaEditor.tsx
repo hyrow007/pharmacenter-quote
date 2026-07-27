@@ -4122,6 +4122,7 @@ export default function FormulaEditor({
           }
           batchSizeKg={batchKg}
           cfaBatchSizeKg={cfaBatchKg}
+          lineCrewQty={(productionLeaders ?? 0) + (productionOperators ?? 0)}
         />
       )}
 
@@ -7399,6 +7400,7 @@ function CostTab({
   cfaBatchesPerDay,
   batchSizeKg,
   cfaBatchSizeKg,
+  lineCrewQty,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -7426,6 +7428,8 @@ function CostTab({
   cfaBatchesPerDay: number;
   batchSizeKg: number;
   cfaBatchSizeKg: number;
+  /** v66.9: production-phase crew size (leaders + operators). */
+  lineCrewQty: number;
 }) {
   const trTitle = makeTr(useLang());
   // v66.2: shared shells for the QTY mini card + Costs card pair.
@@ -7558,6 +7562,10 @@ function CostTab({
               })}{" "}
               kg
             </ReadOnly>
+          </ParamBlock>
+          {/* v66.9: production crew headcount from the Line Crew card. */}
+          <ParamBlock label="Line Crew QTY" nowrap>
+            <ReadOnly>{lineCrewQty.toLocaleString("en-US")}</ReadOnly>
           </ParamBlock>
         </div>
       </div>
