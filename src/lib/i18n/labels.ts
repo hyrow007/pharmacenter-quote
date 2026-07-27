@@ -115,6 +115,7 @@ const es: Record<string, string> = {
   Costs: "Costos",
   "Cost per Thousand": "Costo por millar",
   "Cost per Kg": "Costo por kg",
+  "Costing Sheet": "Hoja de costos",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",

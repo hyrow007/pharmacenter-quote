@@ -3151,7 +3151,11 @@ export default function FormulaEditor({
             }}
           >
             {/* v55.2: the sheet subtitle names the tab being printed. */}
-            {tab === "scale" ? tr("Scaled Up Batch") : tr("Bench top batch")}
+            {tab === "scale"
+              ? tr("Scaled Up Batch")
+              : tab === "cost"
+                ? tr("Costing Sheet")
+                : tr("Bench top batch")}
           </div>
         </div>
 
