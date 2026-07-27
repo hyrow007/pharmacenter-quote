@@ -3154,7 +3154,7 @@ export default function FormulaEditor({
             {tab === "scale"
               ? tr("Scaled Up Batch")
               : tab === "cost"
-                ? tr("Costing Sheet")
+                ? tr("Costing")
                 : tr("Bench top batch")}
           </div>
         </div>
