@@ -7498,21 +7498,21 @@ function CostTab({
       style={{
         marginBottom: 14,
         display: "flex",
+        flexDirection: "column",
         gap: 14,
-        flexWrap: "wrap",
-        alignItems: "stretch",
       }}
     >
-      {/* v66.2: mini card beside Costs. v66.7: retitled Considerations —
-          QTY plus the production context the costing math rides on. */}
-      <div style={{ ...shell, flex: "0 1 auto", minWidth: 230 }}>
+      {/* v66.8: Considerations stacked ABOVE Costs (user request) —
+          both full width, metrics flowing horizontally. */}
+      <div style={shell}>
         <div style={band}>{trTitle("Considerations")}</div>
         <div
           style={{
             padding: 14,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 14,
+            alignItems: "end",
           }}
         >
           <ParamBlock label="QTY (Gummies)" nowrap>
@@ -7562,7 +7562,7 @@ function CostTab({
         </div>
       </div>
       {/* v66.1: titled like the other costing cards. */}
-      <div style={{ ...shell, flex: "1 1 560px" }}>
+      <div style={shell}>
       <div style={band}>{trTitle("Costs")}</div>
       <div
         style={{
