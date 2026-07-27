@@ -4116,6 +4116,12 @@ export default function FormulaEditor({
           topDec={topDec}
           onTopDecChange={setTopDec}
           pieceWeightG={gummyPieceWeightG}
+          batchesPerDay={batchesPerDay}
+          cfaBatchesPerDay={
+            cfaBatchKg > 0 ? (scaleUp.carryKg * batchesPerDay) / cfaBatchKg : 0
+          }
+          batchSizeKg={batchKg}
+          cfaBatchSizeKg={cfaBatchKg}
         />
       )}
 
@@ -7389,6 +7395,10 @@ function CostTab({
   topDec,
   onTopDecChange,
   pieceWeightG,
+  batchesPerDay,
+  cfaBatchesPerDay,
+  batchSizeKg,
+  cfaBatchSizeKg,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -7411,6 +7421,11 @@ function CostTab({
   /** v66.4: finished piece weight (dry, g) — converts true cost per
    *  gummy into cost per kg of bulk gummies. */
   pieceWeightG: number;
+  /** v66.7: production context for the Considerations mini card. */
+  batchesPerDay: number;
+  cfaBatchesPerDay: number;
+  batchSizeKg: number;
+  cfaBatchSizeKg: number;
 }) {
   const trTitle = makeTr(useLang());
   // v66.2: shared shells for the QTY mini card + Costs card pair.
@@ -7488,22 +7503,62 @@ function CostTab({
         alignItems: "stretch",
       }}
     >
-      {/* v66.2: QTY (Gummies) as its own mini card beside Costs. */}
-      <div style={{ ...shell, flex: "0 1 auto", minWidth: 190 }}>
-        <div style={band}>{trTitle("QTY (Gummies)")}</div>
-        <div style={{ padding: 14, display: "flex", alignItems: "flex-end" }}>
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: "var(--teal-900, #0f4a56)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {targetYieldUnits > 0
-              ? Math.round(targetYieldUnits).toLocaleString("en-US")
-              : "—"}
-          </div>
+      {/* v66.2: mini card beside Costs. v66.7: retitled Considerations —
+          QTY plus the production context the costing math rides on. */}
+      <div style={{ ...shell, flex: "0 1 auto", minWidth: 230 }}>
+        <div style={band}>{trTitle("Considerations")}</div>
+        <div
+          style={{
+            padding: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <ParamBlock label="QTY (Gummies)" nowrap>
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: "var(--teal-900, #0f4a56)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {targetYieldUnits > 0
+                ? Math.round(targetYieldUnits).toLocaleString("en-US")
+                : "—"}
+            </div>
+          </ParamBlock>
+          <ParamBlock label="Batches / day (Primary Blend)" nowrap>
+            <ReadOnly>
+              {batchesPerDay.toLocaleString("en-US", {
+                maximumFractionDigits: 2,
+              })}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="CFA Batches / day" nowrap>
+            <ReadOnly>
+              {cfaBatchesPerDay.toLocaleString("en-US", {
+                maximumFractionDigits: 2,
+              })}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Batch size (pre-cook blend)" nowrap>
+            <ReadOnly>
+              {batchSizeKg.toLocaleString("en-US", {
+                maximumFractionDigits: 1,
+              })}{" "}
+              kg
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="CFA Batch Size" nowrap>
+            <ReadOnly>
+              {cfaBatchSizeKg.toLocaleString("en-US", {
+                maximumFractionDigits: 1,
+              })}{" "}
+              kg
+            </ReadOnly>
+          </ParamBlock>
         </div>
       </div>
       {/* v66.1: titled like the other costing cards. */}
