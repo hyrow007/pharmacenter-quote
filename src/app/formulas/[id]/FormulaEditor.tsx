@@ -7453,6 +7453,25 @@ function CostTab({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+  // v66.6: each component's share of the true cost, shown in
+  // parentheses after its dollar figure.
+  const pctOf = (v: number) =>
+    trueCost !== null && trueCost > 0 ? (
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--ink-3, #8a9498)",
+          marginLeft: 4,
+        }}
+      >
+        (
+        {((v / trueCost) * 100).toLocaleString("en-US", {
+          maximumFractionDigits: 1,
+        })}
+        %)
+      </span>
+    ) : null;
   const costPerThousand = trueCost !== null ? trueCost * 1000 : null;
   const costPerKg =
     trueCost !== null && pieceWeightG > 0
@@ -7505,20 +7524,41 @@ function CostTab({
           line rule as the table (any "—" ingredient blanks this). */}
       <ParamBlock label="Material cost / gummy" nowrap>
         <ReadOnly>
-          {materialCostPerGummy !== null ? fmt(materialCostPerGummy) : "—"}
+          {materialCostPerGummy !== null ? (
+            <>
+              {fmt(materialCostPerGummy)}
+              {pctOf(materialCostPerGummy)}
+            </>
+          ) : (
+            "—"
+          )}
         </ReadOnly>
       </ParamBlock>
       {/* v59.5: labor mirror of the material readout — Batch Labor
           Costs grand total ÷ Target Yield. */}
       <ParamBlock label="Direct Labor Cost / gummy" nowrap>
         <ReadOnly>
-          {laborCostPerGummy !== null ? fmt(laborCostPerGummy) : "—"}
+          {laborCostPerGummy !== null ? (
+            <>
+              {fmt(laborCostPerGummy)}
+              {pctOf(laborCostPerGummy)}
+            </>
+          ) : (
+            "—"
+          )}
         </ReadOnly>
       </ParamBlock>
       {/* v65: overhead mirror — Batch Allocation cost per gummy. */}
       <ParamBlock label="Overhead Cost / gummy" nowrap>
         <ReadOnly>
-          {overheadCostPerGummy !== null ? fmt(overheadCostPerGummy) : "—"}
+          {overheadCostPerGummy !== null ? (
+            <>
+              {fmt(overheadCostPerGummy)}
+              {pctOf(overheadCostPerGummy)}
+            </>
+          ) : (
+            "—"
+          )}
         </ReadOnly>
       </ParamBlock>
       {/* v65: the all-in number — material + direct labor + overhead.
