@@ -80,6 +80,27 @@ export default function FormulasCatalog({
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
 
+  // v67.1: clone a formula (latest version becomes v1 of the copy).
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  async function handleDuplicate(id: string) {
+    setDuplicatingId(id);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/formulas/${id}/duplicate`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setDeleteError(json.error || `duplicate_failed_${res.status}`);
+        setDuplicatingId(null);
+        return;
+      }
+      setFormulas((prev) => [json.formula as GummyFormulaRecord, ...prev]);
+      setDuplicatingId(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "duplicate_failed");
+      setDuplicatingId(null);
+    }
+  }
+
   async function handleDelete(id: string) {
     setDeletingId(id);
     setDeleteError(null);
@@ -534,24 +555,47 @@ export default function FormulasCatalog({
                         </button>
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteId(f.id)}
-                        title="Admin only"
-                        style={{
-                          padding: "3px 8px",
-                          background: "transparent",
-                          color: "#a13a2a",
-                          border: "none",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {tr("Delete")}
-                      </button>
+                      <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
+                        {/* v67.1: clone this formula — latest version
+                            becomes v1 of a new "(Copy)" catalog entry. */}
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicate(f.id)}
+                          disabled={duplicatingId === f.id}
+                          title="Copy this formula's latest version into a new formula"
+                          style={{
+                            padding: "3px 8px",
+                            background: "transparent",
+                            color: "var(--teal-700, #1d6c7b)",
+                            border: "none",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            cursor: duplicatingId === f.id ? "wait" : "pointer",
+                          }}
+                        >
+                          {duplicatingId === f.id ? "…" : tr("Duplicate")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(f.id)}
+                          title="Admin only"
+                          style={{
+                            padding: "3px 8px",
+                            background: "transparent",
+                            color: "#a13a2a",
+                            border: "none",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {tr("Delete")}
+                        </button>
+                      </span>
                     )}
                   </Td>
                 ) : null}

@@ -119,6 +119,7 @@ const es: Record<string, string> = {
   Considerations: "Consideraciones",
   "Line Crew QTY": "Cant. de personal de línea",
   "Total Batch Cost": "Costo total del lote",
+  Duplicate: "Duplicar",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",
