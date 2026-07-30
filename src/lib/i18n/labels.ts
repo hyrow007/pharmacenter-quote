@@ -118,6 +118,7 @@ const es: Record<string, string> = {
   "Costing Sheet": "Hoja de costos",
   Considerations: "Consideraciones",
   "Line Crew QTY": "Cant. de personal de línea",
+  "Total Batch Cost": "Costo total del lote",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",

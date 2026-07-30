@@ -7496,6 +7496,11 @@ function CostTab({
     trueCost !== null && pieceWeightG > 0
       ? trueCost * (1000 / pieceWeightG)
       : null;
+  // v67: the whole batch in one figure — true cost × target yield.
+  const totalBatchCost =
+    trueCost !== null && targetYieldUnits > 0
+      ? trueCost * targetYieldUnits
+      : null;
   return (
     <div
       className="fe-cost-card"
@@ -7637,6 +7642,12 @@ function CostTab({
       </ParamBlock>
       <ParamBlock label="Cost per Kg" nowrap>
         <ReadOnly>{costPerKg !== null ? fmt2(costPerKg) : "—"}</ReadOnly>
+      </ParamBlock>
+      {/* v67: material + labor + overhead across the full run. */}
+      <ParamBlock label="Total Batch Cost" nowrap>
+        <ReadOnly>
+          {totalBatchCost !== null ? fmt2(totalBatchCost) : "—"}
+        </ReadOnly>
       </ParamBlock>
       <div
         style={{
