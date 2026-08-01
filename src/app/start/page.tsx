@@ -553,11 +553,16 @@ function StartWorkflow() {
     // Async default of first quantity tier from the formula's Target Yield.
     // Non-fatal: on network hiccup we simply leave the tier empty and let
     // the rep type it — no dead-locking spinner, no alert.
+    //
+    // API shape: GET /api/formulas/[id] returns `{ formula, latestVersion }`,
+    // NOT `{ formula, version }` — an earlier version of this code used the
+    // wrong key and the fetch always came back undefined. Verified against
+    // the deployed route by hitting /api/formulas/<id> directly.
     void (async () => {
       try {
         const res = await fetch(`/api/formulas/${encodeURIComponent(f.id)}`);
         const data = await res.json();
-        const tyu = data?.version?.targetYieldUnits;
+        const tyu = data?.latestVersion?.targetYieldUnits;
         if (typeof tyu !== "number" || !Number.isFinite(tyu) || tyu <= 0) return;
         setProduct(productUid, (cur) => {
           const first = (cur.quantities[0] ?? "").trim();
