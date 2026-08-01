@@ -558,17 +558,24 @@ function StartWorkflow() {
     // NOT `{ formula, version }` — an earlier version of this code used the
     // wrong key and the fetch always came back undefined. Verified against
     // the deployed route by hitting /api/formulas/<id> directly.
+    //
+    // Unit conversion: the formula stores Target Yield in gummy PIECES, but
+    // the workflow's Quantity field is in UNITS where 1 unit = 1,000 pieces
+    // (matches the sales convention used everywhere else on /start and the
+    // pricing calculator). So we divide by 1,000 before seeding. Rounded to
+    // the nearest whole unit — the rep can fine-tune if needed.
     void (async () => {
       try {
         const res = await fetch(`/api/formulas/${encodeURIComponent(f.id)}`);
         const data = await res.json();
         const tyu = data?.latestVersion?.targetYieldUnits;
         if (typeof tyu !== "number" || !Number.isFinite(tyu) || tyu <= 0) return;
+        const units = Math.max(1, Math.round(tyu / 1000));
         setProduct(productUid, (cur) => {
           const first = (cur.quantities[0] ?? "").trim();
           if (first !== "") return cur; // don't stomp a rep-typed value
           const nextQtys = [...cur.quantities];
-          nextQtys[0] = formatQty(String(Math.round(tyu)));
+          nextQtys[0] = formatQty(String(units));
           return { ...cur, quantities: nextQtys };
         });
       } catch {
