@@ -1665,7 +1665,14 @@ export default function PricingCalculator({
         });
         return;
       }
-      const perUnit = cc.totalUsdPerPiece * 1000;
+      // Prefer the server's cents-rounded per-thousand figure (computed
+      // from the unrounded per-piece total, matching the Costing tab's
+      // "Cost per Thousand" exactly). Fall back to ×1000 of the rounded
+      // per-piece total for API responses that pre-date the field.
+      const perUnit =
+        typeof cc.costPerThousandUsd === "number"
+          ? cc.costPerThousandUsd
+          : cc.totalUsdPerPiece * 1000;
       setUnitCost(formatValueInput(perUnit.toFixed(2)));
       setFormulaImport({
         status: "done",

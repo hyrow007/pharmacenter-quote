@@ -77,6 +77,12 @@ export type CostingComputed = {
    *  null unless material, labor AND overhead are all computable —
    *  same rule as the editor's top card (FormulaEditor 7891–7899). */
   totalUsdPerPiece: number | null;
+  /** True Cost per 1,000 pieces, rounded to cents from the UNROUNDED
+   *  per-piece total — matches the Costing tab's "Cost per Thousand"
+   *  readout exactly. The PricingCalculator imports THIS (its sales unit
+   *  is 1,000 gummies); deriving it from the topDec-rounded
+   *  totalUsdPerPiece × 1000 drifts by a few cents (e.g. 56.80 vs 56.77). */
+  costPerThousandUsd: number | null;
   basisTargetYieldUnits: number;
   basisBenchBatchG: number;
 };
@@ -584,6 +590,10 @@ export function computeCostingComputed(params: {
     testingUsdPerPiece: r(testingUsdPerPieceRaw),
     otherUsdPerPiece: null,
     totalUsdPerPiece: r(totalRaw),
+    // Cents-rounded from the RAW sum (see CostingComputed docs) — mirrors
+    // the Costing tab's Cost per Thousand, which also multiplies before
+    // rounding.
+    costPerThousandUsd: totalRaw === null ? null : roundTo(totalRaw * 1000, 2),
     basisTargetYieldUnits: targetYieldUnits,
     basisBenchBatchG: benchBatchG,
   };
