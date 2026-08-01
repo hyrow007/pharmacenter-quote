@@ -95,6 +95,17 @@ export type WorkflowProductOption = {
   // is already known in Fishbowl. Optional for back-compat — older workflow
   // products without the field behave like "purchase".
   sourceMode?: "purchase" | "stock";
+  // PC-manufactured gummy: identity of the pinned formula from the Formula
+  // catalog. When present the calculator offers "Import cost from formula",
+  // which pulls the live True Cost breakdown from /api/formulas/[id]
+  // (costingComputed). versionNum is the formula's DISPLAY version (the
+  // issued version shown in the editor meta strip, e.g. 2 → "v2") — NOT the
+  // internal version-row counter the detail API reports.
+  pinnedFormula?: {
+    formulaId: string;
+    formulaNumber: number;
+    versionNum: number;
+  } | null;
 };
 
 // Row shape we get back from the vendors table search. Mirrors the columns
@@ -103,6 +114,28 @@ type VendorRow = {
   id: string;
   name: string;
 };
+
+// State machine for the "Import cost from formula" action (task #165).
+// The fetch is live-on-click — we intentionally never snapshot dollar
+// values at pin time, so a re-saved formula reprices on the next import.
+type FormulaImportState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | {
+      status: "done";
+      /** True Cost converted to the calculator's sales unit ($/1,000 pcs). */
+      perUnit: number;
+      /** Per-piece component breakdown straight off costingComputed. */
+      breakdown: {
+        material: number | null;
+        labor: number | null;
+        overhead: number | null;
+        testing: number | null;
+      };
+      /** created_at of the version the costing came from — freshness stamp. */
+      savedAt: string | null;
+    };
 
 const VENDOR_SEARCH_LIMIT = 12;
 
@@ -1578,11 +1611,81 @@ export default function PricingCalculator({
     () => workflowProducts.find((p) => p.uid === workflowProductUid) ?? null,
     [workflowProducts, workflowProductUid],
   );
+  // True when the picked workflow product is a PC-manufactured gummy pinned
+  // to a Formula catalog entry. These behave like stock products for
+  // section visibility (no vendor, no inbound costs — the product never
+  // ships inbound to us; we make it), but with formula-specific copy and an
+  // "Import cost from formula" action on the Product cost section.
+  const isFormulaProduct = !!pickedProduct?.pinnedFormula;
   // True when the user picked an "existing stock" product on the workflow.
   // Hides every inbound-cost input (freight/insurance/duties/customs/lab/
   // other fees) because the landed cost is already known from Fishbowl —
   // the calculator collapses to unit cost × qty + margin = sale price.
-  const isStockProduct = pickedProduct?.sourceMode === "stock";
+  // Formula products ride the same rails: their True Cost import already
+  // includes labor, overhead, AND lab testing, so surfacing the inbound
+  // testing/freight inputs would double-count.
+  const isStockProduct =
+    pickedProduct?.sourceMode === "stock" || isFormulaProduct;
+
+  // --- Formula cost import (task #165) --------------------------------
+  // UNIT CONVENTION: the calculator's Quantity is in sales units where
+  // 1 unit = 1,000 gummies — the same convention /start uses when it seeds
+  // the workflow quantity from the formula's Target Yield. So the imported
+  // Cost per unit = costingComputed.totalUsdPerPiece × 1,000, which equals
+  // the "COST PER THOUSAND" readout on the formula's Costing tab.
+  const [formulaImport, setFormulaImport] = useState<FormulaImportState>({
+    status: "idle",
+  });
+  // Reset the import banner when the rep points the tab at a different
+  // workflow product — the breakdown belongs to the previous formula.
+  useEffect(() => {
+    setFormulaImport({ status: "idle" });
+  }, [workflowProductUid]);
+  const importFormulaCost = async () => {
+    const pin = pickedProduct?.pinnedFormula;
+    if (!pin || formulaImport.status === "loading") return;
+    setFormulaImport({ status: "loading" });
+    try {
+      const res = await fetch(
+        `/api/formulas/${encodeURIComponent(pin.formulaId)}`,
+      );
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `fetch_failed_${res.status}`);
+      }
+      // costingComputed is null when the formula has no Costing tab data —
+      // a setup gap the rep can fix, so say exactly that instead of a
+      // generic failure.
+      const cc = data?.latestVersion?.costingComputed;
+      if (!cc || typeof cc.totalUsdPerPiece !== "number") {
+        setFormulaImport({
+          status: "error",
+          message:
+            "This formula has no completed Costing tab yet. Open it in the Formula app, fill in the Costing tab (material sources, labor, overhead), hit Save, then import again.",
+        });
+        return;
+      }
+      const perUnit = cc.totalUsdPerPiece * 1000;
+      setUnitCost(formatValueInput(perUnit.toFixed(2)));
+      setFormulaImport({
+        status: "done",
+        perUnit,
+        breakdown: {
+          material: cc.materialUsdPerPiece ?? null,
+          labor: cc.laborUsdPerPiece ?? null,
+          overhead: cc.overheadUsdPerPiece ?? null,
+          testing: cc.testingUsdPerPiece ?? null,
+        },
+        savedAt: data?.latestVersion?.createdAt ?? null,
+      });
+    } catch {
+      setFormulaImport({
+        status: "error",
+        message:
+          "Couldn't reach the Formula app. Check your connection and try again.",
+      });
+    }
+  };
 
   // --- Vendor picker --------------------------------------------------
   // Mirrors the customer selector UX on /start: toggle between existing
@@ -2836,6 +2939,82 @@ export default function PricingCalculator({
 
       <section className="pricing__section">
         <h2 className="pricing__section-title">Product cost</h2>
+        {isFormulaProduct && pickedProduct?.pinnedFormula ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                type="button"
+                onClick={importFormulaCost}
+                disabled={formulaImport.status === "loading"}
+                style={{
+                  background: "#0f766e",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor:
+                    formulaImport.status === "loading" ? "wait" : "pointer",
+                  opacity: formulaImport.status === "loading" ? 0.7 : 1,
+                }}
+              >
+                {formulaImport.status === "loading"
+                  ? "Importing…"
+                  : `Import cost from F${String(
+                      pickedProduct.pinnedFormula.formulaNumber,
+                    ).padStart(4, "0")} (v${pickedProduct.pinnedFormula.versionNum})`}
+              </button>
+              {formulaImport.status === "done" ? (
+                <span style={{ fontSize: 13, color: "#0f766e", fontWeight: 600 }}>
+                  Imported ${formulaImport.perUnit.toFixed(2)} / unit
+                </span>
+              ) : null}
+            </div>
+            {formulaImport.status === "done" ? (
+              <p className="pricing__hint pricing__hint--inline">
+                Per 1,000 gummies:{" "}
+                {(
+                  [
+                    ["Material", formulaImport.breakdown.material],
+                    ["Labor", formulaImport.breakdown.labor],
+                    ["Overhead", formulaImport.breakdown.overhead],
+                    ["Lab testing", formulaImport.breakdown.testing],
+                  ] as Array<[string, number | null]>
+                )
+                  .filter(([, v]) => v !== null)
+                  .map(([k, v]) => `${k} $${((v as number) * 1000).toFixed(2)}`)
+                  .join(" · ")}
+                {formulaImport.savedAt
+                  ? ` — costing saved ${new Date(
+                      formulaImport.savedAt,
+                    ).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}`
+                  : ""}
+                . Re-import after R&amp;D re-saves the formula to pick up new
+                material prices.
+              </p>
+            ) : null}
+            {formulaImport.status === "error" ? (
+              <p
+                className="pricing__hint pricing__hint--inline"
+                style={{ color: "#b91c1c" }}
+              >
+                {formulaImport.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="pricing__row">
           <label className="pricing__field">
             <span className="pricing__label">Cost per unit</span>
@@ -2879,11 +3058,25 @@ export default function PricingCalculator({
             className="pricing__hint"
             style={{ color: "#0f766e", fontWeight: 500 }}
           >
-            This product is <strong>existing stock</strong>. The landed cost is
-            already in Fishbowl, so freight, duties, insurance, customs broker,
-            lab testing, and other fees don&rsquo;t apply here. Enter the known
-            landed unit cost above and the calculator will go straight to the
-            sale price using just your margin.
+            {isFormulaProduct ? (
+              <>
+                This product is <strong>manufactured in-house</strong> from a
+                formula. The imported cost per unit is the formula&rsquo;s True
+                Cost — materials, direct labor, overhead, and lab testing —
+                so freight, duties, insurance, and customs broker fees
+                don&rsquo;t apply. The calculator goes straight to the sale
+                price using just your margin.
+              </>
+            ) : (
+              <>
+                This product is <strong>existing stock</strong>. The landed
+                cost is already in Fishbowl, so freight, duties, insurance,
+                customs broker, lab testing, and other fees don&rsquo;t apply
+                here. Enter the known landed unit cost above and the
+                calculator will go straight to the sale price using just your
+                margin.
+              </>
+            )}
           </p>
         </section>
       ) : (
@@ -3485,9 +3678,11 @@ export default function PricingCalculator({
               <tr>
                 <td>Source</td>
                 <td>
-                  {isStockProduct
-                    ? "Existing stock (landed cost from Fishbowl)"
-                    : "Purchase needed"}
+                  {isFormulaProduct
+                    ? "PC-manufactured (True Cost from Formula app)"
+                    : isStockProduct
+                      ? "Existing stock (landed cost from Fishbowl)"
+                      : "Purchase needed"}
                 </td>
               </tr>
             ) : null}

@@ -170,7 +170,15 @@ export default async function PricingPage({ searchParams }: Ctx) {
       workflowProducts = products.map((p, idx) => {
         let label = `Product ${idx + 1}`;
         let sub: string | null = null;
-        if (p.mode === "new") {
+        if (p.pinnedFormula) {
+          // PC-manufactured gummy: the formula IS the product identity.
+          // Label with the formula handle so the dropdown reads the same
+          // as the Formula catalog (F0001 · Neurobrocc Pectin Gummies).
+          const f = p.pinnedFormula;
+          const fNum = `F${String(f.formulaNumber).padStart(4, "0")}`;
+          label = `${fNum} · ${f.name}`;
+          sub = f.pcBkCode ? `Code ${f.pcBkCode}` : "PC-manufactured";
+        } else if (p.mode === "new") {
           label = p.newProduct?.name_desc?.trim() || label;
           sub = "New product";
         } else if (p.productId && productNameMap[p.productId]) {
@@ -191,6 +199,17 @@ export default async function PricingPage({ searchParams }: Ctx) {
           // Carry sourceMode through so the calculator can skip inbound
           // costs for products we already have in stock.
           sourceMode: p.sourceMode ?? "purchase",
+          // Identity-only formula pin (see PinnedFormula in lib/workflows).
+          // The calculator uses this to offer "Import cost from formula",
+          // which fetches live costingComputed from /api/formulas/[id] —
+          // never a snapshotted dollar value.
+          pinnedFormula: p.pinnedFormula
+            ? {
+                formulaId: p.pinnedFormula.formulaId,
+                formulaNumber: p.pinnedFormula.formulaNumber,
+                versionNum: p.pinnedFormula.versionNum,
+              }
+            : null,
         };
       });
     }
