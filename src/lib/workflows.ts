@@ -28,6 +28,31 @@ export type WorkflowMode = "existing" | "new";
 //     excludes this product (Rosy doesn't need to source it).
 export type ProductSourceMode = "purchase" | "stock";
 
+// Pinned formula snapshot for PC-manufactured gummy products (task #164 /
+// user-driven follow-up). The formula catalog on formula.pharmacenter.app
+// owns the canonical record; we snapshot the identity fields here so the
+// workflow listing + review page can show the formula without a fetch.
+// Costing / spec data is read on demand from `/api/formulas/[id]` at
+// pricing time — the pinned snapshot is intentionally identity-only so
+// stale unit-cost values never leak into a quote.
+export type PinnedFormula = {
+  formulaId: string;
+  // Numeric version we pinned. Today we default to the formula's current
+  // `latestVersionNum` at pin time; a later phase can add explicit version
+  // pinning + audit stability.
+  versionNum: number;
+  // Sequential formula number, e.g. 1 → renders as "F0001". Stored as a
+  // number so future zero-padding tweaks stay a formatting concern.
+  formulaNumber: number;
+  // R&D-facing product code from the Formula catalog (e.g. PC-BK-01234).
+  // Optional — a fresh formula can be TBD.
+  pcBkCode: string | null;
+  // Display name at pin time.
+  name: string;
+  // Optional flavor tag from the formula card.
+  flavor: string | null;
+};
+
 export type ProductEntry = {
   uid: string;
   mode: WorkflowMode;
@@ -38,6 +63,11 @@ export type ProductEntry = {
   // Optional for backward compatibility with workflows saved before this
   // field existed — those rows behave like "purchase" by default.
   sourceMode?: ProductSourceMode;
+  // PC-manufactured gummies only: the formula this product is made from.
+  // Optional so pre-formula workflows still parse. When set, the formula
+  // is the product identity — the Fishbowl ProductPicker is skipped and
+  // downstream pricing pulls unit cost from the Formula app's costing tab.
+  pinnedFormula?: PinnedFormula;
   // Hydrated display fields — not persisted to JSONB. Marked optional so the
   // server-loaded rows (which won't have them) typecheck.
   _name?: string | null;

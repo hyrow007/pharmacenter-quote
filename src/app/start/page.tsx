@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
 import { formatQuoteNumber } from "@/lib/workflows";
-import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry } from "@/lib/workflows";
+import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
 // ----- catalogue ----------------------------------------------------------
@@ -66,7 +66,25 @@ const STORAGE_KEY = "quote.workflow.v1";
 
 type CustomerRow = { id: string; name: string; default_ship_to: string | null };
 type ProductRow = Pick<Product, "id" | "name" | "fp_code" | "default_unit">;
+// Shape returned by GET /api/formulas — mirrors the fields the search
+// endpoint sends back (identity-only, no version bodies). We keep this
+// local because the /api/formulas response includes extra fields we
+// don't need in the picker.
+type FormulaRow = {
+  id: string;
+  formulaNumber: number;
+  pcBkCode: string | null;
+  name: string;
+  shape: string | null;
+  flavor: string | null;
+  latestVersionNum: number;
+};
 type Mode = "existing" | "new";
+
+// Format a formula number as the display code (1 → "F0001").
+function fmtFormulaCode(n: number): string {
+  return `F${String(n).padStart(4, "0")}`;
+}
 
 // Re-export the shared shapes under local names so the existing JSX (which
 // references `ProductEntry` / `WorkflowState`) keeps compiling.
@@ -458,6 +476,80 @@ function StartWorkflow() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.products.map((p) => p.productId).join("|")]);
 
+  // ----- per-product formula search (PC-manufactured gummies only) -----
+  const [formulaSearches, setFormulaSearches] = useState<Record<string, string>>({});
+  const [formulaResults, setFormulaResults] = useState<Record<string, FormulaRow[]>>({});
+
+  const setFormulaSearch = (uid: string, v: string) =>
+    setFormulaSearches((m) => ({ ...m, [uid]: v }));
+
+  // Debounced formula search — only active when the workflow source is
+  // Manufactured at PharmaCenter + form = gummy. Hits GET /api/formulas
+  // same-origin (middleware exempts /api/formulas from the formula-host
+  // redirect on purpose).
+  useEffect(() => {
+    // Skip the effect entirely when the current workflow shape wouldn't
+    // ever show the picker. Cheaper than firing empty timeouts per product.
+    if (state.source !== "pharmacenter" || state.form !== "gummy") return;
+    const handles: ReturnType<typeof setTimeout>[] = [];
+    for (const p of state.products) {
+      if (p.pinnedFormula) continue;
+      const term = (formulaSearches[p.uid] ?? "").trim();
+      if (term.length === 0) {
+        setFormulaResults((m) => ({ ...m, [p.uid]: [] }));
+        continue;
+      }
+      const t = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/formulas?q=${encodeURIComponent(term)}`);
+          const data = await res.json();
+          if (data?.ok && Array.isArray(data.formulas)) {
+            setFormulaResults((m) => ({ ...m, [p.uid]: data.formulas as FormulaRow[] }));
+          }
+        } catch {
+          // Transient — leave the previous results in place so a flaky
+          // network doesn't blank the dropdown mid-search.
+        }
+      }, 200);
+      handles.push(t);
+    }
+    return () => { for (const h of handles) clearTimeout(h); };
+  }, [formulaSearches, state.products, state.source, state.form]);
+
+  // Pinning a formula on a product row is a two-step write: (1) stash the
+  // identity snapshot on the product entry so the workflow can display it
+  // without a fetch, and (2) mirror the formula name into newProduct.name_desc
+  // so existing downstream code (workflow list summary, review page) that
+  // treats mode:"new" + name_desc as the display path keeps working
+  // unchanged. Fishbowl productId is cleared — the formula is the identity.
+  const pickFormulaFor = (productUid: string, f: FormulaRow) => {
+    setProduct(productUid, (cur) => ({
+      ...cur,
+      pinnedFormula: {
+        formulaId: f.id,
+        versionNum: f.latestVersionNum,
+        formulaNumber: f.formulaNumber,
+        pcBkCode: f.pcBkCode,
+        name: f.name,
+        flavor: f.flavor,
+      },
+      mode: "new",
+      productId: null,
+      _name: null,
+      _code: null,
+      newProduct: {
+        name_desc: f.name,
+        notes: cur.newProduct.notes,
+      },
+    }));
+    setFormulaSearch(productUid, "");
+    setFormulaResults((m) => ({ ...m, [productUid]: [] }));
+  };
+
+  const clearPinnedFormula = (productUid: string) => {
+    setProduct(productUid, (cur) => ({ ...cur, pinnedFormula: undefined }));
+  };
+
   // ----- derived flags -------------------------------------------------
   const isBulk = state.type === "bulk";
   const isContractPackaging = state.type === "contract-packaging";
@@ -465,6 +557,11 @@ function StartWorkflow() {
   // state.form — Bulk picks a dosage form, CP picks a packaging type.
   const showFormSection = isBulk || isContractPackaging;
   const showSourceSection = isBulk && state.form === "gummy";
+  // Per-product formula picker: only for PC-manufactured gummies. When
+  // active, the ProductPicker + Purchase/Stock toggle are hidden — the
+  // formula IS the product identity, and PC-made products aren't sourced
+  // via the purchase/stock flow.
+  const showFormulaPicker = state.source === "pharmacenter" && state.form === "gummy";
   // Contract Packaging adds a THIRD pill row — what dosage form is being
   // packaged — which only opens once the packaging type is locked in.
   const showDosageSection = isContractPackaging && !!state.form;
@@ -487,9 +584,15 @@ function StartWorkflow() {
   const sourceOk = !showSourceSection || !!state.source;
 
   const productsOk = state.products.every((p) => {
-    const productPicked = p.mode === "existing" ? !!p.productId : !!p.newProduct.name_desc.trim();
     const qtyOk = p.quantities.some((q) => q.trim().length > 0 && /^\d+(\.\d+)?$/.test(q.replace(/,/g, "")));
-    return productPicked && qtyOk;
+    if (!qtyOk) return false;
+    // PC-manufactured gummies: the pinned formula IS the product identity.
+    // No Fishbowl productId or new-product name_desc required (we auto-fill
+    // name_desc from the formula on pick anyway, but the pinned snapshot is
+    // the canonical Save gate).
+    if (showFormulaPicker) return !!p.pinnedFormula;
+    const productPicked = p.mode === "existing" ? !!p.productId : !!p.newProduct.name_desc.trim();
+    return productPicked;
   });
 
   const missing: string[] = [];
@@ -498,7 +601,13 @@ function StartWorkflow() {
   if (!formOk) missing.push(formLabel);
   if (!dosageOk) missing.push("Dosage form");
   if (!sourceOk) missing.push("Source");
-  if (!productsOk) missing.push("Each product needs a name and at least one quantity");
+  if (!productsOk) {
+    missing.push(
+      showFormulaPicker
+        ? "Each product needs a formula and at least one quantity"
+        : "Each product needs a name and at least one quantity",
+    );
+  }
 
   const canSubmit = missing.length === 0;
 
@@ -940,9 +1049,11 @@ function StartWorkflow() {
                     Fishbowl). Default is Purchase.
                     Hidden for Contract Packaging — the customer brings the
                     bulk to PharmaCenter, so there's no sourcing decision
-                    on our end. The underlying sourceMode stays at its
-                    "purchase" default so downstream logic doesn't break. */}
-                {!isContractPackaging ? (
+                    on our end. Also hidden for PC-manufactured gummies —
+                    we make it in-house, so neither "purchase" nor
+                    "existing stock" applies. sourceMode stays at its
+                    default so downstream logic doesn't break. */}
+                {!isContractPackaging && !showFormulaPicker ? (
                   <div style={{ marginBottom: 12 }}>
                     <span style={labelText}>Source</span>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -1008,18 +1119,29 @@ function StartWorkflow() {
                   </div>
                 ) : null}
 
-                <ProductPicker
-                  entry={p}
-                  results={productResults[p.uid] ?? []}
-                  search={productSearches[p.uid] ?? ""}
-                  onSearch={(v) => setProductSearch(p.uid, v)}
-                  onPick={(pr) => pickProductFor(p.uid, pr)}
-                  onSetMode={(m) => setProduct(p.uid, (cur) => ({ ...cur, mode: m }))}
-                  onChangeProduct={() => setProduct(p.uid, (cur) => ({ ...cur, productId: null, _name: null, _code: null }))}
-                  onNewNameChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, name_desc: v } }))}
-                  onNewNotesChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, notes: v } }))}
-                  newProductPlaceholder={newProductPlaceholder}
-                />
+                {showFormulaPicker ? (
+                  <FormulaPicker
+                    entry={p}
+                    results={formulaResults[p.uid] ?? []}
+                    search={formulaSearches[p.uid] ?? ""}
+                    onSearch={(v) => setFormulaSearch(p.uid, v)}
+                    onPick={(f) => pickFormulaFor(p.uid, f)}
+                    onClear={() => clearPinnedFormula(p.uid)}
+                  />
+                ) : (
+                  <ProductPicker
+                    entry={p}
+                    results={productResults[p.uid] ?? []}
+                    search={productSearches[p.uid] ?? ""}
+                    onSearch={(v) => setProductSearch(p.uid, v)}
+                    onPick={(pr) => pickProductFor(p.uid, pr)}
+                    onSetMode={(m) => setProduct(p.uid, (cur) => ({ ...cur, mode: m }))}
+                    onChangeProduct={() => setProduct(p.uid, (cur) => ({ ...cur, productId: null, _name: null, _code: null }))}
+                    onNewNameChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, name_desc: v } }))}
+                    onNewNotesChange={(v) => setProduct(p.uid, (cur) => ({ ...cur, newProduct: { ...cur.newProduct, notes: v } }))}
+                    newProductPlaceholder={newProductPlaceholder}
+                  />
+                )}
 
                 {/* Quantities */}
                 <div style={{ marginTop: 14 }}>
@@ -1208,5 +1330,104 @@ function ProductPicker(props: {
         </>
       )}
     </>
+  );
+}
+
+// ----- FormulaPicker (sub-component) ------------------------------------
+//
+// Shown per-product when the workflow source is Manufactured at PharmaCenter
+// AND form = gummy. Search hits GET /api/formulas?q=<term> same-origin. Once
+// picked, the formula identity is snapshotted onto the ProductEntry and the
+// row collapses to a compact "selected" card with a Change affordance —
+// mirrors the ProductPicker UX so reps only have one interaction pattern to
+// learn.
+//
+// Deliberately identity-only. Cost is fetched fresh at pricing time from
+// /api/formulas/[id] — pinning cost here would let stale unit-cost values
+// leak into a quote if the formula's costing tab changes after the
+// workflow is saved.
+function FormulaPicker(props: {
+  entry: ProductEntry;
+  results: FormulaRow[];
+  search: string;
+  onSearch: (v: string) => void;
+  onPick: (f: FormulaRow) => void;
+  onClear: () => void;
+}) {
+  const { entry: p, results, search, onSearch, onPick, onClear } = props;
+  const pinned = p.pinnedFormula;
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <span style={labelText}>Formula</span>
+      <div style={{ marginTop: 6 }}>
+        {pinned ? (
+          <div style={selectedRow}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-1)" }}>
+                {pinned.name}
+              </div>
+              <div style={{ fontSize: 13, marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)', fontWeight: 700 }}>
+                  {fmtFormulaCode(pinned.formulaNumber)}
+                </span>
+                {pinned.pcBkCode ? (
+                  <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)', fontWeight: 700 }}>
+                    · {pinned.pcBkCode}
+                  </span>
+                ) : null}
+                <span style={{ color: "var(--ink-3)" }}>· v{pinned.versionNum}</span>
+                {pinned.flavor ? <span style={{ color: "var(--ink-3)" }}>· {pinned.flavor}</span> : null}
+              </div>
+            </div>
+            <button type="button" style={changeBtn} onClick={onClear}>Change</button>
+          </div>
+        ) : (
+          <>
+            <input
+              type="text"
+              placeholder="Search formulas by code, name, or flavor…"
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              style={inputStyle}
+            />
+            {results.length > 0 ? (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {results.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => onPick(f)}
+                    style={{ textAlign: "left", padding: "10px 12px", background: "#fff", border: "1px solid #e3dcc9", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-1)" }}>{f.name}</div>
+                    <div style={{ fontSize: 12, marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)', fontWeight: 700 }}>
+                        {fmtFormulaCode(f.formulaNumber)}
+                      </span>
+                      {f.pcBkCode ? (
+                        <span style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', color: 'var(--teal-700)', fontWeight: 700 }}>
+                          · {f.pcBkCode}
+                        </span>
+                      ) : null}
+                      <span style={{ color: "var(--ink-3)" }}>· v{f.latestVersionNum}</span>
+                      {f.flavor ? <span style={{ color: "var(--ink-3)" }}>· {f.flavor}</span> : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : search.trim().length > 0 ? (
+              <div style={{ marginTop: 10, fontSize: 12, color: "var(--ink-3)", fontStyle: "italic" }}>
+                No formulas matched. Try a different search — or create the formula in the Formula catalog first.
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, fontSize: 12, color: "var(--ink-3)" }}>
+                Type to search the Formula catalog.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
