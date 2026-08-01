@@ -139,6 +139,11 @@ type FormulaImportState =
         overhead: number | null;
         testing: number | null;
       };
+      /** True Cost / gummy (topDec-rounded, same as the Costing tab). */
+      totalPerPiece: number | null;
+      /** Macro denominations — mirror the Costing tab's COSTS card. */
+      costPerKg: number | null;
+      totalBatchCost: number | null;
       /** created_at of the version the costing came from — freshness stamp. */
       savedAt: string | null;
     };
@@ -1689,6 +1694,10 @@ export default function PricingCalculator({
           overhead: cc.overheadUsdPerPiece ?? null,
           testing: cc.testingUsdPerPiece ?? null,
         },
+        totalPerPiece: cc.totalUsdPerPiece ?? null,
+        costPerKg: typeof cc.costPerKgUsd === "number" ? cc.costPerKgUsd : null,
+        totalBatchCost:
+          typeof cc.totalBatchCostUsd === "number" ? cc.totalBatchCostUsd : null,
         savedAt: data?.latestVersion?.createdAt ?? null,
       });
     } catch {
@@ -3004,31 +3013,149 @@ export default function PricingCalculator({
               ) : null}
             </div>
             {formulaImport.status === "done" ? (
-              <p className="pricing__hint pricing__hint--inline">
-                Per 1,000 gummies:{" "}
-                {(
-                  [
-                    ["Material", formulaImport.breakdown.material],
-                    ["Labor", formulaImport.breakdown.labor],
-                    ["Overhead", formulaImport.breakdown.overhead],
-                    ["Lab testing", formulaImport.breakdown.testing],
-                  ] as Array<[string, number | null]>
-                )
-                  .filter(([, v]) => v !== null)
-                  .map(([k, v]) => `${k} $${((v as number) * 1000).toFixed(2)}`)
-                  .join(" · ")}
-                {formulaImport.savedAt
-                  ? ` — costing saved ${new Date(
-                      formulaImport.savedAt,
-                    ).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}`
-                  : ""}
-                . Re-import after R&amp;D re-saves the formula to pick up new
-                material prices.
-              </p>
+              <>
+                {/* Full COSTS card — mirrors the formula editor's Costing-tab
+                    readout so the rep sees the same figures R&D sees, without
+                    leaving the calculator. Row 1: per-gummy components with
+                    their share of True Cost. Row 2: macro denominations. */}
+                <div
+                  style={{
+                    border: "1px solid #d6e3e1",
+                    borderRadius: 10,
+                    background: "#fdfbf7",
+                    padding: "12px 16px",
+                    marginTop: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      color: "#0f766e",
+                      textTransform: "uppercase",
+                      marginBottom: 10,
+                    }}
+                  >
+                    Formula costs (from Costing tab)
+                  </div>
+                  {(() => {
+                    const total = formulaImport.totalPerPiece;
+                    const pct = (v: number | null) =>
+                      v !== null && total !== null && total > 0
+                        ? ` (${((v / total) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`
+                        : "";
+                    const gummy = (v: number | null) =>
+                      v !== null ? `$${v.toFixed(4)}` : "—";
+                    const money = (v: number | null) =>
+                      v !== null
+                        ? v.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })
+                        : "—";
+                    const cell = (label: string, value: string, sub?: string) => (
+                      <div key={label} style={{ minWidth: 150 }}>
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            letterSpacing: "0.06em",
+                            color: "#7a8a88",
+                            textTransform: "uppercase",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: "#134e4a",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {value}
+                          {sub ? (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                color: "#8a9498",
+                                marginLeft: 3,
+                              }}
+                            >
+                              {sub}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                    return (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "10px 22px",
+                            marginBottom: 10,
+                          }}
+                        >
+                          {cell(
+                            "Material cost / gummy",
+                            gummy(formulaImport.breakdown.material),
+                            pct(formulaImport.breakdown.material).trim(),
+                          )}
+                          {cell(
+                            "Direct labor cost / gummy",
+                            gummy(formulaImport.breakdown.labor),
+                            pct(formulaImport.breakdown.labor).trim(),
+                          )}
+                          {cell(
+                            "Overhead cost / gummy",
+                            gummy(formulaImport.breakdown.overhead),
+                            pct(formulaImport.breakdown.overhead).trim(),
+                          )}
+                          {cell(
+                            "Lab testing cost / gummy",
+                            gummy(formulaImport.breakdown.testing),
+                            pct(formulaImport.breakdown.testing).trim(),
+                          )}
+                          {cell("True cost / gummy", gummy(total))}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "10px 22px",
+                          }}
+                        >
+                          {cell("Cost per thousand", money(formulaImport.perUnit))}
+                          {cell("Cost per kg", money(formulaImport.costPerKg))}
+                          {cell(
+                            "Total batch cost",
+                            money(formulaImport.totalBatchCost),
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+                <p className="pricing__hint pricing__hint--inline">
+                  {formulaImport.savedAt
+                    ? `Costing saved ${new Date(
+                        formulaImport.savedAt,
+                      ).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}. `
+                    : ""}
+                  Re-import after R&amp;D re-saves the formula to pick up new
+                  material prices.
+                </p>
+              </>
             ) : null}
             {formulaImport.status === "error" ? (
               <p

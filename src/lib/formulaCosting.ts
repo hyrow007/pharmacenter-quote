@@ -83,6 +83,14 @@ export type CostingComputed = {
    *  is 1,000 gummies); deriving it from the topDec-rounded
    *  totalUsdPerPiece × 1000 drifts by a few cents (e.g. 56.80 vs 56.77). */
   costPerThousandUsd: number | null;
+  /** True Cost per kg of finished gummies — raw total × (1000 /
+   *  gummyPieceWeightG), cents-rounded. Mirrors the Costing tab's
+   *  "Cost per Kg" readout (FormulaEditor 7929–7932). Null when the
+   *  piece weight isn't set. */
+  costPerKgUsd: number | null;
+  /** True Cost across the whole run — raw total × targetYieldUnits,
+   *  cents-rounded. Mirrors "Total Batch Cost" (FormulaEditor 7934–7937). */
+  totalBatchCostUsd: number | null;
   basisTargetYieldUnits: number;
   basisBenchBatchG: number;
 };
@@ -594,6 +602,14 @@ export function computeCostingComputed(params: {
     // the Costing tab's Cost per Thousand, which also multiplies before
     // rounding.
     costPerThousandUsd: totalRaw === null ? null : roundTo(totalRaw * 1000, 2),
+    costPerKgUsd:
+      totalRaw === null || !(version.gummyPieceWeightG > 0)
+        ? null
+        : roundTo(totalRaw * (1000 / version.gummyPieceWeightG), 2),
+    totalBatchCostUsd:
+      totalRaw === null || targetYieldUnits <= 0
+        ? null
+        : roundTo(totalRaw * targetYieldUnits, 2),
     basisTargetYieldUnits: targetYieldUnits,
     basisBenchBatchG: benchBatchG,
   };
