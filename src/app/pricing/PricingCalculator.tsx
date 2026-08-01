@@ -3607,10 +3607,19 @@ export default function PricingCalculator({
               {/* Customs broker retired — USA/domestic has no broker fees
                   (no border to clear), international auto-computes from the
                   baseline. */}
-              <Row label="Lab testing" value={usd.format(num(testing))} muted />
-              <Row label="Other costs" value={usd.format(num(otherCosts))} muted />
-              {shippingOrigin === "usa" ? (
-                <Row label="Handling (domestic)" value={usd.format(num(handling))} muted />
+              {/* Inbound-cost rows are meaningless for stock / PC-manufactured
+                  products — the math zeroes them (computeResults blanks the
+                  inputs), but the DISPLAY was reading the raw input state so
+                  the $500/$200 defaults still showed on the Results card.
+                  Hide them entirely when the quote type doesn't include them. */}
+              {!isStockProduct ? (
+                <>
+                  <Row label="Lab testing" value={usd.format(num(testing))} muted />
+                  <Row label="Other costs" value={usd.format(num(otherCosts))} muted />
+                  {shippingOrigin === "usa" ? (
+                    <Row label="Handling (domestic)" value={usd.format(num(handling))} muted />
+                  ) : null}
+                </>
               ) : null}
               <Row
                 label="Landed cost (in warehouse)"
@@ -3784,19 +3793,26 @@ export default function PricingCalculator({
                 "Other fees" was replaced by "Other costs" (bound to the
                 new `otherCosts` field). Handling stays as a USA-only input
                 until we build out the domestic model (task #157). */}
-            <tr>
-              <td>Lab testing</td>
-              <td>{usd.format(num(testing))}</td>
-            </tr>
-            <tr>
-              <td>Other costs</td>
-              <td>{usd.format(num(otherCosts))}</td>
-            </tr>
-            {shippingOrigin === "usa" ? (
-              <tr>
-                <td>Handling</td>
-                <td>{usd.format(num(handling))}</td>
-              </tr>
+            {/* Hidden for stock / PC-manufactured — these inputs aren't part
+                of the landed cost for those quote types (same gate as the
+                on-screen Results card). */}
+            {!isStockProduct ? (
+              <>
+                <tr>
+                  <td>Lab testing</td>
+                  <td>{usd.format(num(testing))}</td>
+                </tr>
+                <tr>
+                  <td>Other costs</td>
+                  <td>{usd.format(num(otherCosts))}</td>
+                </tr>
+                {shippingOrigin === "usa" ? (
+                  <tr>
+                    <td>Handling</td>
+                    <td>{usd.format(num(handling))}</td>
+                  </tr>
+                ) : null}
+              </>
             ) : null}
             {shippingOrigin === "international" && !isStockProduct && num(deliveryOverride) > 0 ? (
               <tr>
