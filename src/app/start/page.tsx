@@ -516,12 +516,17 @@ function StartWorkflow() {
     return () => { for (const h of handles) clearTimeout(h); };
   }, [formulaSearches, state.products, state.source, state.form]);
 
-  // Pinning a formula on a product row is a two-step write: (1) stash the
-  // identity snapshot on the product entry so the workflow can display it
-  // without a fetch, and (2) mirror the formula name into newProduct.name_desc
-  // so existing downstream code (workflow list summary, review page) that
-  // treats mode:"new" + name_desc as the display path keeps working
-  // unchanged. Fishbowl productId is cleared — the formula is the identity.
+  // Pinning a formula on a product row is a three-step write:
+  //   (1) stash the identity snapshot on the product entry so the workflow
+  //       can display it without a fetch,
+  //   (2) mirror the formula name into newProduct.name_desc so existing
+  //       downstream code (workflow list summary, review page) that treats
+  //       mode:"new" + name_desc as the display path keeps working unchanged.
+  //       Fishbowl productId is cleared — the formula IS the identity, and
+  //   (3) after the sync write, fire an async GET /api/formulas/[id] and
+  //       seed the first Quantity tier from the formula's Target Yield
+  //       (the costing-tab production target). We only seed when the tier is
+  //       still empty so we don't stomp on a number the rep already typed.
   const pickFormulaFor = (productUid: string, f: FormulaRow) => {
     setProduct(productUid, (cur) => ({
       ...cur,
@@ -544,6 +549,27 @@ function StartWorkflow() {
     }));
     setFormulaSearch(productUid, "");
     setFormulaResults((m) => ({ ...m, [productUid]: [] }));
+
+    // Async default of first quantity tier from the formula's Target Yield.
+    // Non-fatal: on network hiccup we simply leave the tier empty and let
+    // the rep type it — no dead-locking spinner, no alert.
+    void (async () => {
+      try {
+        const res = await fetch(`/api/formulas/${encodeURIComponent(f.id)}`);
+        const data = await res.json();
+        const tyu = data?.version?.targetYieldUnits;
+        if (typeof tyu !== "number" || !Number.isFinite(tyu) || tyu <= 0) return;
+        setProduct(productUid, (cur) => {
+          const first = (cur.quantities[0] ?? "").trim();
+          if (first !== "") return cur; // don't stomp a rep-typed value
+          const nextQtys = [...cur.quantities];
+          nextQtys[0] = formatQty(String(Math.round(tyu)));
+          return { ...cur, quantities: nextQtys };
+        });
+      } catch {
+        // silent — rep can type the qty manually
+      }
+    })();
   };
 
   const clearPinnedFormula = (productUid: string) => {
