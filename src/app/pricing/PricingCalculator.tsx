@@ -1638,6 +1638,123 @@ export default function PricingCalculator({
   const isStockProduct =
     pickedProduct?.sourceMode === "stock" || isFormulaProduct;
 
+
+  // --- Vendor picker --------------------------------------------------
+  // Mirrors the customer selector UX on /start: toggle between existing
+  // (autocomplete from vendors table) and new (free-text). All vendor
+  // fields are tab-scoped — switching tabs replaces them via applyTab.
+  const [vendorMode, setVendorMode] = useState<VendorMode>(
+    () => tabs[0]?.vendorMode ?? "existing",
+  );
+  const [vendorId, setVendorId] = useState<string | null>(
+    () => tabs[0]?.vendorId ?? null,
+  );
+  const [vendorName, setVendorName] = useState<string | null>(
+    () => tabs[0]?.vendorName ?? null,
+  );
+  const [vendorSearch, setVendorSearch] = useState<string>(
+    () => tabs[0]?.vendorSearch ?? "",
+  );
+  const [vendorResults, setVendorResults] = useState<VendorRow[]>([]);
+  const [vendorSearching, setVendorSearching] = useState(false);
+  // True when the user is actively browsing the dropdown — once they pick a
+  // vendor we collapse the search list. The "Change" link reopens it.
+  const [vendorEditing, setVendorEditing] = useState(
+    () => tabs[0]?.vendorEditing ?? true,
+  );
+  const [newVendorName, setNewVendorName] = useState<string>(
+    () => tabs[0]?.newVendorName ?? "",
+  );
+
+  // Debounced search against the vendors table. We use ilike so any
+  // substring matches, matching how the customer selector behaves.
+  useEffect(() => {
+    if (vendorMode !== "existing") {
+      setVendorResults([]);
+      return;
+    }
+    const term = vendorSearch.trim();
+    if (term.length === 0) {
+      setVendorResults([]);
+      return;
+    }
+    const sb = supabase;
+    if (!sb) return;
+    setVendorSearching(true);
+    const handle = setTimeout(async () => {
+      const { data, error } = await sb
+        .from("vendors")
+        .select("id, name")
+        .eq("active", true)
+        .ilike("name", `%${term}%`)
+        .order("name")
+        .limit(VENDOR_SEARCH_LIMIT);
+      // Table may not exist yet in the schema (early bootstrap); swallow
+      // and treat as "no results" so the UI doesn't surface a scary error.
+      if (error) {
+        console.warn("vendors search failed:", error.message);
+        setVendorResults([]);
+      } else {
+        setVendorResults((data ?? []) as VendorRow[]);
+      }
+      setVendorSearching(false);
+    }, 180);
+    return () => {
+      clearTimeout(handle);
+      setVendorSearching(false);
+    };
+  }, [vendorSearch, vendorMode]);
+
+  const pickVendor = (v: VendorRow) => {
+    setVendorId(v.id);
+    setVendorName(v.name);
+    setVendorSearch(v.name);
+    setVendorEditing(false);
+    setVendorResults([]);
+  };
+
+  const resetVendor = () => {
+    setVendorId(null);
+    setVendorName(null);
+    setVendorSearch("");
+    setVendorEditing(true);
+    setVendorResults([]);
+  };
+
+  const onVendorModeChange = (next: VendorMode) => {
+    setVendorMode(next);
+    // Clear cross-mode state so we don't keep stale picks lingering.
+    setVendorId(null);
+    setVendorName(null);
+    setVendorSearch("");
+    setVendorResults([]);
+    setVendorEditing(true);
+  };
+
+  const selectedVendorDisplay =
+    vendorMode === "existing"
+      ? vendorName
+      : newVendorName.trim().length > 0
+        ? newVendorName.trim()
+        : null;
+
+  // --- Inputs ----------------------------------------------------------
+  // Every cost-input hook seeds from tabs[0] so a workflow that already has
+  // saved tabs lands on the first tab pre-filled. Switching tabs writes the
+  // current values into the previous tab and replays setters with the new
+  // tab's values (see switchTab below).
+  const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>(
+    () => tabs[0]?.shippingOrigin ?? "usa",
+  );
+  // Default Incoterm. Only meaningful when shippingOrigin is "international".
+  // CIF is the most common term we quote against — supplier pays freight +
+  // insurance to the destination port and we cover duties + customs.
+  const [incoterm, setIncoterm] = useState<Incoterm>(
+    () => tabs[0]?.incoterm ?? "CIF",
+  );
+  const [unitCost, setUnitCost] = useState<string>(() => tabs[0]?.unitCost ?? "");
+  const [quantity, setQuantity] = useState<string>(() => tabs[0]?.quantity ?? "");
+
   // --- Formula cost import (task #165) --------------------------------
   // UNIT CONVENTION: the calculator's Quantity is in sales units where
   // 1 unit = 1,000 gummies — the same convention /start uses when it seeds
@@ -1763,122 +1880,6 @@ export default function PricingCalculator({
       });
     }
   };
-
-  // --- Vendor picker --------------------------------------------------
-  // Mirrors the customer selector UX on /start: toggle between existing
-  // (autocomplete from vendors table) and new (free-text). All vendor
-  // fields are tab-scoped — switching tabs replaces them via applyTab.
-  const [vendorMode, setVendorMode] = useState<VendorMode>(
-    () => tabs[0]?.vendorMode ?? "existing",
-  );
-  const [vendorId, setVendorId] = useState<string | null>(
-    () => tabs[0]?.vendorId ?? null,
-  );
-  const [vendorName, setVendorName] = useState<string | null>(
-    () => tabs[0]?.vendorName ?? null,
-  );
-  const [vendorSearch, setVendorSearch] = useState<string>(
-    () => tabs[0]?.vendorSearch ?? "",
-  );
-  const [vendorResults, setVendorResults] = useState<VendorRow[]>([]);
-  const [vendorSearching, setVendorSearching] = useState(false);
-  // True when the user is actively browsing the dropdown — once they pick a
-  // vendor we collapse the search list. The "Change" link reopens it.
-  const [vendorEditing, setVendorEditing] = useState(
-    () => tabs[0]?.vendorEditing ?? true,
-  );
-  const [newVendorName, setNewVendorName] = useState<string>(
-    () => tabs[0]?.newVendorName ?? "",
-  );
-
-  // Debounced search against the vendors table. We use ilike so any
-  // substring matches, matching how the customer selector behaves.
-  useEffect(() => {
-    if (vendorMode !== "existing") {
-      setVendorResults([]);
-      return;
-    }
-    const term = vendorSearch.trim();
-    if (term.length === 0) {
-      setVendorResults([]);
-      return;
-    }
-    const sb = supabase;
-    if (!sb) return;
-    setVendorSearching(true);
-    const handle = setTimeout(async () => {
-      const { data, error } = await sb
-        .from("vendors")
-        .select("id, name")
-        .eq("active", true)
-        .ilike("name", `%${term}%`)
-        .order("name")
-        .limit(VENDOR_SEARCH_LIMIT);
-      // Table may not exist yet in the schema (early bootstrap); swallow
-      // and treat as "no results" so the UI doesn't surface a scary error.
-      if (error) {
-        console.warn("vendors search failed:", error.message);
-        setVendorResults([]);
-      } else {
-        setVendorResults((data ?? []) as VendorRow[]);
-      }
-      setVendorSearching(false);
-    }, 180);
-    return () => {
-      clearTimeout(handle);
-      setVendorSearching(false);
-    };
-  }, [vendorSearch, vendorMode]);
-
-  const pickVendor = (v: VendorRow) => {
-    setVendorId(v.id);
-    setVendorName(v.name);
-    setVendorSearch(v.name);
-    setVendorEditing(false);
-    setVendorResults([]);
-  };
-
-  const resetVendor = () => {
-    setVendorId(null);
-    setVendorName(null);
-    setVendorSearch("");
-    setVendorEditing(true);
-    setVendorResults([]);
-  };
-
-  const onVendorModeChange = (next: VendorMode) => {
-    setVendorMode(next);
-    // Clear cross-mode state so we don't keep stale picks lingering.
-    setVendorId(null);
-    setVendorName(null);
-    setVendorSearch("");
-    setVendorResults([]);
-    setVendorEditing(true);
-  };
-
-  const selectedVendorDisplay =
-    vendorMode === "existing"
-      ? vendorName
-      : newVendorName.trim().length > 0
-        ? newVendorName.trim()
-        : null;
-
-  // --- Inputs ----------------------------------------------------------
-  // Every cost-input hook seeds from tabs[0] so a workflow that already has
-  // saved tabs lands on the first tab pre-filled. Switching tabs writes the
-  // current values into the previous tab and replays setters with the new
-  // tab's values (see switchTab below).
-  const [shippingOrigin, setShippingOrigin] = useState<ShippingOrigin>(
-    () => tabs[0]?.shippingOrigin ?? "usa",
-  );
-  // Default Incoterm. Only meaningful when shippingOrigin is "international".
-  // CIF is the most common term we quote against — supplier pays freight +
-  // insurance to the destination port and we cover duties + customs.
-  const [incoterm, setIncoterm] = useState<Incoterm>(
-    () => tabs[0]?.incoterm ?? "CIF",
-  );
-  const [unitCost, setUnitCost] = useState<string>(() => tabs[0]?.unitCost ?? "");
-  const [quantity, setQuantity] = useState<string>(() => tabs[0]?.quantity ?? "");
   const [freight, setFreight] = useState<string>(() => tabs[0]?.freight ?? "");
   // International-shipment specific cost slots. Each is a total-dollar
   // amount distributed across qty (same as freight/handling).
