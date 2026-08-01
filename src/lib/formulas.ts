@@ -467,6 +467,21 @@ export type GummyFormulaCosting = {
   /** v65: decimals for the top summary card's per-gummy readouts (default 4). */
   topDec?: number | null;
   overheadDec?: number | null;
+  /** v68: Lab Testing card — per-batch test costs, split Raw Materials /
+   *  Finished Product. Batch total per row = cost × qty. Null = empty. */
+  labTestingRm?: LabTestItem[] | null;
+  labTestingFp?: LabTestItem[] | null;
+  /** v68: decimal picker for the Lab Testing card (default 2). */
+  labDec?: number | null;
+};
+
+/** One lab test line item (v68). */
+export type LabTestItem = {
+  label: string;
+  /** Cost per test in $. */
+  cost: number;
+  /** Tests run per production batch (e.g. RM lots sampled). */
+  qty: number;
 };
 
 /** One overhead line item (v60.1). */

@@ -56,6 +56,7 @@ import {
   type LabelClaim,
   type LabelClaimUnit,
   type OverheadItem,
+  type LabTestItem,
   type SavedSolution,
   type SolutionComponent,
   type VersionDiff,
@@ -851,6 +852,14 @@ export default function FormulaEditor({
   );
   // v65: decimal picker for the top summary card's per-gummy readouts.
   const [topDec, setTopDec] = useState<number>(seedVersion.costing?.topDec ?? 4);
+  // v68: Lab Testing card — per-batch test costs.
+  const [labTestingRm, setLabTestingRm] = useState<LabTestItem[]>(
+    () => seedVersion.costing?.labTestingRm ?? [],
+  );
+  const [labTestingFp, setLabTestingFp] = useState<LabTestItem[]>(
+    () => seedVersion.costing?.labTestingFp ?? [],
+  );
+  const [labDec, setLabDec] = useState<number>(seedVersion.costing?.labDec ?? 2);
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
@@ -903,6 +912,9 @@ export default function FormulaEditor({
       laborDec,
       overheadDec,
       topDec,
+      labTestingRm,
+      labTestingFp,
+      labDec,
     };
   }, [
     costingDec,
@@ -934,6 +946,9 @@ export default function FormulaEditor({
     laborDec,
     overheadDec,
     topDec,
+    labTestingRm,
+    labTestingFp,
+    labDec,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1049,6 +1064,9 @@ export default function FormulaEditor({
               laborDec: seed.costing.laborDec ?? 2,
               overheadDec: seed.costing.overheadDec ?? 2,
               topDec: seed.costing.topDec ?? 4,
+              labTestingRm: seed.costing.labTestingRm ?? [],
+              labTestingFp: seed.costing.labTestingFp ?? [],
+              labDec: seed.costing.labDec ?? 2,
             }
           : {
               dec: 3,
@@ -1080,6 +1098,9 @@ export default function FormulaEditor({
               laborDec: 2,
               overheadDec: 2,
               topDec: 4,
+              labTestingRm: [],
+              labTestingFp: [],
+              labDec: 2,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -2128,6 +2149,14 @@ export default function FormulaEditor({
       ? ((totalMonthly / workDays) * batchDays) / targetYieldUnits
       : null;
   })();
+  // v68: Lab Testing per gummy — per-batch test spend ÷ Target Yield.
+  const labTestingCostPerGummy =
+    targetYieldUnits > 0
+      ? [...labTestingRm, ...labTestingFp].reduce(
+          (s, t) => s + (Number(t.cost) || 0) * (Number(t.qty) || 0),
+          0,
+        ) / targetYieldUnits
+      : null;
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
   // capture element text via string-set (unsupported), but a plain string
@@ -4113,6 +4142,7 @@ export default function FormulaEditor({
           }
           laborCostPerGummy={laborCostPerGummy}
           overheadCostPerGummy={overheadCostPerGummy}
+          labTestingCostPerGummy={labTestingCostPerGummy}
           topDec={topDec}
           onTopDecChange={setTopDec}
           pieceWeightG={gummyPieceWeightG}
@@ -5713,6 +5743,329 @@ export default function FormulaEditor({
                   }}
                 >
                   <DecimalPicker value={overheadDec} onChange={setOverheadDec} />
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      ) : null}
+
+      {/* ============ Lab Testing (Costing tab) ============
+          v68: per-batch lab test spend, split Raw Materials (incoming
+          lots) / Finished Product (release testing). Row total = cost
+          per test × tests per batch; card total ÷ Target Yield feeds
+          the Costs card + True Cost. */}
+      {tab === "cost" ? (
+        <div
+          className="fe-cost-card"
+          style={{
+            marginBottom: 14,
+            border: "1px solid var(--teal-700, #1d6c7b)",
+            borderRadius: 8,
+            background: "var(--paper, #fffdf8)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 16px",
+              fontSize: 14.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--teal-900, #0f4a56)",
+              background: "var(--cream, #f6efe3)",
+              borderBottom: "2px solid var(--teal-700, #1d6c7b)",
+            }}
+          >
+            {tr("Lab Testing")}
+          </div>
+          {(() => {
+            const subCard: React.CSSProperties = {
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 8,
+              margin: "12px 14px",
+              background: "var(--paper, #fffdf8)",
+              overflow: "hidden",
+            };
+            const subTitle: React.CSSProperties = {
+              padding: "10px 14px 4px",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+            };
+            const lth: React.CSSProperties = {
+              padding: "8px 12px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+              textAlign: "right",
+              whiteSpace: "nowrap",
+            };
+            const ltd: React.CSSProperties = {
+              padding: "6px 12px",
+              fontSize: 13,
+              textAlign: "right",
+              fontVariantNumeric: "tabular-nums",
+              fontWeight: 600,
+              color: "var(--ink-1, #1f2a2d)",
+            };
+            const roMoney = (v: number, dec: number = labDec) => (
+              <input
+                type="text"
+                readOnly
+                tabIndex={-1}
+                value={v.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: dec,
+                  maximumFractionDigits: dec,
+                })}
+                className="pricing__input"
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  pointerEvents: "none",
+                  paddingRight: 14,
+                }}
+              />
+            );
+            const numCell = (
+              value: number,
+              onChange: (n: number) => void,
+              step = "1",
+            ) => (
+              <input
+                type="number"
+                value={Number.isFinite(value) ? value : 0}
+                step={step}
+                min={0}
+                onChange={(e) => onChange(Number(e.target.value) || 0)}
+                className="pricing__input"
+                style={{ width: "100%", minWidth: 0, textAlign: "right", fontSize: 13 }}
+              />
+            );
+            const rowTotal = (t: LabTestItem) =>
+              (Number(t.cost) || 0) * (Number(t.qty) || 0);
+            const groups: Array<{
+              title: string;
+              list: LabTestItem[];
+              setList: React.Dispatch<React.SetStateAction<LabTestItem[]>>;
+            }> = [
+              { title: "Raw Materials", list: labTestingRm, setList: setLabTestingRm },
+              {
+                title: "Finished Product",
+                list: labTestingFp,
+                setList: setLabTestingFp,
+              },
+            ];
+            const grand = groups.reduce(
+              (s, g) => s + g.list.reduce((a, t) => a + rowTotal(t), 0),
+              0,
+            );
+            return (
+              <>
+                {groups.map((g) => {
+                  const subtotal = g.list.reduce((a, t) => a + rowTotal(t), 0);
+                  return (
+                    <div key={g.title} className="fe-cost-sub" style={subCard}>
+                      <div style={subTitle}>{tr(g.title)}</div>
+                      <table
+                        style={{
+                          width: "100%",
+                          borderCollapse: "collapse",
+                          tableLayout: "fixed",
+                        }}
+                      >
+                        <thead>
+                          <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                            <th style={{ ...lth, textAlign: "left" }}>{tr("Test")}</th>
+                            <th style={{ ...lth, width: 150 }}>{tr("Cost per Test ($)")}</th>
+                            <th style={{ ...lth, width: 120 }}>{tr("Tests / Batch")}</th>
+                            <th style={{ ...lth, width: 150 }}>{tr("Batch Total")}</th>
+                            <th style={{ ...lth, width: 140 }}>{tr("Cost per Gummy")}</th>
+                            <th style={{ ...lth, width: 36 }} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.list.map((row, i) => (
+                            <tr
+                              key={i}
+                              style={{ borderBottom: "1px solid var(--line-2, #efe9da)" }}
+                            >
+                              <td style={{ ...ltd, textAlign: "left" }}>
+                                <input
+                                  type="text"
+                                  value={row.label}
+                                  onChange={(e) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i ? { ...r, label: e.target.value } : r,
+                                      ),
+                                    )
+                                  }
+                                  className="pricing__input"
+                                  style={{ width: "100%", fontSize: 13 }}
+                                  placeholder="Test name"
+                                />
+                              </td>
+                              <td style={ltd}>
+                                {numCell(
+                                  row.cost,
+                                  (n) =>
+                                    g.setList((prev) =>
+                                      prev.map((r, j) =>
+                                        j === i ? { ...r, cost: Math.max(0, n) } : r,
+                                      ),
+                                    ),
+                                  "0.01",
+                                )}
+                              </td>
+                              <td style={ltd}>
+                                {numCell(row.qty, (n) =>
+                                  g.setList((prev) =>
+                                    prev.map((r, j) =>
+                                      j === i ? { ...r, qty: Math.max(0, n) } : r,
+                                    ),
+                                  ),
+                                )}
+                              </td>
+                              <td style={ltd}>{roMoney(rowTotal(row))}</td>
+                              <td style={ltd}>
+                                {roMoney(
+                                  targetYieldUnits > 0
+                                    ? rowTotal(row) / targetYieldUnits
+                                    : 0,
+                                  labDec + 2,
+                                )}
+                              </td>
+                              <td style={ltd}>
+                                <button
+                                  type="button"
+                                  title="Remove line"
+                                  onClick={() =>
+                                    g.setList((prev) => prev.filter((_, j) => j !== i))
+                                  }
+                                  style={{
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "var(--ink-3, #8a9498)",
+                                    cursor: "pointer",
+                                    fontSize: 14,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: "var(--cream-soft, #fbf6ec)" }}>
+                            <td style={{ ...lth, textAlign: "left", color: "var(--teal-900, #0f4a56)" }}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  g.setList((prev) => [
+                                    ...prev,
+                                    { label: "", cost: 0, qty: 1 },
+                                  ])
+                                }
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.06em",
+                                  padding: 0,
+                                }}
+                              >
+                                {tr("+ Add line")}
+                              </button>
+                            </td>
+                            <td style={ltd} />
+                            <td style={{ ...lth, color: "var(--teal-900, #0f4a56)" }}>
+                              {tr("Subtotal")}
+                            </td>
+                            <td style={ltd}>{roMoney(subtotal)}</td>
+                            <td style={ltd}>
+                              {roMoney(
+                                targetYieldUnits > 0
+                                  ? subtotal / targetYieldUnits
+                                  : 0,
+                                labDec + 2,
+                              )}
+                            </td>
+                            <td style={ltd} />
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+                {/* Card totals + decimal picker. */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "0 14px 12px",
+                    gap: 14,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 24, alignItems: "baseline" }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {tr("Grand Total")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "var(--teal-900, #0f4a56)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {grand.toLocaleString("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                        minimumFractionDigits: labDec,
+                        maximumFractionDigits: labDec,
+                      })}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "var(--ink-3, #8a9498)",
+                      }}
+                    >
+                      {targetYieldUnits > 0
+                        ? (grand / targetYieldUnits).toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            minimumFractionDigits: labDec + 2,
+                            maximumFractionDigits: labDec + 2,
+                          }) + " / gummy"
+                        : ""}
+                    </span>
+                  </div>
+                  <DecimalPicker value={labDec} onChange={setLabDec} />
                 </div>
               </>
             );
@@ -7393,6 +7746,7 @@ function CostTab({
   materialCostPerGummy,
   laborCostPerGummy,
   overheadCostPerGummy,
+  labTestingCostPerGummy,
   topDec,
   onTopDecChange,
   pieceWeightG,
@@ -7417,6 +7771,8 @@ function CostTab({
   laborCostPerGummy: number | null;
   /** v65: Overhead Costs Batch Allocation ÷ Target Yield. */
   overheadCostPerGummy: number | null;
+  /** v68: Lab Testing card batch total ÷ Target Yield. */
+  labTestingCostPerGummy: number | null;
   /** v65: decimal places for the per-gummy readouts (persisted). */
   topDec: number;
   onTopDecChange: React.Dispatch<React.SetStateAction<number>>;
@@ -7461,7 +7817,10 @@ function CostTab({
     materialCostPerGummy !== null &&
     laborCostPerGummy !== null &&
     overheadCostPerGummy !== null
-      ? materialCostPerGummy + laborCostPerGummy + overheadCostPerGummy
+      ? materialCostPerGummy +
+        laborCostPerGummy +
+        overheadCostPerGummy +
+        (labTestingCostPerGummy ?? 0)
       : null;
   // v66.4: macro readouts — larger denominations print at plain 2
   // decimals (the picker keeps driving the per-gummy figures).
@@ -7623,6 +7982,19 @@ function CostTab({
             <>
               {fmt(overheadCostPerGummy)}
               {pctOf(overheadCostPerGummy)}
+            </>
+          ) : (
+            "—"
+          )}
+        </ReadOnly>
+      </ParamBlock>
+      {/* v68: lab testing mirror — per-batch test spend per gummy. */}
+      <ParamBlock label="Lab Testing Cost / gummy" nowrap>
+        <ReadOnly>
+          {labTestingCostPerGummy !== null ? (
+            <>
+              {fmt(labTestingCostPerGummy)}
+              {pctOf(labTestingCostPerGummy)}
             </>
           ) : (
             "—"
