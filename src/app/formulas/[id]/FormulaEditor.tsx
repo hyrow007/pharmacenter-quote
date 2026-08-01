@@ -852,12 +852,14 @@ export default function FormulaEditor({
   );
   // v65: decimal picker for the top summary card's per-gummy readouts.
   const [topDec, setTopDec] = useState<number>(seedVersion.costing?.topDec ?? 4);
-  // v68: Lab Testing card — per-batch test costs.
-  const [labTestingRm, setLabTestingRm] = useState<LabTestItem[]>(
-    () => seedVersion.costing?.labTestingRm ?? [],
+  // v68: Lab Testing card — per-batch test costs. Null = "use the
+  // default rule" (v68.1): one $120 potency test per active/label-claim
+  // ingredient plus Microbiology + Yeast & Mold at $80, on both cards.
+  const [labTestingRm, setLabTestingRm] = useState<LabTestItem[] | null>(
+    () => seedVersion.costing?.labTestingRm ?? null,
   );
-  const [labTestingFp, setLabTestingFp] = useState<LabTestItem[]>(
-    () => seedVersion.costing?.labTestingFp ?? [],
+  const [labTestingFp, setLabTestingFp] = useState<LabTestItem[] | null>(
+    () => seedVersion.costing?.labTestingFp ?? null,
   );
   const [labDec, setLabDec] = useState<number>(seedVersion.costing?.labDec ?? 2);
   // v60.1: itemized overhead sub-cards.
@@ -1064,8 +1066,8 @@ export default function FormulaEditor({
               laborDec: seed.costing.laborDec ?? 2,
               overheadDec: seed.costing.overheadDec ?? 2,
               topDec: seed.costing.topDec ?? 4,
-              labTestingRm: seed.costing.labTestingRm ?? [],
-              labTestingFp: seed.costing.labTestingFp ?? [],
+              labTestingRm: seed.costing.labTestingRm ?? null,
+              labTestingFp: seed.costing.labTestingFp ?? null,
               labDec: seed.costing.labDec ?? 2,
             }
           : {
@@ -1098,8 +1100,8 @@ export default function FormulaEditor({
               laborDec: 2,
               overheadDec: 2,
               topDec: 4,
-              labTestingRm: [],
-              labTestingFp: [],
+              labTestingRm: null,
+              labTestingFp: null,
               labDec: 2,
             },
       };
@@ -2149,10 +2151,33 @@ export default function FormulaEditor({
       ? ((totalMonthly / workDays) * batchDays) / targetYieldUnits
       : null;
   })();
+  // v68.1: default lab tests — one $120 potency test per active
+  // (label-claim) ingredient, plus Microbiology and Yeast & Mold at
+  // $80 each. Applies to BOTH sub-cards until the user edits a card
+  // (its state materializes on first edit and saves with the formula).
+  const defaultLabTests = useMemo<LabTestItem[]>(() => {
+    const actives = labelClaims
+      .map((c) => {
+        const custom = (c.customName ?? "").trim();
+        if (custom) return custom;
+        if (c.rawMaterialId)
+          return (rmById.get(c.rawMaterialId)?.name ?? "").trim();
+        return "";
+      })
+      .filter(Boolean)
+      .map((label) => ({ label, cost: 120, qty: 1 }));
+    return [
+      ...actives,
+      { label: "Microbiology", cost: 80, qty: 1 },
+      { label: "Yeast & Mold", cost: 80, qty: 1 },
+    ];
+  }, [labelClaims, rmById]);
+  const labRmList = labTestingRm ?? defaultLabTests;
+  const labFpList = labTestingFp ?? defaultLabTests;
   // v68: Lab Testing per gummy — per-batch test spend ÷ Target Yield.
   const labTestingCostPerGummy =
     targetYieldUnits > 0
-      ? [...labTestingRm, ...labTestingFp].reduce(
+      ? [...labRmList, ...labFpList].reduce(
           (s, t) => s + (Number(t.cost) || 0) * (Number(t.qty) || 0),
           0,
         ) / targetYieldUnits
@@ -5853,17 +5878,36 @@ export default function FormulaEditor({
             );
             const rowTotal = (t: LabTestItem) =>
               (Number(t.cost) || 0) * (Number(t.qty) || 0);
+            // Materializing setters: while a card's state is null (the
+            // default rule), the first edit snapshots the rule's rows
+            // into real state so the change lands on what's on screen.
+            const setRm: React.Dispatch<React.SetStateAction<LabTestItem[]>> = (
+              action,
+            ) =>
+              setLabTestingRm((prev) =>
+                typeof action === "function"
+                  ? (action as (p: LabTestItem[]) => LabTestItem[])(
+                      prev ?? defaultLabTests,
+                    )
+                  : action,
+              );
+            const setFp: React.Dispatch<React.SetStateAction<LabTestItem[]>> = (
+              action,
+            ) =>
+              setLabTestingFp((prev) =>
+                typeof action === "function"
+                  ? (action as (p: LabTestItem[]) => LabTestItem[])(
+                      prev ?? defaultLabTests,
+                    )
+                  : action,
+              );
             const groups: Array<{
               title: string;
               list: LabTestItem[];
               setList: React.Dispatch<React.SetStateAction<LabTestItem[]>>;
             }> = [
-              { title: "Raw Materials", list: labTestingRm, setList: setLabTestingRm },
-              {
-                title: "Finished Product",
-                list: labTestingFp,
-                setList: setLabTestingFp,
-              },
+              { title: "Raw Materials", list: labRmList, setList: setRm },
+              { title: "Finished Product", list: labFpList, setList: setFp },
             ];
             const grand = groups.reduce(
               (s, g) => s + g.list.reduce((a, t) => a + rowTotal(t), 0),
