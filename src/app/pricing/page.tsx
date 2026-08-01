@@ -162,21 +162,14 @@ export default async function PricingPage({ searchParams }: Ctx) {
       > = {};
       if (productIds.length > 0) {
         // avg_cost = Fishbowl inventory average cost (nightly sync via
-        // /api/sync/product-costs). Selected defensively so the page
-        // doesn't 500 during the pre-migration window.
-        const { data: pRows, error: pErr } = await supabase
+        // /api/sync/product-costs). Column added by sql/products_avg_cost.sql
+        // (already applied in prod — no pre-migration fallback needed; the
+        // typed-select fallback tripped Vercel's type check on 2d9c61b).
+        const { data: pRows } = await supabase
           .from("products")
           .select("id, name, fp_code, avg_cost")
           .in("id", productIds);
-        let rows = pRows;
-        if (pErr && /avg_cost/.test(pErr.message)) {
-          const { data: legacyRows } = await supabase
-            .from("products")
-            .select("id, name, fp_code")
-            .in("id", productIds);
-          rows = legacyRows;
-        }
-        for (const row of (rows ?? []) as Array<{
+        for (const row of (pRows ?? []) as Array<{
           id: string;
           name: string;
           fp_code: string | null;
