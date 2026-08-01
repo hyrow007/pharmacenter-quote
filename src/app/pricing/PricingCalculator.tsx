@@ -1647,18 +1647,57 @@ export default function PricingCalculator({
   const [formulaImport, setFormulaImport] = useState<FormulaImportState>({
     status: "idle",
   });
-  // Reset the import banner when the rep points the tab at a different
-  // workflow product — the breakdown belongs to the previous formula.
+  // Auto-import when the tab points at a formula product: reset the old
+  // breakdown, then fetch the new one immediately so the COSTS card is
+  // visible without the rep having to click anything. The auto path only
+  // fills Cost per unit when the field is empty (saved tabs may carry a
+  // rep-adjusted cost we must not stomp on hydration); the button re-runs
+  // with force:true and always stamps.
+  // Last value WE stamped into Cost per unit. Lets qty-driven re-imports
+  // tell "field still holds our number" (safe to update) apart from "rep
+  // typed their own cost" (leave it alone).
+  const lastImportedCostRef = useRef<string>("");
   useEffect(() => {
     setFormulaImport({ status: "idle" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowProductUid]);
-  const importFormulaCost = async () => {
+  // Fetch (and re-fetch) the formula costing whenever the product or the
+  // quoted quantity changes. Labor + overhead amortize over the run, so a
+  // different quantity is a genuinely different per-piece cost — the API
+  // recomputes with ?yieldUnits=<pieces>. Debounced so typing "150,000"
+  // doesn't fire six requests.
+  useEffect(() => {
+    const pin = workflowProducts.find(
+      (p) => p.uid === workflowProductUid,
+    )?.pinnedFormula;
+    if (!pin) return;
+    const t = setTimeout(() => {
+      void importFormulaCostFor(pin, { force: false });
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowProductUid, quantity]);
+  const importFormulaCost = () => {
     const pin = pickedProduct?.pinnedFormula;
-    if (!pin || formulaImport.status === "loading") return;
+    if (pin) void importFormulaCostFor(pin, { force: true });
+  };
+  const importFormulaCostFor = async (
+    pin: { formulaId: string; formulaNumber: number; versionNum: number },
+    opts: { force: boolean },
+  ) => {
     setFormulaImport({ status: "loading" });
     try {
+      // Pass the quoted quantity as a yield override (units × 1,000 =
+      // pieces) so the API recomputes labor/overhead amortization for THIS
+      // run size. No quantity yet → server uses the formula's saved
+      // Target Yield.
+      const qtyPieces = Math.round(num(quantity) * 1000);
+      const yieldParam =
+        Number.isFinite(qtyPieces) && qtyPieces > 0
+          ? `?yieldUnits=${qtyPieces}`
+          : "";
       const res = await fetch(
-        `/api/formulas/${encodeURIComponent(pin.formulaId)}`,
+        `/api/formulas/${encodeURIComponent(pin.formulaId)}${yieldParam}`,
       );
       const data = await res.json();
       if (!res.ok || !data?.ok) {
@@ -1684,7 +1723,23 @@ export default function PricingCalculator({
         typeof cc.costPerThousandUsd === "number"
           ? cc.costPerThousandUsd
           : cc.totalUsdPerPiece * 1000;
-      setUnitCost(formatValueInput(perUnit.toFixed(2)));
+      const formatted = formatValueInput(perUnit.toFixed(2));
+      if (opts.force) {
+        setUnitCost(formatted);
+        lastImportedCostRef.current = formatted;
+      } else {
+        // Auto path: update when the field is empty OR still holds the
+        // value WE stamped last time (qty-driven re-imports should track
+        // the field). A cost the rep typed themselves — or a saved tab's
+        // hydrated value — is left alone.
+        setUnitCost((prev) => {
+          if (!prev || prev.trim() === "" || prev === lastImportedCostRef.current) {
+            lastImportedCostRef.current = formatted;
+            return formatted;
+          }
+          return prev;
+        });
+      }
       setFormulaImport({
         status: "done",
         perUnit,
@@ -3002,7 +3057,7 @@ export default function PricingCalculator({
               >
                 {formulaImport.status === "loading"
                   ? "Importing…"
-                  : `Import cost from F${String(
+                  : `${formulaImport.status === "done" ? "Re-import" : "Import cost"} from F${String(
                       pickedProduct.pinnedFormula.formulaNumber,
                     ).padStart(4, "0")} (v${pickedProduct.pinnedFormula.versionNum})`}
               </button>
@@ -3953,6 +4008,84 @@ export default function PricingCalculator({
             </tr>
           </tbody>
         </table>
+
+        {/* PC-manufactured gummies: mirror the on-screen Formula costs card
+            so the printed summary carries the same Costing-tab breakdown. */}
+        {isFormulaProduct && formulaImport.status === "done" ? (
+          <>
+            <h3 className="pricing-print__section-title">
+              Formula costs (from Costing tab)
+            </h3>
+            <table className="pricing-print__table">
+              <tbody>
+                {(() => {
+                  const total = formulaImport.totalPerPiece;
+                  const pctTxt = (v: number | null) =>
+                    v !== null && total !== null && total > 0
+                      ? ` (${((v / total) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%)`
+                      : "";
+                  const gummyTxt = (v: number | null) =>
+                    v !== null ? `$${v.toFixed(4)}` : "—";
+                  const moneyTxt = (v: number | null) =>
+                    v !== null
+                      ? v.toLocaleString("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                        })
+                      : "—";
+                  return (
+                    <>
+                      <tr>
+                        <td>Material cost / gummy</td>
+                        <td>
+                          {gummyTxt(formulaImport.breakdown.material)}
+                          {pctTxt(formulaImport.breakdown.material)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Direct labor cost / gummy</td>
+                        <td>
+                          {gummyTxt(formulaImport.breakdown.labor)}
+                          {pctTxt(formulaImport.breakdown.labor)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Overhead cost / gummy</td>
+                        <td>
+                          {gummyTxt(formulaImport.breakdown.overhead)}
+                          {pctTxt(formulaImport.breakdown.overhead)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Lab testing cost / gummy</td>
+                        <td>
+                          {gummyTxt(formulaImport.breakdown.testing)}
+                          {pctTxt(formulaImport.breakdown.testing)}
+                        </td>
+                      </tr>
+                      <tr className="pricing-print__row--emphasis">
+                        <td>True cost / gummy</td>
+                        <td>{gummyTxt(total)}</td>
+                      </tr>
+                      <tr>
+                        <td>Cost per thousand</td>
+                        <td>{moneyTxt(formulaImport.perUnit)}</td>
+                      </tr>
+                      <tr>
+                        <td>Cost per kg</td>
+                        <td>{moneyTxt(formulaImport.costPerKg)}</td>
+                      </tr>
+                      <tr>
+                        <td>Total batch cost</td>
+                        <td>{moneyTxt(formulaImport.totalBatchCost)}</td>
+                      </tr>
+                    </>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </>
+        ) : null}
 
         <h3 className="pricing-print__section-title">Results</h3>
         <table className="pricing-print__table">

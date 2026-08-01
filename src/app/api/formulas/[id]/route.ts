@@ -54,13 +54,25 @@ async function gatedClient(): Promise<GateResult> {
 // --- GET ---------------------------------------------------------------------
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const gated = await gatedClient();
   if (gated.error) return gated.error;
   const { supabase } = gated;
   const { id } = await params;
+  // Optional ?yieldUnits=<pieces>: recompute costingComputed as if the
+  // production run were this many gummies instead of the version's saved
+  // Target Yield. Labor + overhead amortize over the run, so quoting a
+  // different quantity legitimately changes the per-piece figures — the
+  // PricingCalculator passes the quoted quantity (units × 1,000) here so
+  // its Formula-costs card tracks the qty field. Material $/piece is
+  // scale-invariant and unaffected.
+  const yieldParam = new URL(request.url).searchParams.get("yieldUnits");
+  const yieldOverride =
+    yieldParam !== null && Number.isFinite(Number(yieldParam)) && Number(yieldParam) > 0
+      ? Math.round(Number(yieldParam))
+      : null;
 
   const { data: formulaRow, error: formulaErr } = await supabase
     .from("gummy_formulas")
@@ -163,7 +175,9 @@ export async function GET(
     }
 
     costingComputed = computeCostingComputed({
-      version: latestVersion,
+      version: yieldOverride
+        ? { ...latestVersion, targetYieldUnits: yieldOverride }
+        : latestVersion,
       rawMaterials: [...curated, ...fishbowl],
       laborRateDefaults,
     });
