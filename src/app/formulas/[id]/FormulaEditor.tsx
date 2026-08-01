@@ -4471,30 +4471,32 @@ export default function FormulaEditor({
                           })() ??
                           ((costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
                           "Manual" ? (
-                            <input
-                              type="number"
-                              step="0.01"
-                              min={0}
-                              value={
-                                manualCostByKey[e.key] !== undefined
-                                  ? manualCostByKey[e.key]
-                                  : ""
-                              }
-                              placeholder="$ / kg"
-                              onChange={(ev) => {
-                                const n = Number(ev.target.value);
-                                setManualCostByKey((prev) => ({
-                                  ...prev,
-                                  [e.key]: Number.isFinite(n) ? n : 0,
-                                }));
-                              }}
-                              className="pricing__input"
-                              style={{
-                                width: "100%",
-                                textAlign: "right",
-                                fontVariantNumeric: "tabular-nums",
-                              }}
-                            />
+                            <DollarWrap>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min={0}
+                                value={
+                                  manualCostByKey[e.key] !== undefined
+                                    ? manualCostByKey[e.key]
+                                    : ""
+                                }
+                                placeholder="/ kg"
+                                onChange={(ev) => {
+                                  const n = Number(ev.target.value);
+                                  setManualCostByKey((prev) => ({
+                                    ...prev,
+                                    [e.key]: Number.isFinite(n) ? n : 0,
+                                  }));
+                                }}
+                                className="pricing__input"
+                                style={{
+                                  width: "100%",
+                                  textAlign: "right",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              />
+                            </DollarWrap>
                           ) : (
                             "—"
                           ))}
@@ -4979,12 +4981,14 @@ export default function FormulaEditor({
                         >
                           <td style={{ ...lth, textAlign: "left" }}>{tr(row.label)}</td>
                           <td style={ltd}>
-                            <NumberInput
-                              value={row.base}
-                              onChange={(n) => row.setBase(n)}
-                              step="0.01"
-                              min={0}
-                            />
+                            <DollarWrap>
+                              <NumberInput
+                                value={row.base}
+                                onChange={(n) => row.setBase(n)}
+                                step="0.01"
+                                min={0}
+                              />
+                            </DollarWrap>
                           </td>
                           <td style={ltd}>
                             <NumberInput
@@ -5349,25 +5353,27 @@ export default function FormulaEditor({
               onCommit: (n: number) => void,
               rowKey: string,
             ) => (
-              <input
-                key={rowKey + ":" + value}
-                type="text"
-                inputMode="decimal"
-                defaultValue={value.toLocaleString("en-US", {
-                  maximumFractionDigits: 2,
-                })}
-                onBlur={(e) => {
-                  const n = Number(e.target.value.replace(/[^0-9.\-]/g, ""));
-                  onCommit(Number.isFinite(n) ? Math.max(0, n) : 0);
-                }}
-                className="pricing__input"
-                style={{
-                  width: "100%",
-                  minWidth: 0,
-                  textAlign: "right",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              />
+              <DollarWrap>
+                <input
+                  key={rowKey + ":" + value}
+                  type="text"
+                  inputMode="decimal"
+                  defaultValue={value.toLocaleString("en-US", {
+                    maximumFractionDigits: 2,
+                  })}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value.replace(/[^0-9.\-]/g, ""));
+                    onCommit(Number.isFinite(n) ? Math.max(0, n) : 0);
+                  }}
+                  className="pricing__input"
+                  style={{
+                    width: "100%",
+                    minWidth: 0,
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                />
+              </DollarWrap>
             );
             return (
               <>
@@ -5960,16 +5966,18 @@ export default function FormulaEditor({
                                 />
                               </td>
                               <td style={ltd}>
-                                {numCell(
-                                  row.cost,
-                                  (n) =>
-                                    g.setList((prev) =>
-                                      prev.map((r, j) =>
-                                        j === i ? { ...r, cost: Math.max(0, n) } : r,
+                                <DollarWrap>
+                                  {numCell(
+                                    row.cost,
+                                    (n) =>
+                                      g.setList((prev) =>
+                                        prev.map((r, j) =>
+                                          j === i ? { ...r, cost: Math.max(0, n) } : r,
+                                        ),
                                       ),
-                                    ),
-                                  "0.01",
-                                )}
+                                    "0.01",
+                                  )}
+                                </DollarWrap>
                               </td>
                               <td style={ltd}>
                                 {numCell(row.qty, (n) =>
@@ -6824,6 +6832,29 @@ function ParamBlock({
       </div>
       {children}
     </div>
+  );
+}
+
+/** v68.2: $ prefix for editable money inputs on the Costing tab — makes
+ *  dollar fields read as dollars and visually separates editable inputs
+ *  from computed (already $-formatted) cells. */
+function DollarWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}
+    >
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: "var(--ink-3, #8a9498)",
+          flex: "0 0 auto",
+        }}
+      >
+        $
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
+    </span>
   );
 }
 
