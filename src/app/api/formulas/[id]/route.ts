@@ -8,8 +8,19 @@ import {
   type GummyFormulaRecord,
   type GummyFormulaVersion,
 } from "@/lib/formulas";
+import {
+  LINE_LEADER_ADP_ID,
+  LINE_OPERATOR_ADP_ID,
+  computeCostingComputed,
+  type CostingComputed,
+  type CostingRawMaterial,
+} from "@/lib/formulaCosting";
 
-// GET  /api/formulas/[id]        — formula + latest version
+// GET  /api/formulas/[id]        — formula + latest version (plus a
+//                                  server-computed `costingComputed`
+//                                  per-piece cost block when the version
+//                                  has a Costing tab set up — consumed by
+//                                  the quote-side PricingCalculator)
 // PUT  /api/formulas/[id]        — edit identity only (name / pc_bk_code /
 //                                  shape / flavor / active). Recipe changes
 //                                  go through POST /versions instead.
@@ -74,7 +85,7 @@ export async function GET(
     const { data: versionRow, error: versionErr } = await supabase
       .from("gummy_formula_versions")
       .select(
-        "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, notes, created_at, created_by_email",
+        "id, formula_id, version_num, bench_batch_g, batch_kg, batches_per_day, fixed_loss_kg_per_day, gummy_piece_weight_g, wet_cast_piece_weight_g, target_yield_units, cfa_batch_kg, yield_pct, ingredients, process_notes, label_claims, costing, notes, created_at, created_by_email",
       )
       .eq("formula_id", id)
       .eq("version_num", formulaRow.latest_version_num)
@@ -85,8 +96,85 @@ export async function GET(
     if (versionRow) latestVersion = versionFromRow(versionRow);
   }
 
+  // v69: per-piece cost breakdown for the quote-side PricingCalculator.
+  // Null when the version has no Costing tab data. Only fetch the extra
+  // inputs (raw-material costs + ADP labor rates) when there's actually
+  // costing to compute. The raw-material list is assembled EXACTLY like
+  // /formulas/[id]/page.tsx does for the editor (curated rows + Fishbowl-
+  // only PC-RW products deduped by fp_code) so the computed figures match
+  // what the operator sees on screen.
+  let costingComputed: CostingComputed | null = null;
+  if (latestVersion?.costing) {
+    const [rmRes, pcRwRes, lrRes] = await Promise.all([
+      supabase
+        .from("raw_materials")
+        .select("id, fp_code, name, inventory_cost_per_kg, last_order_cost_per_kg")
+        .eq("active", true),
+      supabase
+        .from("products")
+        .select("fp_code, name")
+        .eq("active", true)
+        .ilike("fp_code", "PC-RW-%"),
+      supabase
+        .from("labor_rates")
+        .select("adp_id, hourly_rate")
+        .in("adp_id", [LINE_LEADER_ADP_ID, LINE_OPERATOR_ADP_ID]),
+    ]);
+
+    const curated: CostingRawMaterial[] = (rmRes.data ?? []).map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      inventoryCostPerKg:
+        r.inventory_cost_per_kg === null || r.inventory_cost_per_kg === undefined
+          ? null
+          : Number(r.inventory_cost_per_kg),
+      lastOrderCostPerKg:
+        r.last_order_cost_per_kg === null || r.last_order_cost_per_kg === undefined
+          ? null
+          : Number(r.last_order_cost_per_kg),
+    }));
+    const curatedFpCodes = new Set(
+      (rmRes.data ?? [])
+        .map((r) => ((r.fp_code as string | null) ?? "").toUpperCase())
+        .filter(Boolean),
+    );
+    // Fishbowl-only PC-RW products: same `fb:<fp_code>` ids the editor's
+    // picker stores on ingredient rows; costs stay null until the row is
+    // imported into raw_materials (so they blank the material total, just
+    // like on screen).
+    const fishbowl: CostingRawMaterial[] = (pcRwRes.data ?? [])
+      .filter((p) => p.fp_code && p.name)
+      .filter((p) => !curatedFpCodes.has((p.fp_code as string).toUpperCase()))
+      .map((p) => ({
+        id: `fb:${p.fp_code}`,
+        name: p.name as string,
+        inventoryCostPerKg: null,
+        lastOrderCostPerKg: null,
+      }));
+
+    const laborRateDefaults: { leader: number | null; operator: number | null } = {
+      leader: null,
+      operator: null,
+    };
+    for (const r of lrRes.data ?? []) {
+      const rate = r.hourly_rate === null ? null : Number(r.hourly_rate);
+      if (r.adp_id === LINE_LEADER_ADP_ID) laborRateDefaults.leader = rate;
+      if (r.adp_id === LINE_OPERATOR_ADP_ID) laborRateDefaults.operator = rate;
+    }
+
+    costingComputed = computeCostingComputed({
+      version: latestVersion,
+      rawMaterials: [...curated, ...fishbowl],
+      laborRateDefaults,
+    });
+  }
+
   const formula: GummyFormulaRecord = recordFromRow(formulaRow);
-  return NextResponse.json({ ok: true, formula, latestVersion });
+  return NextResponse.json({
+    ok: true,
+    formula,
+    latestVersion: latestVersion ? { ...latestVersion, costingComputed } : null,
+  });
 }
 
 // --- PUT ---------------------------------------------------------------------
