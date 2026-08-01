@@ -156,20 +156,47 @@ export default async function PricingPage({ searchParams }: Ctx) {
       const productIds = products
         .map((p) => p.productId)
         .filter((id): id is string => !!id && id !== "new");
-      const productNameMap: Record<string, { name: string; code: string | null }> = {};
+      const productNameMap: Record<
+        string,
+        { name: string; code: string | null; avgCost: number | null }
+      > = {};
       if (productIds.length > 0) {
-        const { data: pRows } = await supabase
+        // avg_cost = Fishbowl inventory average cost (nightly sync via
+        // /api/sync/product-costs). Selected defensively so the page
+        // doesn't 500 during the pre-migration window.
+        const { data: pRows, error: pErr } = await supabase
           .from("products")
-          .select("id, name, fp_code")
+          .select("id, name, fp_code, avg_cost")
           .in("id", productIds);
-        for (const row of (pRows ?? []) as Array<{ id: string; name: string; fp_code: string | null }>) {
-          productNameMap[row.id] = { name: row.name, code: row.fp_code };
+        let rows = pRows;
+        if (pErr && /avg_cost/.test(pErr.message)) {
+          const { data: legacyRows } = await supabase
+            .from("products")
+            .select("id, name, fp_code")
+            .in("id", productIds);
+          rows = legacyRows;
+        }
+        for (const row of (rows ?? []) as Array<{
+          id: string;
+          name: string;
+          fp_code: string | null;
+          avg_cost?: number | null;
+        }>) {
+          productNameMap[row.id] = {
+            name: row.name,
+            code: row.fp_code,
+            avgCost:
+              row.avg_cost === null || row.avg_cost === undefined
+                ? null
+                : Number(row.avg_cost),
+          };
         }
       }
 
       workflowProducts = products.map((p, idx) => {
         let label = `Product ${idx + 1}`;
         let sub: string | null = null;
+        let stockAvgCost: number | null = null;
         if (p.pinnedFormula) {
           // PC-manufactured gummy: the formula IS the product identity.
           // Label with the formula handle so the dropdown reads the same
@@ -185,6 +212,10 @@ export default async function PricingPage({ searchParams }: Ctx) {
           const info = productNameMap[p.productId];
           label = info.name;
           sub = info.code ? `Code ${info.code}` : null;
+          // Only meaningful for "Existing stock" products — the calculator
+          // pre-fills Cost per unit with it on pick. Purchase products get
+          // their cost from the vendor quote, not inventory history.
+          stockAvgCost = info.avgCost;
         }
         // First non-empty quantity wins — usually a workflow only has one
         // quantity per product anyway, but we accept multiples.
@@ -199,6 +230,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
           // Carry sourceMode through so the calculator can skip inbound
           // costs for products we already have in stock.
           sourceMode: p.sourceMode ?? "purchase",
+          // Fishbowl inventory average cost — pre-fills Cost per unit when
+          // the product is picked with Source = Existing stock.
+          stockAvgCost,
           // Identity-only formula pin (see PinnedFormula in lib/workflows).
           // The calculator uses this to offer "Import cost from formula",
           // which fetches live costingComputed from /api/formulas/[id] —

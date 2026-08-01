@@ -106,6 +106,12 @@ export type WorkflowProductOption = {
     formulaNumber: number;
     versionNum: number;
   } | null;
+  // Fishbowl inventory average cost per unit (products.avg_cost, synced
+  // nightly from partcost.avgCost). When the product is picked with
+  // Source = "Existing stock", Cost per unit pre-fills with this value —
+  // it IS the landed cost, which is why stock products skip the entire
+  // inbound-costs section. Null = no cost history in Fishbowl yet.
+  stockAvgCost?: number | null;
 };
 
 // Row shape we get back from the vendors table search. Mirrors the columns
@@ -1921,6 +1927,18 @@ export default function PricingCalculator({
     if (product?.quantity) {
       setQuantity(formatQtyInput(product.quantity));
     }
+    // Existing-stock products: pre-fill Cost per unit with Fishbowl's
+    // inventory average cost (products.avg_cost). Same overwrite policy
+    // as quantity above — picking a product is an explicit action, so
+    // stamping the field beats guarding a stale value. The rep can still
+    // type over it.
+    if (
+      product?.sourceMode === "stock" &&
+      typeof product.stockAvgCost === "number" &&
+      product.stockAvgCost > 0
+    ) {
+      setUnitCost(formatValueInput(product.stockAvgCost.toFixed(2)));
+    }
   };
 
   // --- Can we save right now? -----------------------------------------
@@ -3079,9 +3097,19 @@ export default function PricingCalculator({
                 This product is <strong>existing stock</strong>. The landed
                 cost is already in Fishbowl, so freight, duties, insurance,
                 customs broker, lab testing, and other fees don&rsquo;t apply
-                here. Enter the known landed unit cost above and the
-                calculator will go straight to the sale price using just your
-                margin.
+                here.{" "}
+                {typeof pickedProduct?.stockAvgCost === "number" &&
+                pickedProduct.stockAvgCost > 0 ? (
+                  <>
+                    Cost per unit was pre-filled with Fishbowl&rsquo;s average
+                    cost (${pickedProduct.stockAvgCost.toFixed(2)}) — adjust
+                    it if needed and
+                  </>
+                ) : (
+                  <>Enter the known landed unit cost above and</>
+                )}{" "}
+                the calculator will go straight to the sale price using just
+                your margin.
               </>
             )}
           </p>
