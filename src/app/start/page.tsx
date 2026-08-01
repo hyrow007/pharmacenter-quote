@@ -1386,7 +1386,7 @@ function FormulaPicker(props: {
           <>
             <input
               type="text"
-              placeholder="Search formulas by code, name, or flavor…"
+              placeholder="Search by formula #, product code, name, or flavor…"
               value={search}
               onChange={(e) => onSearch(e.target.value)}
               style={inputStyle}

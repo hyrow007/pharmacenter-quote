@@ -64,11 +64,28 @@ export async function GET(request: Request) {
   if (!includeInactive) query = query.eq("active", true);
   if (shape) query = query.eq("shape", shape);
   if (q) {
-    // Simple OR against the searchable text columns. pc_bk_code and name
-    // cover the two things reps type into search.
-    query = query.or(
-      `pc_bk_code.ilike.%${q}%,name.ilike.%${q}%,flavor.ilike.%${q}%`,
-    );
+    // Simple OR across the fields reps actually type into the search bar.
+    // We match:
+    //   - pc_bk_code / name / flavor via case-insensitive substring
+    //   - formula_number by numeric equality when the query contains digits
+    //
+    // The formula_number branch strips a leading "F"/"f" and any zero
+    // padding, so all of "F0001", "f0001", "0001", and "1" find formula #1.
+    // We only add the branch when the query parses to a positive integer so
+    // an empty digit run (e.g. "vanilla") doesn't emit `formula_number.eq.NaN`.
+    const filters: string[] = [
+      `pc_bk_code.ilike.%${q}%`,
+      `name.ilike.%${q}%`,
+      `flavor.ilike.%${q}%`,
+    ];
+    const digits = q.replace(/^f/i, "").replace(/\D/g, "");
+    if (digits.length > 0) {
+      const n = parseInt(digits, 10);
+      if (Number.isFinite(n) && n > 0) {
+        filters.push(`formula_number.eq.${n}`);
+      }
+    }
+    query = query.or(filters.join(","));
   }
 
   const { data, error } = await query;
