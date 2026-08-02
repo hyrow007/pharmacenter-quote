@@ -473,6 +473,17 @@ export type GummyFormulaCosting = {
   labTestingFp?: LabTestItem[] | null;
   /** v68: decimal picker for the Lab Testing card (default 2). */
   labDec?: number | null;
+  /** v69: what-if scenarios — each re-runs the whole Costing tab at a
+   *  different quantity. Null/empty = just the base (Scale up) yield. */
+  scenarios?: CostScenario[] | null;
+};
+
+/** One costing scenario (v69). */
+export type CostScenario = {
+  id: string;
+  name: string;
+  /** QTY (gummies) this scenario costs out. */
+  qty: number;
 };
 
 /** One lab test line item (v68). */

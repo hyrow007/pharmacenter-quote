@@ -57,6 +57,7 @@ import {
   type LabelClaimUnit,
   type OverheadItem,
   type LabTestItem,
+  type CostScenario,
   type SavedSolution,
   type SolutionComponent,
   type VersionDiff,
@@ -862,6 +863,13 @@ export default function FormulaEditor({
     () => seedVersion.costing?.labTestingFp ?? null,
   );
   const [labDec, setLabDec] = useState<number>(seedVersion.costing?.labDec ?? 2);
+  // v69: costing scenarios — what-if quantities. The active scenario is
+  // screen-local (never persisted); the scenario LIST saves with the
+  // formula. Null active = the base Scale-up yield.
+  const [costScenarios, setCostScenarios] = useState<CostScenario[]>(
+    () => seedVersion.costing?.scenarios ?? [],
+  );
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
@@ -917,6 +925,7 @@ export default function FormulaEditor({
       labTestingRm,
       labTestingFp,
       labDec,
+      scenarios: costScenarios,
     };
   }, [
     costingDec,
@@ -951,6 +960,7 @@ export default function FormulaEditor({
     labTestingRm,
     labTestingFp,
     labDec,
+    costScenarios,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1069,6 +1079,7 @@ export default function FormulaEditor({
               labTestingRm: seed.costing.labTestingRm ?? null,
               labTestingFp: seed.costing.labTestingFp ?? null,
               labDec: seed.costing.labDec ?? 2,
+              scenarios: seed.costing.scenarios ?? [],
             }
           : {
               dec: 3,
@@ -1103,6 +1114,7 @@ export default function FormulaEditor({
               labTestingRm: null,
               labTestingFp: null,
               labDec: 2,
+              scenarios: [],
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -1941,6 +1953,14 @@ export default function FormulaEditor({
           maximumFractionDigits: 2,
         })
       : "0";
+  // v69: the yield the COSTING tab runs against. The active scenario's
+  // quantity overrides the Scale-up Target Yield so every downstream
+  // figure (material QTYs, shifts, overhead allocation, per-gummy costs)
+  // re-derives for the what-if run. Scale-up itself is untouched.
+  const costYieldUnits = activeScenarioId
+    ? (costScenarios.find((s) => s.id === activeScenarioId)?.qty ??
+      targetYieldUnits)
+    : targetYieldUnits;
   // v57.6: shared costing model — the Costing table AND the top card's
   // Material cost / gummy readout both read from this single computation
   // (dedup ingredient entries, solutions expanded, Water merged; QTYs
@@ -1948,11 +1968,11 @@ export default function FormulaEditor({
   const costingModel = (() => {
     const qtyPrimaryBatches =
       scaleUpGummiesOf(scaleUp.carryKg) > 0
-        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
+        ? costYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
         : 0;
     const qtyCfaBatches =
       scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
-        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
+        ? costYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
         : 0;
     const preKgOf = (grams: number) =>
       scaleUp.totalPrimaryG > 0 ? (grams * batchKg) / scaleUp.totalPrimaryG : 0;
@@ -2084,7 +2104,7 @@ export default function FormulaEditor({
   const laborCostPerGummy = (() => {
     const prodShifts =
       productionDays ??
-      roundDays(scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0);
+      roundDays(scaleUpDailyYield > 0 ? costYieldUnits / scaleUpDailyYield : 0);
     const shifts = [
       setupDays ?? 1,
       prodShifts,
@@ -2113,7 +2133,7 @@ export default function FormulaEditor({
           (r.base * (1 + r.tax / 100 + r.wc / 100)),
       0,
     );
-    return targetYieldUnits > 0 ? grand / targetYieldUnits : null;
+    return costYieldUnits > 0 ? grand / costYieldUnits : null;
   })();
   // v65: Overhead Cost / gummy for the top card — same math as the
   // Overhead Costs card's Batch Allocation (Σ allocated monthly ÷
@@ -2143,12 +2163,12 @@ export default function FormulaEditor({
       chargedOf(overheadOther);
     const prodShifts =
       productionDays ??
-      roundDays(scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0);
+      roundDays(scaleUpDailyYield > 0 ? costYieldUnits / scaleUpDailyYield : 0);
     const batchDays =
       (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
     const workDays = workingDaysPerMonth ?? 21;
-    return workDays > 0 && targetYieldUnits > 0
-      ? ((totalMonthly / workDays) * batchDays) / targetYieldUnits
+    return workDays > 0 && costYieldUnits > 0
+      ? ((totalMonthly / workDays) * batchDays) / costYieldUnits
       : null;
   })();
   // v68.1: default lab tests — one $120 potency test per active
@@ -2176,11 +2196,11 @@ export default function FormulaEditor({
   const labFpList = labTestingFp ?? defaultLabTests;
   // v68: Lab Testing per gummy — per-batch test spend ÷ Target Yield.
   const labTestingCostPerGummy =
-    targetYieldUnits > 0
+    costYieldUnits > 0
       ? [...labRmList, ...labFpList].reduce(
           (s, t) => s + (Number(t.cost) || 0) * (Number(t.qty) || 0),
           0,
-        ) / targetYieldUnits
+        ) / costYieldUnits
       : null;
   // v47.6: identity strip for the printed footer. Interpolated into the
   // @bottom-center margin box inside the print CSS below. Chromium cannot
@@ -4156,13 +4176,174 @@ export default function FormulaEditor({
           })()}
         </dl>
       )}
+      {/* v69: scenario sub-tabs — cost out what-if quantities. The pill
+          strip swaps the yield the whole Costing tab computes against;
+          Base is the Scale-up Target Yield. Scenario list saves with
+          the formula; the selection is screen-local. */}
+      {tab === "cost" && !printing ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            {tr("Scenarios")}
+          </span>
+          {[
+            { id: null as string | null, label: `${tr("Base")} — ${Math.round(targetYieldUnits).toLocaleString("en-US")}` },
+            ...costScenarios.map((s) => ({
+              id: s.id as string | null,
+              label: `${s.name || tr("Scenario")} — ${Math.round(s.qty).toLocaleString("en-US")}`,
+            })),
+          ].map((p) => {
+            const active = activeScenarioId === p.id;
+            return (
+              <button
+                key={p.id ?? "base"}
+                type="button"
+                onClick={() => setActiveScenarioId(p.id)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? "var(--teal-700, #1d6c7b)" : "var(--line, #e3dcc9)"}`,
+                  background: active
+                    ? "var(--teal-700, #1d6c7b)"
+                    : "var(--paper, #fffdf8)",
+                  color: active ? "#fff" : "var(--teal-900, #0f4a56)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              const id = "sc_" + Math.random().toString(36).slice(2, 9);
+              setCostScenarios((prev) => [
+                ...prev,
+                {
+                  id,
+                  name: `${tr("Scenario")} ${prev.length + 1}`,
+                  qty: targetYieldUnits,
+                },
+              ]);
+              setActiveScenarioId(id);
+            }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px dashed var(--line, #e3dcc9)",
+              background: "transparent",
+              color: "var(--teal-700, #1d6c7b)",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + {tr("Scenario")}
+          </button>
+          {activeScenarioId
+            ? (() => {
+                const sc = costScenarios.find((s) => s.id === activeScenarioId);
+                if (!sc) return null;
+                return (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      marginLeft: 4,
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={sc.name}
+                      onChange={(e) =>
+                        setCostScenarios((prev) =>
+                          prev.map((s) =>
+                            s.id === sc.id ? { ...s, name: e.target.value } : s,
+                          ),
+                        )
+                      }
+                      className="pricing__input"
+                      style={{ width: 130, fontSize: 12 }}
+                      placeholder={tr("Scenario")}
+                    />
+                    <input
+                      key={sc.id + ":" + sc.qty}
+                      type="text"
+                      inputMode="numeric"
+                      defaultValue={Math.round(sc.qty).toLocaleString("en-US")}
+                      onBlur={(e) => {
+                        const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
+                        setCostScenarios((prev) =>
+                          prev.map((s) =>
+                            s.id === sc.id
+                              ? { ...s, qty: Number.isFinite(n) ? Math.max(0, n) : 0 }
+                              : s,
+                          ),
+                        );
+                      }}
+                      className="pricing__input"
+                      style={{
+                        width: 120,
+                        fontSize: 12,
+                        textAlign: "right",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    />
+                    <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
+                      {tr("gummies")}
+                    </span>
+                    <button
+                      type="button"
+                      title="Remove scenario"
+                      onClick={() => {
+                        setCostScenarios((prev) =>
+                          prev.filter((s) => s.id !== sc.id),
+                        );
+                        setActiveScenarioId(null);
+                      }}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--ink-3, #8a9498)",
+                        cursor: "pointer",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })()
+            : null}
+        </div>
+      ) : null}
       {tab === "cost" && (
         <CostTab
           cost={cost}
-          targetYieldUnits={targetYieldUnits}
+          targetYieldUnits={costYieldUnits}
           materialCostPerGummy={
-            !costingModel.costMissing && targetYieldUnits > 0
-              ? costingModel.costSum / targetYieldUnits
+            !costingModel.costMissing && costYieldUnits > 0
+              ? costingModel.costSum / costYieldUnits
               : null
           }
           laborCostPerGummy={laborCostPerGummy}
@@ -4516,8 +4697,8 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, padding: "6px 8px" }}>
                           {(() => {
                             const c = resolveCostPerKg(e);
-                            return c !== null && targetYieldUnits > 0
-                              ? fmtUsd(((pre + cfa) * c) / targetYieldUnits)
+                            return c !== null && costYieldUnits > 0
+                              ? fmtUsd(((pre + cfa) * c) / costYieldUnits)
                               : "—";
                           })()}
                         </td>
@@ -4582,9 +4763,9 @@ export default function FormulaEditor({
                         {/* Price per Gummy total = Batch Total sum ÷
                             Target Yield, same line rule. */}
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
-                          {costMissing || !(targetYieldUnits > 0)
+                          {costMissing || !(costYieldUnits > 0)
                             ? "—"
-                            : fmtUsd(costSum / targetYieldUnits)}
+                            : fmtUsd(costSum / costYieldUnits)}
                         </td>
                         <td style={{ ...qtd, padding: "8px 6px" }}>
                           <DecimalPicker value={costingDec} onChange={setCostingDec} />
@@ -4635,7 +4816,7 @@ export default function FormulaEditor({
               shift default to 8. */}
           {(() => {
             const prodShiftsDefault = roundDays(
-              scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
+              scaleUpDailyYield > 0 ? costYieldUnits / scaleUpDailyYield : 0,
             );
             const setupShifts = setupDays ?? 1;
             const prodShifts = productionDays ?? prodShiftsDefault;
@@ -5051,7 +5232,7 @@ export default function FormulaEditor({
                           <td style={ltd}>{moneyCell(row.total)}</td>
                           <td style={ltd}>
                             {moneyCell(
-                              targetYieldUnits > 0 ? row.total / targetYieldUnits : 0,
+                              costYieldUnits > 0 ? row.total / costYieldUnits : 0,
                               laborDec + 2,
                             )}
                           </td>
@@ -5072,7 +5253,7 @@ export default function FormulaEditor({
                         <td style={ltd}>{moneyCell(grand)}</td>
                         <td style={ltd}>
                           {moneyCell(
-                            targetYieldUnits > 0 ? grand / targetYieldUnits : 0,
+                            costYieldUnits > 0 ? grand / costYieldUnits : 0,
                             laborDec + 2,
                           )}
                         </td>
@@ -5262,7 +5443,7 @@ export default function FormulaEditor({
             const prodShifts =
               productionDays ??
               roundDays(
-                scaleUpDailyYield > 0 ? targetYieldUnits / scaleUpDailyYield : 0,
+                scaleUpDailyYield > 0 ? costYieldUnits / scaleUpDailyYield : 0,
               );
             const batchDays =
               (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
@@ -5270,12 +5451,12 @@ export default function FormulaEditor({
             const batchOverhead =
               workDays > 0 ? (totalMonthly / workDays) * batchDays : 0;
             const perGummy =
-              targetYieldUnits > 0 ? batchOverhead / targetYieldUnits : 0;
+              costYieldUnits > 0 ? batchOverhead / costYieldUnits : 0;
             // Per-line contribution to cost per gummy: monthly charged →
             // batch share → ÷ target yield.
             const perGummyOf = (charged: number) =>
-              workDays > 0 && targetYieldUnits > 0
-                ? ((charged / workDays) * batchDays) / targetYieldUnits
+              workDays > 0 && costYieldUnits > 0
+                ? ((charged / workDays) * batchDays) / costYieldUnits
                 : 0;
             /* v64: sortable columns. Clicking a header physically reorders
                the card's row list (so the order saves with the formula);
@@ -5991,8 +6172,8 @@ export default function FormulaEditor({
                               <td style={ltd}>{roMoney(rowTotal(row))}</td>
                               <td style={ltd}>
                                 {roMoney(
-                                  targetYieldUnits > 0
-                                    ? rowTotal(row) / targetYieldUnits
+                                  costYieldUnits > 0
+                                    ? rowTotal(row) / costYieldUnits
                                     : 0,
                                   labDec + 2,
                                 )}
@@ -6049,8 +6230,8 @@ export default function FormulaEditor({
                             <td style={ltd}>{roMoney(subtotal)}</td>
                             <td style={ltd}>
                               {roMoney(
-                                targetYieldUnits > 0
-                                  ? subtotal / targetYieldUnits
+                                costYieldUnits > 0
+                                  ? subtotal / costYieldUnits
                                   : 0,
                                 labDec + 2,
                               )}
@@ -6107,8 +6288,8 @@ export default function FormulaEditor({
                         color: "var(--ink-3, #8a9498)",
                       }}
                     >
-                      {targetYieldUnits > 0
-                        ? (grand / targetYieldUnits).toLocaleString("en-US", {
+                      {costYieldUnits > 0
+                        ? (grand / costYieldUnits).toLocaleString("en-US", {
                             style: "currency",
                             currency: "USD",
                             minimumFractionDigits: labDec + 2,
