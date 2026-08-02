@@ -4282,35 +4282,9 @@ export default function FormulaEditor({
                         )
                       }
                       className="pricing__input"
-                      style={{ width: 130, fontSize: 12 }}
+                      style={{ width: 150, fontSize: 12 }}
                       placeholder={tr("Scenario")}
                     />
-                    <input
-                      key={sc.id + ":" + sc.qty}
-                      type="text"
-                      inputMode="numeric"
-                      defaultValue={Math.round(sc.qty).toLocaleString("en-US")}
-                      onBlur={(e) => {
-                        const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
-                        setCostScenarios((prev) =>
-                          prev.map((s) =>
-                            s.id === sc.id
-                              ? { ...s, qty: Number.isFinite(n) ? Math.max(0, n) : 0 }
-                              : s,
-                          ),
-                        );
-                      }}
-                      className="pricing__input"
-                      style={{
-                        width: 120,
-                        fontSize: 12,
-                        textAlign: "right",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
-                      {tr("gummies")}
-                    </span>
                     <button
                       type="button"
                       title="Remove scenario"
@@ -4359,6 +4333,16 @@ export default function FormulaEditor({
           batchSizeKg={batchKg}
           cfaBatchSizeKg={cfaBatchKg}
           lineCrewQty={(productionLeaders ?? 0) + (productionOperators ?? 0)}
+          onScenarioQtyChange={
+            activeScenarioId
+              ? (n: number) =>
+                  setCostScenarios((prev) =>
+                    prev.map((s) =>
+                      s.id === activeScenarioId ? { ...s, qty: n } : s,
+                    ),
+                  )
+              : null
+          }
         />
       )}
 
@@ -8011,6 +7995,7 @@ function CostTab({
   batchSizeKg,
   cfaBatchSizeKg,
   lineCrewQty,
+  onScenarioQtyChange,
 }: {
   cost: {
     dollarsPerGummy: number;
@@ -8042,6 +8027,9 @@ function CostTab({
   cfaBatchSizeKg: number;
   /** v66.9: production-phase crew size (leaders + operators). */
   lineCrewQty: number;
+  /** v69.1: non-null while a scenario is active — QTY (Gummies) on the
+   *  Considerations card becomes the editable scenario quantity. */
+  onScenarioQtyChange: ((n: number) => void) | null;
 }) {
   const trTitle = makeTr(useLang());
   // v66.2: shared shells for the QTY mini card + Costs card pair.
@@ -8140,18 +8128,47 @@ function CostTab({
           }}
         >
           <ParamBlock label="QTY (Gummies)" nowrap>
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: "var(--teal-900, #0f4a56)",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {targetYieldUnits > 0
-                ? Math.round(targetYieldUnits).toLocaleString("en-US")
-                : "—"}
-            </div>
+            {onScenarioQtyChange ? (
+              /* v69.1: scenario active — the quantity is edited HERE.
+                 Uncontrolled + commit-on-blur so comma grouping doesn't
+                 fight the cursor; key remounts with fresh formatting. */
+              <input
+                key={"scqty:" + targetYieldUnits}
+                type="text"
+                inputMode="numeric"
+                defaultValue={
+                  targetYieldUnits > 0
+                    ? Math.round(targetYieldUnits).toLocaleString("en-US")
+                    : ""
+                }
+                onBlur={(e) => {
+                  const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
+                  onScenarioQtyChange(Number.isFinite(n) ? Math.max(0, n) : 0);
+                }}
+                className="pricing__input"
+                style={{
+                  width: 150,
+                  fontSize: 20,
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  fontVariantNumeric: "tabular-nums",
+                  textAlign: "right",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {targetYieldUnits > 0
+                  ? Math.round(targetYieldUnits).toLocaleString("en-US")
+                  : "—"}
+              </div>
+            )}
           </ParamBlock>
           <ParamBlock label="Batches / day (Primary Blend)" nowrap>
             <ReadOnly>
