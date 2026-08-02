@@ -146,6 +146,12 @@ type FormulaImportState =
       totalBatchCost: number | null;
       /** created_at of the version the costing came from — freshness stamp. */
       savedAt: string | null;
+      /** v69: the Costing tab's saved what-if scenarios ({name, qty in
+       *  gummies}). Rendered as quick-pick pills — clicking one stamps the
+       *  calculator's Quantity, which re-imports at that run size. */
+      scenarios: Array<{ id: string; name: string; qty: number }>;
+      /** The formula's saved Target Yield (pieces) — the "Base" pill. */
+      baseYieldUnits: number;
     };
 
 const VENDOR_SEARCH_LIMIT = 12;
@@ -1871,6 +1877,13 @@ export default function PricingCalculator({
         totalBatchCost:
           typeof cc.totalBatchCostUsd === "number" ? cc.totalBatchCostUsd : null,
         savedAt: data?.latestVersion?.createdAt ?? null,
+        scenarios: Array.isArray(data?.latestVersion?.costing?.scenarios)
+          ? data.latestVersion.costing.scenarios.filter(
+              (s: { qty?: unknown }) =>
+                typeof s?.qty === "number" && s.qty > 0,
+            )
+          : [],
+        baseYieldUnits: data?.latestVersion?.targetYieldUnits ?? 0,
       });
     } catch {
       setFormulaImport({
@@ -3095,6 +3108,80 @@ export default function PricingCalculator({
                   >
                     Formula costs (from Costing tab)
                   </div>
+                  {/* v69 scenario pills — mirror the Costing tab's sub-tabs.
+                      Clicking one stamps the Quantity field with the
+                      scenario's run size (pieces ÷ 1,000 = units); the
+                      debounced qty effect then re-imports at that yield, so
+                      the card, Cost per unit, Results and print sheet all
+                      re-derive. "Base" is the formula's saved Target Yield. */}
+                  {formulaImport.baseYieldUnits > 0 ||
+                  formulaImport.scenarios.length > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.06em",
+                          color: "#7a8a88",
+                          textTransform: "uppercase",
+                          marginRight: 2,
+                        }}
+                      >
+                        Scenarios
+                      </span>
+                      {[
+                        ...(formulaImport.baseYieldUnits > 0
+                          ? [
+                              {
+                                id: "__base",
+                                name: "Base",
+                                qty: formulaImport.baseYieldUnits,
+                              },
+                            ]
+                          : []),
+                        ...formulaImport.scenarios,
+                      ].map((sc) => {
+                        const isActive =
+                          Math.round(num(quantity) * 1000) === Math.round(sc.qty);
+                        return (
+                          <button
+                            key={sc.id}
+                            type="button"
+                            onClick={() =>
+                              setQuantity(
+                                formatQtyInput(
+                                  String(Math.max(1, Math.round(sc.qty / 1000))),
+                                ),
+                              )
+                            }
+                            style={{
+                              border: isActive
+                                ? "1px solid #0f766e"
+                                : "1px solid #d6e3e1",
+                              background: isActive ? "#0f766e" : "#fff",
+                              color: isActive ? "#fff" : "#134e4a",
+                              borderRadius: 999,
+                              padding: "3px 10px",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {sc.name} — {Math.round(sc.qty).toLocaleString("en-US")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   {(() => {
                     const total = formulaImport.totalPerPiece;
                     const pct = (v: number | null) =>
