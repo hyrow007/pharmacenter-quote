@@ -1442,27 +1442,40 @@ function computeResults(input: {
   const productCost = u * q;
 
   // ---------- USA / domestic: v1 model (task #157) ----------
-  // landed = productCost + freight + accessorials + testing + otherCosts.
+  // landed = productCost + freight + accessorials + testing + otherCosts
+  //          + sales commissions (see below).
   // No CBP fees, no broker baseline — domestic broker rates already roll
   // fuel surcharge into the flat quote and there's no border to cross.
+  //
+  // Commissions (task #352 rev 2): they're part of the landed cost, but
+  // they're a % of the SALE price — so the sale solves algebraically:
+  //   gross-margin: sale = base / (1 − margin − commissionRate)
+  //   markup:       sale = base × (1 + markup) / (1 − rate × (1 + markup))
+  // Either way the effective margin/markup on the commission-inclusive
+  // landed cost comes out exactly what the rep asked for.
   if (isUsa) {
-    const landedTotal = productCost + fr + accessorials + ts + otherCosts;
-    const landedPerUnit = q > 0 ? landedTotal / q : 0;
+    const landedBase = productCost + fr + accessorials + ts + otherCosts;
+    const landedBasePerUnit = q > 0 ? landedBase / q : 0;
+    const commissionRate = hosRate + repRate;
     let salePerUnit = 0;
-    if (landedPerUnit > 0) {
+    if (landedBasePerUnit > 0) {
       if (input.marginMode === "markup") {
-        salePerUnit = landedPerUnit * (1 + mPct);
+        const denom = 1 - commissionRate * (1 + mPct);
+        salePerUnit =
+          denom > 0.0001 ? (landedBasePerUnit * (1 + mPct)) / denom : 0;
       } else {
-        const capped = Math.min(mPct, 0.9999);
-        salePerUnit = landedPerUnit / (1 - capped);
+        const capped = Math.min(mPct + commissionRate, 0.9999);
+        salePerUnit = landedBasePerUnit / (1 - capped);
       }
     }
     const totalRevenue = salePerUnit * q;
+    const hosCommission = totalRevenue * hosRate;
+    const repCommission = totalRevenue * repRate;
+    const landedTotal = landedBase + hosCommission + repCommission;
+    const landedPerUnit = q > 0 ? landedTotal / q : 0;
     const grossProfit = totalRevenue - landedTotal;
     const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
     const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
-    const hosCommission = totalRevenue * hosRate;
-    const repCommission = totalRevenue * repRate;
     return {
       productCost,
       dutiesAmount: 0,
@@ -1473,10 +1486,9 @@ function computeResults(input: {
       grossProfit,
       effectiveMargin,
       effectiveMarkup,
-      // Commissions (task #352) — % of sale, out of gross profit.
+      // Commission dollars — already inside landedTotal (task #352 rev 2).
       hosCommission,
       repCommission,
-      netProfit: grossProfit - hosCommission - repCommission,
       hasInputs: u > 0 && q > 0,
       // v2 breakdown fields (zero for USA — no CBP / broker involvement).
       cifValue: productCost,
@@ -1487,7 +1499,9 @@ function computeResults(input: {
       hmf: 0,
       other: otherCosts,
       shipmentKg: 0,
-      cifLandedUpliftPct: productCost > 0 ? (landedTotal - productCost) / productCost : 0,
+      // Uplift gauge stays commission-free — it measures import/inbound
+      // friction, not sales compensation.
+      cifLandedUpliftPct: productCost > 0 ? (landedBase - productCost) / productCost : 0,
     };
   }
 
@@ -1516,7 +1530,7 @@ function computeResults(input: {
   const mpf = Math.min(cif * MPF_RATE, MPF_MAX);
   const hmf = shippingMode === "ocean" ? cif * HMF_RATE : 0;
 
-  const landedTotal =
+  const landedBase =
     cif +
     brokerBaseline +
     airTerminalFee +
@@ -1526,29 +1540,36 @@ function computeResults(input: {
     hmf +
     ts +
     otherCosts;
-  const landedPerUnit = q > 0 ? landedTotal / q : 0;
+  const landedBasePerUnit = q > 0 ? landedBase / q : 0;
 
+  // Commissions are part of the landed cost but priced as a % of the sale,
+  // so the sale solves algebraically — same derivation as the USA branch.
+  const commissionRate = hosRate + repRate;
   let salePerUnit = 0;
-  if (landedPerUnit > 0) {
+  if (landedBasePerUnit > 0) {
     if (input.marginMode === "markup") {
-      salePerUnit = landedPerUnit * (1 + mPct);
+      const denom = 1 - commissionRate * (1 + mPct);
+      salePerUnit =
+        denom > 0.0001 ? (landedBasePerUnit * (1 + mPct)) / denom : 0;
     } else {
-      const capped = Math.min(mPct, 0.9999);
-      salePerUnit = landedPerUnit / (1 - capped);
+      const capped = Math.min(mPct + commissionRate, 0.9999);
+      salePerUnit = landedBasePerUnit / (1 - capped);
     }
   }
   const totalRevenue = salePerUnit * q;
+  const hosCommission = totalRevenue * hosRate;
+  const repCommission = totalRevenue * repRate;
+  const landedTotal = landedBase + hosCommission + repCommission;
+  const landedPerUnit = q > 0 ? landedTotal / q : 0;
   const grossProfit = totalRevenue - landedTotal;
   const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
   const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
 
   // CIF → landed uplift %: how much friction is added by importing (broker,
   // delivery, duty, CBP fees, lab, other). Shown as a sanity gauge — typical
-  // China softgel imports land around 30–40 %.
-  const cifLandedUpliftPct = cif > 0 ? (landedTotal - cif) / cif : 0;
-
-  const hosCommission = totalRevenue * hosRate;
-  const repCommission = totalRevenue * repRate;
+  // China softgel imports land around 30–40 %. Commission-free on purpose:
+  // it measures import friction, not sales compensation.
+  const cifLandedUpliftPct = cif > 0 ? (landedBase - cif) / cif : 0;
 
   return {
     productCost,
@@ -1560,10 +1581,9 @@ function computeResults(input: {
     grossProfit,
     effectiveMargin,
     effectiveMarkup,
-    // Commissions (task #352) — % of sale, out of gross profit.
+    // Commission dollars — already inside landedTotal (task #352 rev 2).
     hosCommission,
     repCommission,
-    netProfit: grossProfit - hosCommission - repCommission,
     hasInputs: u > 0 && q > 0,
     // v2 breakdown for the audit-trail UI.
     cifValue: cif,
@@ -3907,8 +3927,9 @@ export default function PricingCalculator({
           </label>
         </div>
         <p className="pricing__hint">
-          Commissions are a percent of the sale price and come out of gross
-          profit — they don&apos;t change the sale price itself.
+          Commissions are part of the landed cost — they&apos;re computed as a
+          percent of the sale price, and the sale price is solved so it covers
+          them on top of your margin.
         </p>
       </section>
 
@@ -4014,6 +4035,22 @@ export default function PricingCalculator({
                   ) : null}
                 </>
               ) : null}
+              {/* Commissions (task #352 rev 2) — cost lines inside the
+                  landed total, computed as % of the solved sale price. */}
+              {num(hosCommissionPct) > 0 ? (
+                <Row
+                  label={`Head of Sales commission (${hosCommissionPct}%)`}
+                  value={usd.format(results.hosCommission)}
+                  muted
+                />
+              ) : null}
+              {num(repCommissionPct) > 0 ? (
+                <Row
+                  label={`Sales Rep commission (${repCommissionPct}%)`}
+                  value={usd.format(results.repCommission)}
+                  muted
+                />
+              ) : null}
               <Row
                 label="Landed cost (in warehouse)"
                 value={usd.format(results.landedTotal)}
@@ -4057,27 +4094,6 @@ export default function PricingCalculator({
                 value={usd.format(results.grossProfit)}
                 emphasis
               />
-              {/* Commissions (task #352) — only rendered when a non-zero
-                  rate is set so non-commission quotes stay uncluttered. */}
-              {num(hosCommissionPct) > 0 || num(repCommissionPct) > 0 ? (
-                <>
-                  <Row
-                    label={`Head of Sales commission (${hosCommissionPct || "0"}%)`}
-                    value={usd.format(results.hosCommission)}
-                    muted
-                  />
-                  <Row
-                    label={`Sales Rep commission (${repCommissionPct || "0"}%)`}
-                    value={usd.format(results.repCommission)}
-                    muted
-                  />
-                  <Row
-                    label="Profit after commissions"
-                    value={usd.format(results.netProfit)}
-                    emphasis
-                  />
-                </>
-              ) : null}
             </div>
           </>
         )}
@@ -4409,6 +4425,20 @@ export default function PricingCalculator({
                 </tr>
               ) : null
             )}
+            {/* Commissions (task #352 rev 2) — cost lines inside the
+                landed total, same placement as the Results card. */}
+            {num(hosCommissionPct) > 0 ? (
+              <tr>
+                <td>Head of Sales commission ({hosCommissionPct}%)</td>
+                <td>{usd.format(results.hosCommission)}</td>
+              </tr>
+            ) : null}
+            {num(repCommissionPct) > 0 ? (
+              <tr>
+                <td>Sales Rep commission ({repCommissionPct}%)</td>
+                <td>{usd.format(results.repCommission)}</td>
+              </tr>
+            ) : null}
             <tr className="pricing-print__row--emphasis">
               <td>Landed cost (in warehouse)</td>
               <td>{usd.format(results.landedTotal)}</td>
@@ -4435,23 +4465,6 @@ export default function PricingCalculator({
               <td>Gross profit</td>
               <td>{usd.format(results.grossProfit)}</td>
             </tr>
-            {/* Commissions (task #352) — same gate as the Results card. */}
-            {num(hosCommissionPct) > 0 || num(repCommissionPct) > 0 ? (
-              <>
-                <tr>
-                  <td>Head of Sales commission ({hosCommissionPct || "0"}%)</td>
-                  <td>{usd.format(results.hosCommission)}</td>
-                </tr>
-                <tr>
-                  <td>Sales Rep commission ({repCommissionPct || "0"}%)</td>
-                  <td>{usd.format(results.repCommission)}</td>
-                </tr>
-                <tr className="pricing-print__row--emphasis">
-                  <td>Profit after commissions</td>
-                  <td>{usd.format(results.netProfit)}</td>
-                </tr>
-              </>
-            ) : null}
             <tr>
               <td>Effective margin</td>
               <td>{pct.format(results.effectiveMargin)}</td>
