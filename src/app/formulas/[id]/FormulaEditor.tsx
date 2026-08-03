@@ -870,6 +870,14 @@ export default function FormulaEditor({
     () => seedVersion.costing?.scenarios ?? [],
   );
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  // v69.2: pill interactions — right-click renames in place; a hover ×
+  // deletes. Both screen-local.
+  const [renamingScenarioId, setRenamingScenarioId] = useState<string | null>(
+    null,
+  );
+  const [hoveredScenarioId, setHoveredScenarioId] = useState<string | null>(
+    null,
+  );
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
@@ -4201,36 +4209,109 @@ export default function FormulaEditor({
           >
             {tr("Scenarios")}
           </span>
-          {[
-            { id: null as string | null, label: `${tr("Base")} — ${Math.round(targetYieldUnits).toLocaleString("en-US")}` },
-            ...costScenarios.map((s) => ({
-              id: s.id as string | null,
-              label: `${s.name || tr("Scenario")} — ${Math.round(s.qty).toLocaleString("en-US")}`,
-            })),
-          ].map((p) => {
-            const active = activeScenarioId === p.id;
+          {(() => {
+            const pillStyle = (active: boolean): React.CSSProperties => ({
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: `1px solid ${active ? "var(--teal-700, #1d6c7b)" : "var(--line, #e3dcc9)"}`,
+              background: active
+                ? "var(--teal-700, #1d6c7b)"
+                : "var(--paper, #fffdf8)",
+              color: active ? "#fff" : "var(--teal-900, #0f4a56)",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            });
             return (
-              <button
-                key={p.id ?? "base"}
-                type="button"
-                onClick={() => setActiveScenarioId(p.id)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 999,
-                  border: `1px solid ${active ? "var(--teal-700, #1d6c7b)" : "var(--line, #e3dcc9)"}`,
-                  background: active
-                    ? "var(--teal-700, #1d6c7b)"
-                    : "var(--paper, #fffdf8)",
-                  color: active ? "#fff" : "var(--teal-900, #0f4a56)",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {p.label}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveScenarioId(null)}
+                  style={pillStyle(activeScenarioId === null)}
+                >
+                  {tr("Base")} —{" "}
+                  {Math.round(targetYieldUnits).toLocaleString("en-US")}
+                </button>
+                {costScenarios.map((s) => {
+                  const active = activeScenarioId === s.id;
+                  if (renamingScenarioId === s.id) {
+                    // v69.2: in-place rename (right-click opens; Enter /
+                    // blur commits).
+                    return (
+                      <input
+                        key={s.id}
+                        autoFocus
+                        type="text"
+                        defaultValue={s.name}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape")
+                            (e.target as HTMLInputElement).blur();
+                        }}
+                        onBlur={(e) => {
+                          const name = e.target.value.trim();
+                          if (name)
+                            setCostScenarios((prev) =>
+                              prev.map((x) =>
+                                x.id === s.id ? { ...x, name } : x,
+                              ),
+                            );
+                          setRenamingScenarioId(null);
+                        }}
+                        className="pricing__input"
+                        style={{
+                          width: 140,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          borderRadius: 999,
+                          padding: "6px 14px",
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setActiveScenarioId(s.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setRenamingScenarioId(s.id);
+                      }}
+                      onMouseEnter={() => setHoveredScenarioId(s.id)}
+                      onMouseLeave={() => setHoveredScenarioId(null)}
+                      title="Right-click to rename"
+                      style={pillStyle(active)}
+                    >
+                      {s.name || tr("Scenario")} —{" "}
+                      {Math.round(s.qty).toLocaleString("en-US")}
+                      {hoveredScenarioId === s.id ? (
+                        <span
+                          role="button"
+                          aria-label="Delete scenario"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCostScenarios((prev) =>
+                              prev.filter((x) => x.id !== s.id),
+                            );
+                            if (activeScenarioId === s.id)
+                              setActiveScenarioId(null);
+                            setHoveredScenarioId(null);
+                          }}
+                          style={{
+                            marginLeft: 8,
+                            fontWeight: 700,
+                            opacity: 0.75,
+                          }}
+                        >
+                          ×
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
           <button
             type="button"
             onClick={() => {
@@ -4258,57 +4339,6 @@ export default function FormulaEditor({
           >
             + {tr("Scenario")}
           </button>
-          {activeScenarioId
-            ? (() => {
-                const sc = costScenarios.find((s) => s.id === activeScenarioId);
-                if (!sc) return null;
-                return (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginLeft: 4,
-                    }}
-                  >
-                    <input
-                      type="text"
-                      value={sc.name}
-                      onChange={(e) =>
-                        setCostScenarios((prev) =>
-                          prev.map((s) =>
-                            s.id === sc.id ? { ...s, name: e.target.value } : s,
-                          ),
-                        )
-                      }
-                      className="pricing__input"
-                      style={{ width: 150, fontSize: 12 }}
-                      placeholder={tr("Scenario")}
-                    />
-                    <button
-                      type="button"
-                      title="Remove scenario"
-                      onClick={() => {
-                        setCostScenarios((prev) =>
-                          prev.filter((s) => s.id !== sc.id),
-                        );
-                        setActiveScenarioId(null);
-                      }}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        color: "var(--ink-3, #8a9498)",
-                        cursor: "pointer",
-                        fontSize: 14,
-                        fontWeight: 700,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                );
-              })()
-            : null}
         </div>
       ) : null}
       {tab === "cost" && (
