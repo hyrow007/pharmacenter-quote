@@ -1231,6 +1231,10 @@ type TabState = {
   testing: string;
   margin: string;
   marginMode: Mode;
+  // Sales commissions (task #352) — % of sale price, deducted from gross
+  // profit. Stored as typed strings like every other input.
+  hosCommissionPct: string;
+  repCommissionPct: string;
   savedAt: string | null;
   // v2 landed-cost model (see task #155).
   shippingMode: "ocean" | "air";
@@ -1245,6 +1249,11 @@ type TabState = {
   accessorials: string;
 };
 
+// Commission defaults (task #352). Bulk quotes seed these on fresh tabs;
+// other quote types (and scratch calculations) start blank = 0%.
+const DEFAULT_HOS_COMMISSION_PCT = "0.5";
+const DEFAULT_REP_COMMISSION_PCT = "3";
+
 function newTabId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return `tab-${crypto.randomUUID()}`;
@@ -1252,8 +1261,10 @@ function newTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Defaults for a freshly added blank tab.
-function blankTab(): TabState {
+// Defaults for a freshly added blank tab. `commissionSeed` carries the
+// bulk-quote commission defaults (HoS 0.50% / Rep 3%) — undefined for
+// non-bulk quote types so those tabs start at 0%.
+function blankTab(commissionSeed?: { hos: string; rep: string }): TabState {
   return {
     tabId: newTabId(),
     label: null,
@@ -1278,6 +1289,8 @@ function blankTab(): TabState {
     testing: String(DEFAULT_LAB_TESTING),
     margin: "30",
     marginMode: "gross-margin",
+    hosCommissionPct: commissionSeed?.hos ?? "",
+    repCommissionPct: commissionSeed?.rep ?? "",
     savedAt: null,
     shippingMode: DEFAULT_SHIPPING_MODE,
     otherCosts: String(DEFAULT_OTHER_COSTS),
@@ -1324,6 +1337,10 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
     testing: snap.testing,
     margin: snap.margin,
     marginMode: snap.marginMode,
+    // Commissions (task #352) — legacy snapshots hydrate blank (0%) so a
+    // saved quote's profit math doesn't change retroactively.
+    hosCommissionPct: snap.hosCommissionPct ?? "",
+    repCommissionPct: snap.repCommissionPct ?? "",
     savedAt: snap.savedAt,
     // v2 fields — default when the snapshot predates the model change.
     shippingMode: snap.shippingMode ?? DEFAULT_SHIPPING_MODE,
@@ -1397,6 +1414,11 @@ function computeResults(input: {
   // don't affect landed cost. They're metadata for the lane-history table
   // that will drive rate-suggestion in a later phase.
   accessorials?: string;
+  // Sales commissions (task #352) — % of the sale price, deducted from
+  // gross profit. They do NOT change the sale price itself. Optional so
+  // pre-commission snapshots evaluate with 0.
+  hosCommissionPct?: string;
+  repCommissionPct?: string;
 }) {
   const u = num(input.unitCost);
   const q = num(input.quantity);
@@ -1412,6 +1434,10 @@ function computeResults(input: {
   const ts = num(input.testing);
   const otherCosts = num(input.otherCosts ?? "");
   const accessorials = num(input.accessorials ?? "");
+  // Commission rates (task #352) — shared by both the USA and international
+  // branches below; each computes its dollar amounts off its own revenue.
+  const hosRate = num(input.hosCommissionPct ?? "") / 100;
+  const repRate = num(input.repCommissionPct ?? "") / 100;
 
   const productCost = u * q;
 
@@ -1435,6 +1461,8 @@ function computeResults(input: {
     const grossProfit = totalRevenue - landedTotal;
     const effectiveMargin = totalRevenue > 0 ? grossProfit / totalRevenue : 0;
     const effectiveMarkup = landedTotal > 0 ? grossProfit / landedTotal : 0;
+    const hosCommission = totalRevenue * hosRate;
+    const repCommission = totalRevenue * repRate;
     return {
       productCost,
       dutiesAmount: 0,
@@ -1445,6 +1473,10 @@ function computeResults(input: {
       grossProfit,
       effectiveMargin,
       effectiveMarkup,
+      // Commissions (task #352) — % of sale, out of gross profit.
+      hosCommission,
+      repCommission,
+      netProfit: grossProfit - hosCommission - repCommission,
       hasInputs: u > 0 && q > 0,
       // v2 breakdown fields (zero for USA — no CBP / broker involvement).
       cifValue: productCost,
@@ -1515,6 +1547,9 @@ function computeResults(input: {
   // China softgel imports land around 30–40 %.
   const cifLandedUpliftPct = cif > 0 ? (landedTotal - cif) / cif : 0;
 
+  const hosCommission = totalRevenue * hosRate;
+  const repCommission = totalRevenue * repRate;
+
   return {
     productCost,
     dutiesAmount,
@@ -1525,6 +1560,10 @@ function computeResults(input: {
     grossProfit,
     effectiveMargin,
     effectiveMarkup,
+    // Commissions (task #352) — % of sale, out of gross profit.
+    hosCommission,
+    repCommission,
+    netProfit: grossProfit - hosCommission - repCommission,
     hasInputs: u > 0 && q > 0,
     // v2 breakdown for the audit-trail UI.
     cifValue: cif,
@@ -1553,6 +1592,14 @@ export default function PricingCalculator({
   preparerEmail,
   preparerName,
 }: Props) {
+  // Bulk quotes carry sales commissions (task #352): Head of Sales 0.50% +
+  // Sales Rep 3% of the sale price, both editable. Other quote types (and
+  // scratch calculations outside a workflow) start blank = 0%.
+  const isBulkWorkflow = workflowState?.type === "bulk";
+  const commissionSeed = isBulkWorkflow
+    ? { hos: DEFAULT_HOS_COMMISSION_PCT, rep: DEFAULT_REP_COMMISSION_PCT }
+    : undefined;
+
   // --- Tabs ------------------------------------------------------------
   // Excel-style tabs at the top. Each tab is one independent calculator
   // state. Switching tabs writes the current input state into the old
@@ -1560,7 +1607,7 @@ export default function PricingCalculator({
   const [tabs, setTabs] = useState<TabState[]>(() =>
     initialPricingTabs.length > 0
       ? initialPricingTabs.map(tabFromSnapshot)
-      : [blankTab()],
+      : [blankTab(commissionSeed)],
   );
   const [activeTabIndex, setActiveTabIndex] = useState<number>(0);
 
@@ -1910,6 +1957,15 @@ export default function PricingCalculator({
   const [marginMode, setMarginMode] = useState<Mode>(
     () => tabs[0]?.marginMode ?? "gross-margin",
   );
+  // Sales commissions (task #352) — % of sale price, deducted from gross
+  // profit. Fresh bulk tabs arrive pre-seeded via blankTab(commissionSeed);
+  // saved tabs hydrate exactly what they stored (legacy = blank = 0%).
+  const [hosCommissionPct, setHosCommissionPct] = useState<string>(
+    () => tabs[0]?.hosCommissionPct ?? "",
+  );
+  const [repCommissionPct, setRepCommissionPct] = useState<string>(
+    () => tabs[0]?.repCommissionPct ?? "",
+  );
 
   // v2 landed-cost model state (task #155). shippingMode toggles Air/Ocean
   // for international shipments; otherCosts is the catch-all buffer for
@@ -2056,6 +2112,11 @@ export default function PricingCalculator({
         // cost; the metadata fields don't affect math but are still
         // captured on the tab state / snapshot.
         accessorials: isStockProduct ? "" : accessorials,
+        // Commissions (task #352) apply to every quote type — they're a
+        // % of the sale price, so stock / PC-manufactured products keep
+        // them even though inbound costs are zeroed.
+        hosCommissionPct,
+        repCommissionPct,
       }),
     [
       unitCost, quantity,
@@ -2064,6 +2125,7 @@ export default function PricingCalculator({
       shippingOrigin, incoterm,
       shippingMode, otherCosts, deliveryOverride, unitWeightG,
       accessorials,
+      hosCommissionPct, repCommissionPct,
       isStockProduct,
     ],
   );
@@ -2095,6 +2157,8 @@ export default function PricingCalculator({
       testing,
       margin,
       marginMode,
+      hosCommissionPct,
+      repCommissionPct,
       savedAt: lastSavedAt,
       // v2 fields
       shippingMode,
@@ -2133,6 +2197,8 @@ export default function PricingCalculator({
     setTesting(t.testing);
     setMargin(t.margin);
     setMarginMode(t.marginMode);
+    setHosCommissionPct(t.hosCommissionPct);
+    setRepCommissionPct(t.repCommissionPct);
     setLastSavedAt(t.savedAt);
     setSaveError(null);
     // v2 fields
@@ -2161,7 +2227,7 @@ export default function PricingCalculator({
 
   function addTab() {
     const snap = snapshotCurrentTab();
-    const fresh = blankTab();
+    const fresh = blankTab(commissionSeed);
     setTabs((prev) => [
       ...prev.map((t, i) => (i === activeTabIndex ? snap : t)),
       fresh,
@@ -2258,6 +2324,9 @@ export default function PricingCalculator({
       unitWeightG,
       // Domestic v1 (task #157) — accessorials feeds USA landed cost.
       accessorials: t.accessorials,
+      // Commissions (task #352).
+      hosCommissionPct: t.hosCommissionPct,
+      repCommissionPct: t.repCommissionPct,
     });
     const vendorLabel =
       t.vendorMode === "existing" ? t.vendorName : t.newVendorName.trim() || null;
@@ -2281,6 +2350,9 @@ export default function PricingCalculator({
       testing: t.testing,
       margin: t.margin,
       marginMode: t.marginMode,
+      // Commissions (task #352) — persist so the tab hydrates as saved.
+      hosCommissionPct: t.hosCommissionPct,
+      repCommissionPct: t.repCommissionPct,
       // v2 fields — persist so the tab hydrates exactly as saved.
       shippingMode: t.shippingMode,
       otherCosts: t.otherCosts,
@@ -2583,6 +2655,9 @@ export default function PricingCalculator({
     setTesting(String(DEFAULT_LAB_TESTING));
     setMargin("30");
     setMarginMode("gross-margin");
+    // Commissions (task #352) — reseed the bulk defaults (blank elsewhere).
+    setHosCommissionPct(commissionSeed?.hos ?? "");
+    setRepCommissionPct(commissionSeed?.rep ?? "");
     // v2 fields — seed with the same defaults blankTab() uses.
     setShippingMode(DEFAULT_SHIPPING_MODE);
     setOtherCosts(String(DEFAULT_OTHER_COSTS));
@@ -3789,6 +3864,54 @@ export default function PricingCalculator({
         </p>
       </section>
 
+      {/* Commissions (task #352) — % of the sale price, deducted from gross
+          profit on the Results card. Bulk quotes default HoS 0.50% + Rep 3%;
+          everything else starts blank (0%). Always rendered so any quote
+          type can add commissions. */}
+      <section className="pricing__section">
+        <h2 className="pricing__section-title">Commissions</h2>
+        <div className="pricing__row">
+          <label className="pricing__field pricing__field--margin">
+            <span className="pricing__label">Head of Sales commission</span>
+            <div className="pricing__input-wrap">
+              <input
+                type="text"
+                inputMode="decimal"
+                className="pricing__input pricing__input--pct"
+                value={hosCommissionPct}
+                onChange={(e) =>
+                  setHosCommissionPct(formatPercentInput(e.target.value))
+                }
+                placeholder="0.50"
+                autoComplete="off"
+              />
+              <span className="pricing__input-suffix">%</span>
+            </div>
+          </label>
+          <label className="pricing__field pricing__field--margin">
+            <span className="pricing__label">Sales Rep commission</span>
+            <div className="pricing__input-wrap">
+              <input
+                type="text"
+                inputMode="decimal"
+                className="pricing__input pricing__input--pct"
+                value={repCommissionPct}
+                onChange={(e) =>
+                  setRepCommissionPct(formatPercentInput(e.target.value))
+                }
+                placeholder="3"
+                autoComplete="off"
+              />
+              <span className="pricing__input-suffix">%</span>
+            </div>
+          </label>
+        </div>
+        <p className="pricing__hint">
+          Commissions are a percent of the sale price and come out of gross
+          profit — they don&apos;t change the sale price itself.
+        </p>
+      </section>
+
       <section className="pricing__results">
         <div className="pricing__results-header">
           <h2 className="pricing__section-title pricing__section-title--results">
@@ -3934,6 +4057,27 @@ export default function PricingCalculator({
                 value={usd.format(results.grossProfit)}
                 emphasis
               />
+              {/* Commissions (task #352) — only rendered when a non-zero
+                  rate is set so non-commission quotes stay uncluttered. */}
+              {num(hosCommissionPct) > 0 || num(repCommissionPct) > 0 ? (
+                <>
+                  <Row
+                    label={`Head of Sales commission (${hosCommissionPct || "0"}%)`}
+                    value={usd.format(results.hosCommission)}
+                    muted
+                  />
+                  <Row
+                    label={`Sales Rep commission (${repCommissionPct || "0"}%)`}
+                    value={usd.format(results.repCommission)}
+                    muted
+                  />
+                  <Row
+                    label="Profit after commissions"
+                    value={usd.format(results.netProfit)}
+                    emphasis
+                  />
+                </>
+              ) : null}
             </div>
           </>
         )}
@@ -4094,6 +4238,19 @@ export default function PricingCalculator({
               <td>{marginMode === "markup" ? "Markup" : "Gross margin"}</td>
               <td>{margin || "0"}%</td>
             </tr>
+            {/* Commissions (task #352) — mirror the on-screen inputs. */}
+            {num(hosCommissionPct) > 0 ? (
+              <tr>
+                <td>Head of Sales commission</td>
+                <td>{hosCommissionPct}%</td>
+              </tr>
+            ) : null}
+            {num(repCommissionPct) > 0 ? (
+              <tr>
+                <td>Sales Rep commission</td>
+                <td>{repCommissionPct}%</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
 
@@ -4278,6 +4435,23 @@ export default function PricingCalculator({
               <td>Gross profit</td>
               <td>{usd.format(results.grossProfit)}</td>
             </tr>
+            {/* Commissions (task #352) — same gate as the Results card. */}
+            {num(hosCommissionPct) > 0 || num(repCommissionPct) > 0 ? (
+              <>
+                <tr>
+                  <td>Head of Sales commission ({hosCommissionPct || "0"}%)</td>
+                  <td>{usd.format(results.hosCommission)}</td>
+                </tr>
+                <tr>
+                  <td>Sales Rep commission ({repCommissionPct || "0"}%)</td>
+                  <td>{usd.format(results.repCommission)}</td>
+                </tr>
+                <tr className="pricing-print__row--emphasis">
+                  <td>Profit after commissions</td>
+                  <td>{usd.format(results.netProfit)}</td>
+                </tr>
+              </>
+            ) : null}
             <tr>
               <td>Effective margin</td>
               <td>{pct.format(results.effectiveMargin)}</td>

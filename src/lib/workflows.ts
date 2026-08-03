@@ -111,6 +111,12 @@ export type PricingSnapshot = {
   margin: string;
   marginMode: "markup" | "gross-margin";
 
+  // Sales commissions (task #352) — percent of sale price, deducted from
+  // gross profit. Bulk quotes default HoS 0.50% + Rep 3%; both editable.
+  // Optional so pre-commission snapshots still parse (hydrate as blank = 0%).
+  hosCommissionPct?: string;
+  repCommissionPct?: string;
+
   // v2 landed-cost model (Jul 2026 rebuild — see task #155).
   // Optional so pre-v2 snapshots still parse; defaults get applied on hydrate.
   //   shippingMode: only meaningful when shippingOrigin === "international".
