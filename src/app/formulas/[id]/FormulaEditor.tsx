@@ -1876,6 +1876,32 @@ export default function FormulaEditor({
           ];
         }
       }
+      // v71: mirror the CLAIM ORDER onto the claim-sourced cooked rows —
+      // dragging actives into a new order on Label Claims rearranges the
+      // linked Secondary Blend rows to match. The linked rows keep their
+      // SLOTS in the overall ingredient list (only the subset is
+      // rearranged), so hand-authored rows never move.
+      const claimOrder = new Map<string, number>();
+      labelClaims.forEach((c, i) => claimOrder.set(c.id, i));
+      const slotIdxs: number[] = [];
+      next.forEach((r, i) => {
+        if (r.sourceLabelClaimId && claimOrder.has(r.sourceLabelClaimId))
+          slotIdxs.push(i);
+      });
+      if (slotIdxs.length > 1) {
+        const sortedRows = slotIdxs
+          .map((i) => next[i])
+          .sort(
+            (a, b) =>
+              (claimOrder.get(a.sourceLabelClaimId as string) ?? 0) -
+              (claimOrder.get(b.sourceLabelClaimId as string) ?? 0),
+          );
+        const rearranged = [...next];
+        slotIdxs.forEach((slot, k) => {
+          rearranged[slot] = sortedRows[k];
+        });
+        next = rearranged;
+      }
       // Compare-then-set — bail out with `prev` if the effect produced
       // an identical array so React doesn't re-render / re-fire this
       // effect (prevents render loops when nothing actually changed).
@@ -3822,6 +3848,17 @@ export default function FormulaEditor({
           onAdd={addLabelClaim}
           onUpdate={updateLabelClaim}
           onRemove={removeLabelClaim}
+          onReorder={(fromId, toId) =>
+            setLabelClaims((prev) => {
+              const fromIdx = prev.findIndex((c) => c.id === fromId);
+              const toIdx = prev.findIndex((c) => c.id === toId);
+              if (fromIdx < 0 || toIdx < 0) return prev;
+              const next = [...prev];
+              const [moved] = next.splice(fromIdx, 1);
+              next.splice(toIdx, 0, moved);
+              return next;
+            })
+          }
         />
 
         {/* d line — dotted print-only divider under Label Claims, closes
@@ -11770,14 +11807,21 @@ function LabelClaimsSection({
   onAdd,
   onUpdate,
   onRemove,
+  onReorder,
 }: {
   claims: LabelClaim[];
   rawMaterials: RawMaterialOption[];
   onAdd: () => void;
   onUpdate: (id: string, patch: Partial<LabelClaim>) => void;
   onRemove: (id: string) => void;
+  /** v71: drop `fromId` onto `toId` — reorders the actives; the parent
+   *  sync mirrors the new order onto the Secondary Blend rows. */
+  onReorder: (fromId: string, toId: string) => void;
 }) {
   const tr = makeTr(useLang());
+  // v71: drag-to-reorder state for the claim rows.
+  const [dragClaimId, setDragClaimId] = useState<string | null>(null);
+  const [dropClaimId, setDropClaimId] = useState<string | null>(null);
   // Build the same lookup the parent uses so we can resolve a claim's
   // rawMaterialId or rawMaterialFpCode back to a RawMaterialOption without
   // threading another prop.
@@ -11928,7 +11972,40 @@ function LabelClaimsSection({
               : 0;
             const inputAmt = labelClaimInputAmount(c);
             return (
-              <LabelClaimRow key={c.id} onRemove={() => onRemove(c.id)}>
+              <LabelClaimRow
+                key={c.id}
+                onRemove={() => onRemove(c.id)}
+                dnd={{
+                  dragging: dragClaimId === c.id,
+                  dropTarget: dropClaimId === c.id && dragClaimId !== c.id,
+                  onDragStart: (e) => {
+                    e.dataTransfer.setData("text/plain", c.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragClaimId(c.id);
+                  },
+                  onDragEnd: () => {
+                    setDragClaimId(null);
+                    setDropClaimId(null);
+                  },
+                  onDragOver: (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropClaimId !== c.id) setDropClaimId(c.id);
+                  },
+                  onDragLeave: (e) => {
+                    const nxt = e.relatedTarget as Node | null;
+                    if (nxt && e.currentTarget.contains(nxt)) return;
+                    if (dropClaimId === c.id) setDropClaimId(null);
+                  },
+                  onDrop: (e) => {
+                    e.preventDefault();
+                    const fromId = e.dataTransfer.getData("text/plain");
+                    setDragClaimId(null);
+                    setDropClaimId(null);
+                    if (fromId && fromId !== c.id) onReorder(fromId, c.id);
+                  },
+                }}
+              >
                 <IngredientPicker
                   row={{
                     rawMaterialId: c.rawMaterialId,
@@ -13327,22 +13404,67 @@ const LABEL_CLAIM_GRID_TEMPLATE = "1fr 90px 70px 90px 100px 32px";
 function LabelClaimRow({
   onRemove,
   children,
+  dnd,
 }: {
   onRemove: () => void;
   children: React.ReactNode;
+  /** v71: drag-to-reorder wiring from LabelClaimsSection. */
+  dnd?: {
+    dragging: boolean;
+    dropTarget: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDragLeave: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+  };
 }) {
   const [hover, setHover] = useState(false);
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onDragOver={dnd?.onDragOver}
+      onDragLeave={dnd?.onDragLeave}
+      onDrop={dnd?.onDrop}
       style={{
         display: "grid",
         gridTemplateColumns: LABEL_CLAIM_GRID_TEMPLATE,
         gap: 8,
         alignItems: "center",
+        position: "relative",
+        opacity: dnd?.dragging ? 0.4 : 1,
+        outline: dnd?.dropTarget
+          ? "2px dashed var(--teal-700, #1d6c7b)"
+          : "none",
+        outlineOffset: 2,
+        borderRadius: 6,
       }}
     >
+      {dnd ? (
+        <span
+          draggable
+          aria-label="Drag to reorder"
+          title="Drag to reorder — the Secondary Blend follows this order"
+          onDragStart={dnd.onDragStart}
+          onDragEnd={dnd.onDragEnd}
+          style={{
+            position: "absolute",
+            left: -16,
+            top: "50%",
+            transform: "translateY(-50%)",
+            cursor: "grab",
+            color: "var(--ink-3, #8a9498)",
+            fontSize: 12,
+            letterSpacing: "-1px",
+            userSelect: "none",
+            opacity: hover ? 0.9 : 0.25,
+            transition: "opacity 80ms ease",
+          }}
+        >
+          ⋮⋮
+        </span>
+      ) : null}
       {children}
       <button
         type="button"
