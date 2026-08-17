@@ -281,7 +281,7 @@ export default function FormulasCatalog({
   const columns: ColumnConfig[] = [
     { key: "formulaNumber", label: "Formula", width: 80 },
     { key: "pcBkCode", label: "Product Code", width: 125 },
-    { key: "name", label: "Name", width: 265 },
+    { key: "name", label: "Name", width: 245 },
     { key: "customer", label: "Customer", width: 135 },
     { key: "shape", label: "Shape", width: 65 },
     { key: "flavor", label: "Flavor", width: 80 },
@@ -422,7 +422,7 @@ export default function FormulasCatalog({
                   width={col.width}
                 />
               ))}
-              {isAdmin ? <Th style={{ textAlign: "right", width: 145 }}>{tr("Actions")}</Th> : null}
+              {isAdmin ? <Th style={{ textAlign: "right", width: 165 }}>{tr("Actions")}</Th> : null}
             </tr>
           </thead>
           <tbody>
