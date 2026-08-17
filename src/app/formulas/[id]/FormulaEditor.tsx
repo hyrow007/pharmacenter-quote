@@ -2284,7 +2284,10 @@ export default function FormulaEditor({
              shows; the rounded corners come right back when it closes. */
           .fe-blend-panel:has(ul[role="menu"]),
           .fe-blend-card:has(ul[role="menu"]),
-          [style*="overflow: hidden"]:has(ul[role="menu"]) {
+          [style*="overflow: hidden"]:has(ul[role="menu"]),
+          .fe-blend-panel:has(.fe-search-pop),
+          .fe-blend-card:has(.fe-search-pop),
+          [style*="overflow: hidden"]:has(.fe-search-pop) {
             overflow: visible !important;
           }
           .fe-grand-total-block {
@@ -13507,6 +13510,7 @@ function IngredientPicker({
       />
       {search.trim().length > 0 && results.length > 0 ? (
         <ul
+          className="fe-search-pop"
           style={{
             position: "absolute",
             top: "calc(100% + 2px)",
@@ -13643,6 +13647,7 @@ function IngredientPicker({
         </ul>
       ) : search.trim().length > 0 ? (
         <div
+          className="fe-search-pop"
           style={{
             position: "absolute",
             top: "calc(100% + 2px)",
