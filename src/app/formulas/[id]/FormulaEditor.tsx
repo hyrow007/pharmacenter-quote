@@ -2220,7 +2220,10 @@ export default function FormulaEditor({
     tr("Formula") + " F" + String(initialFormula.formulaNumber ?? 0).padStart(4, "0"),
     // v54: the printed sheet carries the ISSUED number; a draft marker
     // flags sheets printed with unissued changes.
-    tr("Version") + " v" + String(initialIssue.issueNum) + (isDraft ? " (" + tr("draft") + ")" : ""),
+    tr("Version") +
+      " " +
+      (initialIssue.issueNum > 0 ? "v" + String(initialIssue.issueNum) : "—") +
+      (isDraft ? " (" + tr("draft") + ")" : ""),
     (name || "").trim() || "(unnamed)",
   ]
     .join("  \u00B7  ")
@@ -2273,6 +2276,16 @@ export default function FormulaEditor({
           .fe-blend-panel > .fe-blend-subheading,
           .fe-blend-panel > div:first-child {
             border-top: none !important;
+          }
+          /* v70: the "+ Add solution ▾" popover renders inside the blend
+             panel / card, whose overflow:hidden (rounded-corner clipping)
+             was cutting the menu off at the card edge. While a menu is
+             open, let every clipping ancestor overflow so the full list
+             shows; the rounded corners come right back when it closes. */
+          .fe-blend-panel:has(ul[role="menu"]),
+          .fe-blend-card:has(ul[role="menu"]),
+          [style*="overflow: hidden"]:has(ul[role="menu"]) {
+            overflow: visible !important;
           }
           .fe-grand-total-block {
             border: 1.5px solid var(--teal-700, #1d6c7b) !important;
@@ -3265,8 +3278,8 @@ export default function FormulaEditor({
               {String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}
             </span>
             <span>
-              <strong style={{ color: "#0f4a56" }}>{tr("Version")}</strong> v
-              {initialIssue.issueNum}
+              <strong style={{ color: "#0f4a56" }}>{tr("Version")}</strong>{" "}
+              {initialIssue.issueNum > 0 ? `v${initialIssue.issueNum}` : "—"}
               {isDraft ? ` (${tr("draft")})` : ""}
             </span>
             {initialFormula.pcBkCode ? (

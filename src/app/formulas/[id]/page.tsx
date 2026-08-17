@@ -126,10 +126,21 @@ export default async function FormulaEditorPage({
           issueNum: Number(issueRes.data.issue_num),
           revisionNum: Number(issueRes.data.revision_num),
         }
-      : {
-          issueNum: formula.latestVersionNum,
-          revisionNum: formula.latestVersionNum,
-        };
+      : issueRes.error
+        ? {
+            // Issues table missing (migration not run) — degrade to the
+            // old save-per-version behavior so nothing breaks.
+            issueNum: formula.latestVersionNum,
+            revisionNum: formula.latestVersionNum,
+          }
+        : {
+            // v70: table exists but this formula was NEVER issued — it's
+            // an unissued draft. v0 keeps the visible number pinned so
+            // plain saves can't look like version bumps; the first Issue
+            // stamps v1.
+            issueNum: 0,
+            revisionNum: 0,
+          };
   const isDraft = formula.latestVersionNum > issue.revisionNum;
 
   // v58.6: default hourly rates for the Direct Labor Costs card — read
@@ -305,7 +316,8 @@ export default async function FormulaEditorPage({
             <span>
               {tr("Version")}{" "}
               <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
-                v{issue.issueNum}
+                {/* v70: unissued formulas have no official number yet. */}
+                {issue.issueNum > 0 ? `v${issue.issueNum}` : "—"}
               </strong>
               {isDraft ? (
                 <strong

@@ -114,11 +114,12 @@ export async function GET(request: Request) {
         if (Number(row.issue_num) > cur)
           issuedByFormula[row.formula_id] = Number(row.issue_num);
       }
-      formulas = formulas.map((f) =>
-        issuedByFormula[f.id] !== undefined
-          ? { ...f, latestVersionNum: issuedByFormula[f.id] }
-          : f,
-      );
+      // v70: issued numbers only — unissued formulas show "—" in the
+      // catalog (latestVersionNum 0) instead of the revision counter.
+      formulas = formulas.map((f) => ({
+        ...f,
+        latestVersionNum: issuedByFormula[f.id] ?? 0,
+      }));
     }
   }
   return NextResponse.json({ ok: true, formulas });

@@ -77,11 +77,13 @@ export default async function FormulasPage() {
         if (Number(row.issue_num) > cur)
           issuedByFormula[row.formula_id] = Number(row.issue_num);
       }
-      initialFormulas = initialFormulas.map((f) =>
-        issuedByFormula[f.id] !== undefined
-          ? { ...f, latestVersionNum: issuedByFormula[f.id] }
-          : f,
-      );
+      // v70: the catalog's Version column shows ISSUED numbers only —
+      // never-issued formulas render "—" (latestVersionNum 0) so plain
+      // saves can't read as version bumps.
+      initialFormulas = initialFormulas.map((f) => ({
+        ...f,
+        latestVersionNum: issuedByFormula[f.id] ?? 0,
+      }));
     }
   }
 
