@@ -275,15 +275,18 @@ export default function FormulasCatalog({
 
   // Header config — order determines the on-screen column order. Add
   // sortable keys here to include them in the click-to-sort behavior.
+  // v71.3: Name gets a generous fixed track so long product names read
+  // on one or two lines instead of wrapping word-per-line; the compact
+  // columns (Formula / Shape / Version) give up the slack.
   const columns: ColumnConfig[] = [
-    { key: "formulaNumber", label: "Formula" },
-    { key: "pcBkCode", label: "Product Code" },
-    { key: "name", label: "Name" },
-    { key: "customer", label: "Customer" },
-    { key: "shape", label: "Shape" },
-    { key: "flavor", label: "Flavor" },
-    { key: "latestVersionNum", label: "Version", align: "right" },
-    { key: "updatedAt", label: "Updated" },
+    { key: "formulaNumber", label: "Formula", width: 78 },
+    { key: "pcBkCode", label: "Product Code", width: 110 },
+    { key: "name", label: "Name", width: 280 },
+    { key: "customer", label: "Customer", width: 150 },
+    { key: "shape", label: "Shape", width: 80 },
+    { key: "flavor", label: "Flavor", width: 100 },
+    { key: "latestVersionNum", label: "Version", align: "right", width: 70 },
+    { key: "updatedAt", label: "Updated", width: 100 },
   ];
 
   return (
