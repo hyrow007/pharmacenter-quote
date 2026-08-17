@@ -130,6 +130,7 @@ const es: Record<string, string> = {
   Scenarios: "Escenarios",
   Scenario: "Escenario",
   Base: "Base",
+  "Total Load": "Carga total",
   "Monthly Allocated Overhead": "Gastos generales asignados (mes)",
   "Daily Allocated Overhead": "Gastos generales asignados (día)",
   "CAM ($/mo)": "CAM ($/mes)",

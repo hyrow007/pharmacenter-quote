@@ -12135,6 +12135,79 @@ function LabelClaimsSection({
               </LabelClaimRow>
             );
           })}
+          {/* v71.1: Total Load — every active's Claim and Input summed.
+              Mixed units are normalized to mg (mcg ÷ 1000, g × 1000). */}
+          {(() => {
+            const toMg = (amt: number, unit: LabelClaimUnit) =>
+              unit === "mcg" ? amt / 1000 : unit === "g" ? amt * 1000 : amt;
+            const claimTotal = claims.reduce(
+              (s, c) =>
+                s + toMg(Number.isFinite(c.amount) ? c.amount : 0, c.unit),
+              0,
+            );
+            const inputTotal = claims.reduce(
+              (s, c) => s + toMg(labelClaimInputAmount(c), c.unit),
+              0,
+            );
+            const fmtMg = (v: number) =>
+              v.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+            return (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: LABEL_CLAIM_GRID_TEMPLATE,
+                  gap: 8,
+                  alignItems: "center",
+                  borderTop: "1.5px solid var(--teal-700, #1d6c7b)",
+                  paddingTop: 6,
+                  marginTop: 2,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  {tr("Total Load")}
+                </div>
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontWeight: 700,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  {fmtMg(claimTotal)}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
+                  mg
+                </div>
+                <div aria-hidden="true" />
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontWeight: 700,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  {fmtMg(inputTotal)}{" "}
+                  <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
+                    mg
+                  </span>
+                </div>
+                <div aria-hidden="true" />
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
