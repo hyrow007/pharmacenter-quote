@@ -279,14 +279,14 @@ export default function FormulasCatalog({
   // on one or two lines instead of wrapping word-per-line; the compact
   // columns (Formula / Shape / Version) give up the slack.
   const columns: ColumnConfig[] = [
-    { key: "formulaNumber", label: "Formula", width: 78 },
-    { key: "pcBkCode", label: "Product Code", width: 110 },
-    { key: "name", label: "Name", width: 280 },
-    { key: "customer", label: "Customer", width: 150 },
-    { key: "shape", label: "Shape", width: 80 },
-    { key: "flavor", label: "Flavor", width: 100 },
-    { key: "latestVersionNum", label: "Version", align: "right", width: 70 },
-    { key: "updatedAt", label: "Updated", width: 100 },
+    { key: "formulaNumber", label: "Formula", width: 70 },
+    { key: "pcBkCode", label: "Product Code", width: 100 },
+    { key: "name", label: "Name", width: 300 },
+    { key: "customer", label: "Customer", width: 140 },
+    { key: "shape", label: "Shape", width: 70 },
+    { key: "flavor", label: "Flavor", width: 90 },
+    { key: "latestVersionNum", label: "Version", align: "right", width: 60 },
+    { key: "updatedAt", label: "Updated", width: 90 },
   ];
 
   return (
@@ -397,6 +397,9 @@ export default function FormulasCatalog({
         <table
           style={{
             width: "100%",
+            // v71.3: fixed layout so the column widths below are honored
+            // as proportions — auto layout was crushing Name to ~90px.
+            tableLayout: "fixed",
             borderCollapse: "collapse",
             fontSize: 13,
             background: "var(--paper, #fffdf8)",
@@ -419,7 +422,7 @@ export default function FormulasCatalog({
                   width={col.width}
                 />
               ))}
-              {isAdmin ? <Th style={{ textAlign: "right", width: 90 }}>{tr("Actions")}</Th> : null}
+              {isAdmin ? <Th style={{ textAlign: "right", width: 150 }}>{tr("Actions")}</Th> : null}
             </tr>
           </thead>
           <tbody>
