@@ -2148,13 +2148,13 @@ export default function FormulaEditor({
     const phaseHours = shifts.map((s, i) => s * hours[i]);
     const roles = [
       {
-        crew: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+        crew: [setupLeaders ?? 1, productionLeaders ?? 1, cleaningLeaders ?? 1],
         base: leaderRate ?? laborRateDefaults?.leader ?? 0,
         tax: leaderTaxPct ?? 8.5,
         wc: leaderWcPct ?? 4,
       },
       {
-        crew: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+        crew: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
         base: operatorRate ?? laborRateDefaults?.operator ?? 0,
         tax: operatorTaxPct ?? 8.5,
         wc: operatorWcPct ?? 4,
@@ -2209,8 +2209,8 @@ export default function FormulaEditor({
   // (label-claim) ingredient, plus Microbiology and Yeast & Mold at
   // $80 each. Applies to BOTH sub-cards until the user edits a card
   // (its state materializes on first edit and saves with the formula).
-  const defaultLabTests = useMemo<LabTestItem[]>(() => {
-    const actives = labelClaims
+  const defaultLabTests = useMemo<{ rm: LabTestItem[]; fp: LabTestItem[] }>(() => {
+    const activeNames = labelClaims
       .map((c) => {
         const custom = (c.customName ?? "").trim();
         if (custom) return custom;
@@ -2218,16 +2218,27 @@ export default function FormulaEditor({
           return (rmById.get(c.rawMaterialId)?.name ?? "").trim();
         return "";
       })
-      .filter(Boolean)
-      .map((label) => ({ label, cost: 120, qty: 1 }));
-    return [
-      ...actives,
-      { label: "Microbiology", cost: 80, qty: 1 },
-      { label: "Yeast & Mold", cost: 80, qty: 1 },
-    ];
+      .filter(Boolean);
+    const actives = activeNames.map((label) => ({ label, cost: 120, qty: 1 }));
+    // v71.2: on the RAW MATERIALS card, Microbiology and Yeast & Mold
+    // run once per active RM lot — tests/batch defaults to the number
+    // of actives. Finished Product tests the batch once.
+    const nActives = Math.max(1, activeNames.length);
+    return {
+      rm: [
+        ...actives,
+        { label: "Microbiology", cost: 80, qty: nActives },
+        { label: "Yeast & Mold", cost: 80, qty: nActives },
+      ],
+      fp: [
+        ...actives.map((a) => ({ ...a })),
+        { label: "Microbiology", cost: 80, qty: 1 },
+        { label: "Yeast & Mold", cost: 80, qty: 1 },
+      ],
+    };
   }, [labelClaims, rmById]);
-  const labRmList = labTestingRm ?? defaultLabTests;
-  const labFpList = labTestingFp ?? defaultLabTests;
+  const labRmList = labTestingRm ?? defaultLabTests.rm;
+  const labFpList = labTestingFp ?? defaultLabTests.fp;
   // v68: Lab Testing per gummy — per-batch test spend ÷ Target Yield.
   const labTestingCostPerGummy =
     costYieldUnits > 0
@@ -4415,7 +4426,7 @@ export default function FormulaEditor({
           }
           batchSizeKg={batchKg}
           cfaBatchSizeKg={cfaBatchKg}
-          lineCrewQty={(productionLeaders ?? 0) + (productionOperators ?? 0)}
+          lineCrewQty={(productionLeaders ?? 1) + (productionOperators ?? 6)}
           onScenarioQtyChange={
             activeScenarioId
               ? (n: number) =>
@@ -4993,7 +5004,7 @@ export default function FormulaEditor({
             const rateRows = [
               {
                 label: "Line Leaders",
-                crew: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+                crew: [setupLeaders ?? 1, productionLeaders ?? 1, cleaningLeaders ?? 1],
                 base: leaderRate ?? laborRateDefaults?.leader ?? 0,
                 setBase: setLeaderRate,
                 tax: leaderTaxPct ?? 8.5,
@@ -5003,7 +5014,7 @@ export default function FormulaEditor({
               },
               {
                 label: "Line Operators",
-                crew: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+                crew: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
                 base: operatorRate ?? laborRateDefaults?.operator ?? 0,
                 setBase: setOperatorRate,
                 tax: operatorTaxPct ?? 8.5,
@@ -5020,12 +5031,12 @@ export default function FormulaEditor({
             const crewRows = [
               {
                 label: "QTY of Line Leaders",
-                vals: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+                vals: [setupLeaders ?? 1, productionLeaders ?? 1, cleaningLeaders ?? 1],
                 sets: [setSetupLeaders, setProductionLeaders, setCleaningLeaders],
               },
               {
                 label: "QTY of Line Operators",
-                vals: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+                vals: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
                 sets: [setSetupOperators, setProductionOperators, setCleaningOperators],
               },
             ];
@@ -6141,7 +6152,7 @@ export default function FormulaEditor({
               setLabTestingRm((prev) =>
                 typeof action === "function"
                   ? (action as (p: LabTestItem[]) => LabTestItem[])(
-                      prev ?? defaultLabTests,
+                      prev ?? defaultLabTests.rm,
                     )
                   : action,
               );
@@ -6151,7 +6162,7 @@ export default function FormulaEditor({
               setLabTestingFp((prev) =>
                 typeof action === "function"
                   ? (action as (p: LabTestItem[]) => LabTestItem[])(
-                      prev ?? defaultLabTests,
+                      prev ?? defaultLabTests.fp,
                     )
                   : action,
               );
