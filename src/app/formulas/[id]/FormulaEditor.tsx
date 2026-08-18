@@ -1493,11 +1493,29 @@ export default function FormulaEditor({
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
     if (!printing) return;
+    // v72: the browser's "Save as PDF" filename comes from document.title.
+    // Swap in "<product code> - <name> - <tab>" for the duration of the
+    // print so saved sheets are self-identifying; restore after.
+    const prevTitle = document.title;
+    const tabName =
+      tab === "scale" ? "Scale Up" : tab === "cost" ? "Costing" : "Bench Top";
+    document.title = [
+      initialFormula.pcBkCode ?? "TBD",
+      (name || "Formula").trim(),
+      tabName,
+    ].join(" - ");
     const t = window.setTimeout(() => {
       window.print();
-      window.setTimeout(() => setPrinting(false), 300);
+      window.setTimeout(() => {
+        setPrinting(false);
+        document.title = prevTitle;
+      }, 300);
     }, 120);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      document.title = prevTitle;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printing]);
 
   // -- Save -------------------------------------------------------------------
