@@ -68,11 +68,229 @@ export type ProductEntry = {
   // is the product identity — the Fishbowl ProductPicker is skipped and
   // downstream pricing pulls unit cost from the Formula app's costing tab.
   pinnedFormula?: PinnedFormula;
+  // Contract Packaging → Bottles: the per-product packaging spec mirroring
+  // the PandaDoc "Packaging Specification Form (Bottles)". Optional and
+  // fillable-later; a future PandaDoc sync pushes it into a real form.
+  packagingSpec?: PackagingSpecBottles;
   // Hydrated display fields — not persisted to JSONB. Marked optional so the
   // server-loaded rows (which won't have them) typecheck.
   _name?: string | null;
   _code?: string | null;
 };
+
+// -----------------------------------------------------------------------------
+// Packaging Specification Form (Bottles) — PandaDoc form version 202401
+// -----------------------------------------------------------------------------
+// Field-for-field mirror of the PandaDoc form, MINUS what the workflow
+// already captures elsewhere (company, product name/code, bottle count,
+// dosage type, attachments). Everything is a plain string so hydration is
+// lossless and partially-filled specs round-trip cleanly:
+//   - yes/no questions:    "" (unanswered) | "yes" | "no"
+//   - supplied-by pickers: "" | "pharmacenter" | "customer"
+//   - picklists:           "" | option id | "other" (paired *Other free text)
+// Keys are grouped by the form's section letters so the future PandaDoc
+// sync can map 1:1 without a translation table.
+export type PackagingSpecBottles = {
+  formVersion: string; // "202401"
+
+  // --- Section B — bulk ---
+  bulkSuppliedBy: string;          // "" | "pharmacenter" | "customer"
+  bulkProductCode: string;         // PC bulk code when PharmaCenter-supplied
+  dosageTypeOther: string;         // free text when workflow dosage = other
+  dosageSize: string;
+  dosageShape: string;
+
+  // --- Section C — bottle ---
+  bottleSuppliedBy: string;
+  bottleMaterial: string;          // pet | hdpe | glass | pcr | other
+  bottleMaterialOther: string;
+  bottleSize: string;              // 75cc | 100cc | 120cc | 150cc | 200cc | 250cc | 300cc | other
+  bottleSizeOther: string;
+  bottleShape: string;             // round | packer | square | oval | other
+  bottleShapeOther: string;
+  bottleColor: string;             // clear | white | amber | black | other
+  bottleColorOther: string;
+
+  // --- Section D — filler ---
+  fillerRequired: string;          // yes/no
+  fillerSuppliedBy: string;
+  fillerCotton: string;            // yes/no
+  fillerDesiccant: string;         // yes/no
+  fillerOther: string;             // free text ("" = none)
+
+  // --- Section E — closure ---
+  closureSuppliedBy: string;
+  closureFinish: string;           // smooth | ribbed | crc | flip-top | other
+  closureFinishOther: string;
+  closureSizeMm: string;           // 33-400 | 38-400 | 45-400 | 53-400 | other
+  closureSizeOther: string;
+  closureColor: string;            // white | black | other
+  closureColorOther: string;
+  closureLiner: string;            // induction | pressure-sensitive | foam | none | other
+  closureLinerOther: string;
+
+  // --- Section F — neckband ---
+  neckbandRequired: string;        // yes/no
+  neckbandSuppliedBy: string;
+  neckbandColor: string;           // clear | other
+  neckbandColorOther: string;
+  neckbandPrint: string;           // free text
+  neckbandPerforation: string;     // yes/no
+
+  // --- Section G — full sleeve ---
+  sleeveRequired: string;          // yes/no
+  sleeveSuppliedBy: string;
+  sleeveColor: string;             // clear | other
+  sleeveColorOther: string;
+  sleevePrint: string;             // free text
+  sleevePerforation: string;       // yes/no
+
+  // --- Section H — bottle label ---
+  labelRequired: string;           // yes/no
+  labelSuppliedBy: string;
+  labelArtwork: string;            // free text / artwork reference
+
+  // --- Section I — bottle lot & date printing ---
+  lotPrintRequired: string;        // yes/no
+  lotPrintSource: string;
+  lotPrintFormat: string;          // julian | yymmdd | lot-alpha | other
+  lotPrintFormatOther: string;
+  lotPrintLine: string;
+  expPrintRequired: string;        // yes/no
+  expPrintSource: string;
+  expPrintFormat: string;          // mm-yyyy | mm-dd-yyyy | yyyy-mm | other
+  expPrintFormatOther: string;
+  expPrintLine: string;
+  otherPrintRequired: string;      // yes/no
+  otherPrintWhat: string;
+  otherPrintSource: string;
+  otherPrintLine: string;
+  printLocation: string;           // bottle | label | cap | other
+  printLocationOnLabel: string;    // where on the label
+  printColor: string;
+
+  // --- Section J — secondary/retail packaging ---
+  retailRequired: string;          // yes/no
+  retailSuppliedBy: string;
+  retailType: string;              // carton | display-box | other
+  retailTypeOther: string;
+  retailBottlesPerPack: string;
+  // J.1 — retail printing
+  retailArtwork: string;
+  retailLotPrintRequired: string;  // yes/no
+  retailLotPrintSource: string;
+  retailLotPrintFormat: string;
+  retailLotPrintFormatOther: string;
+  retailLotPrintLine: string;
+  retailExpPrintRequired: string;  // yes/no
+  retailExpPrintSource: string;
+  retailExpPrintFormat: string;
+  retailExpPrintFormatOther: string;
+  retailExpPrintLine: string;
+  retailOtherPrintRequired: string; // yes/no
+  retailOtherPrintWhat: string;
+  retailOtherPrintSource: string;
+  retailOtherPrintLine: string;
+  retailPrintLocation: string;
+  retailPrintColor: string;
+  // J.2 — retail extra applications
+  safetySealRequired: string;      // yes/no
+  safetySealSuppliedBy: string;
+  insertRequired: string;          // yes/no
+  insertSuppliedBy: string;
+  stickersRequired: string;        // yes/no
+  stickersSuppliedBy: string;
+  stickersWhere: string;
+  retailExtraOther: string;        // free text ("" = none)
+
+  // --- Section K — bundling ---
+  bundlingRequired: string;        // yes/no
+  bundleUnitsPerBundle: string;
+  bundleShrinkWrap: string;        // yes/no
+  bundleShrinkWrapSuppliedBy: string;
+  bundleTrays: string;             // yes/no
+  bundleTraysSuppliedBy: string;
+  bundleOther: string;             // free text ("" = none)
+  // K.1 — bundle extra applications
+  bundleStickersRequired: string;  // yes/no
+  bundleStickersWhere: string;
+  bundleExtraOther: string;
+
+  // --- Section L — inner pack ---
+  innerPackRequired: string;       // yes/no
+  innerPackSuppliedBy: string;
+  innerPackHow: string;            // upright | laydown | bulk | other
+  innerPackHowOther: string;
+  innerPackQty: string;            // "" = no specific qty
+  innerPackSize: string;           // "" = no specific size
+  innerPackLabelInfo: string;      // "" = nothing specific
+  innerPackLabelSize: string;      // "" = no specific size
+
+  // --- Section M — master box ---
+  masterBoxSuppliedBy: string;
+  masterBoxQty: string;            // finished units or inner cases per box
+  masterBoxSize: string;
+  masterBoxLabelInfo: string;
+  masterBoxLabelSize: string;
+
+  // --- Section N — pallet ---
+  palletType: string;              // gma-wood | heat-treated | plastic | other
+  palletTypeOther: string;
+  palletSize: string;              // 48x40 | 48x42 | euro | other
+  palletSizeOther: string;
+  palletConfig: string;            // "" = no specific configuration
+  palletDimensionLimits: string;
+  palletLabelRequired: string;     // yes/no
+  palletLabelInfo: string;
+  palletLabelSize: string;
+  palletTemptale: string;          // yes/no
+
+  // --- Section O — additional ---
+  additionalInfo: string;
+};
+
+/** A fresh, fully-blank Packaging Spec (Bottles) — every field "".
+ *  Exported so /start can seed one lazily on first edit. */
+export function blankPackagingSpecBottles(): PackagingSpecBottles {
+  return {
+    formVersion: "202401",
+    bulkSuppliedBy: "", bulkProductCode: "", dosageTypeOther: "", dosageSize: "", dosageShape: "",
+    bottleSuppliedBy: "", bottleMaterial: "", bottleMaterialOther: "", bottleSize: "", bottleSizeOther: "",
+    bottleShape: "", bottleShapeOther: "", bottleColor: "", bottleColorOther: "",
+    fillerRequired: "", fillerSuppliedBy: "", fillerCotton: "", fillerDesiccant: "", fillerOther: "",
+    closureSuppliedBy: "", closureFinish: "", closureFinishOther: "", closureSizeMm: "", closureSizeOther: "",
+    closureColor: "", closureColorOther: "", closureLiner: "", closureLinerOther: "",
+    neckbandRequired: "", neckbandSuppliedBy: "", neckbandColor: "", neckbandColorOther: "",
+    neckbandPrint: "", neckbandPerforation: "",
+    sleeveRequired: "", sleeveSuppliedBy: "", sleeveColor: "", sleeveColorOther: "",
+    sleevePrint: "", sleevePerforation: "",
+    labelRequired: "", labelSuppliedBy: "", labelArtwork: "",
+    lotPrintRequired: "", lotPrintSource: "", lotPrintFormat: "", lotPrintFormatOther: "", lotPrintLine: "",
+    expPrintRequired: "", expPrintSource: "", expPrintFormat: "", expPrintFormatOther: "", expPrintLine: "",
+    otherPrintRequired: "", otherPrintWhat: "", otherPrintSource: "", otherPrintLine: "",
+    printLocation: "", printLocationOnLabel: "", printColor: "",
+    retailRequired: "", retailSuppliedBy: "", retailType: "", retailTypeOther: "", retailBottlesPerPack: "",
+    retailArtwork: "",
+    retailLotPrintRequired: "", retailLotPrintSource: "", retailLotPrintFormat: "",
+    retailLotPrintFormatOther: "", retailLotPrintLine: "",
+    retailExpPrintRequired: "", retailExpPrintSource: "", retailExpPrintFormat: "",
+    retailExpPrintFormatOther: "", retailExpPrintLine: "",
+    retailOtherPrintRequired: "", retailOtherPrintWhat: "", retailOtherPrintSource: "", retailOtherPrintLine: "",
+    retailPrintLocation: "", retailPrintColor: "",
+    safetySealRequired: "", safetySealSuppliedBy: "", insertRequired: "", insertSuppliedBy: "",
+    stickersRequired: "", stickersSuppliedBy: "", stickersWhere: "", retailExtraOther: "",
+    bundlingRequired: "", bundleUnitsPerBundle: "", bundleShrinkWrap: "", bundleShrinkWrapSuppliedBy: "",
+    bundleTrays: "", bundleTraysSuppliedBy: "", bundleOther: "",
+    bundleStickersRequired: "", bundleStickersWhere: "", bundleExtraOther: "",
+    innerPackRequired: "", innerPackSuppliedBy: "", innerPackHow: "", innerPackHowOther: "",
+    innerPackQty: "", innerPackSize: "", innerPackLabelInfo: "", innerPackLabelSize: "",
+    masterBoxSuppliedBy: "", masterBoxQty: "", masterBoxSize: "", masterBoxLabelInfo: "", masterBoxLabelSize: "",
+    palletType: "", palletTypeOther: "", palletSize: "", palletSizeOther: "",
+    palletConfig: "", palletDimensionLimits: "",
+    palletLabelRequired: "", palletLabelInfo: "", palletLabelSize: "", palletTemptale: "",
+    additionalInfo: "",
+  };
+}
 
 // A saved pricing-calculator snapshot. A workflow can have many — they show
 // up as Excel-style tabs in the calculator. Each tab targets one workflow

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
-import { formatQuoteNumber } from "@/lib/workflows";
+import { formatQuoteNumber, blankPackagingSpecBottles } from "@/lib/workflows";
+import PackagingSpecSection from "./PackagingSpecSection";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
@@ -1262,6 +1263,25 @@ function StartWorkflow() {
                     </ul>
                   ) : null}
                 </div>
+
+                {/* Packaging spec (CP → Bottles only) — the PandaDoc
+                    Packaging Specification Form questionnaire, per product.
+                    Fillable later; a future PandaDoc sync will push the
+                    answers into a real form for signature. */}
+                {isContractPackaging && state.form === "bottles" ? (
+                  <PackagingSpecSection
+                    spec={p.packagingSpec}
+                    dosageIsOther={state.dosage === "other"}
+                    onChange={(updater) =>
+                      setProduct(p.uid, (cur) => ({
+                        ...cur,
+                        packagingSpec: updater(
+                          cur.packagingSpec ?? blankPackagingSpecBottles(),
+                        ),
+                      }))
+                    }
+                  />
+                ) : null}
               </div>
             ))}
             <button type="button" onClick={addProduct}
