@@ -188,6 +188,11 @@ export type WorkflowState = {
   // Bulk uses state.form for its dosage form already, so this field is
   // null on Bulk workflows. Optional so historical rows still parse.
   dosage?: string | null;
+  // Contract Packaging only: pieces per display unit ("Dosage per unit
+  // (count)" on the bottle costing sheet — 30ct / 60ct). Stored as the
+  // typed string like every other numeric input. Optional so historical
+  // rows still parse.
+  dosageCount?: string | null;
   products: ProductEntry[];
   // Pricing tabs in order. Each entry is the saved state of one calculator
   // tab. Order is meaningful (it matches the order shown in the calculator

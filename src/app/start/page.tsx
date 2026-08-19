@@ -134,6 +134,9 @@ function blankState(): WorkflowState {
     // Contract Packaging dosage (Softgels / Gummies / ...). Null when not
     // in a CP workflow.
     dosage: null,
+    // Contract Packaging pieces per display unit (30ct / 60ct). Null when
+    // not in a CP workflow.
+    dosageCount: null,
     products: [newProductEntry()],
   };
 }
@@ -1025,6 +1028,31 @@ function StartWorkflow() {
                     </button>
                   );
                 })}
+              </div>
+              {/* Count per display unit (30ct / 60ct). Drives the bottle
+                  costing sheet's "Dosage per unit (count)" — pieces of the
+                  dosage form that go into each bottle/blister/sachet. */}
+              <div style={{ marginTop: 14 }}>
+                <p style={sectionLabelStyle}>
+                  {state.form === "bottles" ? "Count per bottle" : "Count per unit"}
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={state.dosageCount ?? ""}
+                    onChange={(e) =>
+                      setField(
+                        "dosageCount",
+                        e.target.value.replace(/[^0-9]/g, "").slice(0, 5),
+                      )
+                    }
+                    placeholder="30"
+                    autoComplete="off"
+                    style={{ ...inputStyle, width: 120 }}
+                  />
+                  <span style={{ fontSize: 13, color: "var(--ink-3)" }}>ct</span>
+                </div>
               </div>
             </div>
           ) : null}
