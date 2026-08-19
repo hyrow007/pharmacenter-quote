@@ -93,10 +93,16 @@ export type ProductEntry = {
 export type PackagingSpecBottles = {
   formVersion: string; // "202401"
 
+  // --- Section A — finished product ---
+  // (product code + name come from the product card; only the count lives
+  // here so a single workflow can quote a 30ct and a 60ct side by side)
+  bottleCount: string;             // pieces per bottle, e.g. "30"
+
   // --- Section B — bulk ---
   bulkSuppliedBy: string;          // "" | "pharmacenter" | "customer"
   bulkProductCode: string;         // PC bulk code when PharmaCenter-supplied
-  dosageTypeOther: string;         // free text when workflow dosage = other
+  dosageType: string;              // softgel | gummy | tablet | capsule | other
+  dosageTypeOther: string;         // free text when dosageType = other
   dosageSize: string;
   dosageShape: string;
 
@@ -254,7 +260,8 @@ export type PackagingSpecBottles = {
 export function blankPackagingSpecBottles(): PackagingSpecBottles {
   return {
     formVersion: "202401",
-    bulkSuppliedBy: "", bulkProductCode: "", dosageTypeOther: "", dosageSize: "", dosageShape: "",
+    bottleCount: "",
+    bulkSuppliedBy: "", bulkProductCode: "", dosageType: "", dosageTypeOther: "", dosageSize: "", dosageShape: "",
     bottleSuppliedBy: "", bottleMaterial: "", bottleMaterialOther: "", bottleSize: "", bottleSizeOther: "",
     bottleShape: "", bottleShapeOther: "", bottleColor: "", bottleColorOther: "",
     fillerRequired: "", fillerSuppliedBy: "", fillerCotton: "", fillerDesiccant: "", fillerOther: "",

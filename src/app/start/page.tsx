@@ -606,7 +606,10 @@ function StartWorkflow() {
   const showFormulaPicker = state.source === "pharmacenter" && state.form === "gummy";
   // Contract Packaging adds a THIRD pill row — what dosage form is being
   // packaged — which only opens once the packaging type is locked in.
-  const showDosageSection = isContractPackaging && !!state.form;
+  // Bottles are exempt: their dosage type + count moved into the per-product
+  // Packaging spec panel (matching the PandaDoc form's Sections A/B).
+  const showDosageSection =
+    isContractPackaging && !!state.form && state.form !== "bottles";
   // Pick which option set + section heading goes in the form-section UI.
   const formOptions = isContractPackaging ? PACKAGING_TYPES : FORMS;
   const formLabel = isContractPackaging ? "Packaging type" : "Dosage form";
@@ -1030,13 +1033,11 @@ function StartWorkflow() {
                   );
                 })}
               </div>
-              {/* Count per display unit (30ct / 60ct). Drives the bottle
-                  costing sheet's "Dosage per unit (count)" — pieces of the
-                  dosage form that go into each bottle/blister/sachet. */}
+              {/* Count per display unit. Bottles capture this per product in
+                  the Packaging spec panel instead — this card only renders
+                  for the other CP packaging types. */}
               <div style={{ marginTop: 14 }}>
-                <p style={sectionLabelStyle}>
-                  {state.form === "bottles" ? "Count per bottle" : "Count per unit"}
-                </p>
+                <p style={sectionLabelStyle}>Count per unit</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="text"
@@ -1271,7 +1272,6 @@ function StartWorkflow() {
                 {isContractPackaging && state.form === "bottles" ? (
                   <PackagingSpecSection
                     spec={p.packagingSpec}
-                    dosageIsOther={state.dosage === "other"}
                     onChange={(updater) =>
                       setProduct(p.uid, (cur) => ({
                         ...cur,

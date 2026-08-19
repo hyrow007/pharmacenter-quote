@@ -24,9 +24,6 @@ type Props = {
   // Mirrors setProduct's updater pattern: receives the current (or blank)
   // spec and must return the next one.
   onChange: (updater: (cur: PackagingSpecBottles) => PackagingSpecBottles) => void;
-  // True when the workflow-level Dosage form pill is "other" — reveals the
-  // form's "If Dosage Type is Other" free-text question.
-  dosageIsOther: boolean;
 };
 
 // ----- styles (mirrors /start's local look) --------------------------------
@@ -62,6 +59,11 @@ const pillActive: CSSProperties = {
 // ----- picklists (placeholders until the PandaDoc template is readable) ----
 
 const OPTS: Record<string, Array<{ id: string; name: string }>> = {
+  dosageType: [
+    { id: "softgel", name: "Softgel" }, { id: "gummy", name: "Gummy" },
+    { id: "tablet", name: "Tablet" }, { id: "capsule", name: "Capsule" },
+    { id: "other", name: "Other" },
+  ],
   bottleMaterial: [
     { id: "pet", name: "PET" }, { id: "hdpe", name: "HDPE" },
     { id: "glass", name: "Glass" }, { id: "pcr", name: "PCR" },
@@ -221,8 +223,8 @@ function Text({ ctx, k, label, placeholder }: {
   );
 }
 
-// Lot / EXP / other printing trio — used for both the bottle (Section I)
-// and the retail packaging (Section J.1), so it's parameterised on keys.
+// Lot / EXP / other printing trio — used for both the bottle
+// and the retail packaging, so it's parameterised on keys.
 function PrintTrio({ ctx, prefix, keys }: {
   ctx: Ctx; prefix: string;
   keys: {
@@ -268,7 +270,7 @@ function PrintTrio({ ctx, prefix, keys }: {
   );
 }
 
-export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: Props) {
+export default function PackagingSpecSection({ spec, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const s = spec ?? blankPackagingSpecBottles();
 
@@ -305,18 +307,23 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             here blocks saving — answer what you know now and finish later.
           </p>
 
-          <div style={groupTitle}>Bulk (Section B)</div>
+          <div style={groupTitle}>Finished product</div>
+          <div style={rowStyle}>
+            <Text ctx={ctx} k="bottleCount" label="Bottle count" placeholder="e.g. 30" />
+          </div>
+
+          <div style={groupTitle}>Bulk</div>
           <div style={rowStyle}>
             <Supplied ctx={ctx} k="bulkSuppliedBy" label="Bulk supplied by" />
             {s.bulkSuppliedBy === "pharmacenter" ? (
               <Text ctx={ctx} k="bulkProductCode" label="PC bulk product code" placeholder="PC-BK-0000" />
             ) : null}
-            {dosageIsOther ? <Text ctx={ctx} k="dosageTypeOther" label="Dosage type (other)" /> : null}
+            <Pick ctx={ctx} k="dosageType" otherK="dosageTypeOther" label="Dosage type" opts={OPTS.dosageType} />
             <Text ctx={ctx} k="dosageSize" label="Dosage size" placeholder="e.g. 1,000 mg" />
             <Text ctx={ctx} k="dosageShape" label="Dosage shape" placeholder="e.g. oblong" />
           </div>
 
-          <div style={groupTitle}>Bottle (Section C)</div>
+          <div style={groupTitle}>Bottle</div>
           <div style={rowStyle}>
             <Supplied ctx={ctx} k="bottleSuppliedBy" label="Bottle supplied by" />
             <Pick ctx={ctx} k="bottleMaterial" otherK="bottleMaterialOther" label="Material" opts={OPTS.bottleMaterial} />
@@ -325,7 +332,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             <Pick ctx={ctx} k="bottleColor" otherK="bottleColorOther" label="Color" opts={OPTS.bottleColor} />
           </div>
 
-          <div style={groupTitle}>Bottle filler (Section D)</div>
+          <div style={groupTitle}>Bottle filler</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="fillerRequired" label="Filler required?" />
             {s.fillerRequired === "yes" ? (
@@ -338,7 +345,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             ) : null}
           </div>
 
-          <div style={groupTitle}>Closure (Section E)</div>
+          <div style={groupTitle}>Closure</div>
           <div style={rowStyle}>
             <Supplied ctx={ctx} k="closureSuppliedBy" label="Closure supplied by" />
             <Pick ctx={ctx} k="closureFinish" otherK="closureFinishOther" label="Finish" opts={OPTS.closureFinish} />
@@ -347,7 +354,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             <Pick ctx={ctx} k="closureLiner" otherK="closureLinerOther" label="Liner type" opts={OPTS.closureLiner} />
           </div>
 
-          <div style={groupTitle}>Neckband (Section F)</div>
+          <div style={groupTitle}>Neckband</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="neckbandRequired" label="Neckband required?" />
             {s.neckbandRequired === "yes" ? (
@@ -360,7 +367,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             ) : null}
           </div>
 
-          <div style={groupTitle}>Full sleeve (Section G)</div>
+          <div style={groupTitle}>Full sleeve</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="sleeveRequired" label="Full sleeve required?" />
             {s.sleeveRequired === "yes" ? (
@@ -373,7 +380,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             ) : null}
           </div>
 
-          <div style={groupTitle}>Bottle label (Section H)</div>
+          <div style={groupTitle}>Bottle label</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="labelRequired" label="Bottle label required?" />
             {s.labelRequired === "yes" ? (
@@ -384,7 +391,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             ) : null}
           </div>
 
-          <div style={groupTitle}>Bottle lot &amp; date printing (Section I)</div>
+          <div style={groupTitle}>Bottle lot &amp; date printing</div>
           <PrintTrio ctx={ctx} prefix="Bottle" keys={{
             lotReq: "lotPrintRequired", lotSrc: "lotPrintSource", lotFmt: "lotPrintFormat",
             lotFmtOther: "lotPrintFormatOther", lotLine: "lotPrintLine",
@@ -401,7 +408,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             <Text ctx={ctx} k="printColor" label="Print color" />
           </div>
 
-          <div style={groupTitle}>Secondary / retail packaging (Section J)</div>
+          <div style={groupTitle}>Secondary / retail packaging</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="retailRequired" label="Retail packaging required?" />
             {s.retailRequired === "yes" ? (
@@ -414,7 +421,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
           </div>
           {s.retailRequired === "yes" ? (
             <>
-              <div style={groupTitle}>Retail packaging printing (Section J.1)</div>
+              <div style={groupTitle}>Retail packaging printing</div>
               <div style={rowStyle}>
                 <Text ctx={ctx} k="retailArtwork" label="Retail packaging artwork" placeholder="reference or attach above" />
               </div>
@@ -430,7 +437,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
                 <Text ctx={ctx} k="retailPrintLocation" label="Print location" />
                 <Text ctx={ctx} k="retailPrintColor" label="Print color" />
               </div>
-              <div style={groupTitle}>Retail extra applications (Section J.2)</div>
+              <div style={groupTitle}>Retail extra applications</div>
               <div style={rowStyle}>
                 <YesNo ctx={ctx} k="safetySealRequired" label="Safety seal?" />
                 {s.safetySealRequired === "yes" ? <Supplied ctx={ctx} k="safetySealSuppliedBy" label="Seal supplied by" /> : null}
@@ -450,7 +457,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             </>
           ) : null}
 
-          <div style={groupTitle}>Bundling (Section K)</div>
+          <div style={groupTitle}>Bundling</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="bundlingRequired" label="Bundling required?" />
             {s.bundlingRequired === "yes" ? (
@@ -472,7 +479,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             </div>
           ) : null}
 
-          <div style={groupTitle}>Inner pack (Section L)</div>
+          <div style={groupTitle}>Inner pack</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="innerPackRequired" label="Inner pack required?" />
             {s.innerPackRequired === "yes" ? (
@@ -487,7 +494,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             ) : null}
           </div>
 
-          <div style={groupTitle}>Master box (Section M)</div>
+          <div style={groupTitle}>Master box</div>
           <div style={rowStyle}>
             <Supplied ctx={ctx} k="masterBoxSuppliedBy" label="Master box supplied by" />
             <Text ctx={ctx} k="masterBoxQty" label="Units / inner cases per box" placeholder="blank = our standard" />
@@ -496,7 +503,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             <Text ctx={ctx} k="masterBoxLabelSize" label="Label size" placeholder="blank = standard" />
           </div>
 
-          <div style={groupTitle}>Pallet (Section N)</div>
+          <div style={groupTitle}>Pallet</div>
           <div style={rowStyle}>
             <Pick ctx={ctx} k="palletType" otherK="palletTypeOther" label="Pallet type" opts={OPTS.palletType} />
             <Pick ctx={ctx} k="palletSize" otherK="palletSizeOther" label="Pallet size" opts={OPTS.palletSize} />
@@ -514,7 +521,7 @@ export default function PackagingSpecSection({ spec, onChange, dosageIsOther }: 
             <YesNo ctx={ctx} k="palletTemptale" label="Temptale on pallet?" />
           </div>
 
-          <div style={groupTitle}>Additional information (Section O)</div>
+          <div style={groupTitle}>Additional information</div>
           <textarea value={s.additionalInfo} onChange={(e) => set("additionalInfo", e.target.value)}
             placeholder="Any packaging requirements not covered above. Supporting files go in Attachments."
             style={{ ...inputStyle, resize: "vertical", minHeight: 70, lineHeight: 1.5 }} />
