@@ -260,8 +260,8 @@ function StartWorkflow() {
   const fresh = searchParams.get("fresh") === "1";
 
   // Effective-admin gate. Non-admins (and admins in "view as user" mode)
-  // are temporarily restricted to creating Bulk workflows in any dosage
-  // form EXCEPT gummies sourced from PharmaCenter. Everything else on the
+  // can create Bulk and Contract Packaging workflows in any dosage form
+  // EXCEPT gummies sourced from PharmaCenter. Everything else on the
   // /start page renders as muted/disabled pills until the admin promotes
   // the user or flips back to admin view.
   const { effectiveAdmin } = useEffectiveAdmin();
@@ -269,7 +269,8 @@ function StartWorkflow() {
   // Per-rule helpers — pulled out as functions so the JSX stays readable.
   function isTypeAllowed(typeId: string): boolean {
     if (effectiveAdmin) return true;
-    return typeId === "bulk";
+    // v70: Contract Packaging unlocked for all users (was admin-only).
+    return typeId === "bulk" || typeId === "contract-packaging";
   }
   function isFormAllowed(_formId: string): boolean {
     // All dosage forms are allowed for users — the gummy + PharmaCenter
