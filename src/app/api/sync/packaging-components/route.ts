@@ -23,6 +23,14 @@ import { createClient } from "@supabase/supabase-js";
 // the payload, so a malformed sender can't mislabel a customer asset as a
 // PharmaCenter-purchased one and quietly inflate a quote.
 //
+// UOM CONVERSION: Fishbowl reports avgCost in the part's own purchase UOM,
+// and PharmaCenter buys most packaging in "un" — a THOUSAND-count unit. The
+// incoming number is therefore a per-thousand price, not a per-each price.
+// We store both: the raw purchase cost (auditable) and the derived per-each
+// cost (usable). Getting this wrong is worse than a missing cost, because a
+// 1000x-too-high number is still a NUMBER — it slips past null-propagation
+// and quotes confidently. See EACHES_PER_PURCHASE_UOM below.
+//
 // CUSTOMER-ASSET ZEROING: for owner = "customer" both cost columns are
 // forced to 0 regardless of what Fishbowl reports. That zero is a KNOWN
 // value, not a missing one — the costing model must treat it as resolved
@@ -70,6 +78,9 @@ type PackagingComponentRecord = {
   default_unit: string;
   owner: Owner;
   kind: Kind;
+  inventory_cost_per_purchase_unit: number | null;
+  last_order_cost_per_purchase_unit: number | null;
+  units_per_purchase_unit: number | null;
   inventory_cost_per_unit: number | null;
   last_order_cost_per_unit: number | null;
   inventory_cost_uom: string | null;
@@ -78,6 +89,32 @@ type PackagingComponentRecord = {
   source: "fishbowl";
   synced_at: string;
 };
+
+/** How many eaches sit inside one Fishbowl purchase UOM.
+ *
+ *  PharmaCenter buys most packaging in "un", which is a THOUSAND-count unit.
+ *  Fishbowl's avgCost is denominated in that UOM, so a $292.10 "un" cost is
+ *  $0.2921 per bottle — not $292.10 per bottle. Getting this wrong does not
+ *  produce a visibly empty quote, it produces a confidently wrong one that
+ *  is 1000x too high, because a bad-but-present number sails straight past
+ *  the costing model's null-propagation guard.
+ *
+ *  Anything absent from this map has no defensible each-count: you cannot
+ *  derive "how many bottles" from a kilogram or a millimetre. Those rows get
+ *  a NULL factor, which yields a NULL per-each cost, which correctly blanks
+ *  the costing line instead of inventing a number. An admin resolves them
+ *  via units_per_purchase_unit_override. */
+const EACHES_PER_PURCHASE_UOM: Record<string, number> = {
+  un: 1000,
+  ea: 1,
+  each: 1,
+  ct: 1,
+};
+
+function eachesPerPurchaseUom(uom: string | null | undefined): number | null {
+  if (!uom) return null;
+  return EACHES_PER_PURCHASE_UOM[uom.trim().toLowerCase()] ?? null;
+}
 
 /** Owner from the leading two letters. Anything that isn't an explicit
  *  CA- prefix is treated as PharmaCenter-purchased. */
@@ -187,6 +224,20 @@ export async function POST(request: Request) {
         ? v.last_order_cost_per_unit
         : null;
 
+    // The UOM the cost is denominated in. Fishbowl sends it alongside the
+    // cost; fall back to the part's own unit when it doesn't.
+    const purchaseUom =
+      (typeof v.inventory_cost_uom === "string" && v.inventory_cost_uom.trim()
+        ? v.inventory_cost_uom
+        : v.default_unit) || null;
+    const factor = eachesPerPurchaseUom(purchaseUom);
+
+    /** Purchase-unit cost -> per-each cost. Null in, null out; and an
+     *  unconvertible UOM also yields null, which is the point: a missing
+     *  per-each cost blanks the costing line, an invented one poisons it. */
+    const perEach = (cost: number | null): number | null =>
+      cost === null || factor === null ? null : cost / factor;
+
     records.push({
       fp_code: fpCode,
       name: v.name.trim(),
@@ -194,8 +245,12 @@ export async function POST(request: Request) {
       owner,
       kind,
       // Customer assets are free issue — a hard 0, never Fishbowl's number.
-      inventory_cost_per_unit: isCustomerAsset ? 0 : inventory,
-      last_order_cost_per_unit: isCustomerAsset ? 0 : lastOrder,
+      // Note the 0 applies at BOTH denominations: 0 per case is 0 per each.
+      inventory_cost_per_purchase_unit: isCustomerAsset ? 0 : inventory,
+      last_order_cost_per_purchase_unit: isCustomerAsset ? 0 : lastOrder,
+      units_per_purchase_unit: factor,
+      inventory_cost_per_unit: isCustomerAsset ? 0 : perEach(inventory),
+      last_order_cost_per_unit: isCustomerAsset ? 0 : perEach(lastOrder),
       inventory_cost_uom: isCustomerAsset
         ? null
         : typeof v.inventory_cost_uom === "string" && v.inventory_cost_uom.trim()
