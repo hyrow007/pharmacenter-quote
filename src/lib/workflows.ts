@@ -443,6 +443,13 @@ export type WorkflowState = {
   // pointer to a versioned catalog row. Both fields can coexist during the
   // transition; if a ref is present it wins.
   gummyFormula?: GummyFormula;
+  // Contract-Packaging (Bottles) cost build-up. Deliberately stores the
+  // INPUTS — component picks, bottles/minute, crew, rates, overhead shares —
+  // and never the computed dollars, so reopening an old quote recalculates
+  // against today's costs instead of showing a stale number that looks
+  // authoritative. Shape lives in app/workflow/[id]/bottle-costing
+  // (SavedState); typed loosely here to avoid a lib -> app import cycle.
+  bottleCosting?: Record<string, unknown>;
   // Reference to a snapshotted version in the gummy_formulas catalog. See
   // /lib/formulas.ts (GummyFormulaReference). Small enough to store on the
   // state row without bloating it — cached identity fields let the workflow

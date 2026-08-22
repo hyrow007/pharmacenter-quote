@@ -704,6 +704,30 @@ export default function WorkflowActions({
             </a>
           );
         })()}
+
+        {/* Bottle costing — the Contract-Packaging counterpart to the gummy
+            formula. Gated on the same two facts the /start form records:
+            quote type is contract-packaging AND the packaging type is bottles.
+            Anything else (blisters, sachets, pouches, kitting) has a different
+            bill of materials and would need its own board. */}
+        {(() => {
+          const s = workflow.state;
+          const isCp = (s.type ?? "") === "contract-packaging";
+          const isBottles = (s.form ?? "") === "bottles";
+          if (!isCp || !isBottles) return null;
+          return (
+            <a
+              href={`/workflow/${workflow.id}/bottle-costing`}
+              style={editAction}
+              aria-label="Open the bottle costing calculator"
+            >
+              <span>Bottle Costing →</span>
+              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+                Components + line crew → cost per bottle.
+              </span>
+            </a>
+          );
+        })()}
       </div>
 
       {/* Delete workflow lives on its own row, separated from the everyday
