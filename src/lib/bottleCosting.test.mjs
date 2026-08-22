@@ -50,3 +50,34 @@ console.log('  TOTAL         = $'+r.totalCost?.toFixed(2));
 console.log('\n-- a PC part with no cost at all still blocks --');
 bom[3].costStatus='no_cost'; bom[3].costPerUnit=null;
 console.log('  costPerUnit =',B.computeBottleCosting(inputs).costPerUnit,'(expect null)');
+
+// ---- suite 2: 'not used' vs 'not chosen' (scoped) ----
+{
+const mk=(id,slot,over={})=>({id,slot,fpCode:'X-'+id,name:slot,qtyPerUnit:1,costPerUnit:0.05,costStatus:'ok',...over});
+// Q0016 shape: 3 slots genuinely unused, rest costed
+const bom=[
+ mk('1','bottle',{costPerUnit:0,costStatus:'customer_asset'}),
+ mk('2','closure',{costPerUnit:0,costStatus:'customer_asset'}),
+ mk('3','liner',{fpCode:null,costPerUnit:null,costStatus:'no_cost',notUsed:true}),
+ mk('4','other',{costPerUnit:0.03}),
+ mk('5','neckband',{costPerUnit:0.05}),
+ mk('6','label',{costPerUnit:0,costStatus:'customer_asset'}),
+ mk('7','carton',{fpCode:null,costPerUnit:null,costStatus:'no_cost',notUsed:true}),
+ mk('8','master_box',{qtyPerUnit:1/12,costPerUnit:3.30}),
+];
+const inp={quantity:12000,bom,
+ labor:{bottlesPerMinute:40,setup:{days:1,hoursPerDay:8,leaders:1,operators:2},
+  production:{leaders:1,operators:3},cleaning:{days:null,hoursPerDay:8,leaders:0,operators:2},
+  leaderRate:20,operatorRate:17},
+ overhead:{rentLease:[{id:'r',label:'r',monthly:12000,sharePct:25}],indirectLabor:[],other:[],workingDaysPerMonth:21},
+ labTestingTotal:null};
+let r=B.computeBottleCosting(inp);
+console.log('unused slots do NOT block :', r.costPerUnit!==null ? 'PASS' : '**FAIL**');
+console.log('  issues:', r.issues.length===0?'none':r.issues.map(i=>i.slot+'/'+i.reason).join(','));
+console.log('  materials/bottle = $'+r.materialsPerUnit?.toFixed(4), '(0 + 0 + 0.03 + 0.05 + 0 + 3.30/12 = 0.355)');
+console.log('  COST/BOTTLE      = $'+r.costPerUnit?.toFixed(4));
+console.log('  TOTAL            = $'+r.totalCost?.toFixed(2));
+// and an UNCHOSEN (not marked unused) line must still block
+bom[6].notUsed=false;
+console.log('\nunchosen line still blocks   :', B.computeBottleCosting(inp).costPerUnit===null?'PASS':'**FAIL**');
+}

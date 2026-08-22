@@ -266,21 +266,47 @@ function ComponentPicker({
    * is a shortlist rather than 1,927 rows. Recommendations only — the pick is
    * always theirs, because a description match is a hint, not an identification.
    */
+  /**
+   * Seed the search from the packaging spec so the first thing the user sees
+   * is a shortlist rather than 1,927 rows.
+   *
+   * KEY NAMES HERE ARE VERIFIED against a real saved workflow, not guessed. An
+   * earlier pass used `closureSize` and `masterBoxUnitsPerBox` — neither
+   * exists (they are `closureSizeMm` and `masterBoxQty`) and the failure was
+   * silent: an empty suggestion rather than an error. If you add a slot, go
+   * and read a stored spec first.
+   */
   const suggested = useMemo(() => {
     if (!spec) return "";
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = spec[k];
+        if (v && !/^n\/a$/i.test(v)) return v;
+      }
+      return "";
+    };
     const bits: string[] = [];
     if (slot === "bottle") {
-      if (spec.bottleSize) bits.push(spec.bottleSize.replace(/\s*cc$/i, ""));
-      if (spec.bottleMaterial) bits.push(spec.bottleMaterial);
-      if (spec.bottleColorOther || spec.bottleColor)
-        bits.push(spec.bottleColorOther || spec.bottleColor);
+      const size = pick("bottleSizeOther", "bottleSize");
+      if (size) bits.push(size.replace(/\s*cc$/i, ""));
+      bits.push(pick("bottleMaterialOther", "bottleMaterial"));
+      bits.push(pick("bottleColorOther", "bottleColor"));
     } else if (slot === "closure") {
-      if (spec.closureSize) bits.push(spec.closureSize);
-      if (spec.closureFinish) bits.push(spec.closureFinish);
+      bits.push(pick("closureSizeOther", "closureSizeMm"));
+      bits.push(pick("closureFinishOther", "closureFinish"));
+    } else if (slot === "liner") {
+      bits.push(pick("closureLinerOther", "closureLiner"));
+    } else if (slot === "neckband") {
+      bits.push("neckband");
     } else if (slot === "master_box") {
       bits.push("box");
     }
-    return bits.join(" ");
+    // "other" is a spec ANSWER, not a search term — without this every picker
+    // whose field was set to Other would go looking for the word "other".
+    return bits
+      .filter((b) => b && b.toLowerCase() !== "other")
+      .join(" ")
+      .trim();
   }, [slot, spec]);
 
   useEffect(() => {
@@ -473,13 +499,13 @@ export default function BottleCostingBoard({
   spec: Record<string, string> | null;
   initial: SavedState | null;
 }) {
-  const [st, setSt] = useState<SavedState>(
-    () =>
-      initial ??
-      blankState(
-        spec?.masterBoxUnitsPerBox ? Number(spec.masterBoxUnitsPerBox) : null,
-      ),
-  );
+  // masterBoxQty — verified key name. See the note on `suggested` above.
+  const [st, setSt] = useState<SavedState>(() => {
+    const perBox = Number(spec?.masterBoxQty ?? "");
+    return (
+      initial ?? blankState(Number.isFinite(perBox) && perBox > 0 ? perBox : null)
+    );
+  });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -638,6 +664,7 @@ export default function BottleCostingBoard({
                   gridTemplateColumns: "150px 1fr 110px 120px",
                   gap: 10,
                   alignItems: "start",
+                  opacity: line.notUsed ? 0.55 : 1,
                 }}
               >
                 <div
@@ -653,20 +680,68 @@ export default function BottleCostingBoard({
                   {slotLabel}
                 </div>
                 <div>
-                  <ComponentPicker
-                    slot={line.slot}
-                    current={line}
-                    spec={spec}
-                    onPick={(opt) =>
-                      setLine(line.id, {
-                        fpCode: opt?.fp_code ?? null,
-                        name: opt?.name ?? slotLabel,
-                        costPerUnit: opt?.effective_cost_per_unit ?? null,
-                        costStatus: opt?.cost_status ?? "no_cost",
-                        zeroCostConfirmed: false,
-                      })
-                    }
-                  />
+                  {line.notUsed ? (
+                    <div
+                      style={{
+                        padding: "7px 9px",
+                        border: "1px dashed var(--line, #e3dcc9)",
+                        borderRadius: 6,
+                        fontSize: 14,
+                        color: "var(--ink-3, #7b7364)",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Not used on this job
+                    </div>
+                  ) : (
+                    <ComponentPicker
+                      slot={line.slot}
+                      current={line}
+                      spec={spec}
+                      onPick={(opt) =>
+                        setLine(line.id, {
+                          fpCode: opt?.fp_code ?? null,
+                          name: opt?.name ?? slotLabel,
+                          costPerUnit: opt?.effective_cost_per_unit ?? null,
+                          costStatus: opt?.cost_status ?? "no_cost",
+                          zeroCostConfirmed: false,
+                        })
+                      }
+                    />
+                  )}
+                  {/* "Not used" is a positive statement, not an empty field.
+                      Q0016 has no sleeve and no unit carton; PharmaCenter
+                      stocks no standalone liners at all. Without this, those
+                      slots would block the total forever. */}
+                  <label
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "center",
+                      marginTop: 6,
+                      fontSize: 12.5,
+                      color: "var(--ink-3, #7b7364)",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!line.notUsed}
+                      onChange={(e) =>
+                        setLine(line.id, {
+                          notUsed: e.target.checked,
+                          ...(e.target.checked
+                            ? {
+                                fpCode: null,
+                                name: slotLabel,
+                                costPerUnit: null,
+                                costStatus: "no_cost" as CostStatus,
+                              }
+                            : {}),
+                        })
+                      }
+                    />
+                    Not used on this job
+                  </label>
                   {/* The #358 gate. A PharmaCenter $0 does not count until a
                       human says it is genuinely free. */}
                   {line.costStatus === "zero_cost" && (
@@ -700,17 +775,25 @@ export default function BottleCostingBoard({
                     </div>
                   )}
                 </div>
-                <NumField
-                  value={line.qtyPerUnit}
-                  onChange={(v) => setLine(line.id, { qtyPerUnit: v })}
-                />
+                {line.notUsed ? (
+                  <div style={{ paddingTop: 9, color: "var(--ink-3, #7b7364)" }}>
+                    —
+                  </div>
+                ) : (
+                  <NumField
+                    value={line.qtyPerUnit}
+                    onChange={(v) => setLine(line.id, { qtyPerUnit: v })}
+                  />
+                )}
                 <div style={{ textAlign: "right", paddingTop: 8 }}>
                   <ReadOnly>
-                    {line.costStatus === "customer_asset"
-                      ? money(0)
-                      : line.costPerUnit !== null
-                        ? money(line.costPerUnit)
-                        : "—"}
+                    {line.notUsed
+                      ? "—"
+                      : line.costStatus === "customer_asset"
+                        ? money(0)
+                        : line.costPerUnit !== null
+                          ? money(line.costPerUnit)
+                          : "—"}
                   </ReadOnly>
                 </div>
               </div>

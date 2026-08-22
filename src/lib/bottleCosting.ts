@@ -83,6 +83,18 @@ export type BomLine = {
   costStatus: CostStatus;
   /** The #358 gate. Only consulted when costStatus === 'zero_cost'. */
   zeroCostConfirmed?: boolean;
+  /**
+   * This job does not use this slot at all — no liner, no unit carton, no
+   * sleeve. Distinct from "not chosen yet", and the distinction is the whole
+   * point: an unchosen line must BLOCK the total, whereas a deliberately
+   * unused one must not.
+   *
+   * Without this the calculator could never resolve for a real job. Q0016 has
+   * no sleeve and no unit carton, and PharmaCenter stocks no standalone liners
+   * at all (the liner is part of the cap — see #362), so three of the eight
+   * slots would have blocked the number forever.
+   */
+  notUsed?: boolean;
 };
 
 export type LaborPhase = {
@@ -222,6 +234,10 @@ export function resolveLine(line: BomLine): {
     cost: null,
     issue: { lineId: line.id, name: line.name, slot: line.slot, reason, message },
   });
+
+  // Deliberately excluded from this job — contributes nothing and blocks
+  // nothing. Checked FIRST so an unused slot never has to be filled in.
+  if (line.notUsed) return { cost: 0, issue: null };
 
   if (!line.fpCode) return mk("unassigned", "No component chosen yet.");
 

@@ -59,16 +59,28 @@ export async function GET(request: Request) {
     query = query.eq("category", slot);
   }
 
-  if (q) {
-    // Split the suggested spec string into words and require each to appear
-    // somewhere in code or name. "150 PET Amber" then narrows properly instead
-    // of matching anything containing the whole phrase verbatim.
-    const words = q.split(/\s+/).filter(Boolean).slice(0, 5);
-    for (const w of words) {
-      const esc = w.replace(/[%_,()]/g, " ").trim();
-      if (!esc) continue;
-      query = query.or(`fp_code.ilike.%${esc}%,name.ilike.%${esc}%`);
-    }
+  // Words are OR-matched and then RANKED by how many hit — never AND-filtered.
+  //
+  // The spec speaks the app's vocabulary ("Flip-top", "Induction (heat seal)")
+  // while Fishbowl speaks its own ("FLIP TOP", "IH"). Requiring every word to
+  // match therefore returns NOTHING for a perfectly ordinary closure — which is
+  // exactly what it did on the first live test. Matching any word and sorting
+  // by how many matched degrades gracefully: the closest part floats up, and a
+  // vocabulary mismatch costs relevance instead of the entire result set.
+  const words = q
+    ? q
+        .split(/[\s/]+/)
+        .map((w) => w.replace(/[%_,()-]/g, " ").trim())
+        .filter((w) => w.length > 1)
+        .slice(0, 6)
+    : [];
+
+  if (words.length) {
+    query = query.or(
+      words
+        .flatMap((w) => [`fp_code.ilike.%${w}%`, `name.ilike.%${w}%`])
+        .join(","),
+    );
   }
 
   const { data, error } = await query.limit(200);
@@ -85,10 +97,19 @@ export async function GET(request: Request) {
     cost_status: string;
   };
 
+  // Lower is better. Word hits dominate, then the slot match, then whether we
+  // can actually cost it. Scoring rather than filtering is what lets a partial
+  // vocabulary match still surface the right part.
   const rank = (r: Row) => {
-    let s = 0;
+    const hay = `${r.fp_code} ${r.name}`.toLowerCase();
+    const hits = words.filter((w) => hay.includes(w.toLowerCase())).length;
+    let s = -hits * 50;
     if (slot && r.category === slot) s -= 100;
     if (r.cost_status === "ok" || r.cost_status === "customer_asset") s -= 10;
+    // A part whose name STARTS with the slot word is almost always the real
+    // thing, rather than something that merely mentions it in passing — this
+    // is what separates "BOX (18 X 14 X 14)" from "GLUE STICKS (90 PER BOX)".
+    if (slot && hay.startsWith(slot.replace("_", " "))) s -= 40;
     return s;
   };
 
