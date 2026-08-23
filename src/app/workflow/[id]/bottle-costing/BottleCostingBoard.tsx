@@ -30,6 +30,7 @@ import {
   DEFAULT_HOS_COMMISSION_PCT,
   DEFAULT_REP_COMMISSION_PCT,
   DEFAULT_COST_SOURCE,
+  DEFAULT_WASTE_PCT,
   COST_SOURCES,
   costFromSource,
   wasteFactor,
@@ -410,6 +411,7 @@ export function blankState(
       costStatus: "no_cost",
       suppliedBy: suppliedByFromSpec(s.slot, spec ?? null),
       costSource: DEFAULT_COST_SOURCE,
+      wastePct: DEFAULT_WASTE_PCT[s.slot],
       manualCostPerUnit: null,
       inventoryCostPerUnit: null,
       lastOrderCostPerUnit: null,
@@ -733,6 +735,16 @@ export default function BottleCostingBoard({
             ? "customer"
             : suppliedByFromSpec(l.slot, spec)),
         costSource: l.costSource ?? DEFAULT_COST_SOURCE,
+        // Seed the house scrap rate on lines saved before the column existed,
+        // so an old costing and a new one price the same job identically.
+        //
+        // `??` and not `||` on purpose: a deliberate 0% must survive. Someone
+        // who typed zero meant zero, and `||` would overwrite it with 5.
+        //
+        // This does move the number on an already-saved costing — but it moves
+        // it visibly, with 5 / 10 / 2 sitting in the inputs where they can be
+        // read and changed, and nothing is written back until Save is pressed.
+        wastePct: l.wastePct ?? DEFAULT_WASTE_PCT[l.slot],
       })),
     };
   });
@@ -771,6 +783,7 @@ export default function BottleCostingBoard({
           costStatus: "no_cost",
           suppliedBy: suppliedByFromSpec(slot, spec),
           costSource: DEFAULT_COST_SOURCE,
+          wastePct: DEFAULT_WASTE_PCT[slot],
           manualCostPerUnit: null,
           inventoryCostPerUnit: null,
           lastOrderCostPerUnit: null,

@@ -278,6 +278,40 @@ export type BottleCostingResult = {
 // Defaults
 // ============================================================
 
+/**
+ * Starting scrap rate per slot.
+ *
+ * 5% is the house figure for anything handled on the line. Two exceptions,
+ * both from how the part is applied rather than what it is made of:
+ *
+ *   labels      10%  — a web changeover misfeeds and destroys labels by the
+ *                      handful, and a mislabelled bottle is scrap twice over.
+ *   master box   2%  — cases are hand-assembled at the end of the line, out of
+ *                      the machine's way, so very few are lost.
+ *
+ * These are DEFAULTS, not rules: they seed the input and every one is editable
+ * per line, because the right number is a property of the job and the customer,
+ * not of the category.
+ *
+ * Note the neckband and sleeve sit at 5% rather than the label's 10%, even
+ * though Fishbowl files all three under the -LL- infix. That is a guess at the
+ * boundary of the instruction and worth confirming — shrink film on an
+ * applicator may well scrap more like a label than like a bottle.
+ */
+export const DEFAULT_WASTE_PCT: Record<PackagingSlot, number> = {
+  bottle: 5,
+  closure: 5,
+  liner: 5,
+  neckband: 5,
+  sleeve: 5,
+  label: 10,
+  safety_seal: 5,
+  insert: 5,
+  carton: 5,
+  master_box: 2,
+  other: 5,
+};
+
 /** Payroll burden, matching the gummy Costing tab defaults. */
 export const DEFAULT_TAX_PCT = 8.5;
 export const DEFAULT_WC_PCT = 4;

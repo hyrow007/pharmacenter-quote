@@ -201,3 +201,35 @@ ok('customer-supplied ignores waste',
 ok('notUsed ignores waste',
    B.resolveLine(L({notUsed:true,wastePct:50})).cost, 0);
 }
+
+// ---- suite 6: default waste rates (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const D=B.DEFAULT_WASTE_PCT;
+
+ok('label defaults 10',       D.label,      10);
+ok('master box defaults 2',   D.master_box,  2);
+ok('bottle defaults 5',       D.bottle,      5);
+ok('closure defaults 5',      D.closure,     5);
+ok('carton defaults 5 (unit carton is not a master case)', D.carton, 5);
+ok('other defaults 5',        D.other,       5);
+
+// every slot must have an entry, or a row would seed undefined and price at 0%
+const SLOTS=['bottle','closure','liner','neckband','sleeve','label',
+             'carton','insert','safety_seal','master_box','other'];
+ok('every slot has a default', SLOTS.filter(s=>typeof D[s]!=='number'), []);
+ok('no default is out of range',
+   SLOTS.filter(s=>D[s]<0||D[s]>=100), []);
+
+// the defaults must survive the factor maths
+const L=(slot)=>({id:'x',slot,fpCode:'PC-1',name:'n',qtyPerUnit:1,costPerUnit:null,
+  costStatus:'ok',suppliedBy:'pharmacenter',costSource:'Manual',
+  manualCostPerUnit:1,wastePct:D[slot]});
+const r4=(v)=>+v.toFixed(4);
+ok('label line at default 10% -> 1/0.90',  r4(B.resolveLine(L('label')).cost),      1.1111);
+ok('master box at default 2% -> 1/0.98',   r4(B.resolveLine(L('master_box')).cost), 1.0204);
+ok('bottle at default 5% -> 1/0.95',       r4(B.resolveLine(L('bottle')).cost),     1.0526);
+
+// an explicit 0 must NOT be replaced by the default (?? not ||)
+ok('explicit 0 survives', B.wasteFactor({...L('label'),wastePct:0}), 1);
+}
