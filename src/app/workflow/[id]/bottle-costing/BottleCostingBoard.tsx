@@ -172,7 +172,31 @@ function CardTotal({
         {label}
       </span>
       <span style={{ textAlign: "right" }}>
-        <ReadOnly>{perUnit !== null ? money(perUnit) : "—"}</ReadOnly>
+        {/* "Total" sits against the figure rather than being folded into the
+            left-hand label, so the eye lands on the word and the number as one
+            unit. The card already says WHAT is being measured on the left;
+            this says that the number beside it is the sum, not another row. */}
+        <span
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "flex-end",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              color: "var(--ink-3, #7b7364)",
+            }}
+          >
+            Total
+          </span>
+          <ReadOnly>{perUnit !== null ? money(perUnit) : "—"}</ReadOnly>
+        </span>
         {total !== null && (
           <div
             style={{
