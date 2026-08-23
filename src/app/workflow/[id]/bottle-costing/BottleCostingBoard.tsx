@@ -122,6 +122,73 @@ function ParamBlock({
   );
 }
 
+/**
+ * The bottom line of a cost card.
+ *
+ * One component for all three cards rather than three hand-built footers, so
+ * they cannot drift into three different shapes — and so the em dash for
+ * "not resolved yet" is guaranteed to mean the same thing in each.
+ *
+ * It never computes a cost. `perUnit` always arrives from the model, because a
+ * footer that re-derived its own subtotal could disagree with the Costs card
+ * above it, and two different answers to the same question is the exact
+ * failure this calculator exists to avoid. The only arithmetic here is
+ * per-bottle × quantity, which is presentation, not costing.
+ */
+function CardTotal({
+  label,
+  perUnit,
+  quantity,
+}: {
+  label: string;
+  perUnit: number | null;
+  quantity: number | null;
+}) {
+  const total =
+    perUnit !== null && quantity !== null && quantity > 0
+      ? perUnit * quantity
+      : null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: 12,
+        margin: "0 14px",
+        padding: "10px 0 12px",
+        borderTop: "1px solid var(--line, #e3dcc9)",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11.5,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          color: "var(--ink-3, #7b7364)",
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ textAlign: "right" }}>
+        <ReadOnly>{perUnit !== null ? money(perUnit) : "—"}</ReadOnly>
+        {total !== null && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--ink-3, #7b7364)",
+              marginTop: 2,
+            }}
+          >
+            {money(total, 2)} for {quantity!.toLocaleString("en-US")} bottles
+          </div>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function ReadOnly({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -1519,6 +1586,11 @@ export default function BottleCostingBoard({
             </span>
           </div>
         </div>
+        <CardTotal
+          label="Material cost / bottle"
+          perUnit={r.materialsPerUnit}
+          quantity={quantity}
+        />
       </div>
 
       {/* ---------- Line crew ---------- */}
@@ -1620,6 +1692,11 @@ export default function BottleCostingBoard({
             </ParamBlock>
           </div>
         </div>
+        <CardTotal
+          label="Direct labor / bottle"
+          perUnit={r.laborPerUnit}
+          quantity={quantity}
+        />
       </div>
 
       {/* ---------- Overhead ---------- */}
@@ -1651,6 +1728,18 @@ export default function BottleCostingBoard({
             />
           </ParamBlock>
         </div>
+        {/* Overhead AND testing, because both are entered on this card and a
+            footer that showed only one would be a subtotal of half the card.
+            Null if either is unresolved — the usual rule. */}
+        <CardTotal
+          label="Overhead + testing / bottle"
+          perUnit={
+            r.overheadPerUnit !== null && r.labTestingPerUnit !== null
+              ? r.overheadPerUnit + r.labTestingPerUnit
+              : null
+          }
+          quantity={quantity}
+        />
       </div>
 
       {/* ---------- Costs ---------- */}
