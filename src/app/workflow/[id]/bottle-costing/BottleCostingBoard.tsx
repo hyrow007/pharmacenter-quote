@@ -1016,9 +1016,14 @@ export default function BottleCostingBoard({
                   {/* A component shared across several bottles — the master box
                       being the usual one. Shown as the ratio a human would say
                       out loud rather than the 0.08333 the arithmetic needs. */}
-                  {line.qtyPerUnit !== null &&
-                    line.qtyPerUnit > 0 &&
-                    line.qtyPerUnit < 1 && (
+                  {/* Shown whenever a component is shared across bottles, and
+                      ALWAYS for the master box — otherwise a spec with no
+                      units-per-box would render no caption and leave nowhere
+                      to type the number. */}
+                  {(line.slot === "master_box" ||
+                    (line.qtyPerUnit !== null &&
+                      line.qtyPerUnit > 0 &&
+                      line.qtyPerUnit < 1)) && (
                       <div
                         style={{
                           fontSize: 11,
@@ -1026,10 +1031,55 @@ export default function BottleCostingBoard({
                           textTransform: "none",
                           letterSpacing: 0,
                           color: "var(--ink-3, #7b7364)",
-                          marginTop: 2,
+                          marginTop: 3,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 3,
                         }}
                       >
-                        1 per {Math.round(1 / line.qtyPerUnit)} bottles
+                        1 per
+                        <input
+                          type="number"
+                          min={1}
+                          step="1"
+                          placeholder="?"
+                          value={
+                            line.qtyPerUnit !== null && line.qtyPerUnit > 0
+                              ? Math.round(1 / line.qtyPerUnit)
+                              : ""
+                          }
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            const per =
+                              Number.isFinite(n) && n > 0 ? n : null;
+                            // The master box has ONE source of truth —
+                            // bottlesPerMasterBox, seeded from the packaging
+                            // form and shown in Considerations. Write there and
+                            // let the existing effect derive qtyPerUnit, rather
+                            // than setting the row directly and ending up with
+                            // two fields that can disagree.
+                            if (line.slot === "master_box") {
+                              set("bottlesPerMasterBox", per);
+                            } else {
+                              setLine(line.id, {
+                                qtyPerUnit: per ? 1 / per : null,
+                              });
+                            }
+                          }}
+                          style={{
+                            width: 44,
+                            padding: "1px 4px",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            textAlign: "right",
+                            color: "var(--teal-900, #0f4a56)",
+                            background: "#fff",
+                          }}
+                        />
+                        bottles
                       </div>
                     )}
                 </div>
