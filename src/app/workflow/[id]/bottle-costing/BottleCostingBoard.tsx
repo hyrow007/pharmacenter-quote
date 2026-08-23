@@ -235,10 +235,61 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
   { slot: "liner", label: "Liner" },
   { slot: "other", label: "Filler (cotton / desiccant)" },
   { slot: "neckband", label: "Neckband" },
+  { slot: "sleeve", label: "Full sleeve" },
   { slot: "label", label: "Label" },
-  { slot: "carton", label: "Unit carton" },
+  { slot: "safety_seal", label: "Safety seal" },
+  { slot: "insert", label: "Insert" },
+  { slot: "carton", label: "Retail / unit carton" },
   { slot: "master_box", label: "Master box" },
 ];
+
+/**
+ * Which packaging-form answer decides whether a slot is on this job at all.
+ *
+ * Verified against PackagingSpecSection. null = inherent to any bottle job
+ * (there is no "bottle required?" question, because there always is one).
+ */
+const SLOT_PRESENCE_SPEC_KEY: Partial<Record<PackagingSlot, string>> = {
+  other: "fillerRequired",
+  neckband: "neckbandRequired",
+  sleeve: "sleeveRequired",
+  label: "labelRequired",
+  carton: "retailRequired",
+  safety_seal: "safetySealRequired",
+  insert: "insertRequired",
+};
+
+/**
+ * Is this slot part of the job, per the packaging form?
+ *
+ * Only an explicit "no" removes a component. A BLANK answer keeps it, because
+ * blank means the form was not filled in — and silently dropping something we
+ * might actually buy would under-quote the job. Dropping a real cost is
+ * invisible; carrying an extra row the user can delete is not. Same asymmetry
+ * that makes an unanswered "supplied by" default to PharmaCenter.
+ *
+ * The liner is the one that reads differently: it has a type picker rather
+ * than a yes/no, and "none" is one of the choices.
+ */
+function slotIsInSpec(
+  slot: PackagingSlot,
+  spec: Record<string, string> | null,
+): boolean {
+  if (slot === "liner") return (spec?.closureLiner ?? "") !== "none";
+
+  // Safety seal and insert are asked INSIDE the retail-packaging section of
+  // the form. With no retail packaging those questions are never rendered, so
+  // they stay permanently blank — and the blank-keeps-it rule below would then
+  // add two components to every job that has no retail carton. Checked against
+  // the real Q0016 record, where retailRequired="no" and both of these are "".
+  if (slot === "safety_seal" || slot === "insert") {
+    if ((spec?.retailRequired ?? "") === "no") return false;
+  }
+
+  const key = SLOT_PRESENCE_SPEC_KEY[slot];
+  if (!key) return true; // bottle, closure, master box
+  return (spec?.[key] ?? "") !== "no";
+}
 
 /**
  * Which packaging-form answer decides who supplies each slot.
@@ -286,7 +337,9 @@ export function blankState(
   spec?: Record<string, string> | null,
 ): SavedState {
   return {
-    bom: SLOTS.map((s, i) => ({
+    // The list is generated FROM THE SPEC, not fixed. A job with no retail
+    // carton simply has no carton row to explain away.
+    bom: SLOTS.filter((s) => slotIsInSpec(s.slot, spec ?? null)).map((s, i) => ({
       id: `slot-${i}-${s.slot}`,
       slot: s.slot,
       fpCode: null,
@@ -629,6 +682,7 @@ export default function BottleCostingBoard({
   });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [addSlot, setAddSlot] = useState<PackagingSlot>("other");
 
   const set = <K extends keyof SavedState>(k: K, v: SavedState[K]) =>
     setSt((p) => ({ ...p, [k]: v }));
@@ -638,6 +692,39 @@ export default function BottleCostingBoard({
       ...p,
       bom: p.bom.map((l) => (l.id === id ? { ...l, ...patch } : l)),
     }));
+
+  /**
+   * Add a component the spec did not call for. The spec is a starting point,
+   * not a cage — real jobs pick up an extra part after the form is filled in.
+   * The id carries a timestamp so a slot can appear twice (two label types,
+   * say) without the two rows sharing a key.
+   */
+  const addLine = (slot: PackagingSlot) => {
+    const meta = SLOTS.find((s) => s.slot === slot);
+    setSt((p) => ({
+      ...p,
+      bom: [
+        ...p.bom,
+        {
+          id: `added-${slot}-${Date.now()}`,
+          slot,
+          fpCode: null,
+          name: meta?.label ?? slot,
+          qtyPerUnit: 1,
+          costPerUnit: null,
+          costStatus: "no_cost",
+          suppliedBy: suppliedByFromSpec(slot, spec),
+          costSource: DEFAULT_COST_SOURCE,
+          manualCostPerUnit: null,
+          inventoryCostPerUnit: null,
+          lastOrderCostPerUnit: null,
+        },
+      ],
+    }));
+  };
+
+  const removeLine = (id: string) =>
+    setSt((p) => ({ ...p, bom: p.bom.filter((l) => l.id !== id) }));
 
   // Master box qty is derived, so keep it in step with bottles-per-box.
   useEffect(() => {
@@ -920,39 +1007,27 @@ export default function BottleCostingBoard({
                       }
                     />
                   )}
-                  {/* "Not used" is a positive statement, not an empty field.
-                      Q0016 has no sleeve and no unit carton; PharmaCenter
-                      stocks no standalone liners at all. Without this, those
-                      slots would block the total forever. */}
-                  <label
+                  {/* Remove replaces the old "Not used" checkbox: now that the
+                      spec generates the list, a row that does not belong should
+                      simply not be here. Anything removed can be added back
+                      from the picker below. */}
+                  <button
+                    type="button"
+                    onClick={() => removeLine(line.id)}
+                    title="Remove this component from the costing"
                     style={{
-                      display: "flex",
-                      gap: 6,
-                      alignItems: "center",
-                      marginTop: 6,
-                      fontSize: 12.5,
-                      color: "var(--ink-3, #7b7364)",
+                      marginTop: 5,
+                      padding: 0,
+                      border: "none",
+                      background: "none",
+                      fontSize: 12,
+                      color: "#8b2f2f",
+                      cursor: "pointer",
+                      textDecoration: "underline",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={!!line.notUsed}
-                      onChange={(e) =>
-                        setLine(line.id, {
-                          notUsed: e.target.checked,
-                          ...(e.target.checked
-                            ? {
-                                fpCode: null,
-                                name: slotLabel,
-                                costPerUnit: null,
-                                costStatus: "no_cost" as CostStatus,
-                              }
-                            : {}),
-                        })
-                      }
-                    />
-                    Not used on this job
-                  </label>
+                    Remove
+                  </button>
                   {/* The #358 gate. A PharmaCenter $0 does not count until a
                       human says it is genuinely free. */}
                   {!line.notUsed &&
@@ -1110,6 +1185,67 @@ export default function BottleCostingBoard({
               </div>
             );
           })}
+
+          {/* Add a component the spec did not ask for. */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              marginTop: 4,
+              paddingTop: 10,
+              borderTop: "1px solid var(--line, #e3dcc9)",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                color: "var(--ink-3, #7b7364)",
+              }}
+            >
+              Add component
+            </span>
+            <select
+              value={addSlot}
+              onChange={(e) => setAddSlot(e.target.value as PackagingSlot)}
+              style={{
+                padding: "6px 8px",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 13,
+                background: "#fff",
+              }}
+            >
+              {SLOTS.map((s) => (
+                <option key={s.slot} value={s.slot}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => addLine(addSlot)}
+              style={{
+                padding: "6px 14px",
+                border: "1px solid var(--teal-700, #1d6c7b)",
+                borderRadius: 6,
+                background: "#fff",
+                color: "var(--teal-900, #0f4a56)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Add
+            </button>
+            <span style={{ fontSize: 12, color: "var(--ink-3, #7b7364)" }}>
+              The list above comes from the packaging spec — add anything it
+              missed.
+            </span>
+          </div>
         </div>
       </div>
 
