@@ -116,6 +116,21 @@ export type BomLine = {
   inventoryCostPerUnit?: number | null;
   /** Per-each cost from the last purchase order. */
   lastOrderCostPerUnit?: number | null;
+
+  /**
+   * Scrap rate for this component, as a percentage of what we BUY.
+   *
+   * Per-line rather than one figure for the job, because the rates genuinely
+   * differ by an order of magnitude: labels are misfed and thrown away by the
+   * hundred on a web changeover, whereas bottles are rarely lost at all.
+   *
+   * Blank means no waste has been declared, which is treated as 0. That is a
+   * deliberate exception to the null-propagation rule everywhere else in this
+   * file. An unspecified waste rate is not an unknown quantity, it is an
+   * unclaimed allowance — and blanking the whole quote until someone types 0
+   * into ten rows would punish the common case to describe the rare one.
+   */
+  wastePct?: number | null;
 };
 
 export type SuppliedBy = "pharmacenter" | "customer";
@@ -228,7 +243,8 @@ export type LineIssue = {
     | "no_qty"
     | "no_cost"
     | "uom_unresolved"
-    | "zero_unconfirmed";
+    | "zero_unconfirmed"
+    | "waste_invalid";
   message: string;
 };
 
@@ -302,6 +318,34 @@ export function burdenedRate(
 // ============================================================
 
 /**
+ * How much we must BUY per good bottle, expressed as a multiplier on the
+ * quantity the bottle actually consumes.
+ *
+ * THE CONVENTION, AND WHY
+ *
+ * Waste is a fraction of what we purchase, not of what survives. If 5% of
+ * labels are destroyed on setup then 95 good labels come out of every 100
+ * bought, so labelling one bottle costs 1 / 0.95 = 1.0526 labels.
+ *
+ * The tempting alternative — multiply by 1.05 — quietly under-buys. It is
+ * close enough to hide at 5% (1.0500 against 1.0526) and wrong enough to
+ * matter as rates climb: at 20% it orders 1.20 where the line needs 1.25, so
+ * a run that budgeted exactly would stop four fifths of the way through.
+ * Since the whole point of this calculator is to refuse plausible-looking
+ * wrong numbers, it uses the yield form.
+ *
+ * 100% or more cannot be honoured — everything bought is scrapped, so no
+ * amount of purchasing yields a bottle. That returns null, not a huge number,
+ * because a division by something at or below zero is not a price.
+ */
+export function wasteFactor(line: BomLine): number | null {
+  const w = num(line.wastePct);
+  if (w === null || w === 0) return 1;
+  if (w < 0 || w >= 100) return null;
+  return 1 / (1 - w / 100);
+}
+
+/**
  * Resolve one BOM line to a cost per finished bottle.
  *
  * Returns null with an issue rather than throwing or defaulting, so the caller
@@ -366,7 +410,16 @@ export function resolveLine(line: BomLine): {
       "$0 for a PharmaCenter-purchased part. Confirm it is genuinely free before it counts.",
     );
 
-  return { cost: qty * cost, issue: null };
+  // Checked last, so a nonsense waste rate is reported on a line that is
+  // otherwise ready rather than masking a more basic problem underneath it.
+  const waste = wasteFactor(line);
+  if (waste === null)
+    return mk(
+      "waste_invalid",
+      "Waste % must be between 0 and 99. At 100% every unit bought is scrapped, so no quantity produces a bottle.",
+    );
+
+  return { cost: qty * cost * waste, issue: null };
 }
 
 /**

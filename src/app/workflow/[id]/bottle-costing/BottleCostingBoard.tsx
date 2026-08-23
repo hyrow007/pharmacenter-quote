@@ -32,6 +32,7 @@ import {
   DEFAULT_COST_SOURCE,
   COST_SOURCES,
   costFromSource,
+  wasteFactor,
   type SuppliedBy,
   type CostSource,
   type BomLine,
@@ -171,7 +172,20 @@ function NumField({
         const n = Number(raw);
         onChange(Number.isFinite(n) ? n : null);
       }}
-      onFocus={(e) => e.currentTarget.select()}
+      onFocus={(e) => {
+        // Deferred by a frame, per #206. Chrome does not select a number
+        // input's contents synchronously on focus, so the first keystroke
+        // prepends to the existing digits instead of replacing them — typing
+        // 5 over 10 gave 510. This handler had kept the synchronous form and
+        // therefore still had the bug; the inline quantity editor below was
+        // fixed but the manual $/each field here was not.
+        const el = e.currentTarget;
+        setTimeout(() => {
+          try {
+            el.select();
+          } catch {}
+        }, 0);
+      }}
       style={numInput}
     />
   );
@@ -269,7 +283,7 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
  * the one field with genuinely unbounded content — "ALTERNATIVE LABS /
  * SHIPPER BOXES (24X12X12)" and friends.
  */
-const MATERIALS_COLUMNS = "170px 1fr 118px 165px 120px";
+const MATERIALS_COLUMNS = "170px 1fr 118px 165px 78px 120px";
 
 /**
  * Liner types, spelled as the packaging form spells them. Shown as a caption
@@ -983,6 +997,9 @@ export default function BottleCostingBoard({
             <div>Fishbowl part</div>
             <div>Supplied by</div>
             <div>Cost source</div>
+            <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+              Waste %
+            </div>
             <div style={{ textAlign: "right" }}>$ / bottle</div>
           </div>
           {st.bom.map((line) => {
@@ -1297,6 +1314,70 @@ export default function BottleCostingBoard({
                   )}
                 </div>
 
+                {/* Waste % — the scrap rate for THIS component.
+                    Per-line because the rates differ by an order of magnitude:
+                    a label web changeover throws away hundreds, a bottle
+                    almost never gets lost. Blank means none is claimed.
+                    Hidden when the customer supplies it or the slot is unused,
+                    for the same reason the cost source is: we buy none of it,
+                    so there is nothing of ours to scrap. */}
+                <div style={{ paddingTop: 4 }}>
+                  {line.notUsed || line.suppliedBy === "customer" ? (
+                    <div
+                      style={{
+                        paddingTop: 5,
+                        textAlign: "right",
+                        fontSize: 12,
+                        color: "var(--ink-3, #7b7364)",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      —
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min={0}
+                      max={99}
+                      step="0.5"
+                      placeholder="0"
+                      value={line.wastePct ?? ""}
+                      onFocus={(e) => {
+                        // #206 again — deferred a frame or the first keystroke
+                        // prepends instead of replacing.
+                        const el = e.currentTarget;
+                        setTimeout(() => {
+                          try {
+                            el.select();
+                          } catch {}
+                        }, 0);
+                      }}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "")
+                          return setLine(line.id, { wastePct: null });
+                        const n = Number(raw);
+                        // Out-of-range is STORED, not clamped. Clamping 150
+                        // to 99 would silently invent a rate nobody typed;
+                        // storing it lets resolveLine refuse the line and say
+                        // why, which is the behaviour everywhere else here.
+                        setLine(line.id, {
+                          wastePct: Number.isFinite(n) ? n : null,
+                        });
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "6px 6px",
+                        border: "1px solid var(--line, #e3dcc9)",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        textAlign: "right",
+                        background: "#fff",
+                      }}
+                    />
+                  )}
+                </div>
+
                 {/* The $/each actually in play, per the chosen source — not
                     whatever Fishbowl's inventory column happens to hold. If
                     this showed the inventory figure while the line was set to
@@ -1317,25 +1398,48 @@ export default function BottleCostingBoard({
                         : (() => {
                             const c = costFromSource(line);
                             const q = line.qtyPerUnit;
-                            if (c === null || q === null) return "—";
-                            return money(q * c);
+                            // Mirrors resolveLine's final expression exactly,
+                            // waste included, so the column and the total can
+                            // never tell different stories.
+                            const w = wasteFactor(line);
+                            if (c === null || q === null || w === null)
+                              return "—";
+                            return money(q * c * w);
                           })()}
                   </ReadOnly>
+                  {/* Show the working, not just the answer. The figure above
+                      can now be moved by two separate divisors — how many
+                      bottles share the part, and how many we scrap — and a
+                      caption that named neither would leave the user unable
+                      to tell why $3.30 became $0.29. */}
                   {!line.notUsed &&
                     line.suppliedBy === "pharmacenter" &&
-                    line.qtyPerUnit !== null &&
-                    line.qtyPerUnit !== 1 &&
-                    costFromSource(line) !== null && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "var(--ink-3, #7b7364)",
-                          marginTop: 2,
-                        }}
-                      >
-                        {money(costFromSource(line) as number)} each
-                      </div>
-                    )}
+                    costFromSource(line) !== null &&
+                    (() => {
+                      const c = costFromSource(line) as number;
+                      const w =
+                        typeof line.wastePct === "number" &&
+                        Number.isFinite(line.wastePct)
+                          ? line.wastePct
+                          : null;
+                      const parts: string[] = [];
+                      if (line.qtyPerUnit !== null && line.qtyPerUnit !== 1)
+                        parts.push(money(c) + " each");
+                      if (w !== null && w > 0 && w < 100)
+                        parts.push("incl. " + w + "% waste");
+                      if (!parts.length) return null;
+                      return (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "var(--ink-3, #7b7364)",
+                            marginTop: 2,
+                          }}
+                        >
+                          {parts.join(" · ")}
+                        </div>
+                      );
+                    })()}
                 </div>
               </div>
             );

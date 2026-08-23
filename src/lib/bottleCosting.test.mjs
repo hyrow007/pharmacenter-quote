@@ -155,3 +155,49 @@ ok('uom_unresolved blocks Fishbowl',
 ok('uom_unresolved: Manual escapes',
    B.resolveLine(L({costStatus:'uom_unresolved',costSource:'Manual',manualCostPerUnit:0.05})).cost, 0.05);
 }
+
+// ---- suite 5: waste % (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const L=(o)=>({id:'x',slot:'label',fpCode:'PC-LL-1',name:'label',qtyPerUnit:1,
+  costPerUnit:null,costStatus:'ok',suppliedBy:'pharmacenter',
+  costSource:'Manual',manualCostPerUnit:1,...o});
+const r6=(v)=>v===null?null:+v.toFixed(6);
+
+// absent / zero waste must not disturb the existing number
+ok('no wastePct -> factor 1',        B.wasteFactor(L({})), 1);
+ok('wastePct 0 -> factor 1',         B.wasteFactor(L({wastePct:0})), 1);
+ok('null wastePct -> factor 1',      B.wasteFactor(L({wastePct:null})), 1);
+ok('undefined leaves cost alone',    B.resolveLine(L({})).cost, 1);
+
+// the yield convention: buy 1/(1-w), NOT multiply by (1+w)
+ok('5% waste -> 1/0.95',   r6(B.wasteFactor(L({wastePct:5}))),  1.052632);
+ok('20% waste -> 1.25 not 1.20', r6(B.wasteFactor(L({wastePct:20}))), 1.25);
+ok('50% waste -> 2x',      r6(B.wasteFactor(L({wastePct:50}))), 2);
+
+// it actually reaches the cost, and compounds with qty
+ok('$1 @ 5% waste',        r6(B.resolveLine(L({wastePct:5})).cost), 1.052632);
+ok('qty 1/12 x $3.30 @ 10%',
+   r6(B.resolveLine(L({slot:'master_box',qtyPerUnit:1/12,manualCostPerUnit:3.30,wastePct:10})).cost),
+   r6(3.30/12/0.9));
+
+// out-of-range is refused, not clamped and not infinite
+ok('100% waste -> null',   B.wasteFactor(L({wastePct:100})), null);
+ok('120% waste -> null',   B.wasteFactor(L({wastePct:120})), null);
+ok('negative -> null',     B.wasteFactor(L({wastePct:-5})),  null);
+ok('100% blocks the line', B.resolveLine(L({wastePct:100})).cost, null);
+ok('  ...with waste_invalid',
+   B.resolveLine(L({wastePct:100})).issue.reason, 'waste_invalid');
+
+// waste cannot resurrect a line that was already blocked for a better reason
+ok('unassigned still wins over waste',
+   B.resolveLine(L({fpCode:null,costSource:'Fish Bowl (Inventory)',wastePct:100})).issue.reason,
+   'unassigned');
+
+// customer-supplied stays $0 — we buy none of it, so we scrap none of it
+ok('customer-supplied ignores waste',
+   B.resolveLine(L({suppliedBy:'customer',wastePct:50})).cost, 0);
+// and an unused slot likewise
+ok('notUsed ignores waste',
+   B.resolveLine(L({notUsed:true,wastePct:50})).cost, 0);
+}
