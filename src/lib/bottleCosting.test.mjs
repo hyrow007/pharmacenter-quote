@@ -233,3 +233,40 @@ ok('bottle at default 5% -> 1/0.95',       r4(B.resolveLine(L('bottle')).cost), 
 // an explicit 0 must NOT be replaced by the default (?? not ||)
 ok('explicit 0 survives', B.wasteFactor({...L('label'),wastePct:0}), 1);
 }
+
+// ---- suite 7: hand-typed custom parts (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const L=(o)=>({id:'x',slot:'other',fpCode:null,name:'Desiccant sachet (not coded yet)',
+  qtyPerUnit:1,costPerUnit:null,costStatus:'no_cost',suppliedBy:'pharmacenter',
+  costSource:'Manual',manualCostPerUnit:0.04,wastePct:0,customPart:true,...o});
+
+// the whole point: no fpCode, but it still prices
+ok('custom part with manual cost resolves', B.resolveLine(L({})).cost, 0.04);
+ok('  ...and raises no issue',              B.resolveLine(L({})).issue, null);
+
+// and is NOT mistaken for an unchosen line
+ok('not reported as unassigned',
+   B.resolveLine(L({manualCostPerUnit:null})).issue.reason, 'no_cost');
+
+// a plain unchosen line must still block, exactly as before
+ok('no part + no custom flag still blocks',
+   B.resolveLine(L({customPart:false,costSource:'Fish Bowl (Inventory)'})).issue.reason,
+   'unassigned');
+
+// a custom part on a Fishbowl source is a dead end — say so specifically
+ok('custom + Fishbowl source -> no_cost',
+   B.resolveLine(L({costSource:'Fish Bowl (Inventory)'})).issue.reason, 'no_cost');
+ok('  ...with a message naming the fix',
+   /Manual/.test(B.resolveLine(L({costSource:'Fish Bowl (Inventory)'})).issue.message), true);
+
+// everything else still applies to a custom part
+ok('waste applies to custom parts',
+   +B.resolveLine(L({wastePct:20})).cost.toFixed(4), 0.05);
+ok('qty applies to custom parts',
+   +B.resolveLine(L({qtyPerUnit:1/12})).cost.toFixed(6), +(0.04/12).toFixed(6));
+ok('$0 custom still needs confirming',
+   B.resolveLine(L({manualCostPerUnit:0})).issue.reason, 'zero_unconfirmed');
+ok('customer-supplied custom part is $0',
+   B.resolveLine(L({suppliedBy:'customer',manualCostPerUnit:null})).cost, 0);
+}

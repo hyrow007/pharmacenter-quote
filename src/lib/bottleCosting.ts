@@ -72,6 +72,25 @@ export type BomLine = {
   /** Fishbowl part number, null while the line is still unassigned. */
   fpCode: string | null;
   name: string;
+
+  /**
+   * This line is a hand-typed description, not a Fishbowl part.
+   *
+   * Needed because `fpCode === null` already means something else — "nobody has
+   * chosen yet" — and those two states must not be confused. An unchosen line
+   * has to block the quote; a deliberately described one has to price. Without
+   * a flag to tell them apart, one of the two behaves wrongly.
+   *
+   * Exists for the parts that are real but absent from Fishbowl: a new
+   * component not yet set up, a one-off bought on a credit card, something the
+   * customer named that we have not coded. The alternative is that the quote
+   * stalls waiting on a data-entry job in another system, which is how people
+   * end up doing the sums in a spreadsheet instead.
+   *
+   * A custom part can only be priced Manually — there is no Fishbowl record to
+   * read an inventory or last-order figure from.
+   */
+  customPart?: boolean;
   /**
    * How many of this component per FINISHED BOTTLE. Usually 1. A master box
    * holding 12 bottles is 1/12. Storing the fraction rather than "12 per box"
@@ -408,7 +427,16 @@ export function resolveLine(line: BomLine): {
   if (line.suppliedBy === "customer") return { cost: 0, issue: null };
 
   // From here down, PharmaCenter is buying it — so a real number is required.
-  if (!line.fpCode && line.costSource !== "Manual")
+  //
+  // A hand-typed part counts as chosen. It has no fpCode and never will, so
+  // the guard below would otherwise call it "not chosen yet" forever.
+  if (line.customPart && line.costSource !== "Manual")
+    return mk(
+      "no_cost",
+      "A typed-in part has no Fishbowl record to price from. Set Cost source to Manual and enter the cost.",
+    );
+
+  if (!line.fpCode && !line.customPart && line.costSource !== "Manual")
     return mk("unassigned", "No component chosen yet.");
 
   const qty = num(line.qtyPerUnit);

@@ -540,11 +540,14 @@ function ComponentPicker({
   current,
   spec,
   onPick,
+  onCustom,
 }: {
   slot: PackagingSlot;
   current: BomLine;
   spec: Record<string, string> | null;
   onPick: (opt: ComponentOption | null) => void;
+  /** Commit the typed text as a hand-described part with no Fishbowl record. */
+  onCustom: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -646,9 +649,10 @@ function ComponentPicker({
           borderRadius: 6,
           background: "var(--paper, #fffdf8)",
           fontSize: 14,
-          color: current.fpCode
-            ? "var(--teal-900, #0f4a56)"
-            : "var(--teal-700, #1d6c7b)",
+          color:
+            current.fpCode || current.customPart
+              ? "var(--teal-900, #0f4a56)"
+              : "var(--teal-700, #1d6c7b)",
           cursor: "pointer",
         }}
       >
@@ -656,6 +660,26 @@ function ComponentPicker({
           <>
             <span style={{ fontWeight: 700 }}>{current.fpCode}</span>{" "}
             <span style={{ opacity: 0.75 }}>{current.name}</span>
+          </>
+        ) : current.customPart ? (
+          <>
+            {/* Tagged, not disguised. A typed part should never be mistaken at
+                a glance for one Fishbowl has vouched for. */}
+            <span
+              style={{
+                display: "inline-block",
+                padding: "1px 7px",
+                borderRadius: 999,
+                background: "#fdf3e0",
+                color: "#8a5a00",
+                fontSize: 11,
+                fontWeight: 700,
+                marginRight: 6,
+              }}
+            >
+              typed in
+            </span>
+            <span>{current.name}</span>
           </>
         ) : (
           "Choose a component…"
@@ -687,10 +711,57 @@ function ComponentPicker({
                 suggested ? `Suggested: ${suggested}` : "Search code or name…"
               }
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter commits the typed text. The escape hatch is worthless
+                // if you have to hunt for it with the mouse.
+                if (e.key === "Enter" && q.trim()) {
+                  e.preventDefault();
+                  onCustom(q.trim());
+                  setQ("");
+                  setOpen(false);
+                }
+              }}
               style={{ ...numInput, textAlign: "left", fontWeight: 500 }}
             />
           </div>
-          {current.fpCode && (
+
+          {/* Type-it-yourself escape hatch.
+              Sits directly under the search box rather than at the end of the
+              list, because the moment you need it is the moment the list is
+              empty — and hiding it below "No matching components" would put it
+              exactly where a user has already given up looking.
+              Deliberately NOT offered on an empty query: a blank description
+              is worse than no part at all. */}
+          {q.trim() && (
+            <button
+              type="button"
+              onClick={() => {
+                onCustom(q.trim());
+                setQ("");
+                setOpen(false);
+              }}
+              style={{
+                ...rowBtn,
+                background: "#fdf9f0",
+                borderBottom: "1px solid #e6ddcc",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--teal-900, #0f4a56)",
+                }}
+              >
+                + Use “{q.trim()}”
+              </div>
+              <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 2 }}>
+                Not in Fishbowl — you will enter the cost manually.
+              </div>
+            </button>
+          )}
+
+          {(current.fpCode || current.customPart) && (
             <button
               type="button"
               onClick={() => {
@@ -1257,6 +1328,9 @@ export default function BottleCostingBoard({
                         setLine(line.id, {
                           fpCode: opt?.fp_code ?? null,
                           name: opt?.name ?? slotLabel,
+                          // Clearing or choosing a real part both end any
+                          // custom description that was here before.
+                          customPart: false,
                           costPerUnit: opt?.effective_cost_per_unit ?? null,
                           // Both Fishbowl figures are stored so the source
                           // picker can switch between them without a refetch.
@@ -1265,6 +1339,26 @@ export default function BottleCostingBoard({
                           lastOrderCostPerUnit:
                             opt?.last_order_cost_per_unit ?? null,
                           costStatus: opt?.cost_status ?? "no_cost",
+                          zeroCostConfirmed: false,
+                        })
+                      }
+                      onCustom={(text) =>
+                        setLine(line.id, {
+                          fpCode: null,
+                          customPart: true,
+                          name: text,
+                          // Manual is the only source that can price this, so
+                          // set it rather than leaving the user on a Fishbowl
+                          // source that will never resolve. Any stale Fishbowl
+                          // figures from a previously picked part are wiped —
+                          // keeping them would let the old part's price hide
+                          // behind the new part's name.
+                          costSource: "Manual",
+                          manualCostPerUnit: null,
+                          costPerUnit: null,
+                          inventoryCostPerUnit: null,
+                          lastOrderCostPerUnit: null,
+                          costStatus: "no_cost",
                           zeroCostConfirmed: false,
                         })
                       }
