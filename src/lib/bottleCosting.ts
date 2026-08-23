@@ -95,7 +95,51 @@ export type BomLine = {
    * slots would have blocked the number forever.
    */
   notUsed?: boolean;
+
+  /**
+   * Who buys this component.
+   *
+   * Defaults from the packaging form's *SuppliedBy answers, but the human can
+   * change it — the form is filled early and reality moves.
+   *
+   * This, NOT the Fishbowl CA-/PC- prefix, is now what decides whether a line
+   * costs anything. The prefix describes how a part is stocked; this describes
+   * who pays on THIS job, and only the second one belongs in a price.
+   */
+  suppliedBy: SuppliedBy;
+
+  /** Where the $/each comes from. Same four options as the gummy Costing tab. */
+  costSource: CostSource;
+  /** Only consulted when costSource is "Manual". */
+  manualCostPerUnit?: number | null;
+  /** Per-each cost from Fishbowl's inventory average. */
+  inventoryCostPerUnit?: number | null;
+  /** Per-each cost from the last purchase order. */
+  lastOrderCostPerUnit?: number | null;
 };
+
+export type SuppliedBy = "pharmacenter" | "customer";
+
+/**
+ * Cost sources, spelled exactly as the gummy Costing tab spells them so the
+ * two calculators stay legible to the same person. "App" is deliberately
+ * unwired in both — it is a placeholder for a future source, and it yields a
+ * blank rather than a guess.
+ */
+export type CostSource =
+  | "Fish Bowl (Inventory)"
+  | "Fish Bowl (Last Order)"
+  | "App"
+  | "Manual";
+
+export const COST_SOURCES: CostSource[] = [
+  "Fish Bowl (Inventory)",
+  "Fish Bowl (Last Order)",
+  "App",
+  "Manual",
+];
+
+export const DEFAULT_COST_SOURCE: CostSource = "Fish Bowl (Inventory)";
 
 export type LaborPhase = {
   /** Shifts. Production is derived from line speed, so it ignores this. */
@@ -276,40 +320,73 @@ export function resolveLine(line: BomLine): {
   // nothing. Checked FIRST so an unused slot never has to be filled in.
   if (line.notUsed) return { cost: 0, issue: null };
 
-  if (!line.fpCode) return mk("unassigned", "No component chosen yet.");
+  // Customer free-issues it, so it genuinely adds nothing to OUR cost.
+  //
+  // Checked before the part-chosen guard on purpose. Requiring a Fishbowl part
+  // for something we never buy would block the total on bookkeeping — and on
+  // Q0016 the bottle, cap and label are ALL customer-supplied, so that guard
+  // alone would have made the job unpriceable. Picking a part is still allowed
+  // and still useful for the spec; it just is not a precondition for a price.
+  if (line.suppliedBy === "customer") return { cost: 0, issue: null };
+
+  // From here down, PharmaCenter is buying it — so a real number is required.
+  if (!line.fpCode && line.costSource !== "Manual")
+    return mk("unassigned", "No component chosen yet.");
 
   const qty = num(line.qtyPerUnit);
   if (qty === null || qty <= 0)
     return mk("no_qty", "Quantity per bottle is missing.");
 
-  switch (line.costStatus) {
-    case "customer_asset":
-      // A KNOWN zero. Customer free-issues it, so it genuinely adds nothing.
-      return { cost: 0, issue: null };
+  // A UOM we cannot convert poisons BOTH Fishbowl sources, so it is checked
+  // before the source switch. Manual sidesteps it — that is the escape hatch.
+  if (line.costStatus === "uom_unresolved" && line.costSource !== "Manual")
+    return mk(
+      "uom_unresolved",
+      "Fishbowl prices this in a unit with no per-each conversion. Choose Manual, or set a units-per-purchase-unit override.",
+    );
 
-    case "zero_cost":
-      // See rule 2 in the header. Present but unproven.
-      if (!line.zeroCostConfirmed)
-        return mk(
-          "zero_unconfirmed",
-          "Fishbowl reports $0 for a PharmaCenter-purchased part. Confirm it is genuinely free before it counts.",
-        );
-      return { cost: 0, issue: null };
+  const cost = costFromSource(line);
 
-    case "no_cost":
-      return mk("no_cost", "No cost recorded in Fishbowl.");
+  if (cost === null) {
+    if (line.costSource === "Manual")
+      return mk("no_cost", "Enter a manual cost per each.");
+    if (line.costSource === "App")
+      return mk("no_cost", "The App source is not wired up yet — choose another source.");
+    if (line.costSource === "Fish Bowl (Last Order)")
+      return mk("no_cost", "No last-order cost in Fishbowl for this part.");
+    return mk("no_cost", "No inventory cost in Fishbowl for this part.");
+  }
 
-    case "uom_unresolved":
-      return mk(
-        "uom_unresolved",
-        "Fishbowl prices this in a unit with no per-each conversion. Set a units-per-purchase-unit override.",
-      );
+  // The #358 gate, now applied to whichever source was chosen rather than only
+  // to Fishbowl's inventory column. PharmaCenter is buying this, so a $0 is an
+  // absence wearing a number's clothes until a human says otherwise.
+  if (cost === 0 && !line.zeroCostConfirmed)
+    return mk(
+      "zero_unconfirmed",
+      "$0 for a PharmaCenter-purchased part. Confirm it is genuinely free before it counts.",
+    );
 
-    case "ok": {
-      const c = num(line.costPerUnit);
-      if (c === null) return mk("no_cost", "No cost recorded in Fishbowl.");
-      return { cost: qty * c, issue: null };
-    }
+  return { cost: qty * cost, issue: null };
+}
+
+/**
+ * The per-each cost implied by the line's chosen source. Null means "this
+ * source has nothing for this part" — never 0, which would be a silent lie.
+ */
+export function costFromSource(line: BomLine): number | null {
+  switch (line.costSource) {
+    case "Manual":
+      return num(line.manualCostPerUnit);
+    case "Fish Bowl (Last Order)":
+      return num(line.lastOrderCostPerUnit);
+    case "App":
+      // Deliberately unwired, exactly as on the gummy tab.
+      return null;
+    case "Fish Bowl (Inventory)":
+    default:
+      // costPerUnit is the view's effective_cost_per_unit, which IS the
+      // inventory figure; inventoryCostPerUnit is the explicit alias.
+      return num(line.inventoryCostPerUnit ?? line.costPerUnit);
   }
 }
 

@@ -29,6 +29,11 @@ import {
   DEFAULT_MARGIN_PCT,
   DEFAULT_HOS_COMMISSION_PCT,
   DEFAULT_REP_COMMISSION_PCT,
+  DEFAULT_COST_SOURCE,
+  COST_SOURCES,
+  costFromSource,
+  type SuppliedBy,
+  type CostSource,
   type BomLine,
   type CostStatus,
   type PackagingSlot,
@@ -182,7 +187,10 @@ export type ComponentOption = {
   name: string;
   category: PackagingSlot | null;
   owner: "pharmacenter" | "customer";
+  /** Per-each, from Fishbowl's inventory average. */
   effective_cost_per_unit: number | null;
+  /** Per-each, from the last purchase order. Feeds the cost-source picker. */
+  last_order_cost_per_unit: number | null;
   cost_status: CostStatus;
 };
 
@@ -232,7 +240,51 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
   { slot: "master_box", label: "Master box" },
 ];
 
-export function blankState(bottlesPerMasterBox: number | null): SavedState {
+/**
+ * Which packaging-form answer decides who supplies each slot.
+ *
+ * These key names are VERIFIED against PackagingSpecSection, not guessed —
+ * the last time I guessed spec keys the failure was silent and the fields
+ * just sat empty. Values are "pharmacenter" | "customer" | "".
+ *
+ * Two slots have no answer of their own:
+ *   liner  — PharmaCenter stocks no standalone liners; it arrives as part of
+ *            the cap, so it inherits the closure's answer (#362).
+ *   carton — the form calls this "Secondary / retail packaging".
+ */
+const SUPPLIED_BY_SPEC_KEY: Record<PackagingSlot, string | null> = {
+  bottle: "bottleSuppliedBy",
+  closure: "closureSuppliedBy",
+  liner: "closureSuppliedBy",
+  other: "fillerSuppliedBy",
+  neckband: "neckbandSuppliedBy",
+  label: "labelSuppliedBy",
+  carton: "retailSuppliedBy",
+  master_box: "masterBoxSuppliedBy",
+  sleeve: "sleeveSuppliedBy",
+  insert: "insertSuppliedBy",
+  safety_seal: "safetySealSuppliedBy",
+};
+
+/**
+ * Read the form's answer for a slot. Defaults to PharmaCenter when the form
+ * is silent — the conservative direction, because assuming the customer
+ * supplies something we actually buy would drop a real cost to $0 and
+ * under-quote the job. Assuming the reverse merely asks for a part number.
+ */
+function suppliedByFromSpec(
+  slot: PackagingSlot,
+  spec: Record<string, string> | null,
+): SuppliedBy {
+  const key = SUPPLIED_BY_SPEC_KEY[slot];
+  const v = key ? spec?.[key] : undefined;
+  return v === "customer" ? "customer" : "pharmacenter";
+}
+
+export function blankState(
+  bottlesPerMasterBox: number | null,
+  spec?: Record<string, string> | null,
+): SavedState {
   return {
     bom: SLOTS.map((s, i) => ({
       id: `slot-${i}-${s.slot}`,
@@ -248,6 +300,11 @@ export function blankState(bottlesPerMasterBox: number | null): SavedState {
           : 1,
       costPerUnit: null,
       costStatus: "no_cost",
+      suppliedBy: suppliedByFromSpec(s.slot, spec ?? null),
+      costSource: DEFAULT_COST_SOURCE,
+      manualCostPerUnit: null,
+      inventoryCostPerUnit: null,
+      lastOrderCostPerUnit: null,
     })),
     bottlesPerMinute: null,
     bottlesPerMasterBox,
@@ -537,13 +594,38 @@ export default function BottleCostingBoard({
     const perBox = Number(spec?.masterBoxQty ?? "");
     const blank = blankState(
       Number.isFinite(perBox) && perBox > 0 ? perBox : null,
+      spec,
     );
     if (!initial) return blank;
     // Costings saved BEFORE the pricing tier existed have no margin fields.
     // Spreading blank first backfills them, so an old record opens with the
     // standard 30% / commissions rather than an undefined that would turn
     // the margin select into an uncontrolled input and the price into NaN.
-    return { ...blank, ...initial };
+    //
+    // The bom array needs the SAME treatment one level down: a top-level
+    // spread replaces it wholesale, so saved lines would arrive with no
+    // suppliedBy and no costSource. An undefined suppliedBy is not merely
+    // cosmetic — resolveLine would read it as "not customer", silently
+    // demanding a cost for something the customer actually free-issues.
+    return {
+      ...blank,
+      ...initial,
+      bom: (initial.bom ?? blank.bom).map((l) => ({
+        ...l,
+        // A saved line that already resolved as a customer asset must stay
+        // customer-supplied. That fact came from the chosen Fishbowl part
+        // (a CA- code), which is a stronger signal than the form answer —
+        // and without this check such a line would silently flip to
+        // PharmaCenter and start demanding a $0 confirmation for something
+        // we never buy.
+        suppliedBy:
+          l.suppliedBy ??
+          (l.costStatus === "customer_asset"
+            ? "customer"
+            : suppliedByFromSpec(l.slot, spec)),
+        costSource: l.costSource ?? DEFAULT_COST_SOURCE,
+      })),
+    };
   });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -751,8 +833,30 @@ export default function BottleCostingBoard({
 
       {/* ---------- Bill of materials ---------- */}
       <div style={shell}>
-        <div style={band}>Bill of Materials</div>
+        <div style={band}>Material Costs</div>
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
+          {/* Column headers — six columns is too many to read unlabelled. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "150px 1fr 150px 165px 90px 110px",
+              gap: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              color: "var(--ink-3, #7b7364)",
+              paddingBottom: 2,
+              borderBottom: "1px solid var(--line, #e3dcc9)",
+            }}
+          >
+            <div>Component</div>
+            <div>Fishbowl part</div>
+            <div>Supplied by</div>
+            <div>Cost source</div>
+            <div>Qty / bottle</div>
+            <div style={{ textAlign: "right" }}>$ / each</div>
+          </div>
           {st.bom.map((line) => {
             const slotLabel =
               SLOTS.find((s) => s.slot === line.slot)?.label ?? line.slot;
@@ -762,8 +866,8 @@ export default function BottleCostingBoard({
                 key={line.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "150px 1fr 110px 120px",
-                  gap: 10,
+                  gridTemplateColumns: "150px 1fr 150px 165px 90px 110px",
+                  gap: 8,
                   alignItems: "start",
                   opacity: line.notUsed ? 0.55 : 1,
                 }}
@@ -804,6 +908,12 @@ export default function BottleCostingBoard({
                           fpCode: opt?.fp_code ?? null,
                           name: opt?.name ?? slotLabel,
                           costPerUnit: opt?.effective_cost_per_unit ?? null,
+                          // Both Fishbowl figures are stored so the source
+                          // picker can switch between them without a refetch.
+                          inventoryCostPerUnit:
+                            opt?.effective_cost_per_unit ?? null,
+                          lastOrderCostPerUnit:
+                            opt?.last_order_cost_per_unit ?? null,
                           costStatus: opt?.cost_status ?? "no_cost",
                           zeroCostConfirmed: false,
                         })
@@ -845,7 +955,9 @@ export default function BottleCostingBoard({
                   </label>
                   {/* The #358 gate. A PharmaCenter $0 does not count until a
                       human says it is genuinely free. */}
-                  {line.costStatus === "zero_cost" && (
+                  {!line.notUsed &&
+                    line.suppliedBy === "pharmacenter" &&
+                    costFromSource(line) === 0 && (
                     <label
                       style={{
                         display: "flex",
@@ -865,10 +977,10 @@ export default function BottleCostingBoard({
                           })
                         }
                       />
-                      Fishbowl reports $0 — confirm this part is genuinely free
+                      $0 from this source — confirm the part is genuinely free
                     </label>
                   )}
-                  {issue && !(line.costStatus === "zero_cost") && (
+                  {issue && issue.reason !== "zero_unconfirmed" && (
                     <div
                       style={{ marginTop: 5, fontSize: 12, color: "#a3281f" }}
                     >
@@ -876,6 +988,113 @@ export default function BottleCostingBoard({
                     </div>
                   )}
                 </div>
+                {/* Supplied by — defaults from the packaging form, but the
+                    human can override. This is what decides whether the line
+                    costs anything, so it sits before the money columns. */}
+                <div style={{ paddingTop: 4 }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(
+                      [
+                        ["pharmacenter", "PharmaCenter"],
+                        ["customer", "Customer"],
+                      ] as const
+                    ).map(([v, label]) => {
+                      const on = line.suppliedBy === v;
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          disabled={line.notUsed}
+                          onClick={() => setLine(line.id, { suppliedBy: v })}
+                          style={{
+                            flex: 1,
+                            padding: "6px 4px",
+                            fontSize: 11.5,
+                            fontWeight: on ? 700 : 500,
+                            borderRadius: 999,
+                            cursor: line.notUsed ? "default" : "pointer",
+                            border: on
+                              ? "1px solid var(--teal-700, #1d6c7b)"
+                              : "1px solid var(--line, #e3dcc9)",
+                            background: on
+                              ? "var(--teal-700, #1d6c7b)"
+                              : "#fff",
+                            color: on ? "#fff" : "var(--ink-3, #7b7364)",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {suppliedByFromSpec(line.slot, spec) !== line.suppliedBy && (
+                    <div
+                      style={{
+                        marginTop: 3,
+                        fontSize: 11,
+                        color: "#8a5a00",
+                      }}
+                    >
+                      Changed from the spec
+                    </div>
+                  )}
+                </div>
+
+                {/* Cost source — same four options as the gummy Costing tab.
+                    Hidden when the customer supplies it: there is no cost to
+                    source, and offering the choice would imply otherwise. */}
+                <div style={{ paddingTop: 4 }}>
+                  {line.notUsed || line.suppliedBy === "customer" ? (
+                    <div
+                      style={{
+                        paddingTop: 5,
+                        fontSize: 12,
+                        color: "var(--ink-3, #7b7364)",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      {line.notUsed ? "—" : "Free-issued"}
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={line.costSource}
+                        onChange={(e) =>
+                          setLine(line.id, {
+                            costSource: e.target.value as CostSource,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          padding: "6px 6px",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 6,
+                          fontSize: 12,
+                          background: "#fff",
+                        }}
+                      >
+                        {COST_SOURCES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      {line.costSource === "Manual" && (
+                        <div style={{ marginTop: 4 }}>
+                          <NumField
+                            value={line.manualCostPerUnit ?? null}
+                            onChange={(v) =>
+                              setLine(line.id, { manualCostPerUnit: v })
+                            }
+                            placeholder="$ / each"
+                            step="0.0001"
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 {line.notUsed ? (
                   <div style={{ paddingTop: 9, color: "var(--ink-3, #7b7364)" }}>
                     —
@@ -886,15 +1105,21 @@ export default function BottleCostingBoard({
                     onChange={(v) => setLine(line.id, { qtyPerUnit: v })}
                   />
                 )}
+                {/* The $/each actually in play, per the chosen source — not
+                    whatever Fishbowl's inventory column happens to hold. If
+                    this showed the inventory figure while the line was set to
+                    Last Order, the displayed number and the number in the
+                    total would disagree, which is worse than showing nothing. */}
                 <div style={{ textAlign: "right", paddingTop: 8 }}>
                   <ReadOnly>
                     {line.notUsed
                       ? "—"
-                      : line.costStatus === "customer_asset"
+                      : line.suppliedBy === "customer"
                         ? money(0)
-                        : line.costPerUnit !== null
-                          ? money(line.costPerUnit)
-                          : "—"}
+                        : (() => {
+                            const c = costFromSource(line);
+                            return c !== null ? money(c) : "—";
+                          })()}
                   </ReadOnly>
                 </div>
               </div>
@@ -1253,6 +1478,7 @@ export default function BottleCostingBoard({
             setSt(
               blankState(
                 Number.isFinite(perBox) && perBox > 0 ? perBox : null,
+                spec,
               ),
             );
           }}

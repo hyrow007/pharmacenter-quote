@@ -16,9 +16,9 @@ ok('prodHours no BPM => null',B.productionHours(12000,null),null);
 
 // --- Q0016 BOM. Bottle/closure/label are CUSTOMER supplied => $0 known.
 const bom=[
- {id:'1',slot:'bottle', fpCode:'CA-PK-1',name:'150cc amber PET',qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset'},
- {id:'2',slot:'closure',fpCode:'CA-PK-2',name:'38/400 flip-top',qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset'},
- {id:'3',slot:'label',  fpCode:'CA-LL-1',name:'bottle label',   qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset'},
+ {id:'1',slot:'bottle', fpCode:'CA-PK-1',name:'150cc amber PET',qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'},
+ {id:'2',slot:'closure',fpCode:'CA-PK-2',name:'38/400 flip-top',qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'},
+ {id:'3',slot:'label',  fpCode:'CA-LL-1',name:'bottle label',   qtyPerUnit:1,costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'},
  {id:'4',slot:'neckband',fpCode:'PC-PK-9',name:'clear neckband',qtyPerUnit:1,costPerUnit:0.05,costStatus:'ok'},
  {id:'5',slot:'other',  fpCode:'PC-PK-8',name:'cotton',         qtyPerUnit:1,costPerUnit:0.01,costStatus:'ok'},
  {id:'6',slot:'other',  fpCode:'PC-PK-7',name:'desiccant',      qtyPerUnit:1,costPerUnit:0.02,costStatus:'ok'},
@@ -56,12 +56,12 @@ console.log('  costPerUnit =',B.computeBottleCosting(inputs).costPerUnit,'(expec
 const mk=(id,slot,over={})=>({id,slot,fpCode:'X-'+id,name:slot,qtyPerUnit:1,costPerUnit:0.05,costStatus:'ok',...over});
 // Q0016 shape: 3 slots genuinely unused, rest costed
 const bom=[
- mk('1','bottle',{costPerUnit:0,costStatus:'customer_asset'}),
- mk('2','closure',{costPerUnit:0,costStatus:'customer_asset'}),
+ mk('1','bottle',{costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'}),
+ mk('2','closure',{costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'}),
  mk('3','liner',{fpCode:null,costPerUnit:null,costStatus:'no_cost',notUsed:true}),
  mk('4','other',{costPerUnit:0.03}),
  mk('5','neckband',{costPerUnit:0.05}),
- mk('6','label',{costPerUnit:0,costStatus:'customer_asset'}),
+ mk('6','label',{costPerUnit:0,costStatus:'customer_asset',suppliedBy:'customer'}),
  mk('7','carton',{fpCode:null,costPerUnit:null,costStatus:'no_cost',notUsed:true}),
  mk('8','master_box',{qtyPerUnit:1/12,costPerUnit:3.30}),
 ];
@@ -108,4 +108,50 @@ const b=B.computeSalePrice(cost,qty,P(30,'gross-margin')).salePerUnit;
 console.log('\n30% markup   -> $'+a.toFixed(4)+' /bottle');
 console.log('30% margin   -> $'+b.toFixed(4)+' /bottle');
 ok('modes differ', a!==b, true);
+}
+
+// ---- suite 4: supplied-by + cost source (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const L=(o)=>({id:'x',slot:'bottle',fpCode:'PC-PK-1',name:'n',qtyPerUnit:1,
+  costPerUnit:null,costStatus:'ok',suppliedBy:'pharmacenter',costSource:'Fish Bowl (Inventory)',...o});
+
+// customer-supplied resolves at 0 EVEN WITH NO PART CHOSEN — the Q0016 case
+ok('customer-supplied, no part -> $0',
+   B.resolveLine(L({suppliedBy:'customer',fpCode:null})).cost, 0);
+ok('  ...and raises no issue',
+   B.resolveLine(L({suppliedBy:'customer',fpCode:null})).issue, null);
+
+// PC-supplied with no part still blocks
+ok('PC-supplied, no part -> blocks',
+   B.resolveLine(L({fpCode:null})).cost, null);
+
+// source switching
+const both=L({inventoryCostPerUnit:0.10,lastOrderCostPerUnit:0.14});
+ok('Inventory source', B.resolveLine({...both,costSource:'Fish Bowl (Inventory)'}).cost, 0.10);
+ok('Last Order source', B.resolveLine({...both,costSource:'Fish Bowl (Last Order)'}).cost, 0.14);
+ok('App source -> blocks', B.resolveLine({...both,costSource:'App'}).cost, null);
+ok('Manual, no value -> blocks', B.resolveLine({...both,costSource:'Manual'}).cost, null);
+ok('Manual with value', B.resolveLine({...both,costSource:'Manual',manualCostPerUnit:0.22}).cost, 0.22);
+ok('Manual works with NO part chosen',
+   B.resolveLine({...both,fpCode:null,costSource:'Manual',manualCostPerUnit:0.22}).cost, 0.22);
+
+// last-order missing must not silently fall back to inventory
+ok('Last Order missing -> blocks (no silent fallback)',
+   B.resolveLine(L({inventoryCostPerUnit:0.10,lastOrderCostPerUnit:null,costSource:'Fish Bowl (Last Order)'})).cost, null);
+
+// the #358 zero gate still applies, now per-source
+ok('$0 manual unconfirmed -> blocks',
+   B.resolveLine({...both,costSource:'Manual',manualCostPerUnit:0}).cost, null);
+ok('$0 manual CONFIRMED -> counts',
+   B.resolveLine({...both,costSource:'Manual',manualCostPerUnit:0,zeroCostConfirmed:true}).cost, 0);
+
+// qty multiplies
+ok('qty 1/12 x $3.30', +B.resolveLine(L({qtyPerUnit:1/12,inventoryCostPerUnit:3.30})).cost.toFixed(6), 0.275);
+
+// uom_unresolved poisons Fishbowl sources but Manual escapes it
+ok('uom_unresolved blocks Fishbowl',
+   B.resolveLine(L({costStatus:'uom_unresolved',inventoryCostPerUnit:5})).cost, null);
+ok('uom_unresolved: Manual escapes',
+   B.resolveLine(L({costStatus:'uom_unresolved',costSource:'Manual',manualCostPerUnit:0.05})).cost, 0.05);
 }

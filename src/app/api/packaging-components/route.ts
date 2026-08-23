@@ -47,8 +47,13 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("packaging_components_costed")
+    // last_order_cost_per_purchase_unit + effective_units_per_purchase_unit
+    // are carried so the cost-source picker has a second Fishbowl figure to
+    // switch to. The view only derives the INVENTORY per-each cost; the
+    // last-order one is divided down below rather than in SQL, which keeps
+    // this a code change instead of a migration someone has to remember to run.
     .select(
-      "fp_code, name, category, owner, effective_cost_per_unit, cost_status",
+      "fp_code, name, category, owner, effective_cost_per_unit, cost_status, last_order_cost_per_purchase_unit, effective_units_per_purchase_unit",
     )
     .eq("active", true);
 
@@ -95,6 +100,8 @@ export async function GET(request: Request) {
     owner: string;
     effective_cost_per_unit: number | null;
     cost_status: string;
+    last_order_cost_per_purchase_unit: number | null;
+    effective_units_per_purchase_unit: number | null;
   };
 
   // Lower is better. Word hits dominate, then the slot match, then whether we
@@ -113,9 +120,31 @@ export async function GET(request: Request) {
     return s;
   };
 
+  // Divide the last-order purchase-unit cost down to per-each using the SAME
+  // factor the view used for the inventory cost, so the two figures are
+  // directly comparable. Null in, null out — an unconvertible UOM must leave
+  // this blank rather than quietly reporting a per-1,000 price as per-each,
+  // which is exactly the bug that made boxes look like $7,461 (#357).
+  const perEach = (r: Row): number | null => {
+    const c = r.last_order_cost_per_purchase_unit;
+    const f = r.effective_units_per_purchase_unit;
+    if (c === null || f === null || f === 0) return null;
+    if (r.owner === "customer") return 0;
+    return c / f;
+  };
+
   const rows = ((data ?? []) as Row[])
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-    .slice(0, 60);
+    .slice(0, 60)
+    .map((r) => ({
+      fp_code: r.fp_code,
+      name: r.name,
+      category: r.category,
+      owner: r.owner,
+      effective_cost_per_unit: r.effective_cost_per_unit,
+      cost_status: r.cost_status,
+      last_order_cost_per_unit: perEach(r),
+    }));
 
   return NextResponse.json({ ok: true, rows });
 }
