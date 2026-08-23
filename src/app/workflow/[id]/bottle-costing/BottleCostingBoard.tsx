@@ -967,7 +967,7 @@ export default function BottleCostingBoard({
             <div>Fishbowl part</div>
             <div>Supplied by</div>
             <div>Cost source</div>
-            <div style={{ textAlign: "right" }}>$ / each</div>
+            <div style={{ textAlign: "right" }}>$ / bottle</div>
           </div>
           {st.bom.map((line) => {
             const slotLabel =
@@ -1037,7 +1037,7 @@ export default function BottleCostingBoard({
                           gap: 3,
                         }}
                       >
-                        1 per
+                        {line.slot !== "master_box" && "1 per"}
                         <input
                           type="number"
                           min={1}
@@ -1048,7 +1048,19 @@ export default function BottleCostingBoard({
                               ? Math.round(1 / line.qtyPerUnit)
                               : ""
                           }
-                          onFocus={(e) => e.currentTarget.select()}
+                          onFocus={(e) => {
+                            // Chrome does not select a number input's contents
+                            // synchronously on focus, so a keystroke prepends
+                            // to the existing digits instead of replacing them
+                            // — typing 24 over 12 gave 124. Deferring a frame
+                            // is the workaround already proven in #206.
+                            const el = e.currentTarget;
+                            setTimeout(() => {
+                              try {
+                                el.select();
+                              } catch {}
+                            }, 0);
+                          }}
                           onChange={(e) => {
                             const n = Number(e.target.value);
                             const per =
@@ -1079,7 +1091,9 @@ export default function BottleCostingBoard({
                             background: "#fff",
                           }}
                         />
-                        bottles
+                        {line.slot === "master_box"
+                          ? "bottles per box"
+                          : "bottles"}
                       </div>
                     )}
                 </div>
@@ -1272,6 +1286,12 @@ export default function BottleCostingBoard({
                     this showed the inventory figure while the line was set to
                     Last Order, the displayed number and the number in the
                     total would disagree, which is worse than showing nothing. */}
+                {/* What this line actually contributes to ONE BOTTLE —
+                    i.e. the unit price already divided by how many bottles
+                    share it. A master box at $3.30 for 12 bottles shows
+                    $0.2750 here, which is the number that lands in the
+                    total; the undivided price is kept as a caption so the
+                    buyer can still sanity-check what a box costs. */}
                 <div style={{ textAlign: "right", paddingTop: 8 }}>
                   <ReadOnly>
                     {line.notUsed
@@ -1280,9 +1300,26 @@ export default function BottleCostingBoard({
                         ? money(0)
                         : (() => {
                             const c = costFromSource(line);
-                            return c !== null ? money(c) : "—";
+                            const q = line.qtyPerUnit;
+                            if (c === null || q === null) return "—";
+                            return money(q * c);
                           })()}
                   </ReadOnly>
+                  {!line.notUsed &&
+                    line.suppliedBy === "pharmacenter" &&
+                    line.qtyPerUnit !== null &&
+                    line.qtyPerUnit !== 1 &&
+                    costFromSource(line) !== null && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--ink-3, #7b7364)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {money(costFromSource(line) as number)} each
+                      </div>
+                    )}
                 </div>
               </div>
             );
