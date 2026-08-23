@@ -255,6 +255,17 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
  * Verified against PackagingSpecSection. null = inherent to any bottle job
  * (there is no "bottle required?" question, because there always is one).
  */
+/**
+ * Liner types, spelled as the packaging form spells them. Shown as a caption
+ * on the Closure row because the liner has no row of its own.
+ */
+const LINER_LABEL: Record<string, string> = {
+  induction: "Induction (heat seal)",
+  "pressure-sensitive": "Pressure-sensitive",
+  foam: "Foam",
+  other: "Other — see spec",
+};
+
 const SLOT_PRESENCE_SPEC_KEY: Partial<Record<PackagingSlot, string>> = {
   other: "fillerRequired",
   neckband: "neckbandRequired",
@@ -274,14 +285,22 @@ const SLOT_PRESENCE_SPEC_KEY: Partial<Record<PackagingSlot, string>> = {
  * invisible; carrying an extra row the user can delete is not. Same asymmetry
  * that makes an unanswered "supplied by" default to PharmaCenter.
  *
- * The liner is the one that reads differently: it has a type picker rather
- * than a yes/no, and "none" is one of the choices.
+ * The liner is the exception: it is never generated, because it is not a
+ * separate part. See the note in the function body.
  */
 function slotIsInSpec(
   slot: PackagingSlot,
   spec: Record<string, string> | null,
 ): boolean {
-  if (slot === "liner") return (spec?.closureLiner ?? "") !== "none";
+  // The liner comes IN the cap. It is a property of the closure, not a part
+  // we buy separately — which is why every "liner" search returns caps, and
+  // why the Fishbowl descriptions read "CAP 53/400 W/ LINER" rather than
+  // listing a liner of their own (#362). The closure's cost already includes
+  // it, so generating a Liner row would either sit empty forever or, worse,
+  // get filled with a cap and count the cap twice.
+  //
+  // Still in the Add-component list for the rare job that buys liners loose.
+  if (slot === "liner") return false;
 
   // Safety seal and insert are asked INSIDE the retail-packaging section of
   // the form. With no retail packaging those questions are never rendered, so
@@ -976,6 +995,24 @@ export default function BottleCostingBoard({
                   }}
                 >
                   {slotLabel}
+                  {/* The liner has no row of its own (it arrives in the cap),
+                      so the spec's answer is surfaced here — otherwise the
+                      requirement would simply disappear from the costing and
+                      someone could pick a cap with the wrong liner. */}
+                  {line.slot === "closure" && LINER_LABEL[spec?.closureLiner ?? ""] && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        color: "var(--ink-3, #7b7364)",
+                        marginTop: 2,
+                      }}
+                    >
+                      liner: {LINER_LABEL[spec?.closureLiner ?? ""]}
+                    </div>
+                  )}
                   {/* A component shared across several bottles — the master box
                       being the usual one. Shown as the ratio a human would say
                       out loud rather than the 0.08333 the arithmetic needs. */}
