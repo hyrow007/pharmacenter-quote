@@ -658,7 +658,7 @@ export default function BottleCostingBoard({
       customerEmail: null,
       workflowLabel: quoteNumber,
       preparerName: "",
-      preparerEmail: null,
+      preparerEmail: "",
       lineItems,
       backUrl,
       backLabel: `Back to workflow (${quoteNumber})`,
