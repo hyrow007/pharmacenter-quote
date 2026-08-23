@@ -55,6 +55,12 @@ const PRINT_CSS = [
   "  body { background: #fff !important; }",
   "  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
   "}",
+  // The component dropdown renders inside the Material Costs card, whose
+  // overflow:hidden (there to clip the rounded corners) was cutting the
+  // result list off at the card edge. While a list is open, let the clipping
+  // ancestor overflow; the rounded corners come back when it closes. Same
+  // fix as task #190 on the gummy editor.
+  ".bc-materials:has(.bc-pop) { overflow: visible !important; }",
 ].join("\n");
 
 // ============================================================
@@ -516,6 +522,7 @@ function ComponentPicker({
 
       {open && (
         <div
+          className="bc-pop"
           style={{
             position: "absolute",
             zIndex: 40,
@@ -919,14 +926,14 @@ export default function BottleCostingBoard({
       </div>
 
       {/* ---------- Bill of materials ---------- */}
-      <div style={shell}>
+      <div style={shell} className="bc-materials">
         <div style={band}>Material Costs</div>
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
           {/* Column headers — six columns is too many to read unlabelled. */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "150px 1fr 118px 165px 90px 110px",
+              gridTemplateColumns: "170px 1fr 118px 165px 120px",
               gap: 8,
               fontSize: 11,
               fontWeight: 700,
@@ -941,7 +948,6 @@ export default function BottleCostingBoard({
             <div>Fishbowl part</div>
             <div>Supplied by</div>
             <div>Cost source</div>
-            <div>Qty / bottle</div>
             <div style={{ textAlign: "right" }}>$ / each</div>
           </div>
           {st.bom.map((line) => {
@@ -953,7 +959,7 @@ export default function BottleCostingBoard({
                 key={line.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "150px 1fr 118px 165px 90px 110px",
+                  gridTemplateColumns: "170px 1fr 118px 165px 120px",
                   gap: 8,
                   alignItems: "start",
                   opacity: line.notUsed ? 0.55 : 1,
@@ -970,6 +976,25 @@ export default function BottleCostingBoard({
                   }}
                 >
                   {slotLabel}
+                  {/* A component shared across several bottles — the master box
+                      being the usual one. Shown as the ratio a human would say
+                      out loud rather than the 0.08333 the arithmetic needs. */}
+                  {line.qtyPerUnit !== null &&
+                    line.qtyPerUnit > 0 &&
+                    line.qtyPerUnit < 1 && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          textTransform: "none",
+                          letterSpacing: 0,
+                          color: "var(--ink-3, #7b7364)",
+                          marginTop: 2,
+                        }}
+                      >
+                        1 per {Math.round(1 / line.qtyPerUnit)} bottles
+                      </div>
+                    )}
                 </div>
                 <div>
                   {line.notUsed ? (
@@ -1155,16 +1180,6 @@ export default function BottleCostingBoard({
                   )}
                 </div>
 
-                {line.notUsed ? (
-                  <div style={{ paddingTop: 9, color: "var(--ink-3, #7b7364)" }}>
-                    —
-                  </div>
-                ) : (
-                  <NumField
-                    value={line.qtyPerUnit}
-                    onChange={(v) => setLine(line.id, { qtyPerUnit: v })}
-                  />
-                )}
                 {/* The $/each actually in play, per the chosen source — not
                     whatever Fishbowl's inventory column happens to hold. If
                     this showed the inventory figure while the line was set to
