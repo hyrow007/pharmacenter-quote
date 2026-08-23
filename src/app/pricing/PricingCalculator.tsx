@@ -259,14 +259,14 @@ function relativeFromNow(iso: string): string {
 // tab. The `notes` and `terms` blocks are baked in (from the Excel quote
 // template the team currently uses).
 // ----------------------------------------------------------------------
-type QuoteLineItem = {
+export type QuoteLineItem = {
   itemRef: string;       // e.g. "ITEM 1"
   description: string;
   quantity: number;
   unitPrice: number;
 };
 
-function buildQuoteHtml(args: {
+export function buildQuoteHtml(args: {
   customerName: string | null;
   customerAddress: string | null;       // multi-line ok
   customerContact: string | null;       // e.g. for new customers

@@ -147,6 +147,31 @@ export type BottleCostingInputs = {
   overhead: OverheadInputs;
   /** Flat lab/testing cost for the whole job, spread across the quantity. */
   labTestingTotal?: number | null;
+  /**
+   * Margin tier. For contract-packaging bottles this board IS the pricing
+   * calculator, so it has to carry cost all the way to a sale price — a
+   * cost-only board cannot issue a quote.
+   */
+  pricing?: PricingInputs;
+};
+
+/**
+ * How the margin number is meant: a markup ON cost, or a margin OF the sale
+ * price. These are NOT the same and the difference is money — 30% markup on
+ * $0.49 is $0.637, 30% gross margin is $0.70. The pricing calculator has
+ * always offered both, so bottles offer both too rather than silently
+ * picking one.
+ */
+export type MarginMode = "markup" | "gross-margin";
+
+export type PricingInputs = {
+  /** Percent, as typed: 30 means 30%. */
+  marginPct: number | null;
+  marginMode: MarginMode;
+  /** Head of Sales commission, % of SALE price. */
+  hosCommissionPct?: number | null;
+  /** Sales rep commission, % of SALE price. */
+  repCommissionPct?: number | null;
 };
 
 /** Why a line could not be costed. Drives the UI badge, not just a blank. */
@@ -175,6 +200,18 @@ export type BottleCostingResult = {
   productionHours: number | null;
   /** Everything blocking a complete number, for display next to the offender. */
   issues: LineIssue[];
+
+  // ---- pricing tier ----
+  /** What we'd charge per bottle. Null whenever cost is null. */
+  salePerUnit: number | null;
+  /** salePerUnit × quantity. */
+  totalRevenue: number | null;
+  hosCommission: number | null;
+  repCommission: number | null;
+  /** Revenue − true cost − commissions. The number the margin % promised. */
+  grossProfit: number | null;
+  /** Realised margin as a % of sale, after commissions. Sanity-check readout. */
+  effectiveMarginPct: number | null;
 };
 
 // ============================================================
@@ -441,14 +478,112 @@ export function computeBottleCosting(
     ? null
     : (parts as number[]).reduce((a, b) => a + b, 0);
 
+  const totalCost =
+    costPerUnit === null || q === null ? null : costPerUnit * q;
+
+  const price = computeSalePrice(costPerUnit, q, input.pricing);
+
   return {
     materialsPerUnit: mat.total,
     laborPerUnit: lab,
     overheadPerUnit: ovh,
     labTestingPerUnit: testingPerUnit,
     costPerUnit,
-    totalCost: costPerUnit === null || q === null ? null : costPerUnit * q,
+    totalCost,
     productionHours: prodHours,
     issues: mat.issues,
+    ...price,
+  };
+}
+
+// ============================================================
+// Pricing tier — cost → sale price
+// ============================================================
+
+/** Commission defaults, matching the pricing calculator (task #352). */
+export const DEFAULT_HOS_COMMISSION_PCT = 0.5;
+export const DEFAULT_REP_COMMISSION_PCT = 3;
+export const DEFAULT_MARGIN_PCT = 30;
+
+/**
+ * Turn a true cost into a sale price.
+ *
+ * Commissions are a percentage OF THE SALE PRICE, but they are also a cost
+ * that the margin has to cover — so the price cannot simply be marked up and
+ * then have commission subtracted. It solves algebraically, exactly as the
+ * pricing calculator does:
+ *
+ *   gross-margin: sale = cost / (1 − margin − commissionRate)
+ *   markup:       sale = cost × (1 + markup) / (1 − rate × (1 + markup))
+ *
+ * Both leave the rep with precisely the margin they asked for once
+ * commission has been paid.
+ *
+ * Null in, null out — a cost we could not resolve must not silently price at
+ * zero, which is the same rule the rest of this module follows.
+ */
+export function computeSalePrice(
+  costPerUnit: number | null,
+  quantity: number | null,
+  pricing?: PricingInputs,
+): {
+  salePerUnit: number | null;
+  totalRevenue: number | null;
+  hosCommission: number | null;
+  repCommission: number | null;
+  grossProfit: number | null;
+  effectiveMarginPct: number | null;
+} {
+  const none = {
+    salePerUnit: null,
+    totalRevenue: null,
+    hosCommission: null,
+    repCommission: null,
+    grossProfit: null,
+    effectiveMarginPct: null,
+  };
+  if (costPerUnit === null || !pricing) return none;
+
+  const m = num(pricing.marginPct);
+  if (m === null) return none;
+
+  const mPct = m / 100;
+  const hosRate = (num(pricing.hosCommissionPct) ?? 0) / 100;
+  const repRate = (num(pricing.repCommissionPct) ?? 0) / 100;
+  const commissionRate = hosRate + repRate;
+
+  let salePerUnit: number;
+  if (pricing.marginMode === "markup") {
+    const denom = 1 - commissionRate * (1 + mPct);
+    if (denom <= 0.0001) return none;
+    salePerUnit = (costPerUnit * (1 + mPct)) / denom;
+  } else {
+    // A margin of 100% (or margin + commission ≥ 100%) has no finite price.
+    // Refuse rather than emit a vast or negative number.
+    const capped = mPct + commissionRate;
+    if (capped >= 0.9999) return none;
+    salePerUnit = costPerUnit / (1 - capped);
+  }
+
+  const q = num(quantity);
+  const totalRevenue = q === null ? null : salePerUnit * q;
+  const hosCommission = totalRevenue === null ? null : totalRevenue * hosRate;
+  const repCommission = totalRevenue === null ? null : totalRevenue * repRate;
+  const grossProfit =
+    totalRevenue === null || q === null
+      ? null
+      : totalRevenue - costPerUnit * q - (hosCommission ?? 0) - (repCommission ?? 0);
+  const effectiveMarginPct =
+    totalRevenue === null || totalRevenue === 0 || grossProfit === null
+      ? null
+      : (grossProfit / totalRevenue) * 100;
+
+  return {
+    salePerUnit,
+    totalRevenue,
+    hosCommission,
+    repCommission,
+    grossProfit,
+    effectiveMarginPct,
   };
 }

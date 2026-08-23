@@ -26,11 +26,31 @@ import {
   DEFAULT_HOURS_PER_DAY,
   DEFAULT_SETUP_DAYS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
+  DEFAULT_MARGIN_PCT,
+  DEFAULT_HOS_COMMISSION_PCT,
+  DEFAULT_REP_COMMISSION_PCT,
   type BomLine,
   type CostStatus,
   type PackagingSlot,
   type BottleCostingInputs,
+  type MarginMode,
 } from "@/lib/bottleCosting";
+import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalculator";
+
+/**
+ * Print rules. Written as a normal single-quoted string, NOT a template
+ * literal: a stray backtick inside a template literal is what broke the
+ * builds behind tasks #348 and #349, and CSS is full of quotes.
+ */
+const PRINT_CSS = [
+  "@media print {",
+  "  @page { size: letter portrait; margin: 0.5in; }",
+  "  header, nav, .bc-actions { display: none !important; }",
+  "  .bc-price, .bc-actions { break-inside: avoid; }",
+  "  body { background: #fff !important; }",
+  "  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+  "}",
+].join("\n");
 
 // ============================================================
 // Shared look — lifted verbatim from the gummy Costing tab
@@ -186,6 +206,15 @@ export type SavedState = {
   overheadSharePct: number | null;
   workingDaysPerMonth: number | null;
   labTestingTotal: number | null;
+
+  // ---- pricing tier ----
+  // For contract-packaging bottles this board IS the pricing calculator, so
+  // it carries margin through to a sale price. Without these a quote could
+  // never be issued from here.
+  marginPct: number | null;
+  marginMode: MarginMode;
+  hosCommissionPct: number | null;
+  repCommissionPct: number | null;
 };
 
 /**
@@ -238,6 +267,10 @@ export function blankState(bottlesPerMasterBox: number | null): SavedState {
     overheadSharePct: null,
     workingDaysPerMonth: DEFAULT_WORKING_DAYS_PER_MONTH,
     labTestingTotal: null,
+    marginPct: DEFAULT_MARGIN_PCT,
+    marginMode: "gross-margin",
+    hosCommissionPct: DEFAULT_HOS_COMMISSION_PCT,
+    repCommissionPct: DEFAULT_REP_COMMISSION_PCT,
   };
 }
 
@@ -502,9 +535,15 @@ export default function BottleCostingBoard({
   // masterBoxQty — verified key name. See the note on `suggested` above.
   const [st, setSt] = useState<SavedState>(() => {
     const perBox = Number(spec?.masterBoxQty ?? "");
-    return (
-      initial ?? blankState(Number.isFinite(perBox) && perBox > 0 ? perBox : null)
+    const blank = blankState(
+      Number.isFinite(perBox) && perBox > 0 ? perBox : null,
     );
+    if (!initial) return blank;
+    // Costings saved BEFORE the pricing tier existed have no margin fields.
+    // Spreading blank first backfills them, so an old record opens with the
+    // standard 30% / commissions rather than an undefined that would turn
+    // the margin select into an uncontrolled input and the price into NaN.
+    return { ...blank, ...initial };
   });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -570,11 +609,73 @@ export default function BottleCostingBoard({
         workingDaysPerMonth: st.workingDaysPerMonth,
       },
       labTestingTotal: st.labTestingTotal,
+      pricing: {
+        marginPct: st.marginPct,
+        marginMode: st.marginMode,
+        hosCommissionPct: st.hosCommissionPct,
+        repCommissionPct: st.repCommissionPct,
+      },
     }),
     [st, quantity],
   );
 
   const r = useMemo(() => computeBottleCosting(inputs), [inputs]);
+
+  /**
+   * Issue a Quote — same customer-facing document the pricing calculator
+   * produces, so a bottles quote and a bulk quote are indistinguishable to
+   * the customer. One line item: this job, at the computed price.
+   *
+   * Refuses when there is no price. Issuing a quote with a blank or zero
+   * price is exactly the silent-wrong-number failure the whole model is
+   * built to prevent, and it would go out to a customer.
+   */
+  const issueQuote = useCallback(() => {
+    if (r.salePerUnit === null) {
+      window.alert(
+        r.costPerUnit === null
+          ? "No price yet — the costing is incomplete. Resolve the flagged component lines and enter bottles per minute first."
+          : "No price yet — enter a margin percentage.",
+      );
+      return;
+    }
+    const lineItems: QuoteLineItem[] = [
+      {
+        itemRef: "ITEM 1",
+        description: productName,
+        quantity: quantity ?? 0,
+        unitPrice: r.salePerUnit,
+      },
+    ];
+    const backUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/workflow/${workflowId}`
+        : null;
+    const html = buildQuoteHtml({
+      customerName,
+      customerAddress: null,
+      customerContact: null,
+      customerEmail: null,
+      workflowLabel: quoteNumber,
+      preparerName: "",
+      preparerEmail: null,
+      lineItems,
+      backUrl,
+      backLabel: `Back to workflow (${quoteNumber})`,
+      initialTabs: [],
+      saveEnabled: false,
+    });
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const w = window.open(url, "_blank");
+    if (!w) {
+      window.alert(
+        "Couldn't open the quote window — please allow popups for this site and try again.",
+      );
+      URL.revokeObjectURL(url);
+      return;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }, [r, productName, quantity, workflowId, customerName, quoteNumber]);
 
   /**
    * Same endpoint the pricing calculator and gummy formula save through — it
@@ -1017,44 +1118,201 @@ export default function BottleCostingBoard({
           </div>
         )}
 
-        <div
+      </div>
+
+      {/* ---------- Margin & Price ----------
+          For contract-packaging bottles this board IS the pricing
+          calculator, so cost has to carry through to a price. Same margin
+          convention as the main calculator, deliberately: two shops using
+          two different definitions of "30%" is how quotes get mispriced. */}
+      <div style={shell} className="bc-price">
+        <div style={band}>Margin &amp; Price</div>
+        <div style={metricGrid}>
+          <ParamBlock label="Margin / markup %" nowrap>
+            <NumField
+              value={st.marginPct}
+              onChange={(v) => set("marginPct", v)}
+            />
+          </ParamBlock>
+          <ParamBlock label="Margin type" nowrap>
+            <select
+              value={st.marginMode}
+              onChange={(e) => set("marginMode", e.target.value as MarginMode)}
+              style={{
+                padding: "7px 9px",
+                border: "1px solid var(--line, #e3dcc9)",
+                borderRadius: 6,
+                fontSize: 14,
+                background: "#fff",
+                width: "100%",
+              }}
+            >
+              <option value="gross-margin">Gross margin (% of price)</option>
+              <option value="markup">Markup (% on cost)</option>
+            </select>
+          </ParamBlock>
+          <ParamBlock label="HoS commission %" nowrap>
+            <NumField
+              value={st.hosCommissionPct}
+              onChange={(v) => set("hosCommissionPct", v)}
+            />
+          </ParamBlock>
+          <ParamBlock label="Sales rep commission %" nowrap>
+            <NumField
+              value={st.repCommissionPct}
+              onChange={(v) => set("repCommissionPct", v)}
+            />
+          </ParamBlock>
+        </div>
+        <div style={metricGrid}>
+          <ParamBlock label="Price / bottle" nowrap>
+            <ReadOnly>
+              {r.salePerUnit !== null ? money(r.salePerUnit) : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Price per Thousand" nowrap>
+            <ReadOnly>
+              {r.salePerUnit !== null ? money(r.salePerUnit * 1000, 2) : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Total Quote Value" nowrap>
+            <ReadOnly>
+              {r.totalRevenue !== null ? money(r.totalRevenue, 2) : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Commissions" nowrap>
+            <ReadOnly>
+              {r.hosCommission !== null && r.repCommission !== null
+                ? money(r.hosCommission + r.repCommission, 2)
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Gross profit" nowrap>
+            <ReadOnly>
+              {r.grossProfit !== null ? money(r.grossProfit, 2) : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock label="Realised margin" nowrap>
+            <ReadOnly>
+              {r.effectiveMarginPct !== null
+                ? `${r.effectiveMarginPct.toFixed(1)}%`
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
+        </div>
+      </div>
+
+      {/* ---------- Action bar ----------
+          Mirrors the pricing calculator's bar, because for this workflow
+          type this page fills that role. */}
+      <div
+        className="bc-actions"
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          alignItems: "center",
+          padding: "2px 0",
+        }}
+      >
+        {savedAt && (
+          <span style={{ fontSize: 12.5, opacity: 0.7, marginRight: "auto" }}>
+            Saved {savedAt}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => window.print()}
+          title='Open the browser print dialog. Choose "Save as PDF" for a copy of this costing.'
           style={{
-            padding: "0 14px 14px",
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-            alignItems: "center",
+            background: "#fff",
+            color: "#0f172a",
+            border: "1px solid #cbd5e1",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
           }}
         >
-          {savedAt && (
-            <span style={{ fontSize: 12.5, opacity: 0.7 }}>
-              Saved {savedAt}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            style={{
-              padding: "9px 18px",
-              borderRadius: 999,
-              border: "none",
-              background: "var(--teal-900, #0f4a56)",
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: saving ? "default" : "pointer",
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            {saving ? "Saving…" : "Save costing"}
-          </button>
-        </div>
+          Print / Save PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            // Destructive, so confirm. Master-box qty is re-seeded from the
+            // spec rather than blanked — it is a fact about the job, not a
+            // typed assumption, so wiping it would just make work.
+            if (
+              !window.confirm(
+                "Reset this costing to defaults? Every component pick and typed input will be cleared.",
+              )
+            )
+              return;
+            const perBox = Number(spec?.masterBoxQty ?? "");
+            setSt(
+              blankState(
+                Number.isFinite(perBox) && perBox > 0 ? perBox : null,
+              ),
+            );
+          }}
+          title="Clear all picks and inputs and restore default rates."
+          style={{
+            background: "#fffdf8",
+            color: "#8b2f2f",
+            border: "1px solid #d8b3b3",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          onClick={issueQuote}
+          title="Generate a customer-facing quote (PDF) at the price above."
+          style={{
+            background: "var(--teal-700, #1d6c7b)",
+            color: "#fff",
+            border: "1px solid var(--teal-900, #0f4a56)",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Issue a Quote
+        </button>
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          style={{
+            padding: "8px 18px",
+            borderRadius: 8,
+            border: "none",
+            background: "var(--teal-900, #0f4a56)",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: saving ? "default" : "pointer",
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
       </div>
 
       <div style={{ fontSize: 12, opacity: 0.6, textAlign: "right" }}>
         {quoteNumber} · {customerName} · {productName}
       </div>
+
+      {/* Print: drop the app chrome and the buttons, keep the numbers. */}
+      <style>{PRINT_CSS}</style>
     </div>
   );
 }

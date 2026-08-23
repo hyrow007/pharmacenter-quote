@@ -100,14 +100,14 @@ export default async function BottleCostingPage({ params }: Ctx) {
               PharmaCenter · Tools · {formatQuoteNumber(w.quote_number)}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Bottle Costing
+              Pricing Calculator · Bottles
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
-              Build the cost of one finished bottle from its components, the
-              line crew and a share of overhead. Components are suggested from
-              the packaging spec, but every pick is yours to confirm — and any
-              cost we cannot resolve leaves the total blank rather than quietly
-              counting as zero.
+              Build the price of one finished bottle from its components, the
+              line crew, a share of overhead and your margin. Components are
+              suggested from the packaging spec, but every pick is yours to
+              confirm — and any cost we cannot resolve leaves the total blank
+              rather than quietly counting as zero.
             </p>
           </div>
 

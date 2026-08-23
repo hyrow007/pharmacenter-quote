@@ -81,3 +81,31 @@ console.log('  TOTAL            = $'+r.totalCost?.toFixed(2));
 bom[6].notUsed=false;
 console.log('\nunchosen line still blocks   :', B.computeBottleCosting(inp).costPerUnit===null?'PASS':'**FAIL**');
 }
+
+// ---- suite 3: pricing tier (scoped) ----
+{
+const P=(m,mode,hos=0.5,rep=3)=>({marginPct:m,marginMode:mode,hosCommissionPct:hos,repCommissionPct:rep});
+const ok=(n,got,want)=>{const p=Math.abs(got-want)<1e-9;console.log((p?'PASS':'**FAIL**').padEnd(10),n,'got',got,'want',want);};
+
+// Markup mode: commission is part of the base being marked up, so the
+// invariant is sale / (cost + commission) = 1 + markup. Derive it:
+//   sale = cost(1+m) / (1 - rate(1+m))
+//   =>  sale(1 - rate(1+m)) = cost(1+m)
+//   =>  sale = (1+m)(cost + sale*rate)   <- sale*rate IS the commission
+const cost=0.49, qty=12000;
+let r=B.computeSalePrice(cost,qty,P(30,'markup'));
+const commPerUnit=(r.hosCommission+r.repCommission)/qty;
+ok('markup: sale/(cost+comm) == 1.30',
+   +(r.salePerUnit/(cost+commPerUnit)).toFixed(9), 1.3);
+
+// Gross-margin mode: profit after commission is 30% OF SALE.
+r=B.computeSalePrice(cost,qty,P(30,'gross-margin'));
+ok('gross-margin: profit/revenue == 30%', +r.effectiveMarginPct.toFixed(9), 30);
+
+// The two modes must not agree — that is the whole reason both exist.
+const a=B.computeSalePrice(cost,qty,P(30,'markup')).salePerUnit;
+const b=B.computeSalePrice(cost,qty,P(30,'gross-margin')).salePerUnit;
+console.log('\n30% markup   -> $'+a.toFixed(4)+' /bottle');
+console.log('30% margin   -> $'+b.toFixed(4)+' /bottle');
+ok('modes differ', a!==b, true);
+}

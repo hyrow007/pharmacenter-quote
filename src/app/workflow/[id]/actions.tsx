@@ -452,6 +452,16 @@ export default function WorkflowActions({
 
   const canDelete = isOwner || isAdmin;
 
+  /**
+   * Contract-packaging bottles. These jobs price from their own board, which
+   * models components + line crew + overhead + margin. The generic pricing
+   * calculator models an imported landed cost instead, so it is hidden here
+   * rather than left as a trap that quotes from the wrong basis.
+   */
+  const isCpBottles =
+    (workflow.state.type ?? "") === "contract-packaging" &&
+    (workflow.state.form ?? "") === "bottles";
+
   const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
   return (
@@ -658,27 +668,38 @@ export default function WorkflowActions({
           </span>
         </a>
 
-        <a
-          href={`/pricing?from=${workflow.id}&issue=1`}
-          style={editAction}
-          aria-label="Open the pricing calculator and issue a quote"
-        >
-          <span>Issue Quote →</span>
-          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-            Generate a customer-facing quote PDF.
-          </span>
-        </a>
+        {/* The generic pricing calculator models a LANDED cost — freight,
+            duty, incoterms, a purchased unit cost. Contract-packaging bottles
+            have none of that shape: the customer supplies the components and
+            we sell labour plus overhead. Pointing a bottles workflow at this
+            calculator produces a quote built from the wrong model with an
+            empty cost, so both entry points are hidden for bottles and the
+            Bottles calculator below carries the job end to end. */}
+        {!isCpBottles && (
+          <>
+            <a
+              href={`/pricing?from=${workflow.id}&issue=1`}
+              style={editAction}
+              aria-label="Open the pricing calculator and issue a quote"
+            >
+              <span>Issue Quote →</span>
+              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+                Generate a customer-facing quote PDF.
+              </span>
+            </a>
 
-        <a
-          href={`/pricing?from=${workflow.id}`}
-          style={editAction}
-          aria-label="Open the pricing calculator"
-        >
-          <span>Pricing Calculator →</span>
-          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-            Landed cost + margin → sale price.
-          </span>
-        </a>
+            <a
+              href={`/pricing?from=${workflow.id}`}
+              style={editAction}
+              aria-label="Open the pricing calculator"
+            >
+              <span>Pricing Calculator →</span>
+              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+                Landed cost + margin → sale price.
+              </span>
+            </a>
+          </>
+        )}
 
         {/* Gummy-formula calculator — only for workflows where we're actually
             manufacturing gummies at PharmaCenter (Bulk → Gummy → PharmaCenter,
@@ -710,24 +731,18 @@ export default function WorkflowActions({
             quote type is contract-packaging AND the packaging type is bottles.
             Anything else (blisters, sachets, pouches, kitting) has a different
             bill of materials and would need its own board. */}
-        {(() => {
-          const s = workflow.state;
-          const isCp = (s.type ?? "") === "contract-packaging";
-          const isBottles = (s.form ?? "") === "bottles";
-          if (!isCp || !isBottles) return null;
-          return (
-            <a
-              href={`/workflow/${workflow.id}/bottle-costing`}
-              style={editAction}
-              aria-label="Open the bottle costing calculator"
-            >
-              <span>Bottle Costing →</span>
-              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-                Components + line crew → cost per bottle.
-              </span>
-            </a>
-          );
-        })()}
+        {isCpBottles && (
+          <a
+            href={`/workflow/${workflow.id}/bottle-costing`}
+            style={editAction}
+            aria-label="Open the bottles pricing calculator"
+          >
+            <span>Pricing Calculator (Bottles) →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Components + line crew + margin → price per bottle.
+            </span>
+          </a>
+        )}
       </div>
 
       {/* Delete workflow lives on its own row, separated from the everyday
