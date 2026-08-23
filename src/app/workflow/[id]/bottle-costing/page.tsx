@@ -72,7 +72,15 @@ export default async function BottleCostingPage({ params }: Ctx) {
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
-        <div className="page__inner--narrow">
+        {/*
+          Full 1240px shell, not the 880px --narrow one. This IS the pricing
+          calculator for CP-bottles, so it should read at the same width as the
+          formula catalog and editor rather than looking like a side panel.
+          The Material Costs grid is 573px of fixed columns plus one 1fr, so the
+          extra width lands entirely on the Fishbowl part name — the column that
+          was actually running out of room.
+        */}
+        <div className="page__inner">
           <a
             href={`/workflow/${w.id}`}
             style={{

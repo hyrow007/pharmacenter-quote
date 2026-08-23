@@ -256,6 +256,22 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
  * (there is no "bottle required?" question, because there always is one).
  */
 /**
+ * One source of truth for the Material Costs column layout.
+ *
+ * The header row and every data row have to agree exactly or the columns
+ * visibly drift apart, and this literal was previously written out twice —
+ * which is precisely the shape of edit that lets them disagree. Named once,
+ * they cannot.
+ *
+ * Only the part-name column grows. Everything else is a control of known size
+ * (a supplied-by select, a cost-source select, a right-aligned figure), so
+ * handing them extra width would just spread them out; the Fishbowl name is
+ * the one field with genuinely unbounded content — "ALTERNATIVE LABS /
+ * SHIPPER BOXES (24X12X12)" and friends.
+ */
+const MATERIALS_COLUMNS = "170px 1fr 118px 165px 120px";
+
+/**
  * Liner types, spelled as the packaging form spells them. Shown as a caption
  * on the Closure row because the liner has no row of its own.
  */
@@ -952,7 +968,7 @@ export default function BottleCostingBoard({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "170px 1fr 118px 165px 120px",
+              gridTemplateColumns: MATERIALS_COLUMNS,
               gap: 8,
               fontSize: 11,
               fontWeight: 700,
@@ -978,7 +994,7 @@ export default function BottleCostingBoard({
                 key={line.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "170px 1fr 118px 165px 120px",
+                  gridTemplateColumns: MATERIALS_COLUMNS,
                   gap: 8,
                   alignItems: "start",
                   opacity: line.notUsed ? 0.55 : 1,
