@@ -839,7 +839,7 @@ export default function BottleCostingBoard({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "150px 1fr 150px 165px 90px 110px",
+              gridTemplateColumns: "150px 1fr 118px 165px 90px 110px",
               gap: 8,
               fontSize: 11,
               fontWeight: 700,
@@ -866,7 +866,7 @@ export default function BottleCostingBoard({
                 key={line.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "150px 1fr 150px 165px 90px 110px",
+                  gridTemplateColumns: "150px 1fr 118px 165px 90px 110px",
                   gap: 8,
                   alignItems: "start",
                   opacity: line.notUsed ? 0.55 : 1,
@@ -992,41 +992,26 @@ export default function BottleCostingBoard({
                     human can override. This is what decides whether the line
                     costs anything, so it sits before the money columns. */}
                 <div style={{ paddingTop: 4 }}>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {(
-                      [
-                        ["pharmacenter", "PharmaCenter"],
-                        ["customer", "Customer"],
-                      ] as const
-                    ).map(([v, label]) => {
-                      const on = line.suppliedBy === v;
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          disabled={line.notUsed}
-                          onClick={() => setLine(line.id, { suppliedBy: v })}
-                          style={{
-                            flex: 1,
-                            padding: "6px 4px",
-                            fontSize: 11.5,
-                            fontWeight: on ? 700 : 500,
-                            borderRadius: 999,
-                            cursor: line.notUsed ? "default" : "pointer",
-                            border: on
-                              ? "1px solid var(--teal-700, #1d6c7b)"
-                              : "1px solid var(--line, #e3dcc9)",
-                            background: on
-                              ? "var(--teal-700, #1d6c7b)"
-                              : "#fff",
-                            color: on ? "#fff" : "var(--ink-3, #7b7364)",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <select
+                    value={line.suppliedBy}
+                    disabled={line.notUsed}
+                    onChange={(e) =>
+                      setLine(line.id, {
+                        suppliedBy: e.target.value as SuppliedBy,
+                      })
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "6px 6px",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      background: "#fff",
+                    }}
+                  >
+                    <option value="pharmacenter">PharmaCenter</option>
+                    <option value="customer">Customer</option>
+                  </select>
                   {suppliedByFromSpec(line.slot, spec) !== line.suppliedBy && (
                     <div
                       style={{
@@ -1053,7 +1038,7 @@ export default function BottleCostingBoard({
                         fontStyle: "italic",
                       }}
                     >
-                      {line.notUsed ? "—" : "Free-issued"}
+                      {line.notUsed ? "—" : "No cost to PC"}
                     </div>
                   ) : (
                     <>
