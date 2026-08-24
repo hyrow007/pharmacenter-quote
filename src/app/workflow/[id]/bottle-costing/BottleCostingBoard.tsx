@@ -25,7 +25,6 @@ import {
   DEFAULT_OPERATOR_RATE,
   DEFAULT_SETUP_HOURS,
   DEFAULT_CLEANING_HOURS,
-  DEFAULT_KITTING_HOURS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
   DEFAULT_TAX_PCT,
   DEFAULT_WC_PCT,
@@ -772,7 +771,14 @@ export function blankState(
     cleaningHours: DEFAULT_CLEANING_HOURS,
     cleaningLeaders: 0,
     cleaningOperators: 2,
-    kittingHours: DEFAULT_KITTING_HOURS,
+    // NULL, not 0.
+    //
+    // Seeding an explicit 0 here looked harmless and was not: the model reads
+    // a typed value as an override, so a stored 0 beat the kitting-speed
+    // derivation and pinned the phase at zero hours no matter what speed was
+    // entered. Null means "nothing typed", which lets the speed drive it and
+    // still falls through to DEFAULT_KITTING_HOURS when there is no speed.
+    kittingHours: null,
     kittingLeaders: 0,
     kittingOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,

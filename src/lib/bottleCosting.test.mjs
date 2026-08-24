@@ -500,3 +500,31 @@ ok('leaders count toward kitting crew',
 // and the line speed still drives production independently
 ok('production still from line speed', B.laborBreakdown(12000,base).phases[1].totalHours, 5);
 }
+
+// ---- suite 13: a stored 0 must not shadow a derivation (scoped) ----
+//
+// The bug this locks down: blankState seeded kittingHours = 0, the model read
+// that as a deliberate override, and the kitting speed could then never move
+// the number. Shipped and caught on the live page.
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const r4=(v)=>+v.toFixed(4);
+const L=(kitHours)=>({
+  bottlesPerMinute:40, kittingSpeed:25,
+  setup:{hours:2, leaders:1, operators:2},
+  production:{hours:null, leaders:1, operators:3},
+  cleaning:{hours:2, leaders:0, operators:2},
+  kitting:{hours:kitHours, leaders:0, operators:2},
+  leaderRate:20, operatorRate:17,
+  leaderTaxPct:8.5, leaderWcPct:4, operatorTaxPct:8.5, operatorWcPct:4,
+});
+
+// null lets the speed drive it
+ok('null hours -> derived', r4(B.laborBreakdown(12000,L(null)).phases[3].totalHours), 4);
+// a real typed 0 is still honoured -- "we are not kitting this one"
+ok('explicit 0 stays 0',    B.laborBreakdown(12000,L(0)).phases[3].totalHours, 0);
+// and the two must NOT be the same thing
+ok('null and 0 differ',
+   B.laborBreakdown(12000,L(null)).phases[3].totalHours !==
+   B.laborBreakdown(12000,L(0)).phases[3].totalHours, true);
+}
