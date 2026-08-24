@@ -202,7 +202,15 @@ export type LaborInputs = {
    */
   bottlesPerMinute: number | null;
   setup: LaborPhase;
-  production: Pick<LaborPhase, "leaders" | "operators">;
+  /**
+   * Production is a full phase like the others now, so the board can show
+   * Shifts × Hours per Shift the way the gummy Costing tab does.
+   *
+   * `days` left null means "derive it from line speed" — quantity ÷ bpm gives
+   * line hours, which round up to whole shifts. Typing a value overrides that,
+   * which also makes a job priceable before anyone has measured a line speed.
+   */
+  production: LaborPhase;
   cleaning: LaborPhase;
   leaderRate: number | null;
   operatorRate: number | null;
@@ -562,63 +570,164 @@ export function productionHours(
   return q / (bpm * 60);
 }
 
+/** One phase's worth of the labour matrix, fully resolved. */
+export type LaborPhaseBreakdown = {
+  label: string;
+  shifts: number;
+  hoursPerShift: number;
+  /** shifts × hoursPerShift */
+  totalHours: number;
+  leaders: number;
+  operators: number;
+  /** leaders × totalHours */
+  leaderManHours: number;
+  /** operators × totalHours */
+  operatorManHours: number;
+};
+
+/** One role's pay row, base through burdened. */
+export type LaborRoleBreakdown = {
+  label: string;
+  base: number;
+  taxPct: number;
+  wcPct: number;
+  /** base × (1 + tax% + wc%) */
+  burdened: number;
+  /** man hours across every phase */
+  manHours: number;
+  /** manHours × burdened */
+  total: number;
+};
+
+export type LaborBreakdown = {
+  phases: LaborPhaseBreakdown[];
+  totalShifts: number;
+  totalHours: number;
+  roles: LaborRoleBreakdown[];
+  grandTotal: number;
+  /** grandTotal ÷ quantity. Null when the quantity is unknown. */
+  perUnit: number | null;
+};
+
+/**
+ * The whole labour matrix in one pass.
+ *
+ * Every figure the Direct Labor Costs card shows — shift hours, man hours,
+ * burdened rates, the grand total — comes from here. The card renders it and
+ * computes nothing of its own, because five tables each doing their own
+ * arithmetic is five chances for the displayed sum to disagree with the cost
+ * that reaches the quote.
+ *
+ * Returns null only when production cannot be established at all: no line
+ * speed AND no typed shift count. Everything else has a defensible default.
+ */
+export function laborBreakdown(
+  quantity: number | null,
+  labor: LaborInputs,
+): LaborBreakdown | null {
+  const q = num(quantity);
+
+  const setupShifts = num(labor.setup.days) ?? DEFAULT_SETUP_DAYS;
+  const setupHpS = num(labor.setup.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+  const prodHpS = num(labor.production.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+
+  // Line hours from speed, rounded up to whole shifts — you staff a shift, not
+  // three and a half hours of one. A typed value wins over the derivation.
+  const lineHours = productionHours(q, labor.bottlesPerMinute);
+  const derivedProdShifts =
+    lineHours === null || prodHpS <= 0 ? null : roundDays(lineHours / prodHpS);
+  const prodShifts = num(labor.production.days) ?? derivedProdShifts;
+  if (prodShifts === null) return null; // nothing honest to say about production
+
+  // Cleaning defaults to a quarter of production, as on the gummy tab.
+  const cleanShifts = num(labor.cleaning.days) ?? roundDays(prodShifts / 4);
+  const cleanHpS = num(labor.cleaning.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+
+  const mk = (
+    label: string,
+    shifts: number,
+    hoursPerShift: number,
+    leaders: number | null | undefined,
+    operators: number | null | undefined,
+  ): LaborPhaseBreakdown => {
+    const totalHours = shifts * hoursPerShift;
+    const l = num(leaders) ?? 0;
+    const o = num(operators) ?? 0;
+    return {
+      label,
+      shifts,
+      hoursPerShift,
+      totalHours,
+      leaders: l,
+      operators: o,
+      leaderManHours: l * totalHours,
+      operatorManHours: o * totalHours,
+    };
+  };
+
+  const phases = [
+    mk("Setup", setupShifts, setupHpS, labor.setup.leaders, labor.setup.operators),
+    mk(
+      "Production",
+      prodShifts,
+      prodHpS,
+      labor.production.leaders,
+      labor.production.operators,
+    ),
+    mk(
+      "Cleaning",
+      cleanShifts,
+      cleanHpS,
+      labor.cleaning.leaders,
+      labor.cleaning.operators,
+    ),
+  ];
+
+  const role = (
+    label: string,
+    base: number,
+    taxPct: number,
+    wcPct: number,
+    manHours: number,
+  ): LaborRoleBreakdown => {
+    const burdened = burdenedRate(base, taxPct, wcPct);
+    return { label, base, taxPct, wcPct, burdened, manHours, total: manHours * burdened };
+  };
+
+  const roles = [
+    role(
+      "Line Leaders",
+      num(labor.leaderRate) ?? DEFAULT_LEADER_RATE,
+      num(labor.leaderTaxPct) ?? DEFAULT_TAX_PCT,
+      num(labor.leaderWcPct) ?? DEFAULT_WC_PCT,
+      phases.reduce((s, p) => s + p.leaderManHours, 0),
+    ),
+    role(
+      "Line Operators",
+      num(labor.operatorRate) ?? DEFAULT_OPERATOR_RATE,
+      num(labor.operatorTaxPct) ?? DEFAULT_TAX_PCT,
+      num(labor.operatorWcPct) ?? DEFAULT_WC_PCT,
+      phases.reduce((s, p) => s + p.operatorManHours, 0),
+    ),
+  ];
+
+  const grandTotal = roles.reduce((s, r) => s + r.total, 0);
+
+  return {
+    phases,
+    totalShifts: phases.reduce((s, p) => s + p.shifts, 0),
+    totalHours: phases.reduce((s, p) => s + p.totalHours, 0),
+    roles,
+    grandTotal,
+    perUnit: q !== null && q > 0 ? grandTotal / q : null,
+  };
+}
+
 export function laborPerUnit(
   quantity: number | null,
   labor: LaborInputs,
 ): number | null {
-  const q = num(quantity);
-  if (q === null || q <= 0) return null;
-
-  const prodHours = productionHours(q, labor.bottlesPerMinute);
-  if (prodHours === null) return null; // no line speed => no honest estimate
-
-  const hpd = num(labor.setup.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
-
-  // Setup and cleaning keep the gummy shape (shifts × hours per shift).
-  // Cleaning defaults to a quarter of the production time, as in the gummy tab.
-  const setupHours =
-    (num(labor.setup.days) ?? DEFAULT_SETUP_DAYS) *
-    (num(labor.setup.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY);
-
-  const prodShiftEquivalent = roundDays(prodHours / hpd);
-  const cleaningHours =
-    (num(labor.cleaning.days) ?? roundDays(prodShiftEquivalent / 4)) *
-    (num(labor.cleaning.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY);
-
-  const phaseHours = [setupHours, prodHours, cleaningHours];
-
-  const roles = [
-    {
-      crew: [
-        num(labor.setup.leaders) ?? 0,
-        num(labor.production.leaders) ?? 0,
-        num(labor.cleaning.leaders) ?? 0,
-      ],
-      rate: burdenedRate(
-        num(labor.leaderRate) ?? DEFAULT_LEADER_RATE,
-        num(labor.leaderTaxPct) ?? DEFAULT_TAX_PCT,
-        num(labor.leaderWcPct) ?? DEFAULT_WC_PCT,
-      ),
-    },
-    {
-      crew: [
-        num(labor.setup.operators) ?? 0,
-        num(labor.production.operators) ?? 0,
-        num(labor.cleaning.operators) ?? 0,
-      ],
-      rate: burdenedRate(
-        num(labor.operatorRate) ?? DEFAULT_OPERATOR_RATE,
-        num(labor.operatorTaxPct) ?? DEFAULT_TAX_PCT,
-        num(labor.operatorWcPct) ?? DEFAULT_WC_PCT,
-      ),
-    },
-  ];
-
-  const grand = roles.reduce(
-    (s, r) => s + r.crew.reduce((a, c, i) => a + c * phaseHours[i], 0) * r.rate,
-    0,
-  );
-  return grand / q;
+  return laborBreakdown(quantity, labor)?.perUnit ?? null;
 }
 
 // ============================================================

@@ -26,6 +26,10 @@ import {
   DEFAULT_HOURS_PER_DAY,
   DEFAULT_SETUP_DAYS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
+  DEFAULT_TAX_PCT,
+  DEFAULT_WC_PCT,
+  laborBreakdown,
+  roundDays,
   DEFAULT_MARGIN_PCT,
   DEFAULT_HOS_COMMISSION_PCT,
   DEFAULT_REP_COMMISSION_PCT,
@@ -213,6 +217,187 @@ function CardTotal({
   );
 }
 
+// ============================================================
+// Direct Labor Costs table chrome
+//
+// Ported from the gummy Costing tab so the two cards are visually identical.
+// `tableLayout: fixed` with explicit 170px data columns is what makes the five
+// stacked sub-tables line up their columns even though their row labels are
+// different lengths.
+// ============================================================
+const labSub: React.CSSProperties = {
+  border: "1px solid var(--line, #e3dcc9)",
+  borderRadius: 8,
+  margin: "12px 14px",
+  background: "var(--paper, #fffdf8)",
+  overflow: "hidden",
+};
+const labSubTitle: React.CSSProperties = {
+  padding: "10px 14px 4px",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "var(--teal-900, #0f4a56)",
+};
+const labTable: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  tableLayout: "fixed",
+};
+const labHeadRow: React.CSSProperties = {
+  borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+};
+const labBodyRow: React.CSSProperties = {
+  borderBottom: "1px solid var(--line-2, #efe9da)",
+};
+const labTotalRow: React.CSSProperties = {
+  background: "var(--cream-soft, #fbf6ec)",
+};
+const labTh: React.CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.09em",
+  textTransform: "uppercase",
+  color: "var(--ink-3, #8a9498)",
+  textAlign: "right",
+};
+const labTd: React.CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 13,
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
+  fontWeight: 600,
+  color: "var(--ink-1, #1f2a2d)",
+};
+
+/**
+ * Read-only figure cell.
+ *
+ * type="text" rather than a number input so thousands can carry commas —
+ * number inputs reject them. The 14px right padding mirrors the spinner
+ * gutter Chrome reserves on the editable cells, so digits in a computed row
+ * still column-align with digits in a typed one.
+ */
+const labSum = (v: number | null, dec = 2) => (
+  <input
+    type="text"
+    readOnly
+    tabIndex={-1}
+    value={
+      v === null
+        ? ""
+        : v.toLocaleString("en-US", {
+            minimumFractionDigits: dec,
+            maximumFractionDigits: dec,
+          })
+    }
+    style={{
+      width: "100%",
+      maxWidth: 120,
+      border: "none",
+      background: "transparent",
+      textAlign: "right",
+      fontVariantNumeric: "tabular-nums",
+      fontWeight: 700,
+      fontSize: 13,
+      color: "var(--teal-900, #0f4a56)",
+      pointerEvents: "none",
+      paddingRight: 14,
+    }}
+  />
+);
+
+const labMoney = (v: number, dec = 2) => (
+  <input
+    type="text"
+    readOnly
+    tabIndex={-1}
+    value={v.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: dec,
+      maximumFractionDigits: dec,
+    })}
+    style={{
+      width: "100%",
+      maxWidth: 120,
+      border: "none",
+      background: "transparent",
+      textAlign: "right",
+      fontVariantNumeric: "tabular-nums",
+      fontWeight: 700,
+      fontSize: 13,
+      color: "var(--teal-900, #0f4a56)",
+      pointerEvents: "none",
+      paddingRight: 14,
+    }}
+  />
+);
+
+/** Editable cell for the labour tables, with the #206 focus-select fix. */
+function LabNum({
+  value,
+  onChange,
+  step,
+  prefix,
+}: {
+  value: number;
+  onChange: (v: number | null) => void;
+  step?: string;
+  prefix?: string;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 2,
+        justifyContent: "flex-end",
+        width: "100%",
+      }}
+    >
+      {prefix && (
+        <span style={{ fontSize: 12, color: "var(--ink-3, #7b7364)" }}>
+          {prefix}
+        </span>
+      )}
+      <input
+        type="number"
+        step={step ?? "any"}
+        min={0}
+        value={Number.isFinite(value) ? value : ""}
+        onFocus={(e) => {
+          const el = e.currentTarget;
+          setTimeout(() => {
+            try {
+              el.select();
+            } catch {}
+          }, 0);
+        }}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") return onChange(null);
+          const n = Number(raw);
+          onChange(Number.isFinite(n) ? n : null);
+        }}
+        style={{
+          width: "100%",
+          maxWidth: 110,
+          padding: "4px 6px",
+          border: "1px solid var(--line, #e3dcc9)",
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 600,
+          textAlign: "right",
+          fontVariantNumeric: "tabular-nums",
+          background: "#fff",
+          color: "var(--ink-1, #1f2a2d)",
+        }}
+      />
+    </span>
+  );
+}
+
 function ReadOnly({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -326,6 +511,13 @@ export type SavedState = {
   setupHours: number | null;
   setupLeaders: number | null;
   setupOperators: number | null;
+  /**
+   * Production shifts. Null means "derive from bottles per minute" — the
+   * default path. A typed value overrides it, which is also how a job gets
+   * priced before anyone has timed the line.
+   */
+  prodDays: number | null;
+  prodHours: number | null;
   prodLeaders: number | null;
   prodOperators: number | null;
   cleaningDays: number | null;
@@ -334,6 +526,11 @@ export type SavedState = {
   cleaningOperators: number | null;
   leaderRate: number | null;
   operatorRate: number | null;
+  /** Payroll burden, per role and editable — as on the gummy Pay Rates card. */
+  leaderTaxPct: number | null;
+  leaderWcPct: number | null;
+  operatorTaxPct: number | null;
+  operatorWcPct: number | null;
   overheadMonthly: number | null;
   overheadSharePct: number | null;
   workingDaysPerMonth: number | null;
@@ -546,6 +743,9 @@ export function blankState(
     setupHours: DEFAULT_HOURS_PER_DAY,
     setupLeaders: 1,
     setupOperators: 2,
+    // Null so it derives from bottles per minute until someone overrides it.
+    prodDays: null,
+    prodHours: DEFAULT_HOURS_PER_DAY,
     prodLeaders: 1,
     prodOperators: 3,
     cleaningDays: null,
@@ -554,6 +754,10 @@ export function blankState(
     cleaningOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,
     operatorRate: DEFAULT_OPERATOR_RATE,
+    leaderTaxPct: DEFAULT_TAX_PCT,
+    leaderWcPct: DEFAULT_WC_PCT,
+    operatorTaxPct: DEFAULT_TAX_PCT,
+    operatorWcPct: DEFAULT_WC_PCT,
     overheadMonthly: null,
     overheadSharePct: null,
     workingDaysPerMonth: DEFAULT_WORKING_DAYS_PER_MONTH,
@@ -921,6 +1125,17 @@ export default function BottleCostingBoard({
     return {
       ...blank,
       ...initial,
+      // Costings saved before Direct Labor Costs became a five-table matrix
+      // have no production shift fields and no per-role burden. A top-level
+      // spread would leave them undefined, which turns the burden inputs into
+      // uncontrolled fields and the rates into NaN. `??` so a saved 0 — a
+      // deliberate "no workers' comp on this one" — is not overwritten.
+      prodDays: initial.prodDays ?? blank.prodDays,
+      prodHours: initial.prodHours ?? blank.prodHours,
+      leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
+      leaderWcPct: initial.leaderWcPct ?? blank.leaderWcPct,
+      operatorTaxPct: initial.operatorTaxPct ?? blank.operatorTaxPct,
+      operatorWcPct: initial.operatorWcPct ?? blank.operatorWcPct,
       bom: (initial.bom ?? blank.bom).map((l) => ({
         ...l,
         // A saved line that already resolved as a customer asset must stay
@@ -1074,7 +1289,12 @@ export default function BottleCostingBoard({
           leaders: st.setupLeaders,
           operators: st.setupOperators,
         },
-        production: { leaders: st.prodLeaders, operators: st.prodOperators },
+        production: {
+          days: st.prodDays,
+          hoursPerDay: st.prodHours,
+          leaders: st.prodLeaders,
+          operators: st.prodOperators,
+        },
         cleaning: {
           days: st.cleaningDays,
           hoursPerDay: st.cleaningHours,
@@ -1112,6 +1332,17 @@ export default function BottleCostingBoard({
   );
 
   const r = useMemo(() => computeBottleCosting(inputs), [inputs]);
+
+  /**
+   * The labour matrix, computed once by the model and merely rendered by the
+   * five sub-tables below. Null when production cannot be established — no
+   * line speed and no typed shift count — in which case the card says so
+   * rather than drawing a table full of zeroes.
+   */
+  const lb = useMemo(
+    () => laborBreakdown(quantity, inputs.labor),
+    [quantity, inputs.labor],
+  );
 
   /**
    * Issue a Quote — same customer-facing document the pricing calculator
@@ -1866,105 +2097,304 @@ export default function BottleCostingBoard({
         />
       </div>
 
-      {/* ---------- Line crew ---------- */}
+      {/* ---------- Direct labor ----------
+          Ported from the gummy Costing tab so the two calculators read the
+          same way: five stacked sub-tables walking Shifts -> Hours -> Man
+          Hours -> Rates -> Money. Every number below comes from `lb`, the
+          model's single pass; nothing here does its own arithmetic. */}
       <div style={shell}>
-        <div style={band}>Line Crew &amp; Labor</div>
-        <div style={{ padding: 14, display: "grid", gap: 14 }}>
+        <div style={band}>Direct Labor Costs</div>
+        {lb === null ? (
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "130px repeat(4, 1fr)",
-              gap: 10,
-              alignItems: "end",
+              margin: 14,
+              padding: "10px 12px",
+              borderRadius: 6,
+              background: "#fdf3e0",
+              border: "1px solid #e8cf9a",
+              fontSize: 13,
+              color: "#7a4f00",
             }}
           >
-            <div />
-            <ParamBlock label="Days" nowrap>
-              <span />
-            </ParamBlock>
-            <ParamBlock label="Hours / day" nowrap>
-              <span />
-            </ParamBlock>
-            <ParamBlock label="Leaders" nowrap>
-              <span />
-            </ParamBlock>
-            <ParamBlock label="Operators" nowrap>
-              <span />
-            </ParamBlock>
-
-            <PhaseLabel>Setup</PhaseLabel>
-            <NumField value={st.setupDays} onChange={(v) => set("setupDays", v)} />
-            <NumField
-              value={st.setupHours}
-              onChange={(v) => set("setupHours", v)}
-            />
-            <NumField
-              value={st.setupLeaders}
-              onChange={(v) => set("setupLeaders", v)}
-            />
-            <NumField
-              value={st.setupOperators}
-              onChange={(v) => set("setupOperators", v)}
-            />
-
-            <PhaseLabel>Production</PhaseLabel>
-            <div style={{ paddingTop: 8 }}>
-              <ReadOnly>
-                {r.productionHours !== null
-                  ? `${r.productionHours.toFixed(2)} h`
-                  : "—"}
-              </ReadOnly>
-            </div>
-            <div style={{ paddingTop: 8, fontSize: 12, opacity: 0.7 }}>
-              from bottles / minute
-            </div>
-            <NumField
-              value={st.prodLeaders}
-              onChange={(v) => set("prodLeaders", v)}
-            />
-            <NumField
-              value={st.prodOperators}
-              onChange={(v) => set("prodOperators", v)}
-            />
-
-            <PhaseLabel>Cleaning</PhaseLabel>
-            <NumField
-              value={st.cleaningDays}
-              onChange={(v) => set("cleaningDays", v)}
-              placeholder="auto"
-            />
-            <NumField
-              value={st.cleaningHours}
-              onChange={(v) => set("cleaningHours", v)}
-            />
-            <NumField
-              value={st.cleaningLeaders}
-              onChange={(v) => set("cleaningLeaders", v)}
-            />
-            <NumField
-              value={st.cleaningOperators}
-              onChange={(v) => set("cleaningOperators", v)}
-            />
+            <strong>No production estimate yet.</strong> Enter bottles per
+            minute in Considerations, or type the production shifts directly
+            below once this card has a number to show.
           </div>
+        ) : (
+          <>
+            {/* ---- Shift Hours ---- */}
+            <div style={labSub}>
+              <div style={labSubTitle}>Shift Hours</div>
+              <table style={labTable}>
+                <thead>
+                  <tr style={labHeadRow}>
+                    <th style={{ ...labTh, textAlign: "left" }} />
+                    {lb.phases.map((p) => (
+                      <th key={p.label} style={{ ...labTh, width: 170 }}>
+                        {p.label}
+                      </th>
+                    ))}
+                    <th style={{ ...labTh, width: 170 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={labBodyRow}>
+                    <td style={{ ...labTh, textAlign: "left" }}>Shifts</td>
+                    {lb.phases.map((p, i) => (
+                      <td key={p.label} style={labTd}>
+                        <LabNum
+                          value={p.shifts}
+                          onChange={(n) =>
+                            set(
+                              (["setupDays", "prodDays", "cleaningDays"] as const)[i],
+                              n === null ? null : roundDays(n),
+                            )
+                          }
+                          step="1"
+                        />
+                      </td>
+                    ))}
+                    <td style={labTd}>{labSum(lb.totalShifts)}</td>
+                  </tr>
+                  <tr style={labBodyRow}>
+                    <td style={{ ...labTh, textAlign: "left" }}>
+                      Hours per Shift
+                    </td>
+                    {lb.phases.map((p, i) => (
+                      <td key={p.label} style={labTd}>
+                        <LabNum
+                          value={p.hoursPerShift}
+                          onChange={(n) =>
+                            set(
+                              (["setupHours", "prodHours", "cleaningHours"] as const)[i],
+                              n,
+                            )
+                          }
+                          step="0.5"
+                        />
+                      </td>
+                    ))}
+                    {/* Adding hours-per-shift across phases means nothing. */}
+                    <td style={labTd}>{labSum(null)}</td>
+                  </tr>
+                  <tr style={labTotalRow}>
+                    <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
+                    {lb.phases.map((p) => (
+                      <td key={p.label} style={labTd}>
+                        {labSum(p.totalHours)}
+                      </td>
+                    ))}
+                    <td style={labTd}>{labSum(lb.totalHours)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-          <div style={metricGrid}>
-            <ParamBlock label="Leader rate ($/hr)" nowrap>
-              <NumField
-                value={st.leaderRate}
-                onChange={(v) => set("leaderRate", v)}
-              />
-            </ParamBlock>
-            <ParamBlock label="Operator rate ($/hr)" nowrap>
-              <NumField
-                value={st.operatorRate}
-                onChange={(v) => set("operatorRate", v)}
-              />
-            </ParamBlock>
-            <ParamBlock label="Burden" nowrap>
-              <ReadOnly>8.5% tax + 4% WC</ReadOnly>
-            </ParamBlock>
-          </div>
-        </div>
+            {/* ---- Line Crew ---- */}
+            <div style={labSub}>
+              <div style={labSubTitle}>Line Crew</div>
+              <table style={labTable}>
+                <thead>
+                  <tr style={labHeadRow}>
+                    <th style={{ ...labTh, textAlign: "left" }} />
+                    {lb.phases.map((p) => (
+                      <th key={p.label} style={{ ...labTh, width: 170 }}>
+                        {p.label}
+                      </th>
+                    ))}
+                    {/* Empty 170px column keeps these columns landing on the
+                        same x-positions as the tables above and below. */}
+                    <th style={{ ...labTh, width: 170 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(
+                    [
+                      {
+                        label: "QTY of Line Leaders",
+                        get: (p: (typeof lb.phases)[number]) => p.leaders,
+                        keys: ["setupLeaders", "prodLeaders", "cleaningLeaders"],
+                      },
+                      {
+                        label: "QTY of Line Operators",
+                        get: (p: (typeof lb.phases)[number]) => p.operators,
+                        keys: [
+                          "setupOperators",
+                          "prodOperators",
+                          "cleaningOperators",
+                        ],
+                      },
+                    ] as const
+                  ).map((row) => (
+                    <tr key={row.label} style={labBodyRow}>
+                      <td style={{ ...labTh, textAlign: "left" }}>{row.label}</td>
+                      {lb.phases.map((p, i) => (
+                        <td key={p.label} style={labTd}>
+                          <LabNum
+                            value={row.get(p)}
+                            onChange={(n) =>
+                              set(
+                                row.keys[i],
+                                n === null ? null : Math.max(0, Math.round(n)),
+                              )
+                            }
+                            step="1"
+                          />
+                        </td>
+                      ))}
+                      <td style={labTd} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ---- Man Hours (computed) ---- */}
+            <div style={labSub}>
+              <div style={labSubTitle}>Man Hours</div>
+              <table style={labTable}>
+                <thead>
+                  <tr style={labHeadRow}>
+                    <th style={{ ...labTh, textAlign: "left" }} />
+                    {lb.phases.map((p) => (
+                      <th key={p.label} style={{ ...labTh, width: 170 }}>
+                        {p.label}
+                      </th>
+                    ))}
+                    <th style={{ ...labTh, width: 170 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      label: "Line Leaders Man Hours",
+                      per: lb.phases.map((p) => p.leaderManHours),
+                      total: lb.roles[0].manHours,
+                    },
+                    {
+                      label: "Line Operators Man Hours",
+                      per: lb.phases.map((p) => p.operatorManHours),
+                      total: lb.roles[1].manHours,
+                    },
+                  ].map((row) => (
+                    <tr key={row.label} style={labBodyRow}>
+                      <td style={{ ...labTh, textAlign: "left" }}>{row.label}</td>
+                      {row.per.map((v, i) => (
+                        <td key={i} style={labTd}>
+                          {labSum(v)}
+                        </td>
+                      ))}
+                      <td style={labTd}>{labSum(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ---- Pay Rates ---- */}
+            <div style={labSub}>
+              <div style={labSubTitle}>Pay Rates</div>
+              <table style={labTable}>
+                <thead>
+                  <tr style={labHeadRow}>
+                    <th style={{ ...labTh, textAlign: "left" }} />
+                    <th style={{ ...labTh, width: 170 }}>Hourly Base Rate</th>
+                    <th style={{ ...labTh, width: 170 }}>Payroll Tax %</th>
+                    <th style={{ ...labTh, width: 170 }}>Workers&#39; Comp %</th>
+                    <th style={{ ...labTh, width: 170 }}>Burdened Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(
+                    [
+                      {
+                        role: lb.roles[0],
+                        baseKey: "leaderRate",
+                        taxKey: "leaderTaxPct",
+                        wcKey: "leaderWcPct",
+                      },
+                      {
+                        role: lb.roles[1],
+                        baseKey: "operatorRate",
+                        taxKey: "operatorTaxPct",
+                        wcKey: "operatorWcPct",
+                      },
+                    ] as const
+                  ).map(({ role, baseKey, taxKey, wcKey }) => (
+                    <tr key={role.label} style={labBodyRow}>
+                      <td style={{ ...labTh, textAlign: "left" }}>{role.label}</td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={role.base}
+                          onChange={(n) => set(baseKey, n)}
+                          step="0.01"
+                          prefix="$"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={role.taxPct}
+                          onChange={(n) => set(taxKey, n)}
+                          step="0.1"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={role.wcPct}
+                          onChange={(n) => set(wcKey, n)}
+                          step="0.1"
+                        />
+                      </td>
+                      <td style={labTd}>{labMoney(role.burdened, 2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ---- Job Labor Costs ---- */}
+            <div style={labSub}>
+              <div style={labSubTitle}>Job Labor Costs</div>
+              <table style={labTable}>
+                <thead>
+                  <tr style={labHeadRow}>
+                    <th style={{ ...labTh, textAlign: "left" }} />
+                    <th style={{ ...labTh, width: 170 }}>Man Hours</th>
+                    <th style={{ ...labTh, width: 170 }}>Burdened Rate</th>
+                    <th style={{ ...labTh, width: 170 }}>Job Total</th>
+                    <th style={{ ...labTh, width: 170 }}>Cost per Bottle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lb.roles.map((role) => (
+                    <tr key={role.label} style={labBodyRow}>
+                      <td style={{ ...labTh, textAlign: "left" }}>{role.label}</td>
+                      <td style={labTd}>{labSum(role.manHours)}</td>
+                      <td style={labTd}>{labMoney(role.burdened, 2)}</td>
+                      <td style={labTd}>{labMoney(role.total, 2)}</td>
+                      <td style={labTd}>
+                        {quantity && quantity > 0
+                          ? labMoney(role.total / quantity, 4)
+                          : labSum(null)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={labTotalRow}>
+                    <td style={{ ...labTh, textAlign: "left" }}>Grand Total</td>
+                    <td style={labTd} />
+                    <td style={labTd} />
+                    <td style={labTd}>{labMoney(lb.grandTotal, 2)}</td>
+                    <td style={labTd}>
+                      {lb.perUnit !== null
+                        ? labMoney(lb.perUnit, 4)
+                        : labSum(null)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
         <CardTotal
           label="Direct labor / bottle"
           perUnit={r.laborPerUnit}

@@ -357,3 +357,71 @@ ok('inner + master per bottle', [r6(inner.cost),r6(master.cost)],
 ok('  ...stack total', r6(inner.cost+master.cost), r6(0.1+3.30/72));
 }
 }
+
+// ---- suite 10: labor breakdown matrix (scoped) ----
+//
+// Numbers chosen to match the gummy card screenshot this was ported from:
+// setup 1x8, production 4x8, cleaning 1x8; 1 leader + 6 operators throughout;
+// $25 leader / $15 operator at 8.5% tax + 4% WC.
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const r2=(v)=>+v.toFixed(2);
+const L={
+  bottlesPerMinute:null,
+  setup:{days:1,hoursPerDay:8,leaders:1,operators:6},
+  production:{days:4,hoursPerDay:8,leaders:1,operators:6},
+  cleaning:{days:1,hoursPerDay:8,leaders:1,operators:6},
+  leaderRate:25, operatorRate:15,
+  leaderTaxPct:8.5, leaderWcPct:4, operatorTaxPct:8.5, operatorWcPct:4,
+};
+const b=B.laborBreakdown(300000,L);
+
+// Shift Hours row
+ok('total hours per phase', b.phases.map(p=>p.totalHours), [8,32,8]);
+ok('total shifts',          b.totalShifts, 6);
+ok('total hours',           b.totalHours, 48);
+
+// Man Hours rows
+ok('leader man hours per phase',   b.phases.map(p=>p.leaderManHours),   [8,32,8]);
+ok('operator man hours per phase', b.phases.map(p=>p.operatorManHours), [48,192,48]);
+ok('leader man hours total',   b.roles[0].manHours, 48);
+ok('operator man hours total', b.roles[1].manHours, 288);
+
+// Pay Rates row — burdened = base x (1 + 8.5% + 4%)
+ok('leader burdened rate',   r2(b.roles[0].burdened), 28.13);
+ok('operator burdened rate', r2(b.roles[1].burdened), 16.88);
+
+// Batch Labor Costs
+ok('leader job total',   r2(b.roles[0].total), r2(48*25*1.125));
+ok('operator job total', r2(b.roles[1].total), r2(288*15*1.125));
+ok('grand total',        r2(b.grandTotal),     6210);
+
+// per unit, and the wrapper agreeing with it
+ok('per bottle', +b.perUnit.toFixed(6), +(6210/300000).toFixed(6));
+ok('laborPerUnit matches the breakdown',
+   B.laborPerUnit(300000,L), b.perUnit);
+
+// production shifts DERIVE from line speed when not typed
+{
+const d={...L, bottlesPerMinute:40, production:{...L.production, days:null}};
+// 12,000 bottles at 40/min = 5 line hours -> 5/8 of a shift -> rounds to 1
+ok('derived production shifts', B.laborBreakdown(12000,d).phases[1].shifts, 1);
+// 100,000 at 40/min = 41.67 h -> 5.2 shifts -> 5 (remainder .21 <= .24)
+ok('  ...quarter-shift rule applies', B.laborBreakdown(100000,d).phases[1].shifts, 5);
+}
+
+// no line speed AND no typed shifts -> null, not a guess
+{
+const n={...L, bottlesPerMinute:null, production:{...L.production, days:null}};
+ok('no speed, no shifts -> null', B.laborBreakdown(12000,n), null);
+ok('  ...and laborPerUnit is null', B.laborPerUnit(12000,n), null);
+}
+// a typed shift count makes it priceable without a line speed
+ok('typed shifts price without bpm', B.laborPerUnit(300000,L) !== null, true);
+
+// cleaning defaults to a quarter of production
+{
+const c={...L, cleaning:{...L.cleaning, days:null}};
+ok('cleaning defaults to prod/4', B.laborBreakdown(300000,c).phases[2].shifts, 1);
+}
+}
