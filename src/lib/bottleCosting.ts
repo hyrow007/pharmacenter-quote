@@ -187,9 +187,15 @@ export const COST_SOURCES: CostSource[] = [
 export const DEFAULT_COST_SOURCE: CostSource = "Fish Bowl (Inventory)";
 
 export type LaborPhase = {
-  /** Shifts. Production is derived from line speed, so it ignores this. */
-  days: number | null;
-  hoursPerDay: number | null;
+  /**
+   * TOTAL hours for this phase — not shifts, and not hours per shift.
+   *
+   * Bottling is not scheduled in whole shifts the way a gummy cook is: a
+   * changeover is a couple of hours, a wash-down is a couple of hours, and the
+   * run is however long the line takes. Asking for shifts × hours-per-shift
+   * made people multiply in their heads to express two hours.
+   */
+  hours: number | null;
   leaders: number | null;
   operators: number | null;
 };
@@ -363,6 +369,14 @@ export const DEFAULT_OPERATOR_RATE = 17;
 
 export const DEFAULT_HOURS_PER_DAY = 8;
 export const DEFAULT_SETUP_DAYS = 1;
+
+/**
+ * Confirmed house figures for bottling: a changeover is about two hours, and
+ * so is the wash-down afterwards. Production is not defaulted — it comes from
+ * the line speed, because guessing a run length would be guessing the job.
+ */
+export const DEFAULT_SETUP_HOURS = 2;
+export const DEFAULT_CLEANING_HOURS = 2;
 export const DEFAULT_WORKING_DAYS_PER_MONTH = 21;
 
 /**
@@ -573,15 +587,13 @@ export function productionHours(
 /** One phase's worth of the labour matrix, fully resolved. */
 export type LaborPhaseBreakdown = {
   label: string;
-  shifts: number;
-  hoursPerShift: number;
-  /** shifts × hoursPerShift */
+  /** Total hours for the phase. */
   totalHours: number;
   leaders: number;
   operators: number;
-  /** leaders × totalHours */
+  /** leaders x totalHours */
   leaderManHours: number;
-  /** operators × totalHours */
+  /** operators x totalHours */
   operatorManHours: number;
 };
 
@@ -591,35 +603,35 @@ export type LaborRoleBreakdown = {
   base: number;
   taxPct: number;
   wcPct: number;
-  /** base × (1 + tax% + wc%) */
+  /** base x (1 + tax% + wc%) */
   burdened: number;
   /** man hours across every phase */
   manHours: number;
-  /** manHours × burdened */
+  /** manHours x burdened */
   total: number;
 };
 
 export type LaborBreakdown = {
   phases: LaborPhaseBreakdown[];
-  totalShifts: number;
   totalHours: number;
   roles: LaborRoleBreakdown[];
   grandTotal: number;
-  /** grandTotal ÷ quantity. Null when the quantity is unknown. */
+  /** grandTotal / quantity. Null when the quantity is unknown. */
   perUnit: number | null;
 };
 
 /**
  * The whole labour matrix in one pass.
  *
- * Every figure the Direct Labor Costs card shows — shift hours, man hours,
- * burdened rates, the grand total — comes from here. The card renders it and
- * computes nothing of its own, because five tables each doing their own
- * arithmetic is five chances for the displayed sum to disagree with the cost
- * that reaches the quote.
+ * Every figure the Direct Labor Costs card shows comes from here. The card
+ * renders it and computes nothing of its own, because four tables each doing
+ * their own arithmetic is four chances for the displayed sum to disagree with
+ * the cost that reaches the quote.
  *
- * Returns null only when production cannot be established at all: no line
- * speed AND no typed shift count. Everything else has a defensible default.
+ * Hours, not shifts. Setup and cleaning default to the house two hours;
+ * production comes from the line speed and is the only figure with no
+ * defensible default, so a job with neither a speed nor a typed run length
+ * returns null rather than a plausible-looking guess.
  */
 export function laborBreakdown(
   quantity: number | null,
@@ -627,36 +639,25 @@ export function laborBreakdown(
 ): LaborBreakdown | null {
   const q = num(quantity);
 
-  const setupShifts = num(labor.setup.days) ?? DEFAULT_SETUP_DAYS;
-  const setupHpS = num(labor.setup.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
-  const prodHpS = num(labor.production.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+  const setupHours = num(labor.setup.hours) ?? DEFAULT_SETUP_HOURS;
+  const cleanHours = num(labor.cleaning.hours) ?? DEFAULT_CLEANING_HOURS;
 
-  // Line hours from speed, rounded up to whole shifts — you staff a shift, not
-  // three and a half hours of one. A typed value wins over the derivation.
-  const lineHours = productionHours(q, labor.bottlesPerMinute);
-  const derivedProdShifts =
-    lineHours === null || prodHpS <= 0 ? null : roundDays(lineHours / prodHpS);
-  const prodShifts = num(labor.production.days) ?? derivedProdShifts;
-  if (prodShifts === null) return null; // nothing honest to say about production
-
-  // Cleaning defaults to a quarter of production, as on the gummy tab.
-  const cleanShifts = num(labor.cleaning.days) ?? roundDays(prodShifts / 4);
-  const cleanHpS = num(labor.cleaning.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+  // Typed run length wins over the derivation, which is also how a job gets
+  // priced before anyone has timed the line.
+  const prodHours =
+    num(labor.production.hours) ?? productionHours(q, labor.bottlesPerMinute);
+  if (prodHours === null) return null;
 
   const mk = (
     label: string,
-    shifts: number,
-    hoursPerShift: number,
+    totalHours: number,
     leaders: number | null | undefined,
     operators: number | null | undefined,
   ): LaborPhaseBreakdown => {
-    const totalHours = shifts * hoursPerShift;
     const l = num(leaders) ?? 0;
     const o = num(operators) ?? 0;
     return {
       label,
-      shifts,
-      hoursPerShift,
       totalHours,
       leaders: l,
       operators: o,
@@ -666,21 +667,14 @@ export function laborBreakdown(
   };
 
   const phases = [
-    mk("Setup", setupShifts, setupHpS, labor.setup.leaders, labor.setup.operators),
+    mk("Setup", setupHours, labor.setup.leaders, labor.setup.operators),
     mk(
       "Production",
-      prodShifts,
-      prodHpS,
+      prodHours,
       labor.production.leaders,
       labor.production.operators,
     ),
-    mk(
-      "Cleaning",
-      cleanShifts,
-      cleanHpS,
-      labor.cleaning.leaders,
-      labor.cleaning.operators,
-    ),
+    mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
   ];
 
   const role = (
@@ -691,7 +685,15 @@ export function laborBreakdown(
     manHours: number,
   ): LaborRoleBreakdown => {
     const burdened = burdenedRate(base, taxPct, wcPct);
-    return { label, base, taxPct, wcPct, burdened, manHours, total: manHours * burdened };
+    return {
+      label,
+      base,
+      taxPct,
+      wcPct,
+      burdened,
+      manHours,
+      total: manHours * burdened,
+    };
   };
 
   const roles = [
@@ -715,7 +717,6 @@ export function laborBreakdown(
 
   return {
     phases,
-    totalShifts: phases.reduce((s, p) => s + p.shifts, 0),
     totalHours: phases.reduce((s, p) => s + p.totalHours, 0),
     roles,
     grandTotal,
@@ -772,14 +773,13 @@ export function computeBottleCosting(
   const prodHours = productionHours(q, input.labor.bottlesPerMinute);
   const lab = laborPerUnit(q, input.labor);
 
-  const hpd = num(input.labor.setup.hoursPerDay) ?? DEFAULT_HOURS_PER_DAY;
+  // Overhead is charged by how long the job occupies the floor. With hours as
+  // the unit that is simply total hours over an 8-hour working day — and left
+  // fractional, because overhead is a smooth spread. Rounding a 12-hour job up
+  // to two whole days would overcharge it by a third.
+  const lbForDays = laborBreakdown(q, input.labor);
   const jobDays =
-    prodHours === null
-      ? null
-      : (num(input.labor.setup.days) ?? DEFAULT_SETUP_DAYS) +
-        roundDays(prodHours / hpd) +
-        (num(input.labor.cleaning.days) ??
-          roundDays(roundDays(prodHours / hpd) / 4));
+    lbForDays === null ? null : lbForDays.totalHours / DEFAULT_HOURS_PER_DAY;
 
   const ovh = overheadPerUnit(q, input.overhead, jobDays);
 

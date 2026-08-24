@@ -23,13 +23,12 @@ import {
   computeBottleCosting,
   DEFAULT_LEADER_RATE,
   DEFAULT_OPERATOR_RATE,
-  DEFAULT_HOURS_PER_DAY,
-  DEFAULT_SETUP_DAYS,
+  DEFAULT_SETUP_HOURS,
+  DEFAULT_CLEANING_HOURS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
   DEFAULT_TAX_PCT,
   DEFAULT_WC_PCT,
   laborBreakdown,
-  roundDays,
   DEFAULT_MARGIN_PCT,
   DEFAULT_HOS_COMMISSION_PCT,
   DEFAULT_REP_COMMISSION_PCT,
@@ -507,20 +506,23 @@ export type SavedState = {
   bottlesPerInnerPack: number | null;
   /** Inner packs in one master box. Only read when an inner pack exists. */
   innersPerMasterBox: number | null;
-  setupDays: number | null;
+  /** TOTAL setup hours. */
   setupHours: number | null;
   setupLeaders: number | null;
   setupOperators: number | null;
   /**
-   * Production shifts. Null means "derive from bottles per minute" — the
+   * TOTAL production hours. Null means "derive from bottles per minute" — the
    * default path. A typed value overrides it, which is also how a job gets
    * priced before anyone has timed the line.
+   *
+   * Named ...Total rather than reusing the old `prodHours` on purpose: that
+   * field briefly meant hours PER SHIFT and was saved as 8. Reusing the name
+   * would have made a stale 8 read as an eight-hour run.
    */
-  prodDays: number | null;
-  prodHours: number | null;
+  prodHoursTotal: number | null;
   prodLeaders: number | null;
   prodOperators: number | null;
-  cleaningDays: number | null;
+  /** TOTAL cleaning hours. */
   cleaningHours: number | null;
   cleaningLeaders: number | null;
   cleaningOperators: number | null;
@@ -739,17 +741,14 @@ export function blankState(
     // assuming — a blank that the user fills in is honest, a guessed 6 is not.
     bottlesPerInnerPack: null,
     innersPerMasterBox: null,
-    setupDays: DEFAULT_SETUP_DAYS,
-    setupHours: DEFAULT_HOURS_PER_DAY,
+    setupHours: DEFAULT_SETUP_HOURS,
     setupLeaders: 1,
     setupOperators: 2,
     // Null so it derives from bottles per minute until someone overrides it.
-    prodDays: null,
-    prodHours: DEFAULT_HOURS_PER_DAY,
+    prodHoursTotal: null,
     prodLeaders: 1,
     prodOperators: 3,
-    cleaningDays: null,
-    cleaningHours: DEFAULT_HOURS_PER_DAY,
+    cleaningHours: DEFAULT_CLEANING_HOURS,
     cleaningLeaders: 0,
     cleaningOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,
@@ -1130,8 +1129,9 @@ export default function BottleCostingBoard({
       // spread would leave them undefined, which turns the burden inputs into
       // uncontrolled fields and the rates into NaN. `??` so a saved 0 — a
       // deliberate "no workers' comp on this one" — is not overwritten.
-      prodDays: initial.prodDays ?? blank.prodDays,
-      prodHours: initial.prodHours ?? blank.prodHours,
+      prodHoursTotal: initial.prodHoursTotal ?? blank.prodHoursTotal,
+      setupHours: initial.setupHours ?? blank.setupHours,
+      cleaningHours: initial.cleaningHours ?? blank.cleaningHours,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
       leaderWcPct: initial.leaderWcPct ?? blank.leaderWcPct,
       operatorTaxPct: initial.operatorTaxPct ?? blank.operatorTaxPct,
@@ -1284,20 +1284,17 @@ export default function BottleCostingBoard({
       labor: {
         bottlesPerMinute: st.bottlesPerMinute,
         setup: {
-          days: st.setupDays,
-          hoursPerDay: st.setupHours,
+          hours: st.setupHours,
           leaders: st.setupLeaders,
           operators: st.setupOperators,
         },
         production: {
-          days: st.prodDays,
-          hoursPerDay: st.prodHours,
+          hours: st.prodHoursTotal,
           leaders: st.prodLeaders,
           operators: st.prodOperators,
         },
         cleaning: {
-          days: st.cleaningDays,
-          hoursPerDay: st.cleaningHours,
+          hours: st.cleaningHours,
           leaders: st.cleaningLeaders,
           operators: st.cleaningOperators,
         },
@@ -2121,14 +2118,19 @@ export default function BottleCostingBoard({
                 that input is the very thing this message replaces, so the
                 instruction pointed at something that was not on screen. */}
             <strong>No production estimate yet.</strong> Enter bottles per
-            minute in Considerations above. The shift tables appear once there
-            is a line speed, and the shifts stay editable from there.
+            minute in Considerations above. The hours tables appear once there
+            is a line speed, and every figure stays editable from there.
           </div>
         ) : (
           <>
-            {/* ---- Shift Hours ---- */}
+            {/* ---- Hours ----
+                One editable row, not shifts x hours-per-shift. A changeover
+                is two hours and a wash-down is two hours; making someone
+                express that as a fraction of a shift was arithmetic in the
+                head for no gain. Production carries its derived line time,
+                and stays editable like the rest. */}
             <div style={labSub}>
-              <div style={labSubTitle}>Shift Hours</div>
+              <div style={labSubTitle}>Hours</div>
               <table style={labTable}>
                 <thead>
                   <tr style={labHeadRow}>
@@ -2142,35 +2144,21 @@ export default function BottleCostingBoard({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr style={labBodyRow}>
-                    <td style={{ ...labTh, textAlign: "left" }}>Shifts</td>
+                  <tr style={labTotalRow}>
+                    <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
                     {lb.phases.map((p, i) => (
                       <td key={p.label} style={labTd}>
                         <LabNum
-                          value={p.shifts}
+                          value={p.totalHours}
                           onChange={(n) =>
                             set(
-                              (["setupDays", "prodDays", "cleaningDays"] as const)[i],
-                              n === null ? null : roundDays(n),
-                            )
-                          }
-                          step="1"
-                        />
-                      </td>
-                    ))}
-                    <td style={labTd}>{labSum(lb.totalShifts)}</td>
-                  </tr>
-                  <tr style={labBodyRow}>
-                    <td style={{ ...labTh, textAlign: "left" }}>
-                      Hours per Shift
-                    </td>
-                    {lb.phases.map((p, i) => (
-                      <td key={p.label} style={labTd}>
-                        <LabNum
-                          value={p.hoursPerShift}
-                          onChange={(n) =>
-                            set(
-                              (["setupHours", "prodHours", "cleaningHours"] as const)[i],
+                              (
+                                [
+                                  "setupHours",
+                                  "prodHoursTotal",
+                                  "cleaningHours",
+                                ] as const
+                              )[i],
                               n,
                             )
                           }
@@ -2178,20 +2166,23 @@ export default function BottleCostingBoard({
                         />
                       </td>
                     ))}
-                    {/* Adding hours-per-shift across phases means nothing. */}
-                    <td style={labTd}>{labSum(null)}</td>
-                  </tr>
-                  <tr style={labTotalRow}>
-                    <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
-                    {lb.phases.map((p) => (
-                      <td key={p.label} style={labTd}>
-                        {labSum(p.totalHours)}
-                      </td>
-                    ))}
                     <td style={labTd}>{labSum(lb.totalHours)}</td>
                   </tr>
                 </tbody>
               </table>
+              {/* Says where Production's number came from, so a figure that
+                  moves when the line speed changes is not a surprise. */}
+              <div
+                style={{
+                  padding: "0 14px 10px",
+                  fontSize: 11.5,
+                  color: "var(--ink-3, #7b7364)",
+                }}
+              >
+                {st.prodHoursTotal === null
+                  ? "Setup and cleaning default to 2 hours. Production is quantity ÷ bottles per minute — type over it to override."
+                  : "Production hours typed by hand; clear the field to go back to bottles per minute."}
+              </div>
             </div>
 
             {/* ---- Line Crew ---- */}
