@@ -309,7 +309,19 @@ export type ComponentOption = {
 export type SavedState = {
   bom: BomLine[];
   bottlesPerMinute: number | null;
+  /**
+   * Bottles in one master box, for a job WITHOUT an inner pack.
+   *
+   * With an inner pack the master box is counted in inners instead, and this
+   * field goes unread — bottles-per-box becomes a derived figure. Two fields
+   * rather than one that changes meaning: a saved "12" must always mean twelve
+   * bottles, whatever the job grows into later.
+   */
   bottlesPerMasterBox: number | null;
+  /** Bottles in one inner pack. */
+  bottlesPerInnerPack: number | null;
+  /** Inner packs in one master box. Only read when an inner pack exists. */
+  innersPerMasterBox: number | null;
   setupDays: number | null;
   setupHours: number | null;
   setupLeaders: number | null;
@@ -352,6 +364,7 @@ const SLOTS: { slot: PackagingSlot; label: string }[] = [
   { slot: "safety_seal", label: "Safety seal" },
   { slot: "insert", label: "Insert" },
   { slot: "carton", label: "Retail / unit carton" },
+  { slot: "inner_pack", label: "Inner pack" },
   { slot: "master_box", label: "Master box" },
 ];
 
@@ -424,6 +437,13 @@ function slotIsInSpec(
   // Still in the Add-component list for the rare job that buys liners loose.
   if (slot === "liner") return false;
 
+  // Same treatment, different reason: the packaging form never asks whether
+  // there is an inner pack, so there is no answer to read. Generating the row
+  // anyway would put an empty, unpriceable component on every bottle job —
+  // and most bottle jobs go straight from bottle to master case. Add it from
+  // the picker on the jobs that genuinely bundle.
+  if (slot === "inner_pack") return false;
+
   // Safety seal and insert are asked INSIDE the retail-packaging section of
   // the form. With no retail packaging those questions are never rendered, so
   // they stay permanently blank — and the blank-keeps-it rule below would then
@@ -458,6 +478,11 @@ const SUPPLIED_BY_SPEC_KEY: Record<PackagingSlot, string | null> = {
   neckband: "neckbandSuppliedBy",
   label: "labelSuppliedBy",
   carton: "retailSuppliedBy",
+  // The packaging form has no inner-pack question of its own — masterBoxQty is
+  // labelled "Units / inner cases per box" and that is the only mention. So
+  // there is nothing to inherit and it defaults to PharmaCenter-supplied,
+  // which is the common case for a bundling material.
+  inner_pack: null,
   master_box: "masterBoxSuppliedBy",
   sleeve: "sleeveSuppliedBy",
   insert: "insertSuppliedBy",
@@ -491,13 +516,17 @@ export function blankState(
       slot: s.slot,
       fpCode: null,
       name: s.label,
-      // A master box is shared across the bottles inside it.
+      // A master box is shared across the bottles inside it. So is an inner
+      // pack — but it is never generated here (see slotIsInSpec), so it can
+      // only arrive via addLine, which starts it blank.
       qtyPerUnit:
         s.slot === "master_box"
           ? bottlesPerMasterBox && bottlesPerMasterBox > 0
             ? 1 / bottlesPerMasterBox
             : null
-          : 1,
+          : s.slot === "inner_pack"
+            ? null
+            : 1,
       costPerUnit: null,
       costStatus: "no_cost",
       suppliedBy: suppliedByFromSpec(s.slot, spec ?? null),
@@ -509,6 +538,10 @@ export function blankState(
     })),
     bottlesPerMinute: null,
     bottlesPerMasterBox,
+    // No spec question to seed these from, and no house standard worth
+    // assuming — a blank that the user fills in is honest, a guessed 6 is not.
+    bottlesPerInnerPack: null,
+    innersPerMasterBox: null,
     setupDays: DEFAULT_SETUP_DAYS,
     setupHours: DEFAULT_HOURS_PER_DAY,
     setupLeaders: 1,
@@ -594,6 +627,11 @@ function ComponentPicker({
       bits.push("neckband");
     } else if (slot === "master_box") {
       bits.push("box");
+    } else if (slot === "inner_pack") {
+      // Fishbowl has no inner-pack category, so there is nothing to filter on
+      // and the seed has to do the work. "inner" catches parts named as such;
+      // the rest of the list is whatever the user types.
+      bits.push("inner");
     }
     // "other" is a spec ANSWER, not a search term — without this every picker
     // whose field was set to Other would go looking for the word "other".
@@ -940,7 +978,18 @@ export default function BottleCostingBoard({
           slot,
           fpCode: null,
           name: meta?.label ?? slot,
-          qtyPerUnit: 1,
+          // A shared container starts blank so the user states how many
+          // bottles it holds; everything else is one per bottle.
+          qtyPerUnit:
+            slot === "inner_pack"
+              ? p.bottlesPerInnerPack && p.bottlesPerInnerPack > 0
+                ? 1 / p.bottlesPerInnerPack
+                : null
+              : slot === "master_box"
+                ? p.bottlesPerMasterBox && p.bottlesPerMasterBox > 0
+                  ? 1 / p.bottlesPerMasterBox
+                  : null
+                : 1,
           costPerUnit: null,
           costStatus: "no_cost",
           suppliedBy: suppliedByFromSpec(slot, spec),
@@ -957,18 +1006,61 @@ export default function BottleCostingBoard({
   const removeLine = (id: string) =>
     setSt((p) => ({ ...p, bom: p.bom.filter((l) => l.id !== id) }));
 
-  // Master box qty is derived, so keep it in step with bottles-per-box.
+  /**
+   * Does this job bundle bottles into inner packs before they go in the case?
+   *
+   * This single fact changes how the master box is counted, which is why it is
+   * derived from the BOM rather than being a separate switch the user could
+   * forget to flip. Adding the Inner pack row IS the declaration.
+   */
+  const hasInnerPack = st.bom.some((l) => l.slot === "inner_pack");
+
+  /**
+   * Bottles in one master box.
+   *
+   * WITHOUT an inner pack this is typed directly, as it always has been.
+   * WITH one the case is counted in inners, so the bottle figure is the
+   * product of the two nestings and becomes a readout rather than an input.
+   *
+   * Null if any part of the chain is missing. A half-specified nesting must
+   * not quietly collapse to "1", which would price a whole case against every
+   * single bottle.
+   */
+  const bottlesPerMasterBoxEffective = useMemo(() => {
+    if (!hasInnerPack) {
+      const n = st.bottlesPerMasterBox;
+      return n && n > 0 ? n : null;
+    }
+    const per = st.bottlesPerInnerPack;
+    const inners = st.innersPerMasterBox;
+    if (!per || per <= 0 || !inners || inners <= 0) return null;
+    return per * inners;
+  }, [
+    hasInnerPack,
+    st.bottlesPerMasterBox,
+    st.bottlesPerInnerPack,
+    st.innersPerMasterBox,
+  ]);
+
+  // Both containers are shared across the bottles inside them, so both are
+  // derived from the counts above rather than typed as fractions.
   useEffect(() => {
-    const n = st.bottlesPerMasterBox;
+    const perInner = st.bottlesPerInnerPack;
+    const perBox = bottlesPerMasterBoxEffective;
     setSt((p) => ({
       ...p,
-      bom: p.bom.map((l) =>
-        l.slot === "master_box"
-          ? { ...l, qtyPerUnit: n && n > 0 ? 1 / n : null }
-          : l,
-      ),
+      bom: p.bom.map((l) => {
+        if (l.slot === "master_box")
+          return { ...l, qtyPerUnit: perBox ? 1 / perBox : null };
+        if (l.slot === "inner_pack")
+          return {
+            ...l,
+            qtyPerUnit: perInner && perInner > 0 ? 1 / perInner : null,
+          };
+        return l;
+      }),
     }));
-  }, [st.bottlesPerMasterBox]);
+  }, [bottlesPerMasterBoxEffective, st.bottlesPerInnerPack]);
 
   const inputs: BottleCostingInputs = useMemo(
     () => ({
@@ -1131,18 +1223,56 @@ export default function BottleCostingBoard({
                 : "—"}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Bottles / master box" nowrap>
-            <NumField
-              value={st.bottlesPerMasterBox}
-              onChange={(v) => set("bottlesPerMasterBox", v)}
-            />
-          </ParamBlock>
+          {/* The nesting decides which of these is typed and which is read.
+              Without an inner pack the case holds bottles and you say how
+              many. With one it holds inners, and bottles-per-box becomes the
+              product — shown, not asked, because asking twice invites the two
+              answers to disagree. */}
+          {hasInnerPack ? (
+            <>
+              <ParamBlock label="Bottles / inner pack" nowrap>
+                <NumField
+                  value={st.bottlesPerInnerPack}
+                  onChange={(v) => set("bottlesPerInnerPack", v)}
+                />
+              </ParamBlock>
+              <ParamBlock label="Inner packs / master box" nowrap>
+                <NumField
+                  value={st.innersPerMasterBox}
+                  onChange={(v) => set("innersPerMasterBox", v)}
+                />
+              </ParamBlock>
+              <ParamBlock label="Bottles / master box" nowrap>
+                <ReadOnly>
+                  {bottlesPerMasterBoxEffective
+                    ? bottlesPerMasterBoxEffective.toLocaleString("en-US")
+                    : "—"}
+                </ReadOnly>
+              </ParamBlock>
+              <ParamBlock label="Inner packs" nowrap>
+                <ReadOnly>
+                  {quantity && st.bottlesPerInnerPack
+                    ? Math.ceil(
+                        quantity / st.bottlesPerInnerPack,
+                      ).toLocaleString("en-US")
+                    : "—"}
+                </ReadOnly>
+              </ParamBlock>
+            </>
+          ) : (
+            <ParamBlock label="Bottles / master box" nowrap>
+              <NumField
+                value={st.bottlesPerMasterBox}
+                onChange={(v) => set("bottlesPerMasterBox", v)}
+              />
+            </ParamBlock>
+          )}
           <ParamBlock label="Master boxes" nowrap>
             <ReadOnly>
-              {quantity && st.bottlesPerMasterBox
-                ? Math.ceil(quantity / st.bottlesPerMasterBox).toLocaleString(
-                    "en-US",
-                  )
+              {quantity && bottlesPerMasterBoxEffective
+                ? Math.ceil(
+                    quantity / bottlesPerMasterBoxEffective,
+                  ).toLocaleString("en-US")
                 : "—"}
             </ReadOnly>
           </ParamBlock>
@@ -1229,6 +1359,7 @@ export default function BottleCostingBoard({
                       units-per-box would render no caption and leave nowhere
                       to type the number. */}
                   {(line.slot === "master_box" ||
+                    line.slot === "inner_pack" ||
                     (line.qtyPerUnit !== null &&
                       line.qtyPerUnit > 0 &&
                       line.qtyPerUnit < 1)) && (
@@ -1245,16 +1376,24 @@ export default function BottleCostingBoard({
                           gap: 3,
                         }}
                       >
-                        {line.slot !== "master_box" && "1 per"}
+                        {line.slot !== "master_box" &&
+                          line.slot !== "inner_pack" &&
+                          "1 per"}
                         <input
                           type="number"
                           min={1}
                           step="1"
                           placeholder="?"
                           value={
-                            line.qtyPerUnit !== null && line.qtyPerUnit > 0
-                              ? Math.round(1 / line.qtyPerUnit)
-                              : ""
+                            // The master box counts INNERS when the job has
+                            // them, so it must show the number that was typed
+                            // rather than 1/qtyPerUnit — which is bottles, and
+                            // would put 72 in a box the user called 12 inners.
+                            line.slot === "master_box" && hasInnerPack
+                              ? (st.innersPerMasterBox ?? "")
+                              : line.qtyPerUnit !== null && line.qtyPerUnit > 0
+                                ? Math.round(1 / line.qtyPerUnit)
+                                : ""
                           }
                           onFocus={(e) => {
                             // Chrome does not select a number input's contents
@@ -1280,7 +1419,19 @@ export default function BottleCostingBoard({
                             // than setting the row directly and ending up with
                             // two fields that can disagree.
                             if (line.slot === "master_box") {
-                              set("bottlesPerMasterBox", per);
+                              // With inners in play the case is counted in
+                              // inners, so the number typed here belongs to a
+                              // different field. Writing it to bottlesPer-
+                              // MasterBox would leave a stale bottle count
+                              // sitting behind the derived one.
+                              set(
+                                hasInnerPack
+                                  ? "innersPerMasterBox"
+                                  : "bottlesPerMasterBox",
+                                per,
+                              );
+                            } else if (line.slot === "inner_pack") {
+                              set("bottlesPerInnerPack", per);
                             } else {
                               setLine(line.id, {
                                 qtyPerUnit: per ? 1 / per : null,
@@ -1300,8 +1451,12 @@ export default function BottleCostingBoard({
                           }}
                         />
                         {line.slot === "master_box"
-                          ? "bottles per box"
-                          : "bottles"}
+                          ? hasInnerPack
+                            ? "inner packs per box"
+                            : "bottles per box"
+                          : line.slot === "inner_pack"
+                            ? "bottles per inner pack"
+                            : "bottles"}
                       </div>
                     )}
                 </div>

@@ -55,6 +55,17 @@ export type PackagingSlot =
   | "carton"
   | "insert"
   | "safety_seal"
+  /**
+   * A bundle of bottles inside the master carton — a shrink-wrapped six-pack,
+   * a chipboard tray, a small inner carton. Shares its arithmetic with the
+   * master box: one of them is spread across the bottles it holds.
+   *
+   * Kept as its own slot rather than reusing master_box because a job can have
+   * BOTH, at different counts, and each needs its own cost and its own bottles
+   * -per figure. Folding them together would force one of the two to be typed
+   * as a fraction by hand.
+   */
+  | "inner_pack"
   | "master_box"
   | "other";
 
@@ -327,6 +338,9 @@ export const DEFAULT_WASTE_PCT: Record<PackagingSlot, number> = {
   safety_seal: 5,
   insert: 5,
   carton: 5,
+  // Bundled at the end of the line alongside the master case, and lost at
+  // about the same rate.
+  inner_pack: 2,
   master_box: 2,
   other: 5,
 };

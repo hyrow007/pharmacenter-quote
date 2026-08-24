@@ -270,3 +270,90 @@ ok('$0 custom still needs confirming',
 ok('customer-supplied custom part is $0',
    B.resolveLine(L({suppliedBy:'customer',manualCostPerUnit:null})).cost, 0);
 }
+
+// ---- suite 8: inner pack (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const D=B.DEFAULT_WASTE_PCT;
+const L=(o)=>({id:'x',slot:'inner_pack',fpCode:'PC-PK-9',name:'6-pack tray',
+  qtyPerUnit:1/6,costPerUnit:null,costStatus:'ok',suppliedBy:'pharmacenter',
+  costSource:'Manual',manualCostPerUnit:0.60,wastePct:0,...o});
+const r6=(v)=>+v.toFixed(6);
+
+ok('inner_pack has a waste default', D.inner_pack, 2);
+ok('  ...matching the master box', D.inner_pack, D.master_box);
+
+// $0.60 tray over 6 bottles
+ok('tray divided across its bottles', r6(B.resolveLine(L({})).cost), 0.1);
+// with the 2% default
+ok('  ...and at the 2% default', r6(B.resolveLine(L({wastePct:2})).cost), r6(0.60/6/0.98));
+
+// a blank bottles-per-inner-pack must BLOCK, not price as one-per-bottle
+ok('no count yet -> blocks', B.resolveLine(L({qtyPerUnit:null})).cost, null);
+ok('  ...as no_qty',         B.resolveLine(L({qtyPerUnit:null})).issue.reason, 'no_qty');
+
+// both containers resolve from whatever qtyPerUnit they are given. The board
+// now DERIVES the master box's from the nesting (see suite 9); this only
+// asserts that resolveLine divides correctly once handed a share.
+{
+const bom=[
+  L({id:'ip',slot:'inner_pack', qtyPerUnit:1/6,  manualCostPerUnit:0.60, wastePct:0}),
+  L({id:'mb',slot:'master_box', qtyPerUnit:1/12, manualCostPerUnit:3.30, wastePct:0}),
+];
+const per=bom.map(l=>B.resolveLine(l).cost);
+ok('both containers divide their own share', per.map(r6), [0.1, 0.275]);
+ok('  ...and sum', r6(per[0]+per[1]), 0.375);
+}
+}
+
+// ---- suite 9: nested inner pack inside master box (scoped) ----
+//
+// The board derives qtyPerUnit; these assert the arithmetic that derivation
+// implements, and the null-propagation that protects a half-typed nesting.
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const r6=(v)=>v===null?null:+v.toFixed(6);
+
+// mirrors bottlesPerMasterBoxEffective in the board
+const bottlesInMaster=(hasInner,perBoxTyped,perInner,innersPerBox)=>{
+  if(!hasInner) return perBoxTyped && perBoxTyped>0 ? perBoxTyped : null;
+  if(!perInner||perInner<=0||!innersPerBox||innersPerBox<=0) return null;
+  return perInner*innersPerBox;
+};
+
+// no inner pack: unchanged, the typed figure is bottles
+ok('no inner: 12 stays 12', bottlesInMaster(false,12,null,null), 12);
+
+// with inner: 6 bottles per inner, 12 inners per box -> 72 bottles per box
+ok('6 x 12 = 72 bottles per box', bottlesInMaster(true,12,6,12), 72);
+
+// a half-typed nesting must BLOCK, never fall back to the stale typed figure
+ok('inners missing -> null (not the stale 12)', bottlesInMaster(true,12,6,null), null);
+ok('bottles-per-inner missing -> null',         bottlesInMaster(true,12,null,12), null);
+ok('zero inners -> null',                       bottlesInMaster(true,12,6,0),    null);
+
+// removing the inner pack restores the typed bottle count untouched
+ok('removing inner restores 12', bottlesInMaster(false,12,6,12), 12);
+
+// and the costs that fall out of it
+const L=(o)=>({id:'x',slot:'master_box',fpCode:'PC-PK-6',name:'case',
+  costPerUnit:null,costStatus:'ok',suppliedBy:'pharmacenter',
+  costSource:'Manual',wastePct:0,...o});
+
+// $3.30 case over 72 bottles, not over 12
+const per72=bottlesInMaster(true,12,6,12);
+ok('case spread over 72 bottles',
+   r6(B.resolveLine(L({qtyPerUnit:1/per72,manualCostPerUnit:3.30})).cost),
+   r6(3.30/72));
+ok('  ...which is cheaper per bottle than over 12',
+   r6(3.30/72) < r6(3.30/12), true);
+
+// the full two-tier stack: inner + master, both per bottle
+{
+const inner=B.resolveLine(L({slot:'inner_pack',qtyPerUnit:1/6,manualCostPerUnit:0.60}));
+const master=B.resolveLine(L({qtyPerUnit:1/72,manualCostPerUnit:3.30}));
+ok('inner + master per bottle', [r6(inner.cost),r6(master.cost)],
+   [0.1, r6(3.30/72)]);
+ok('  ...stack total', r6(inner.cost+master.cost), r6(0.1+3.30/72));
+}
+}

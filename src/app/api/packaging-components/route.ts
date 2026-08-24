@@ -28,9 +28,19 @@ const SLOTS = new Set([
   "carton",
   "insert",
   "safety_seal",
+  "inner_pack",
   "master_box",
   "other",
 ]);
+
+// Fishbowl does not classify inner packs — the categoriser has no such arm and
+// no row carries the category. Filtering on it would return an empty picker
+// every time, so an inner pack borrows the master box's shelf: both are
+// corrugated containers holding a number of bottles, and in practice the same
+// parts get used for either. The seeded "inner" search term still floats a
+// genuinely inner-pack-named part to the top when one exists.
+const categoryForSlot = (slot: string) =>
+  slot === "inner_pack" ? "master_box" : slot;
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -61,7 +71,7 @@ export async function GET(request: Request) {
   // filed under a different category, so we only PREFER the matching slot when
   // there is also a search term to fall back on.
   if (SLOTS.has(slot) && !q) {
-    query = query.eq("category", slot);
+    query = query.eq("category", categoryForSlot(slot));
   }
 
   // Words are OR-matched and then RANKED by how many hit — never AND-filtered.
@@ -111,7 +121,7 @@ export async function GET(request: Request) {
     const hay = `${r.fp_code} ${r.name}`.toLowerCase();
     const hits = words.filter((w) => hay.includes(w.toLowerCase())).length;
     let s = -hits * 50;
-    if (slot && r.category === slot) s -= 100;
+    if (slot && r.category === categoryForSlot(slot)) s -= 100;
     if (r.cost_status === "ok" || r.cost_status === "customer_asset") s -= 10;
     // A part whose name STARTS with the slot word is almost always the real
     // thing, rather than something that merely mentions it in passing — this
