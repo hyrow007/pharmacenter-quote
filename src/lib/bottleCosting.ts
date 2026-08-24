@@ -207,6 +207,21 @@ export type LaborInputs = {
    * blanks the line rather than inventing a plausible-looking rate.
    */
   bottlesPerMinute: number | null;
+  /**
+   * Kitting speed, in bottles per minute PER PERSON.
+   *
+   * Kitting is hand work, so it scales with headcount in a way a machine line
+   * does not: the line runs at its own speed no matter who is watching it,
+   * whereas two people kit twice as fast as one. Hence the per-person unit.
+   *
+   *   kitting hours = quantity / (people x speed x 60)
+   *
+   * Note what falls out of that: man hours come to quantity / (speed x 60)
+   * regardless of headcount. Putting more people on kitting shortens the job
+   * without changing what it costs — which is correct, and is exactly why the
+   * crew count and the speed are separate inputs rather than one fudged rate.
+   */
+  kittingSpeed?: number | null;
   setup: LaborPhase;
   /**
    * Production is a full phase like the others now, so the board can show
@@ -218,6 +233,11 @@ export type LaborInputs = {
    */
   production: LaborPhase;
   cleaning: LaborPhase;
+  /**
+   * Pulling and staging components for the run. Optional — see
+   * DEFAULT_KITTING_HOURS for why it does not get a house default.
+   */
+  kitting: LaborPhase;
   leaderRate: number | null;
   operatorRate: number | null;
   leaderTaxPct?: number | null;
@@ -377,6 +397,17 @@ export const DEFAULT_SETUP_DAYS = 1;
  */
 export const DEFAULT_SETUP_HOURS = 2;
 export const DEFAULT_CLEANING_HOURS = 2;
+
+/**
+ * Kitting defaults to zero, unlike setup and cleaning.
+ *
+ * Every bottling job has a changeover and a wash-down, so a house figure for
+ * those is a reasonable starting point. Not every job is kitted — plenty run
+ * straight from stock — so a default here would quietly add labour to jobs
+ * that never do it. Zero contributes nothing and is visible in the table as a
+ * zero, which is the honest starting state for a phase that may not happen.
+ */
+export const DEFAULT_KITTING_HOURS = 0;
 export const DEFAULT_WORKING_DAYS_PER_MONTH = 21;
 
 /**
@@ -641,6 +672,17 @@ export function laborBreakdown(
 
   const setupHours = num(labor.setup.hours) ?? DEFAULT_SETUP_HOURS;
   const cleanHours = num(labor.cleaning.hours) ?? DEFAULT_CLEANING_HOURS;
+  // Typed hours win; otherwise derive from the kitting speed and the people on
+  // it; otherwise zero, meaning this job does not kit.
+  const kitPeople =
+    (num(labor.kitting?.leaders) ?? 0) + (num(labor.kitting?.operators) ?? 0);
+  const kitSpeed = num(labor.kittingSpeed);
+  const derivedKitHours =
+    q !== null && q > 0 && kitSpeed !== null && kitSpeed > 0 && kitPeople > 0
+      ? q / (kitPeople * kitSpeed * 60)
+      : null;
+  const kitHours =
+    num(labor.kitting?.hours) ?? derivedKitHours ?? DEFAULT_KITTING_HOURS;
 
   // Typed run length wins over the derivation, which is also how a job gets
   // priced before anyone has timed the line.
@@ -675,6 +717,12 @@ export function laborBreakdown(
       labor.production.operators,
     ),
     mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
+    mk(
+      "Kitting",
+      kitHours,
+      labor.kitting?.leaders,
+      labor.kitting?.operators,
+    ),
   ];
 
   const role = (

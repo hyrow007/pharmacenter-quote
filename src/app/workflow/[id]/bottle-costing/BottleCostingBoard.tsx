@@ -25,6 +25,7 @@ import {
   DEFAULT_OPERATOR_RATE,
   DEFAULT_SETUP_HOURS,
   DEFAULT_CLEANING_HOURS,
+  DEFAULT_KITTING_HOURS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
   DEFAULT_TAX_PCT,
   DEFAULT_WC_PCT,
@@ -505,6 +506,8 @@ export type SavedState = {
    */
   quantityOverride: number | null;
   bottlesPerMinute: number | null;
+  /** Bottles per minute PER PERSON on kitting. Drives the kitting hours. */
+  kittingSpeed: number | null;
   /**
    * Bottles in one master box, for a job WITHOUT an inner pack.
    *
@@ -538,6 +541,10 @@ export type SavedState = {
   cleaningHours: number | null;
   cleaningLeaders: number | null;
   cleaningOperators: number | null;
+  /** Pulling and staging components. Defaults to 0 hours — not every job kits. */
+  kittingHours: number | null;
+  kittingLeaders: number | null;
+  kittingOperators: number | null;
   leaderRate: number | null;
   operatorRate: number | null;
   /** Payroll burden, per role and editable — as on the gummy Pay Rates card. */
@@ -749,6 +756,7 @@ export function blankState(
     })),
     quantityOverride: null,
     bottlesPerMinute: null,
+    kittingSpeed: null,
     bottlesPerMasterBox,
     // No spec question to seed these from, and no house standard worth
     // assuming — a blank that the user fills in is honest, a guessed 6 is not.
@@ -764,6 +772,9 @@ export function blankState(
     cleaningHours: DEFAULT_CLEANING_HOURS,
     cleaningLeaders: 0,
     cleaningOperators: 2,
+    kittingHours: DEFAULT_KITTING_HOURS,
+    kittingLeaders: 0,
+    kittingOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,
     operatorRate: DEFAULT_OPERATOR_RATE,
     leaderTaxPct: DEFAULT_TAX_PCT,
@@ -1145,6 +1156,9 @@ export default function BottleCostingBoard({
       prodHoursTotal: initial.prodHoursTotal ?? blank.prodHoursTotal,
       setupHours: initial.setupHours ?? blank.setupHours,
       cleaningHours: initial.cleaningHours ?? blank.cleaningHours,
+      kittingHours: initial.kittingHours ?? blank.kittingHours,
+      kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
+      kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
       leaderWcPct: initial.leaderWcPct ?? blank.leaderWcPct,
       operatorTaxPct: initial.operatorTaxPct ?? blank.operatorTaxPct,
@@ -1303,6 +1317,7 @@ export default function BottleCostingBoard({
       bom: st.bom,
       labor: {
         bottlesPerMinute: st.bottlesPerMinute,
+        kittingSpeed: st.kittingSpeed,
         setup: {
           hours: st.setupHours,
           leaders: st.setupLeaders,
@@ -1317,6 +1332,11 @@ export default function BottleCostingBoard({
           hours: st.cleaningHours,
           leaders: st.cleaningLeaders,
           operators: st.cleaningOperators,
+        },
+        kitting: {
+          hours: st.kittingHours,
+          leaders: st.kittingLeaders,
+          operators: st.kittingOperators,
         },
         leaderRate: st.leaderRate,
         operatorRate: st.operatorRate,
@@ -1464,11 +1484,21 @@ export default function BottleCostingBoard({
               placeholder="required"
             />
           </ParamBlock>
-          <ParamBlock label="Bottles / minute" nowrap>
+          <ParamBlock label="Line speed (bottles / minute)" nowrap>
             <NumField
               value={st.bottlesPerMinute}
               onChange={(v) => set("bottlesPerMinute", v)}
               placeholder="required"
+            />
+          </ParamBlock>
+          {/* Per PERSON, unlike the line speed. Kitting is hand work: two
+              people kit twice as fast, whereas the line runs at its own pace
+              whoever is watching it. */}
+          <ParamBlock label="Kitting speed (bottles / min / person)" nowrap>
+            <NumField
+              value={st.kittingSpeed}
+              onChange={(v) => set("kittingSpeed", v)}
+              placeholder="optional"
             />
           </ParamBlock>
           <ParamBlock label="Line time (hours)" nowrap>
@@ -2164,6 +2194,7 @@ export default function BottleCostingBoard({
                                   "setupHours",
                                   "prodHoursTotal",
                                   "cleaningHours",
+                                  "kittingHours",
                                 ] as const
                               )[i],
                               n,
@@ -2215,7 +2246,12 @@ export default function BottleCostingBoard({
                       {
                         label: "QTY of Line Leaders",
                         get: (p: (typeof lb.phases)[number]) => p.leaders,
-                        keys: ["setupLeaders", "prodLeaders", "cleaningLeaders"],
+                        keys: [
+                          "setupLeaders",
+                          "prodLeaders",
+                          "cleaningLeaders",
+                          "kittingLeaders",
+                        ],
                       },
                       {
                         label: "QTY of Line Operators",
@@ -2224,6 +2260,7 @@ export default function BottleCostingBoard({
                           "setupOperators",
                           "prodOperators",
                           "cleaningOperators",
+                          "kittingOperators",
                         ],
                       },
                     ] as const
