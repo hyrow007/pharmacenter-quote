@@ -2116,9 +2116,13 @@ export default function BottleCostingBoard({
               color: "#7a4f00",
             }}
           >
+            {/* Points ONLY at Considerations. An earlier draft also offered
+                "or type the production shifts below" — but the table holding
+                that input is the very thing this message replaces, so the
+                instruction pointed at something that was not on screen. */}
             <strong>No production estimate yet.</strong> Enter bottles per
-            minute in Considerations, or type the production shifts directly
-            below once this card has a number to show.
+            minute in Considerations above. The shift tables appear once there
+            is a line speed, and the shifts stay editable from there.
           </div>
         ) : (
           <>
