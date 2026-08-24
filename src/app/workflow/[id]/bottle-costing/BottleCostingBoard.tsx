@@ -492,6 +492,18 @@ export type ComponentOption = {
 
 export type SavedState = {
   bom: BomLine[];
+  /**
+   * Quantity for THIS costing, when it differs from the workflow's stated one.
+   *
+   * Null means "use the workflow's figure" — the normal case. An override is a
+   * scenario ("what does 24,000 look like?") and deliberately does NOT write
+   * back to the workflow: the quantity on the request is a fact about what the
+   * customer asked for, and a costing experiment must not quietly rewrite it.
+   *
+   * Q0016 is exactly why this exists — its 12,000 is flagged CONFIRM BEFORE
+   * QUOTING on the spec itself.
+   */
+  quantityOverride: number | null;
   bottlesPerMinute: number | null;
   /**
    * Bottles in one master box, for a job WITHOUT an inner pack.
@@ -735,6 +747,7 @@ export function blankState(
       inventoryCostPerUnit: null,
       lastOrderCostPerUnit: null,
     })),
+    quantityOverride: null,
     bottlesPerMinute: null,
     bottlesPerMasterBox,
     // No spec question to seed these from, and no house standard worth
@@ -1231,6 +1244,13 @@ export default function BottleCostingBoard({
   const hasInnerPack = st.bom.some((l) => l.slot === "inner_pack");
 
   /**
+   * The quantity everything below costs against. The override when one is set,
+   * otherwise the workflow's. Resolved once here so no card can be looking at
+   * a different number than the card next to it.
+   */
+  const qty = st.quantityOverride ?? quantity;
+
+  /**
    * Bottles in one master box.
    *
    * WITHOUT an inner pack this is typed directly, as it always has been.
@@ -1279,7 +1299,7 @@ export default function BottleCostingBoard({
 
   const inputs: BottleCostingInputs = useMemo(
     () => ({
-      quantity,
+      quantity: qty,
       bom: st.bom,
       labor: {
         bottlesPerMinute: st.bottlesPerMinute,
@@ -1325,7 +1345,7 @@ export default function BottleCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, quantity],
+    [st, qty],
   );
 
   const r = useMemo(() => computeBottleCosting(inputs), [inputs]);
@@ -1337,8 +1357,8 @@ export default function BottleCostingBoard({
    * rather than drawing a table full of zeroes.
    */
   const lb = useMemo(
-    () => laborBreakdown(quantity, inputs.labor),
-    [quantity, inputs.labor],
+    () => laborBreakdown(qty, inputs.labor),
+    [qty, inputs.labor],
   );
 
   /**
@@ -1363,7 +1383,7 @@ export default function BottleCostingBoard({
       {
         itemRef: "ITEM 1",
         description: productName,
-        quantity: quantity ?? 0,
+        quantity: qty ?? 0,
         unitPrice: r.salePerUnit,
       },
     ];
@@ -1395,7 +1415,7 @@ export default function BottleCostingBoard({
       return;
     }
     setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }, [r, productName, quantity, workflowId, customerName, quoteNumber]);
+  }, [r, productName, qty, workflowId, customerName, quoteNumber]);
 
   /**
    * Same endpoint the pricing calculator and gummy formula save through — it
@@ -1430,10 +1450,19 @@ export default function BottleCostingBoard({
       <div style={shell}>
         <div style={band}>Considerations</div>
         <div style={metricGrid}>
+          {/* Editable, because the quantity on the request is often a
+              placeholder and a costing is where you test alternatives. It
+              writes to quantityOverride, NOT back to the workflow — what the
+              customer asked for is a fact, and trying 24,000 here must not
+              quietly rewrite it. Blank restores the workflow's figure. */}
           <ParamBlock label="QTY (Bottles)" nowrap>
-            <ReadOnly>
-              {quantity ? quantity.toLocaleString("en-US") : "—"}
-            </ReadOnly>
+            <NumField
+              value={st.quantityOverride ?? quantity}
+              onChange={(v) =>
+                set("quantityOverride", v === quantity ? null : v)
+              }
+              placeholder="required"
+            />
           </ParamBlock>
           <ParamBlock label="Bottles / minute" nowrap>
             <NumField
@@ -1451,59 +1480,21 @@ export default function BottleCostingBoard({
                 : "—"}
             </ReadOnly>
           </ParamBlock>
-          {/* The nesting decides which of these is typed and which is read.
-              Without an inner pack the case holds bottles and you say how
-              many. With one it holds inners, and bottles-per-box becomes the
-              product — shown, not asked, because asking twice invites the two
-              answers to disagree. */}
-          {hasInnerPack ? (
-            <>
-              <ParamBlock label="Bottles / inner pack" nowrap>
-                <NumField
-                  value={st.bottlesPerInnerPack}
-                  onChange={(v) => set("bottlesPerInnerPack", v)}
-                />
-              </ParamBlock>
-              <ParamBlock label="Inner packs / master box" nowrap>
-                <NumField
-                  value={st.innersPerMasterBox}
-                  onChange={(v) => set("innersPerMasterBox", v)}
-                />
-              </ParamBlock>
-              <ParamBlock label="Bottles / master box" nowrap>
+          {/* Only when the two differ, so the override is never silent. */}
+          {st.quantityOverride !== null &&
+            st.quantityOverride !== quantity && (
+              <ParamBlock label="Workflow qty" nowrap>
                 <ReadOnly>
-                  {bottlesPerMasterBoxEffective
-                    ? bottlesPerMasterBoxEffective.toLocaleString("en-US")
-                    : "—"}
+                  <span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}>
+                    {quantity ? quantity.toLocaleString("en-US") : "—"}
+                  </span>
                 </ReadOnly>
               </ParamBlock>
-              <ParamBlock label="Inner packs" nowrap>
-                <ReadOnly>
-                  {quantity && st.bottlesPerInnerPack
-                    ? Math.ceil(
-                        quantity / st.bottlesPerInnerPack,
-                      ).toLocaleString("en-US")
-                    : "—"}
-                </ReadOnly>
-              </ParamBlock>
-            </>
-          ) : (
-            <ParamBlock label="Bottles / master box" nowrap>
-              <NumField
-                value={st.bottlesPerMasterBox}
-                onChange={(v) => set("bottlesPerMasterBox", v)}
-              />
-            </ParamBlock>
-          )}
-          <ParamBlock label="Master boxes" nowrap>
-            <ReadOnly>
-              {quantity && bottlesPerMasterBoxEffective
-                ? Math.ceil(
-                    quantity / bottlesPerMasterBoxEffective,
-                  ).toLocaleString("en-US")
-                : "—"}
-            </ReadOnly>
-          </ParamBlock>
+            )}
+          {/* Master-box and inner-pack counts used to live here too. They are
+              typed on their own rows in Material Costs, where the part being
+              counted is right next to the count — so a second copy up here was
+              a second place for the same number to be edited. */}
         </div>
       </div>
 
@@ -1685,6 +1676,22 @@ export default function BottleCostingBoard({
                           : line.slot === "inner_pack"
                             ? "bottles per inner pack"
                             : "bottles"}
+                        {/* The derived bottle count, which used to sit in
+                            Considerations. With two levels of nesting the
+                            product is not obvious at a glance, and this is
+                            the one place it can be checked against the two
+                            numbers that produced it. */}
+                        {line.slot === "master_box" &&
+                          hasInnerPack &&
+                          bottlesPerMasterBoxEffective !== null && (
+                            <span style={{ opacity: 0.8 }}>
+                              {" · "}
+                              {bottlesPerMasterBoxEffective.toLocaleString(
+                                "en-US",
+                              )}{" "}
+                              bottles
+                            </span>
+                          )}
                       </div>
                     )}
                 </div>
@@ -2090,7 +2097,7 @@ export default function BottleCostingBoard({
         <CardTotal
           label="Material cost / bottle"
           perUnit={r.materialsPerUnit}
-          quantity={quantity}
+          quantity={qty}
         />
       </div>
 
@@ -2180,7 +2187,7 @@ export default function BottleCostingBoard({
                 }}
               >
                 {st.prodHoursTotal === null
-                  ? "Setup and cleaning default to 2 hours. Production is quantity ÷ bottles per minute — type over it to override."
+                  ? "Setup and cleaning default to 2 hours. Production is qty ÷ bottles per minute — type over it to override."
                   : "Production hours typed by hand; clear the field to go back to bottles per minute."}
               </div>
             </div>
@@ -2368,8 +2375,8 @@ export default function BottleCostingBoard({
                       <td style={labTd}>{labMoney(role.burdened, 2)}</td>
                       <td style={labTd}>{labMoney(role.total, 2)}</td>
                       <td style={labTd}>
-                        {quantity && quantity > 0
-                          ? labMoney(role.total / quantity, 4)
+                        {qty && qty > 0
+                          ? labMoney(role.total / qty, 4)
                           : labSum(null)}
                       </td>
                     </tr>
@@ -2393,7 +2400,7 @@ export default function BottleCostingBoard({
         <CardTotal
           label="Direct labor / bottle"
           perUnit={r.laborPerUnit}
-          quantity={quantity}
+          quantity={qty}
         />
       </div>
 
@@ -2436,7 +2443,7 @@ export default function BottleCostingBoard({
               ? r.overheadPerUnit + r.labTestingPerUnit
               : null
           }
-          quantity={quantity}
+          quantity={qty}
         />
       </div>
 
