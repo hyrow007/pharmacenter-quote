@@ -540,8 +540,6 @@ export type SavedState = {
   cleaningHours: number | null;
   cleaningLeaders: number | null;
   cleaningOperators: number | null;
-  /** Pulling and staging components. Defaults to 0 hours — not every job kits. */
-  kittingHours: number | null;
   kittingLeaders: number | null;
   kittingOperators: number | null;
   leaderRate: number | null;
@@ -771,14 +769,6 @@ export function blankState(
     cleaningHours: DEFAULT_CLEANING_HOURS,
     cleaningLeaders: 0,
     cleaningOperators: 2,
-    // NULL, not 0.
-    //
-    // Seeding an explicit 0 here looked harmless and was not: the model reads
-    // a typed value as an override, so a stored 0 beat the kitting-speed
-    // derivation and pinned the phase at zero hours no matter what speed was
-    // entered. Null means "nothing typed", which lets the speed drive it and
-    // still falls through to DEFAULT_KITTING_HOURS when there is no speed.
-    kittingHours: null,
     kittingLeaders: 0,
     kittingOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,
@@ -1162,7 +1152,6 @@ export default function BottleCostingBoard({
       prodHoursTotal: initial.prodHoursTotal ?? blank.prodHoursTotal,
       setupHours: initial.setupHours ?? blank.setupHours,
       cleaningHours: initial.cleaningHours ?? blank.cleaningHours,
-      kittingHours: initial.kittingHours ?? blank.kittingHours,
       kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
       kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
@@ -1340,7 +1329,11 @@ export default function BottleCostingBoard({
           operators: st.cleaningOperators,
         },
         kitting: {
-          hours: st.kittingHours,
+          // Always null: the board no longer offers a way to type this, so the
+          // speed-and-crew derivation is the only source. Passing a stale
+          // stored value would let an old typed figure outrank the inputs the
+          // user can actually see.
+          hours: null,
           leaders: st.kittingLeaders,
           operators: st.kittingOperators,
         },
@@ -1504,7 +1497,6 @@ export default function BottleCostingBoard({
             <NumField
               value={st.kittingSpeed}
               onChange={(v) => set("kittingSpeed", v)}
-              placeholder="optional"
             />
           </ParamBlock>
           <ParamBlock label="Line time (hours)" nowrap>
@@ -2162,7 +2154,7 @@ export default function BottleCostingBoard({
                 instruction pointed at something that was not on screen. */}
             <strong>No production estimate yet.</strong> Enter bottles per
             minute in Considerations above. The hours tables appear once there
-            is a line speed, and every figure stays editable from there.
+            is a line speed.
           </div>
         ) : (
           <>
@@ -2191,23 +2183,32 @@ export default function BottleCostingBoard({
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
                     {lb.phases.map((p, i) => (
                       <td key={p.label} style={labTd}>
-                        <LabNum
-                          value={p.totalHours}
-                          onChange={(n) =>
-                            set(
-                              (
-                                [
-                                  "setupHours",
-                                  "prodHoursTotal",
-                                  "cleaningHours",
-                                  "kittingHours",
-                                ] as const
-                              )[i],
-                              n,
-                            )
-                          }
-                          step="0.5"
-                        />
+                        {/* Kitting is READ-ONLY. It is a function of the
+                            kitting speed and the people on it, so an editable
+                            cell here would offer to contradict the two inputs
+                            that produce it — and whichever the user changed
+                            last would win silently. Change the speed or the
+                            crew instead. */}
+                        {p.label === "Kitting" ? (
+                          labSum(p.totalHours)
+                        ) : (
+                          <LabNum
+                            value={p.totalHours}
+                            onChange={(n) =>
+                              set(
+                                (
+                                  [
+                                    "setupHours",
+                                    "prodHoursTotal",
+                                    "cleaningHours",
+                                  ] as const
+                                )[i],
+                                n,
+                              )
+                            }
+                            step="0.5"
+                          />
+                        )}
                       </td>
                     ))}
                     <td style={labTd}>{labSum(lb.totalHours)}</td>
