@@ -274,8 +274,16 @@ export type OverheadItem = {
   payType?: "hourly" | "salary" | null;
   /** QuickBooks account, carried for audit reference only. */
   qbAccount?: string | null;
-  /** Percent of this line charged to this job's production line, 0-100. */
-  sharePct: number | null;
+  /**
+   * Percent of this line charged to this job's production line, 0-100.
+   *
+   * NOT nullable, deliberately — lib/formulas.ts declares it `number`, and the
+   * shared defaults in overheadCosting.ts have to satisfy BOTH types. Widening
+   * it here broke the gummy editor's build: a `number | null` array will not
+   * go into state typed `number`. A blank share means zero, and the UI coerces
+   * on the way in rather than carrying the null through.
+   */
+  sharePct: number;
 };
 
 /** How a group's rows convert to an effective monthly figure. */

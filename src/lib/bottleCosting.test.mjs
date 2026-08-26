@@ -600,3 +600,36 @@ const legacy={quantity:10000, bom:[],
 ok('legacy total still honoured', r2(B.computeBottleCosting(legacy).labTestingPerUnit*10000), 500);
 }
 }
+
+// ---- suite 15: per-role burden actually reaches the rate (scoped) ----
+//
+// Locks down a bug found on the live board: the Pay Rates tax and WC cells
+// were editable but were never mapped into the model, so every burdened rate
+// silently used the 8.5 / 4 defaults.
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const r2=(v)=>+v.toFixed(2);
+const L=(o)=>({bottlesPerMinute:null, kittingSpeed:null,
+  setup:{hours:2,leaders:1,operators:1},
+  production:{hours:10,leaders:1,operators:1},
+  cleaning:{hours:2,leaders:1,operators:1},
+  kitting:{hours:null,leaders:0,operators:0},
+  leaderRate:20, operatorRate:17, ...o});
+
+ok('default burden', r2(B.laborBreakdown(1000,L({})).roles[0].burdened), r2(20*1.125));
+// a typed tax rate must move the burdened figure
+ok('typed tax moves it',
+   r2(B.laborBreakdown(1000,L({leaderTaxPct:15})).roles[0].burdened), r2(20*(1+0.15+0.04)));
+ok('typed WC moves it',
+   r2(B.laborBreakdown(1000,L({leaderWcPct:0})).roles[0].burdened), r2(20*1.085));
+// and the two roles are independent
+{
+const b=B.laborBreakdown(1000,L({leaderTaxPct:15, operatorTaxPct:8.5}));
+ok('roles carry their own burden',
+   [r2(b.roles[0].burdened), r2(b.roles[1].burdened)],
+   [r2(20*1.19), r2(17*1.125)]);
+}
+// zero burden is honoured, not treated as "unset"
+ok('0% tax and 0% WC = base rate',
+   r2(B.laborBreakdown(1000,L({leaderTaxPct:0, leaderWcPct:0})).roles[0].burdened), 20);
+}

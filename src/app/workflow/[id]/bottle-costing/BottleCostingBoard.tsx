@@ -657,7 +657,7 @@ function OverheadGroup({
                   <td style={labTd}>
                     <LabNum
                       value={r.sharePct ?? 0}
-                      onChange={(n) => patch(i, { sharePct: n })}
+                      onChange={(n) => patch(i, { sharePct: n ?? 0 })}
                       step="1"
                     />
                   </td>
@@ -1880,6 +1880,15 @@ export default function BottleCostingBoard({
         },
         leaderRate: st.leaderRate,
         operatorRate: st.operatorRate,
+        // These were in SavedState and on the Pay Rates card from the start,
+        // but never made it into this mapping — so the tax and workers'-comp
+        // cells were editable and inert, and every burdened rate quietly used
+        // the 8.5 / 4 defaults no matter what was typed. Caught while chasing
+        // an unrelated build failure.
+        leaderTaxPct: st.leaderTaxPct,
+        leaderWcPct: st.leaderWcPct,
+        operatorTaxPct: st.operatorTaxPct,
+        operatorWcPct: st.operatorWcPct,
       },
       overhead: {
         rentLease: st.overheadRent,
