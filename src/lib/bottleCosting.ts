@@ -246,14 +246,105 @@ export type LaborInputs = {
   operatorWcPct?: number | null;
 };
 
+/**
+ * One overhead line.
+ *
+ * Structurally identical to the type in lib/formulas.ts, because these are the
+ * same rows: a lease, a salaried manager, an electricity bill. The plant's
+ * actual figures live in overheadDefaults.ts, shared by both calculators —
+ * only the SHAPE and the ARITHMETIC live here, because this file is where the
+ * money is worked out.
+ */
 export type OverheadItem = {
-  id: string;
   label: string;
-  /** Monthly cost of the item before any share is applied. */
+  /** Full monthly cost in $. For lease rows this is the BASE rent. */
   monthly: number;
-  /** Percent of that monthly cost this job should carry. */
+  /** CAM / additional rent, lease rows only. Effective = monthly + cam. */
+  cam?: number | null;
+  /**
+   * Labour rows carry a rate plus burden instead of a monthly figure.
+   *   hourly: monthly = rate x burden x hours x qty
+   *   salary: monthly = rate x burden x qty   (rate is already monthly)
+   */
+  rate?: number | null;
+  taxPct?: number | null;
+  wcPct?: number | null;
+  hours?: number | null;
+  qty?: number | null;
+  payType?: "hourly" | "salary" | null;
+  /** QuickBooks account, carried for audit reference only. */
+  qbAccount?: string | null;
+  /** Percent of this line charged to this job's production line, 0-100. */
   sharePct: number | null;
 };
+
+/** How a group's rows convert to an effective monthly figure. */
+export type OverheadGroupMode = "lease" | "labor" | undefined;
+
+/** Working hours per month used to monthlyise an hourly indirect-labour rate. */
+export const INDIRECT_HOURS_PER_MONTH = 173.33;
+
+/** Burdened rate for a labour row — hourly, or monthly for a salary row. */
+export function overheadBurdenedRate(r: OverheadItem): number {
+  return (
+    (num(r.rate) ?? 0) *
+    (1 + (num(r.taxPct) ?? DEFAULT_TAX_PCT) / 100 + (num(r.wcPct) ?? DEFAULT_WC_PCT) / 100)
+  );
+}
+
+/**
+ * Effective FULL monthly cost of one row, before its share is applied.
+ * Lease rows add CAM to the base rent; labour rows convert a rate; everything
+ * else is already monthly.
+ */
+export function overheadRowMonthly(
+  r: OverheadItem,
+  mode?: OverheadGroupMode,
+): number {
+  if (mode === "labor") {
+    const burdened = overheadBurdenedRate(r);
+    return r.payType === "salary"
+      ? burdened * (num(r.qty) ?? 1)
+      : burdened * (num(r.hours) ?? INDIRECT_HOURS_PER_MONTH) * (num(r.qty) ?? 1);
+  }
+  return (num(r.monthly) ?? 0) + (num(r.cam) ?? 0);
+}
+
+/** The portion of one row actually charged to this production line. */
+export function overheadRowCharged(
+  r: OverheadItem,
+  mode?: OverheadGroupMode,
+): number {
+  return overheadRowMonthly(r, mode) * ((num(r.sharePct) ?? 0) / 100);
+}
+
+/** Sum of a group's charged amounts. */
+export function overheadGroupCharged(
+  list: OverheadItem[],
+  mode?: OverheadGroupMode,
+): number {
+  return list.reduce((s, r) => s + overheadRowCharged(r, mode), 0);
+}
+
+/**
+ * One lab test line — a test that costs something and runs some number of
+ * times per job.
+ */
+export type LabTestItem = {
+  label: string;
+  /** Cost per test in $. */
+  cost: number;
+  /** Tests run per job. */
+  qty: number;
+};
+
+/** Total spend across a list of tests. */
+export function labTestsTotal(list: LabTestItem[]): number {
+  return list.reduce(
+    (s, t) => s + (num(t.cost) ?? 0) * (num(t.qty) ?? 0),
+    0,
+  );
+}
 
 export type OverheadInputs = {
   rentLease: OverheadItem[];
@@ -262,13 +353,29 @@ export type OverheadInputs = {
   workingDaysPerMonth: number | null;
 };
 
+/**
+ * Lab testing, as two lists rather than one flat total — raw-material tests
+ * and finished-product tests, matching the gummy Costing tab. The split
+ * matters because the two are triggered by different things: RM tests by lots
+ * arriving, FP tests by the batch shipping.
+ */
+export type LabTestingInputs = {
+  rawMaterials: LabTestItem[];
+  finishedProduct: LabTestItem[];
+};
+
 export type BottleCostingInputs = {
   /** Finished bottles being quoted. */
   quantity: number | null;
   bom: BomLine[];
   labor: LaborInputs;
   overhead: OverheadInputs;
-  /** Flat lab/testing cost for the whole job, spread across the quantity. */
+  /**
+   * Lab testing. The two-list form is preferred; `labTestingTotal` is the old
+   * single-figure field, still read so costings saved before the split keep
+   * their number.
+   */
+  labTesting?: LabTestingInputs;
   labTestingTotal?: number | null;
   /**
    * Margin tier. For contract-packaging bottles this board IS the pricing
@@ -797,13 +904,13 @@ export function overheadPerUnit(
   const wdpm = num(overhead.workingDaysPerMonth) ?? DEFAULT_WORKING_DAYS_PER_MONTH;
   if (q === null || q <= 0 || days === null || days <= 0 || wdpm <= 0) return null;
 
-  const sumList = (list: OverheadItem[]) =>
-    list.reduce((s, i) => s + i.monthly * ((num(i.sharePct) ?? 0) / 100), 0);
-
+  // Each group converts differently — lease rows add CAM, indirect-labour rows
+  // convert a burdened rate into a monthly figure — so the mode has to travel
+  // with the list. Shared with the gummy tab; see overheadCosting.ts.
   const monthly =
-    sumList(overhead.rentLease) +
-    sumList(overhead.indirectLabor) +
-    sumList(overhead.other);
+    overheadGroupCharged(overhead.rentLease, "lease") +
+    overheadGroupCharged(overhead.indirectLabor, "labor") +
+    overheadGroupCharged(overhead.other);
 
   return ((monthly / wdpm) * days) / q;
 }
@@ -831,7 +938,12 @@ export function computeBottleCosting(
 
   const ovh = overheadPerUnit(q, input.overhead, jobDays);
 
-  const testingTotal = num(input.labTestingTotal);
+  // Two lists if present, otherwise the pre-split single figure.
+  const testingTotal =
+    input.labTesting !== undefined
+      ? labTestsTotal(input.labTesting.rawMaterials) +
+        labTestsTotal(input.labTesting.finishedProduct)
+      : num(input.labTestingTotal);
   const testingPerUnit =
     testingTotal === null ? 0 : q === null || q <= 0 ? null : testingTotal / q;
 

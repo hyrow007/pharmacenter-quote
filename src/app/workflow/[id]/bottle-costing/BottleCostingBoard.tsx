@@ -26,6 +26,13 @@ import {
   DEFAULT_SETUP_HOURS,
   DEFAULT_CLEANING_HOURS,
   DEFAULT_WORKING_DAYS_PER_MONTH,
+  overheadRowMonthly,
+  overheadRowCharged,
+  overheadGroupCharged,
+  labTestsTotal,
+  type OverheadItem,
+  type LabTestItem,
+  type OverheadGroupMode,
   DEFAULT_TAX_PCT,
   DEFAULT_WC_PCT,
   laborBreakdown,
@@ -45,6 +52,12 @@ import {
   type BottleCostingInputs,
   type MarginMode,
 } from "@/lib/bottleCosting";
+import {
+  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_INDIRECT_DEFAULTS,
+  OVERHEAD_OTHER_DEFAULTS,
+  INDIRECT_HOURS_PER_MONTH,
+} from "@/lib/overheadCosting";
 import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalculator";
 
 /**
@@ -397,6 +410,491 @@ function LabNum({
   );
 }
 
+/**
+ * One overhead sub-card: Lease Expenses, Indirect Labor or Other Expenses.
+ *
+ * One component for all three rather than three tables, because the only real
+ * difference is which columns a row needs — a lease has CAM, a payroll row has
+ * a rate and a burden, an expense has neither. The Monthly / Share / Allocated
+ * / per-bottle tail is identical, and that tail is the part carrying money.
+ */
+function OverheadGroup({
+  title,
+  mode,
+  list,
+  onChange,
+  jobDays,
+  workingDays,
+  quantity,
+}: {
+  title: string;
+  mode: OverheadGroupMode;
+  list: OverheadItem[];
+  onChange: (next: OverheadItem[]) => void;
+  jobDays: number | null;
+  workingDays: number | null;
+  quantity: number | null;
+}) {
+  const patch = (i: number, p: Partial<OverheadItem>) =>
+    onChange(list.map((r, n) => (n === i ? { ...r, ...p } : r)));
+  const remove = (i: number) => onChange(list.filter((_, n) => n !== i));
+  const add = () =>
+    onChange([
+      ...list,
+      mode === "labor"
+        ? {
+            label: "",
+            monthly: 0,
+            payType: "hourly",
+            rate: 0,
+            qty: 1,
+            taxPct: DEFAULT_TAX_PCT,
+            wcPct: DEFAULT_WC_PCT,
+            hours: INDIRECT_HOURS_PER_MONTH,
+            sharePct: 0,
+          }
+        : { label: "", monthly: 0, sharePct: 0 },
+    ]);
+
+  const wd = workingDays ?? DEFAULT_WORKING_DAYS_PER_MONTH;
+  /** This row's contribution to the cost of one bottle. */
+  const perUnitOf = (charged: number) =>
+    jobDays === null || wd <= 0 || !quantity || quantity <= 0
+      ? null
+      : ((charged / wd) * jobDays) / quantity;
+
+  const groupCharged = overheadGroupCharged(list, mode);
+
+  return (
+    <div style={labSub}>
+      <div style={labSubTitle}>{title}</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ ...labTable, minWidth: mode === "labor" ? 1150 : 760 }}>
+          <thead>
+            <tr style={labHeadRow}>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 190 }}>
+                Item
+              </th>
+              {mode === "lease" && (
+                <>
+                  <th style={{ ...labTh, width: 120 }}>Base rent</th>
+                  <th style={{ ...labTh, width: 120 }}>CAM</th>
+                </>
+              )}
+              {mode === "labor" && (
+                <>
+                  <th style={{ ...labTh, width: 110 }}>Pay type</th>
+                  <th style={{ ...labTh, width: 110 }}>Rate</th>
+                  <th style={{ ...labTh, width: 80 }}>QTY</th>
+                  <th style={{ ...labTh, width: 90 }}>Tax %</th>
+                  <th style={{ ...labTh, width: 90 }}>WC %</th>
+                  <th style={{ ...labTh, width: 100 }}>Hours / mo</th>
+                </>
+              )}
+              {mode === undefined && (
+                <>
+                  <th style={{ ...labTh, width: 110 }}>QB acct</th>
+                  <th style={{ ...labTh, width: 130 }}>Monthly</th>
+                </>
+              )}
+              {mode !== undefined && (
+                <th style={{ ...labTh, width: 130 }}>Monthly</th>
+              )}
+              <th style={{ ...labTh, width: 100 }}>Share %</th>
+              <th style={{ ...labTh, width: 130 }}>Allocated</th>
+              <th style={{ ...labTh, width: 120 }}>$ / bottle</th>
+              <th style={{ ...labTh, width: 44 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((r, i) => {
+              const charged = overheadRowCharged(r, mode);
+              const per = perUnitOf(charged);
+              return (
+                <tr key={i} style={labBodyRow}>
+                  <td style={{ ...labTd, textAlign: "left" }}>
+                    <input
+                      value={r.label}
+                      onChange={(e) => patch(i, { label: e.target.value })}
+                      placeholder="Name this line"
+                      style={{
+                        width: "100%",
+                        padding: "4px 6px",
+                        border: "1px solid var(--line, #e3dcc9)",
+                        borderRadius: 6,
+                        fontSize: 13,
+                        background: "#fff",
+                      }}
+                    />
+                  </td>
+
+                  {mode === "lease" && (
+                    <>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.monthly}
+                          onChange={(n) => patch(i, { monthly: n ?? 0 })}
+                          step="0.01"
+                          prefix="$"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.cam ?? 0}
+                          onChange={(n) => patch(i, { cam: n })}
+                          step="0.01"
+                          prefix="$"
+                        />
+                      </td>
+                    </>
+                  )}
+
+                  {mode === "labor" && (
+                    <>
+                      <td style={labTd}>
+                        <select
+                          value={r.payType ?? "hourly"}
+                          onChange={(e) =>
+                            patch(i, {
+                              payType: e.target.value as "hourly" | "salary",
+                            })
+                          }
+                          style={{
+                            width: "100%",
+                            padding: "4px 6px",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            background: "#fff",
+                          }}
+                        >
+                          <option value="hourly">Hourly</option>
+                          <option value="salary">Salary</option>
+                        </select>
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.rate ?? 0}
+                          onChange={(n) => patch(i, { rate: n })}
+                          step="0.01"
+                          prefix="$"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.qty ?? 1}
+                          onChange={(n) => patch(i, { qty: n })}
+                          step="1"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.taxPct ?? DEFAULT_TAX_PCT}
+                          onChange={(n) => patch(i, { taxPct: n })}
+                          step="0.1"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.wcPct ?? DEFAULT_WC_PCT}
+                          onChange={(n) => patch(i, { wcPct: n })}
+                          step="0.1"
+                        />
+                      </td>
+                      <td style={labTd}>
+                        {/* Only meaningful for hourly rows — a salary is
+                            already a monthly figure. */}
+                        {r.payType === "salary" ? (
+                          labSum(null)
+                        ) : (
+                          <LabNum
+                            value={r.hours ?? INDIRECT_HOURS_PER_MONTH}
+                            onChange={(n) => patch(i, { hours: n })}
+                            step="0.01"
+                          />
+                        )}
+                      </td>
+                    </>
+                  )}
+
+                  {mode === undefined && (
+                    <>
+                      <td style={labTd}>
+                        <input
+                          value={r.qbAccount ?? ""}
+                          onChange={(e) =>
+                            patch(i, { qbAccount: e.target.value })
+                          }
+                          placeholder="—"
+                          style={{
+                            width: "100%",
+                            padding: "4px 6px",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            textAlign: "right",
+                            background: "#fff",
+                          }}
+                        />
+                      </td>
+                      <td style={labTd}>
+                        <LabNum
+                          value={r.monthly}
+                          onChange={(n) => patch(i, { monthly: n ?? 0 })}
+                          step="0.01"
+                          prefix="$"
+                        />
+                      </td>
+                    </>
+                  )}
+
+                  {/* Effective monthly — base + CAM for a lease, the burdened
+                      conversion for payroll. Computed, never typed. */}
+                  {mode !== undefined && (
+                    <td style={labTd}>{labMoney(overheadRowMonthly(r, mode), 2)}</td>
+                  )}
+
+                  <td style={labTd}>
+                    <LabNum
+                      value={r.sharePct ?? 0}
+                      onChange={(n) => patch(i, { sharePct: n })}
+                      step="1"
+                    />
+                  </td>
+                  <td style={labTd}>{labMoney(charged, 2)}</td>
+                  <td style={labTd}>
+                    {per === null ? labSum(null) : labMoney(per, 4)}
+                  </td>
+                  <td style={labTd}>
+                    <button
+                      type="button"
+                      onClick={() => remove(i)}
+                      title="Remove this line"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#8b2f2f",
+                        cursor: "pointer",
+                        fontSize: 15,
+                        lineHeight: 1,
+                        padding: 2,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+
+            <tr style={labTotalRow}>
+              <td style={{ ...labTh, textAlign: "left" }}>Group total</td>
+              {mode === "lease" && (
+                <>
+                  <td style={labTd} />
+                  <td style={labTd} />
+                </>
+              )}
+              {mode === "labor" && (
+                <>
+                  <td style={labTd} />
+                  <td style={labTd} />
+                  <td style={labTd} />
+                  <td style={labTd} />
+                  <td style={labTd} />
+                  <td style={labTd} />
+                </>
+              )}
+              {mode === undefined && (
+                <>
+                  <td style={labTd} />
+                  <td style={labTd} />
+                </>
+              )}
+              {mode !== undefined && <td style={labTd} />}
+              <td style={labTd} />
+              <td style={labTd}>{labMoney(groupCharged, 2)}</td>
+              <td style={labTd}>
+                {perUnitOf(groupCharged) === null
+                  ? labSum(null)
+                  : labMoney(perUnitOf(groupCharged) as number, 4)}
+              </td>
+              <td style={labTd} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "0 14px 12px" }}>
+        <button
+          type="button"
+          onClick={add}
+          style={{
+            padding: "5px 12px",
+            border: "1px solid var(--teal-700, #1d6c7b)",
+            borderRadius: 6,
+            background: "#fff",
+            color: "var(--teal-900, #0f4a56)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Add line
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One lab-testing sub-card: Raw Materials or Finished Product.
+ *
+ * Starts empty on purpose. Testing varies by customer and by job, and a seeded
+ * list would put dollars on a quote that nobody chose to spend.
+ */
+function LabTestGroup({
+  title,
+  list,
+  onChange,
+  quantity,
+}: {
+  title: string;
+  list: LabTestItem[];
+  onChange: (next: LabTestItem[]) => void;
+  quantity: number | null;
+}) {
+  const patch = (i: number, p: Partial<LabTestItem>) =>
+    onChange(list.map((r, n) => (n === i ? { ...r, ...p } : r)));
+  const remove = (i: number) => onChange(list.filter((_, n) => n !== i));
+  const total = labTestsTotal(list);
+  const per = quantity && quantity > 0 ? total / quantity : null;
+
+  return (
+    <div style={labSub}>
+      <div style={labSubTitle}>{title}</div>
+      <table style={labTable}>
+        <thead>
+          <tr style={labHeadRow}>
+            <th style={{ ...labTh, textAlign: "left", minWidth: 200 }}>Test</th>
+            <th style={{ ...labTh, width: 150 }}>Cost / test</th>
+            <th style={{ ...labTh, width: 150 }}>Tests / job</th>
+            <th style={{ ...labTh, width: 150 }}>Job total</th>
+            <th style={{ ...labTh, width: 150 }}>$ / bottle</th>
+            <th style={{ ...labTh, width: 44 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && (
+            <tr style={labBodyRow}>
+              <td
+                colSpan={6}
+                style={{
+                  ...labTd,
+                  textAlign: "left",
+                  fontWeight: 500,
+                  fontStyle: "italic",
+                  color: "var(--ink-3, #7b7364)",
+                }}
+              >
+                No tests on this job yet.
+              </td>
+            </tr>
+          )}
+          {list.map((t, i) => {
+            const line = (Number(t.cost) || 0) * (Number(t.qty) || 0);
+            return (
+              <tr key={i} style={labBodyRow}>
+                <td style={{ ...labTd, textAlign: "left" }}>
+                  <input
+                    value={t.label}
+                    onChange={(e) => patch(i, { label: e.target.value })}
+                    placeholder="Name this test"
+                    style={{
+                      width: "100%",
+                      padding: "4px 6px",
+                      border: "1px solid var(--line, #e3dcc9)",
+                      borderRadius: 6,
+                      fontSize: 13,
+                      background: "#fff",
+                    }}
+                  />
+                </td>
+                <td style={labTd}>
+                  <LabNum
+                    value={t.cost}
+                    onChange={(n) => patch(i, { cost: n ?? 0 })}
+                    step="0.01"
+                    prefix="$"
+                  />
+                </td>
+                <td style={labTd}>
+                  <LabNum
+                    value={t.qty}
+                    onChange={(n) => patch(i, { qty: n ?? 0 })}
+                    step="1"
+                  />
+                </td>
+                <td style={labTd}>{labMoney(line, 2)}</td>
+                <td style={labTd}>
+                  {quantity && quantity > 0
+                    ? labMoney(line / quantity, 4)
+                    : labSum(null)}
+                </td>
+                <td style={labTd}>
+                  <button
+                    type="button"
+                    onClick={() => remove(i)}
+                    title="Remove this test"
+                    style={{
+                      border: "none",
+                      background: "none",
+                      color: "#8b2f2f",
+                      cursor: "pointer",
+                      fontSize: 15,
+                      lineHeight: 1,
+                      padding: 2,
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          <tr style={labTotalRow}>
+            <td style={{ ...labTh, textAlign: "left" }}>Group total</td>
+            <td style={labTd} />
+            <td style={labTd} />
+            <td style={labTd}>{labMoney(total, 2)}</td>
+            <td style={labTd}>
+              {per === null ? labSum(null) : labMoney(per, 4)}
+            </td>
+            <td style={labTd} />
+          </tr>
+        </tbody>
+      </table>
+      <div style={{ padding: "0 14px 12px" }}>
+        <button
+          type="button"
+          onClick={() => onChange([...list, { label: "", cost: 0, qty: 1 }])}
+          style={{
+            padding: "5px 12px",
+            border: "1px solid var(--teal-700, #1d6c7b)",
+            borderRadius: 6,
+            background: "#fff",
+            color: "var(--teal-900, #0f4a56)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Add test
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ReadOnly({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -549,10 +1047,17 @@ export type SavedState = {
   leaderWcPct: number | null;
   operatorTaxPct: number | null;
   operatorWcPct: number | null;
-  overheadMonthly: number | null;
-  overheadSharePct: number | null;
+  /**
+   * Overhead as three editable lists, matching the gummy Costing tab. The old
+   * single overheadMonthly/overheadSharePct pair is migrated on load.
+   */
+  overheadRent: OverheadItem[];
+  overheadIndirect: OverheadItem[];
+  overheadOther: OverheadItem[];
   workingDaysPerMonth: number | null;
-  labTestingTotal: number | null;
+  /** Lab testing as two lists — raw material and finished product. */
+  labTestRm: LabTestItem[];
+  labTestFp: LabTestItem[];
 
   // ---- pricing tier ----
   // For contract-packaging bottles this board IS the pricing calculator, so
@@ -777,10 +1282,14 @@ export function blankState(
     leaderWcPct: DEFAULT_WC_PCT,
     operatorTaxPct: DEFAULT_TAX_PCT,
     operatorWcPct: DEFAULT_WC_PCT,
-    overheadMonthly: null,
-    overheadSharePct: null,
+    overheadRent: OVERHEAD_RENT_DEFAULTS,
+    overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
+    overheadOther: OVERHEAD_OTHER_DEFAULTS,
     workingDaysPerMonth: DEFAULT_WORKING_DAYS_PER_MONTH,
-    labTestingTotal: null,
+    // Empty, not seeded. Testing varies job to job and a default list would
+    // put invented dollars on every quote.
+    labTestRm: [],
+    labTestFp: [],
     marginPct: DEFAULT_MARGIN_PCT,
     marginMode: "gross-margin",
     hosCommissionPct: DEFAULT_HOS_COMMISSION_PCT,
@@ -1131,6 +1640,15 @@ export default function BottleCostingBoard({
       spec,
     );
     if (!initial) return blank;
+    // Read off the pre-list shape before it is spread away.
+    const legacy = initial as unknown as {
+      overheadMonthly?: number | null;
+      overheadSharePct?: number | null;
+      labTestingTotal?: number | null;
+    };
+    const legacyOverheadMonthly = legacy.overheadMonthly ?? null;
+    const legacySharePct = legacy.overheadSharePct ?? null;
+    const legacyLabTotal = legacy.labTestingTotal ?? null;
     // Costings saved BEFORE the pricing tier existed have no margin fields.
     // Spreading blank first backfills them, so an old record opens with the
     // standard 30% / commissions rather than an undefined that would turn
@@ -1152,6 +1670,29 @@ export default function BottleCostingBoard({
       prodHoursTotal: initial.prodHoursTotal ?? blank.prodHoursTotal,
       setupHours: initial.setupHours ?? blank.setupHours,
       cleaningHours: initial.cleaningHours ?? blank.cleaningHours,
+      // Costings saved before the three-list overhead card. The old pair was
+      // one lump sum with one share; carry it across as a single "Other" row
+      // so the number survives and is visible, rather than silently resetting
+      // the job to the plant defaults it was never costed against.
+      overheadRent: initial.overheadRent ?? blank.overheadRent,
+      overheadIndirect: initial.overheadIndirect ?? blank.overheadIndirect,
+      overheadOther:
+        initial.overheadOther ??
+        (legacyOverheadMonthly && legacyOverheadMonthly > 0
+          ? [
+              {
+                label: "Facility overhead (migrated)",
+                monthly: legacyOverheadMonthly,
+                sharePct: legacySharePct ?? 100,
+              },
+            ]
+          : blank.overheadOther),
+      labTestRm:
+        initial.labTestRm ??
+        (legacyLabTotal && legacyLabTotal > 0
+          ? [{ label: "Lab testing (migrated)", cost: legacyLabTotal, qty: 1 }]
+          : []),
+      labTestFp: initial.labTestFp ?? [],
       kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
       kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
@@ -1341,22 +1882,15 @@ export default function BottleCostingBoard({
         operatorRate: st.operatorRate,
       },
       overhead: {
-        rentLease:
-          st.overheadMonthly && st.overheadMonthly > 0
-            ? [
-                {
-                  id: "oh",
-                  label: "Facility overhead",
-                  monthly: st.overheadMonthly,
-                  sharePct: st.overheadSharePct,
-                },
-              ]
-            : [],
-        indirectLabor: [],
-        other: [],
+        rentLease: st.overheadRent,
+        indirectLabor: st.overheadIndirect,
+        other: st.overheadOther,
         workingDaysPerMonth: st.workingDaysPerMonth,
       },
-      labTestingTotal: st.labTestingTotal,
+      labTesting: {
+        rawMaterials: st.labTestRm,
+        finishedProduct: st.labTestFp,
+      },
       pricing: {
         marginPct: st.marginPct,
         marginMode: st.marginMode,
@@ -1379,6 +1913,35 @@ export default function BottleCostingBoard({
     () => laborBreakdown(qty, inputs.labor),
     [qty, inputs.labor],
   );
+
+  /**
+   * How many working days this job occupies the floor.
+   *
+   * Total labour hours over an 8-hour day, left FRACTIONAL. Overhead is a
+   * smooth spread rather than something you buy in whole days, so rounding a
+   * 13-hour job up to two would overcharge it by half. Null when there is no
+   * labour estimate at all — the same rule as everywhere else.
+   */
+  const jobDays = useMemo(
+    () => (lb === null ? null : lb.totalHours / 8),
+    [lb],
+  );
+
+  /** Charged monthly overhead: every row's share, across all three groups. */
+  const overheadMonthlyCharged = useMemo(
+    () =>
+      overheadGroupCharged(st.overheadRent, "lease") +
+      overheadGroupCharged(st.overheadIndirect, "labor") +
+      overheadGroupCharged(st.overheadOther),
+    [st.overheadRent, st.overheadIndirect, st.overheadOther],
+  );
+
+  /** That monthly charge, prorated to this job's days. */
+  const overheadJobTotal = useMemo(() => {
+    const wd = st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH;
+    if (jobDays === null || wd <= 0) return null;
+    return (overheadMonthlyCharged / wd) * jobDays;
+  }, [overheadMonthlyCharged, jobDays, st.workingDaysPerMonth]);
 
   /**
    * Issue a Quote — same customer-facing document the pricing calculator
@@ -2448,45 +3011,123 @@ export default function BottleCostingBoard({
         />
       </div>
 
-      {/* ---------- Overhead ---------- */}
+      {/* ---------- Overhead ----------
+          Three sub-cards, as on the gummy Costing tab: the lease, the indirect
+          payroll, and everything else. Each row carries a share percentage —
+          the fraction of that monthly cost this production line should bear —
+          and the allocation spreads the charged total over the job's days.
+
+          The plant figures come from lib/overheadCosting.ts, shared with the
+          gummy tab so a rent rise is edited once. */}
       <div style={shell}>
-        <div style={band}>Overhead &amp; Testing</div>
-        <div style={metricGrid}>
-          <ParamBlock label="Facility overhead / month" nowrap>
-            <NumField
-              value={st.overheadMonthly}
-              onChange={(v) => set("overheadMonthly", v)}
-            />
-          </ParamBlock>
-          <ParamBlock label="Share for this job (%)" nowrap>
-            <NumField
-              value={st.overheadSharePct}
-              onChange={(v) => set("overheadSharePct", v)}
-            />
-          </ParamBlock>
-          <ParamBlock label="Working days / month" nowrap>
-            <NumField
-              value={st.workingDaysPerMonth}
-              onChange={(v) => set("workingDaysPerMonth", v)}
-            />
-          </ParamBlock>
-          <ParamBlock label="Lab testing (job total)" nowrap>
-            <NumField
-              value={st.labTestingTotal}
-              onChange={(v) => set("labTestingTotal", v)}
-            />
-          </ParamBlock>
+        <div style={band}>Overhead Costs</div>
+
+        {(
+          [
+            { title: "Lease Expenses", key: "overheadRent", mode: "lease" },
+            { title: "Indirect Labor", key: "overheadIndirect", mode: "labor" },
+            { title: "Other Expenses", key: "overheadOther", mode: undefined },
+          ] as const
+        ).map((g) => (
+          <OverheadGroup
+            key={g.title}
+            title={g.title}
+            mode={g.mode as OverheadGroupMode}
+            list={st[g.key]}
+            onChange={(next) => set(g.key, next)}
+            jobDays={jobDays}
+            workingDays={st.workingDaysPerMonth}
+            quantity={qty}
+          />
+        ))}
+
+        {/* ---- Job Allocation ---- */}
+        <div style={labSub}>
+          <div style={labSubTitle}>Job Allocation</div>
+          <table style={labTable}>
+            <thead>
+              <tr style={labHeadRow}>
+                <th style={{ ...labTh, textAlign: "left" }} />
+                <th style={{ ...labTh, width: 170 }}>Charged / month</th>
+                <th style={{ ...labTh, width: 170 }}>Working days</th>
+                <th style={{ ...labTh, width: 170 }}>Job days</th>
+                <th style={{ ...labTh, width: 170 }}>Job total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={labBodyRow}>
+                <td style={{ ...labTh, textAlign: "left" }}>Allocation</td>
+                <td style={labTd}>{labMoney(overheadMonthlyCharged, 2)}</td>
+                <td style={labTd}>
+                  <LabNum
+                    value={st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH}
+                    onChange={(n) => set("workingDaysPerMonth", n)}
+                    step="1"
+                  />
+                </td>
+                {/* Job days is hours ÷ 8, left fractional — overhead is a
+                    smooth spread, so rounding a 13-hour job up to two whole
+                    days would overcharge it by half. */}
+                <td style={labTd}>
+                  {jobDays === null ? labSum(null) : labSum(jobDays, 2)}
+                </td>
+                <td style={labTd}>
+                  {overheadJobTotal === null
+                    ? labSum(null)
+                    : labMoney(overheadJobTotal, 2)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            style={{
+              padding: "0 14px 10px",
+              fontSize: 11.5,
+              color: "var(--ink-3, #7b7364)",
+            }}
+          >
+            Share percentages carry over from the gummy line as a reference
+            point — they describe how much of the plant that line bears. A
+            bottling job occupies the floor differently, so treat them as a
+            starting figure rather than a settled one.
+          </div>
         </div>
-        {/* Overhead AND testing, because both are entered on this card and a
-            footer that showed only one would be a subtotal of half the card.
-            Null if either is unresolved — the usual rule. */}
+
         <CardTotal
-          label="Overhead + testing / bottle"
-          perUnit={
-            r.overheadPerUnit !== null && r.labTestingPerUnit !== null
-              ? r.overheadPerUnit + r.labTestingPerUnit
-              : null
-          }
+          label="Overhead / bottle"
+          perUnit={r.overheadPerUnit}
+          quantity={qty}
+        />
+      </div>
+
+      {/* ---------- Lab Testing ----------
+          Its own card, as on the gummy Costing tab. Two lists because the two
+          are triggered by different things: raw-material tests by lots
+          arriving, finished-product tests by the job shipping.
+
+          Seeded EMPTY. A default list would put invented dollars on a quote,
+          and testing genuinely varies job to job. */}
+      <div style={shell}>
+        <div style={band}>Lab Testing</div>
+
+        {(
+          [
+            { title: "Raw Materials", key: "labTestRm" },
+            { title: "Finished Product", key: "labTestFp" },
+          ] as const
+        ).map((g) => (
+          <LabTestGroup
+            key={g.title}
+            title={g.title}
+            list={st[g.key]}
+            onChange={(next) => set(g.key, next)}
+            quantity={qty}
+          />
+        ))}
+
+        <CardTotal
+          label="Lab testing / bottle"
+          perUnit={r.labTestingPerUnit}
           quantity={qty}
         />
       </div>

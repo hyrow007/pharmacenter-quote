@@ -528,3 +528,75 @@ ok('null and 0 differ',
    B.laborBreakdown(12000,L(null)).phases[3].totalHours !==
    B.laborBreakdown(12000,L(0)).phases[3].totalHours, true);
 }
+
+// ---- suite 14: overhead rows + lab testing lists (scoped) ----
+{
+const ok=(n,got,want)=>console.log((JSON.stringify(got)===JSON.stringify(want)?'PASS':'**FAIL**').padEnd(10),n,'got',JSON.stringify(got));
+const r2=(v)=>+v.toFixed(2);
+
+// a lease row: base rent + CAM, then its share
+const suite400={label:'Suite 400', monthly:4182.08, cam:1775.73, sharePct:100};
+ok('lease adds CAM', r2(B.overheadRowMonthly(suite400,'lease')), 5957.81);
+ok('  ...at 100% share', r2(B.overheadRowCharged(suite400,'lease')), 5957.81);
+const suite500={label:'Suite 500/600', monthly:12087.48, cam:5132.38, sharePct:50};
+ok('half a lease', r2(B.overheadRowCharged(suite500,'lease')), r2(17219.86*0.5));
+
+// an hourly labour row: rate x burden x hours x qty
+const mech={label:'Plant Mechanic', monthly:0, payType:'hourly', rate:26, qty:1,
+            taxPct:8.5, wcPct:4, hours:173.33, sharePct:25};
+ok('hourly burdened rate', r2(B.overheadBurdenedRate(mech)), r2(26*1.125));
+ok('hourly monthly',       r2(B.overheadRowMonthly(mech,'labor')), r2(26*1.125*173.33));
+ok('  ...at 25% share',    r2(B.overheadRowCharged(mech,'labor')), r2(26*1.125*173.33*0.25));
+
+// three warehouse staff on the same row
+const wh={...mech, label:'Warehouse Staff', rate:15, qty:3};
+ok('qty multiplies the row', r2(B.overheadRowMonthly(wh,'labor')), r2(15*1.125*173.33*3));
+
+// a salary row ignores hours -- the rate IS the month
+const pm={label:'Production Manager', monthly:0, payType:'salary', rate:4525.41, qty:1,
+          taxPct:8.5, wcPct:4, hours:173.33, sharePct:25};
+ok('salary ignores hours', r2(B.overheadRowMonthly(pm,'labor')), r2(4525.41*1.125));
+
+// a plain expense is already monthly
+const power={label:'Electricity', monthly:4497, sharePct:30};
+ok('plain expense',        r2(B.overheadRowMonthly(power)), 4497);
+ok('  ...at 30% share',    r2(B.overheadRowCharged(power)), r2(4497*0.3));
+
+// groups sum their charged amounts
+ok('group total', r2(B.overheadGroupCharged([suite400,suite500],'lease')),
+   r2(5957.81 + 17219.86*0.5));
+
+// lab tests
+const rm=[{label:'Microbiology',cost:80,qty:2},{label:'Heavy metals',cost:120,qty:1}];
+ok('lab tests total', B.labTestsTotal(rm), 280);
+ok('empty list is 0',  B.labTestsTotal([]), 0);
+
+// the two lists reach the per-unit figure, and beat the legacy flat field
+{
+const base={quantity:10000, bom:[],
+  labor:{bottlesPerMinute:null, kittingSpeed:null,
+    setup:{hours:2,leaders:0,operators:0},
+    production:{hours:10,leaders:0,operators:0},
+    cleaning:{hours:2,leaders:0,operators:0},
+    kitting:{hours:null,leaders:0,operators:0},
+    leaderRate:20, operatorRate:17},
+  overhead:{rentLease:[],indirectLabor:[],other:[],workingDaysPerMonth:21},
+  labTesting:{rawMaterials:rm, finishedProduct:[{label:'FP micro',cost:80,qty:1}]},
+  labTestingTotal: 99999};
+const res=B.computeBottleCosting(base);
+ok('lists win over the legacy total', r2(res.labTestingPerUnit*10000), 360);
+}
+// with no lists at all the legacy field still works
+{
+const legacy={quantity:10000, bom:[],
+  labor:{bottlesPerMinute:null, kittingSpeed:null,
+    setup:{hours:2,leaders:0,operators:0},
+    production:{hours:10,leaders:0,operators:0},
+    cleaning:{hours:2,leaders:0,operators:0},
+    kitting:{hours:null,leaders:0,operators:0},
+    leaderRate:20, operatorRate:17},
+  overhead:{rentLease:[],indirectLabor:[],other:[],workingDaysPerMonth:21},
+  labTestingTotal: 500};
+ok('legacy total still honoured', r2(B.computeBottleCosting(legacy).labTestingPerUnit*10000), 500);
+}
+}

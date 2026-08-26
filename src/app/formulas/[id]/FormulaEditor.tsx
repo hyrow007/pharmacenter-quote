@@ -63,46 +63,18 @@ import {
   type VersionDiff,
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
+import {
+  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_INDIRECT_DEFAULTS,
+  OVERHEAD_OTHER_DEFAULTS,
+  INDIRECT_HOURS_PER_MONTH,
+} from "@/lib/overheadCosting";
 
 // -----------------------------------------------------------------------------
-// v60.1: default overhead line items — worked out with the operator from
-// the lease ledgers, ADP roster (burdened at tax 8.5% + WC 4%), and the
-// Jan–Jun 2026 P&L averages. All editable per formula; these are just
-// the starting point when a version has no saved overhead lists.
+// v72: the default overhead rows moved to lib/overheadCosting.ts so the bottle
+// board can spread the SAME plant figures. They used to be declared here; a
+// second copy would have meant a rent rise had to be remembered twice.
 // -----------------------------------------------------------------------------
-const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
-  { label: "Suite 400", monthly: 4182.08, cam: 1775.73, sharePct: 100 },
-  { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
-];
-// Indirect labor rows carry hourly rates (sum of the ADP department's
-// active rates) + burden %, like the Pay Rates card. monthly is unused
-// when `rate` is set (kept 0 for the type).
-// One row per rate class (per-person rate × QTY), pulled from the ADP
-// sync. Quality has three classes; Warehouse is three people at one
-// rate. Labels are editable if the class names should differ.
-// Salaried roles (per ADP: paid biweekly salaries) carry their MONTHLY
-// salary in `rate` with payType "salary"; hourly roles carry $/hr.
-const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [
-  { label: "Production Manager", monthly: 0, payType: "salary", rate: 4525.41, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Plant Mechanic", monthly: 0, payType: "hourly", rate: 26.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Manager", monthly: 0, payType: "salary", rate: 5250.01, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Tech", monthly: 0, payType: "hourly", rate: 17.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Quality Tech II", monthly: 0, payType: "hourly", rate: 15.0, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  { label: "Warehouse Staff", monthly: 0, payType: "hourly", rate: 15.0, qty: 3, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-  // Part-time salaried: $803.68 biweekly (ADP Base Rate) × 26 / 12 = $1,741.31/mo
-  { label: "Purchasing Logistics", monthly: 0, payType: "salary", rate: 1741.31, qty: 1, taxPct: 8.5, wcPct: 4, hours: 173.33, sharePct: 25 },
-];
-/** Working hours per month for indirect-labor monthly conversion. */
-const INDIRECT_HOURS_PER_MONTH = 173.33;
-const OVERHEAD_OTHER_DEFAULTS: OverheadItem[] = [
-  { label: "Electricity", monthly: 4497, qbAccount: "5135.30", sharePct: 30 },
-  { label: "Warehouse Supplies & Tools", monthly: 2525, qbAccount: "5195.19", sharePct: 40 },
-  { label: "Licenses & Permits", monthly: 2428, qbAccount: "5145.70", sharePct: 40 },
-  { label: "Insurance (liability + property)", monthly: 3281, qbAccount: "5130", sharePct: 40 },
-  { label: "Repairs & Maintenance", monthly: 1278, qbAccount: "5145", sharePct: 40 },
-  { label: "Cleaning", monthly: 675, qbAccount: "5135.05", sharePct: 40 },
-  { label: "Other Utilities & Services", monthly: 291, qbAccount: "5135", sharePct: 40 },
-];
 
 // Raw-material catalog option surfaced to the editor. Serialised from
 // server so the client doesn't need a separate fetch.
