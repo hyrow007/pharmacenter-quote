@@ -32,8 +32,38 @@ import type { OverheadItem } from "./bottleCosting";
 /** Working hours per month used to monthlyise an hourly indirect-labour rate. */
 export const INDIRECT_HOURS_PER_MONTH = 173.33;
 
+/**
+ * SUITE 300 — from the Sixth Amendment to Lease (July 2025).
+ *
+ * The row this replaces was labelled "Suite 400", which the lease itself shows
+ * to be two moves out of date: Suite 400 was the ORIGINAL 5,300 sq ft premises
+ * and the First Amendment (Dec 2011) vacated it and relocated the tenant to
+ * Suite 300, 15851 SW 41st Street, Davie FL — approximately 10,720 rentable
+ * square feet. Every quote priced off that row was carrying the rent of a unit
+ * PharmaCenter left fifteen years ago.
+ *
+ * BASE RENT SCHEDULE — Extended Term, 1 Aug 2025 to 30 Nov 2030:
+ *
+ *   8-1-25 to  7-31-26   $16.50 /sq ft   $14,740.00 /mo  (first 4 months abated)
+ *   8-1-26 to  7-31-27   $17.16 /sq ft   $15,329.60 /mo  <-- current
+ *   8-1-27 to  7-31-28   $17.85 /sq ft   $15,942.78 /mo
+ *   8-1-28 to  7-31-29   $18.56 /sq ft   $16,580.53 /mo
+ *   8-1-29 to  7-31-30   $19.30 /sq ft   $17,243.75 /mo
+ *   8-1-30 to 11-30-30   $20.07 /sq ft   $17,933.49 /mo
+ *
+ * The rate is annual per square foot: 10,720 x 17.16 / 12 = 15,329.60, which
+ * reproduces the schedule exactly. THIS FIGURE STEPS UP EVERY 1 AUGUST — the
+ * next change is to $15,942.78 on 1 Aug 2027.
+ *
+ * CAM IS DELIBERATELY ZERO. The amendment obliges "Tenant's pro-rata share of
+ * Expenses as Additional Rent" but never states the amount, so there is no
+ * figure in the document to use. The old row's $1,775.73 belonged to Suite 400
+ * — half the floor area — and carrying it over would have looked authoritative
+ * while being attached to the wrong unit. A visible zero that someone fills in
+ * from a rent statement is the honest state.
+ */
 export const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
-  { label: "Suite 400", monthly: 4182.08, cam: 1775.73, sharePct: 100 },
+  { label: "Suite 300", monthly: 15329.6, cam: 0, sharePct: 100 },
   { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
 ];
 
