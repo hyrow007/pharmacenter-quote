@@ -53,7 +53,7 @@ import {
   type MarginMode,
 } from "@/lib/bottleCosting";
 import {
-  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_RENT_DEFAULTS_BOTTLE,
   OVERHEAD_INDIRECT_DEFAULTS,
   OVERHEAD_OTHER_DEFAULTS,
   INDIRECT_HOURS_PER_MONTH,
@@ -1282,7 +1282,7 @@ export function blankState(
     leaderWcPct: DEFAULT_WC_PCT,
     operatorTaxPct: DEFAULT_TAX_PCT,
     operatorWcPct: DEFAULT_WC_PCT,
-    overheadRent: OVERHEAD_RENT_DEFAULTS,
+    overheadRent: OVERHEAD_RENT_DEFAULTS_BOTTLE,
     overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
     overheadOther: OVERHEAD_OTHER_DEFAULTS,
     workingDaysPerMonth: DEFAULT_WORKING_DAYS_PER_MONTH,
@@ -3026,8 +3026,11 @@ export default function BottleCostingBoard({
           the fraction of that monthly cost this production line should bear —
           and the allocation spreads the charged total over the job's days.
 
-          The plant figures come from lib/overheadCosting.ts, shared with the
-          gummy tab so a rent rise is edited once. */}
+          The plant figures come from lib/overheadCosting.ts. The rent AMOUNTS
+          are shared with the gummy tab so a rise is edited once; the SHARES are
+          not — this board reads OVERHEAD_RENT_DEFAULTS_BOTTLE, which charges
+          Suite 300 (packaging) and zeroes Suite 400 (gummy manufacturing). The
+          gummy tab does the opposite. Do not collapse the two back together. */}
       <div style={shell}>
         <div style={band}>Overhead Costs</div>
 
@@ -3095,10 +3098,11 @@ export default function BottleCostingBoard({
               color: "var(--ink-3, #7b7364)",
             }}
           >
-            Share percentages carry over from the gummy line as a reference
-            point — they describe how much of the plant that line bears. A
-            bottling job occupies the floor differently, so treat them as a
-            starting figure rather than a settled one.
+            Lease shares are set for the bottling line: Suite 300 is offices
+            and packaging, so it carries the job; Suite 400 is gummy
+            manufacturing and sits at 0%. Suite 300 at 100% does include the
+            office floor, and the indirect-labour and other-expense shares are
+            still the gummy line&rsquo;s — treat those as a starting figure.
           </div>
         </div>
 

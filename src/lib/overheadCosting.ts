@@ -19,28 +19,44 @@
 // (burdened at 8.5% tax + 4% workers' comp) and the Jan–Jun 2026 P&L averages.
 // Every row is editable per job; these are only the starting point.
 //
-// A NOTE ON THE SHARE PERCENTAGES
+// A NOTE ON THE SHARE PERCENTAGES — READ THIS BEFORE EDITING
 //
 // The monthly amounts are facts about the building and the payroll. The
-// sharePct values are a judgement about how much of the plant belongs to ONE
-// production line, and they were set for bulk gummy production. A bottling job
-// occupies the floor differently, so the bottle board labels them as inherited
-// rather than presenting them as settled.
+// sharePct values are NOT: they say how much of a given space one production
+// line bears, and that differs by line. PharmaCenter holds three spaces and
+// uses them for different things:
+//
+//   Suite 300      offices + PACKAGING
+//   Suite 400      gummy MANUFACTURING
+//   Suite 500/600  warehouse, shared
+//
+// So the gummy line and the bottling line do not charge the same rooms. An
+// earlier version of this file carried ONE rent array shared by both
+// calculators, which made that impossible to express — and worse, meant a
+// correct edit for one calculator was a silent wrong answer in the other.
+// Hence the two arrays below: the RENT AMOUNTS are declared once, the SHARES
+// twice.
+//
+// When a rent steps up, change the suite constant — both calculators follow.
+// When a line's floor usage changes, change only that line's sharePct.
+//
+// A zero share is deliberate and stays visible as a row, rather than the row
+// being deleted. Zero means "this line does not use this space"; a missing row
+// would mean "nobody has considered it". Those are different claims and the
+// operator can see the difference on screen.
 
 import type { OverheadItem } from "./bottleCosting";
 
 /** Working hours per month used to monthlyise an hourly indirect-labour rate. */
 export const INDIRECT_HOURS_PER_MONTH = 173.33;
 
+// -----------------------------------------------------------------------------
+// THE SPACES — rent amounts, declared once
+// -----------------------------------------------------------------------------
+
 /**
- * SUITE 300 — from the Sixth Amendment to Lease (July 2025).
- *
- * The row this replaces was labelled "Suite 400", which the lease itself shows
- * to be two moves out of date: Suite 400 was the ORIGINAL 5,300 sq ft premises
- * and the First Amendment (Dec 2011) vacated it and relocated the tenant to
- * Suite 300, 15851 SW 41st Street, Davie FL — approximately 10,720 rentable
- * square feet. Every quote priced off that row was carrying the rent of a unit
- * PharmaCenter left fifteen years ago.
+ * SUITE 300 — offices and packaging. Sixth Amendment to Lease (July 2025),
+ * 15851 SW 41st Street, Davie FL, approximately 10,720 rentable square feet.
  *
  * BASE RENT SCHEDULE — Extended Term, 1 Aug 2025 to 30 Nov 2030:
  *
@@ -52,28 +68,77 @@ export const INDIRECT_HOURS_PER_MONTH = 173.33;
  *   8-1-30 to 11-30-30   $20.07 /sq ft   $17,933.49 /mo
  *
  * The rate is annual per square foot: 10,720 x 17.16 / 12 = 15,329.60, which
- * reproduces the schedule exactly. THIS FIGURE STEPS UP EVERY 1 AUGUST — the
- * next change is to $15,942.78 on 1 Aug 2027.
+ * reproduces the schedule exactly. THIS STEPS UP EVERY 1 AUGUST — the next
+ * change is to $15,942.78 on 1 Aug 2027.
  *
- * THE CAM FIGURE IS AN ESTIMATE, NOT A LEASE TERM. The amendment obliges
- * "Tenant's pro-rata share of Expenses as Additional Rent" but never states an
- * amount, a percentage or a base year — those live in the original lease's
- * Expenses definition and in the landlord's annual estimate statement, neither
- * of which we hold. So $3,590 is extrapolated by floor area from the row this
- * replaced: Suite 400 carried $1,775.73 across 5,300 sq ft, i.e. $0.335 per sq
- * ft per month; at Suite 300's 10,720 sq ft that is $3,591.67, rounded down to
- * $3,590 so the number LOOKS like the approximation it is.
- *
- * Two caveats worth keeping in view. The Suite 400 rate it derives from was
- * itself undocumented, so this inherits whatever that row's provenance was.
- * And CAM is re-estimated by the landlord annually, so it drifts even when it
- * is right. REPLACE IT the moment a rent statement is to hand — that is the
- * authoritative source, and it is a one-line correction here.
+ * CAM IS AN ESTIMATE, NOT A LEASE TERM. The amendment obliges "Tenant's
+ * pro-rata share of Expenses as Additional Rent" but states no amount, no
+ * percentage and no base year — those live in the original lease's Expenses
+ * definition and the landlord's annual estimate statement, neither of which we
+ * hold. $3,590 is extrapolated by floor area from Suite 400's $1,775.73 across
+ * 5,300 sq ft ($0.335/sq ft/mo x 10,720 = $3,591.67), rounded down so the
+ * number looks like the approximation it is. REPLACE IT from a rent statement.
  */
-export const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
-  // cam: estimated by floor area — see the note above. Not a lease figure.
-  { label: "Suite 300", monthly: 15329.6, cam: 3590, sharePct: 100 },
-  { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
+const SUITE_300 = { label: "Suite 300", monthly: 15329.6, cam: 3590 };
+
+/**
+ * SUITE 400 — gummy manufacturing. Fifth Amendment to Lease (Oct 2022),
+ * 15951 SW 41st Street, approximately 3,072 rentable square feet; term ends
+ * 1-31-28. Verified against the amendment on 17 Aug 2026.
+ *
+ * BASE RENT SCHEDULE (Second Expansion Space):
+ *
+ *   11-21-25 to 10-31-26   $4,182.08 /mo
+ *   11- 1-26 to 10-31-27   $4,307.55 /mo  <-- carried below (operator chose to
+ *                                             cost forward-looking batches at
+ *                                             the autumn rate, Aug 2026)
+ *   11- 1-27 to  1-31-28   $4,436.77 /mo
+ *
+ * CAM $1,775.73 is from the landlord's 2026 estimate letter / rent ledger —
+ * re-estimated annually, replace when the 2027 statement lands.
+ */
+const SUITE_400 = { label: "Suite 400", monthly: 4307.55, cam: 1775.73 };
+
+/**
+ * SUITE 500/600 — warehouse, shared by both lines. Fourth Amendment to Lease
+ * (Dec 2021), 15951 SW 41st Street, approximately 8,879 rentable square feet;
+ * term ends 1-31-28. Verified against the amendment on 17 Aug 2026. Rent is
+ * banded by LEASE MONTH from the 18 Oct 2022 commencement date:
+ *
+ *   months 37-48  (~Nov 25 - Oct 26)   $12,087.48 /mo
+ *   months 49-60  (~Nov 26 - Oct 27)   $12,450.10 /mo  <-- carried below
+ *                                          (operator chose the autumn rate,
+ *                                           Aug 2026, for forward costing)
+ *   months 61-63  (~Nov 27 - Jan 28)   $12,823.60 /mo
+ *
+ * CAM $5,132.38 is the landlord's 2026 estimate (ledger-confirmed). The
+ * earlier observation stands: CAM here runs ~42% of base vs ~23% on Suite
+ * 300 — likely the buildings' expense pools genuinely differ, but worth a
+ * question to the property manager with the 2027 statement.
+ */
+const SUITE_500_600 = { label: "Suite 500/600", monthly: 12450.10, cam: 5132.38 };
+
+// -----------------------------------------------------------------------------
+// THE SHARES — declared per production line
+// -----------------------------------------------------------------------------
+
+/** Bulk gummy manufacturing (/formulas/[id] Costing tab). */
+export const OVERHEAD_RENT_DEFAULTS_GUMMY: OverheadItem[] = [
+  { ...SUITE_400, sharePct: 100 },
+  // Offices and packaging: no part of a gummy manufacturing run happens here.
+  { ...SUITE_300, sharePct: 0 },
+  { ...SUITE_500_600, sharePct: 50 },
+];
+
+/** Contract-packaging bottle line (/workflow/[id]/bottle-costing). */
+export const OVERHEAD_RENT_DEFAULTS_BOTTLE: OverheadItem[] = [
+  // Packaging happens in Suite 300 — but the suite is offices AND packaging,
+  // so 100% charges a bottling job for floor it does not occupy. Left at 100
+  // pending a call on the office/packaging split rather than guessed at.
+  { ...SUITE_300, sharePct: 100 },
+  // Gummy manufacturing: a bottling job does not use it.
+  { ...SUITE_400, sharePct: 0 },
+  { ...SUITE_500_600, sharePct: 50 },
 ];
 
 export const OVERHEAD_INDIRECT_DEFAULTS: OverheadItem[] = [

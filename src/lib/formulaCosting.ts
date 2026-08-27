@@ -45,7 +45,7 @@ import type {
 // further down, where the comment explaining the split lives.
 import {
   INDIRECT_HOURS_PER_MONTH,
-  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_RENT_DEFAULTS_GUMMY,
   OVERHEAD_INDIRECT_DEFAULTS,
   OVERHEAD_OTHER_DEFAULTS,
 } from "./overheadCosting";
@@ -126,7 +126,7 @@ export type CostingComputed = {
 // stops resolving — which is exactly how build 5461e48 failed.
 export {
   INDIRECT_HOURS_PER_MONTH,
-  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_RENT_DEFAULTS_GUMMY,
   OVERHEAD_INDIRECT_DEFAULTS,
   OVERHEAD_OTHER_DEFAULTS,
 };
@@ -330,7 +330,7 @@ export function computeCostingComputed(params: {
   const leaderWcPct = costing.leaderWcPct || null;
   const operatorWcPct = costing.operatorWcPct || null;
   const workingDaysPerMonth = costing.workingDaysPerMonth || null;
-  const overheadRent = costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS;
+  const overheadRent = costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY;
   const overheadIndirect = costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS;
   const overheadOther = costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS;
   const labTestingRm = costing.labTestingRm ?? null;

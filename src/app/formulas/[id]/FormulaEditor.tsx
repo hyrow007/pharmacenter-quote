@@ -64,7 +64,7 @@ import {
   type RawMaterialCostLookup,
 } from "@/lib/formulas";
 import {
-  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_RENT_DEFAULTS_GUMMY,
   OVERHEAD_INDIRECT_DEFAULTS,
   OVERHEAD_OTHER_DEFAULTS,
   INDIRECT_HOURS_PER_MONTH,
@@ -852,7 +852,7 @@ export default function FormulaEditor({
   );
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
-    () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
+    () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
   );
   const [overheadIndirect, setOverheadIndirect] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
@@ -1049,7 +1049,7 @@ export default function FormulaEditor({
               operatorWcPct: seed.costing.operatorWcPct || null,
               monthlyOverhead: seed.costing.monthlyOverhead || null,
               workingDaysPerMonth: seed.costing.workingDaysPerMonth || null,
-              overheadRent: seed.costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS,
+              overheadRent: seed.costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
               overheadIndirect:
                 seed.costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: seed.costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
@@ -1085,7 +1085,7 @@ export default function FormulaEditor({
               operatorWcPct: null,
               monthlyOverhead: null,
               workingDaysPerMonth: null,
-              overheadRent: OVERHEAD_RENT_DEFAULTS,
+              overheadRent: OVERHEAD_RENT_DEFAULTS_GUMMY,
               overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: OVERHEAD_OTHER_DEFAULTS,
               laborDec: 2,
