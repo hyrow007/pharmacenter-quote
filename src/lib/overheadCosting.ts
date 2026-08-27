@@ -55,15 +55,24 @@ export const INDIRECT_HOURS_PER_MONTH = 173.33;
  * reproduces the schedule exactly. THIS FIGURE STEPS UP EVERY 1 AUGUST — the
  * next change is to $15,942.78 on 1 Aug 2027.
  *
- * CAM IS DELIBERATELY ZERO. The amendment obliges "Tenant's pro-rata share of
- * Expenses as Additional Rent" but never states the amount, so there is no
- * figure in the document to use. The old row's $1,775.73 belonged to Suite 400
- * — half the floor area — and carrying it over would have looked authoritative
- * while being attached to the wrong unit. A visible zero that someone fills in
- * from a rent statement is the honest state.
+ * THE CAM FIGURE IS AN ESTIMATE, NOT A LEASE TERM. The amendment obliges
+ * "Tenant's pro-rata share of Expenses as Additional Rent" but never states an
+ * amount, a percentage or a base year — those live in the original lease's
+ * Expenses definition and in the landlord's annual estimate statement, neither
+ * of which we hold. So $3,590 is extrapolated by floor area from the row this
+ * replaced: Suite 400 carried $1,775.73 across 5,300 sq ft, i.e. $0.335 per sq
+ * ft per month; at Suite 300's 10,720 sq ft that is $3,591.67, rounded down to
+ * $3,590 so the number LOOKS like the approximation it is.
+ *
+ * Two caveats worth keeping in view. The Suite 400 rate it derives from was
+ * itself undocumented, so this inherits whatever that row's provenance was.
+ * And CAM is re-estimated by the landlord annually, so it drifts even when it
+ * is right. REPLACE IT the moment a rent statement is to hand — that is the
+ * authoritative source, and it is a one-line correction here.
  */
 export const OVERHEAD_RENT_DEFAULTS: OverheadItem[] = [
-  { label: "Suite 300", monthly: 15329.6, cam: 0, sharePct: 100 },
+  // cam: estimated by floor area — see the note above. Not a lease figure.
+  { label: "Suite 300", monthly: 15329.6, cam: 3590, sharePct: 100 },
   { label: "Suite 500/600", monthly: 12087.48, cam: 5132.38, sharePct: 50 },
 ];
 
