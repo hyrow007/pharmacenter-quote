@@ -41,6 +41,15 @@ import type {
   OverheadItem,
 } from "./formulas";
 
+// The plant's real overhead rows. Imported for LOCAL use here and re-exported
+// further down, where the comment explaining the split lives.
+import {
+  INDIRECT_HOURS_PER_MONTH,
+  OVERHEAD_RENT_DEFAULTS,
+  OVERHEAD_INDIRECT_DEFAULTS,
+  OVERHEAD_OTHER_DEFAULTS,
+} from "./overheadCosting";
+
 // -----------------------------------------------------------------------------
 // Inputs
 // -----------------------------------------------------------------------------
@@ -109,12 +118,18 @@ export type CostingComputed = {
 // this file's header gives.
 // -----------------------------------------------------------------------------
 
+// The import that backs this sits with the other imports at the top of the
+// file, and the two halves must STAY apart. The one-line shorthand
+// `export { … } from "./overheadCosting"` re-exports the names for other
+// modules but creates no local binding, so every consumer inside this file
+// (overheadRent, overheadIndirect, overheadOther, the indirect-hours divisor)
+// stops resolving — which is exactly how build 5461e48 failed.
 export {
   INDIRECT_HOURS_PER_MONTH,
   OVERHEAD_RENT_DEFAULTS,
   OVERHEAD_INDIRECT_DEFAULTS,
   OVERHEAD_OTHER_DEFAULTS,
-} from "./overheadCosting";
+};
 
 /** Whole-shift rounding rule (FormulaEditor 877–878): fractions of .25
  *  and up round up to an additional shift; .24 and below round down. */
