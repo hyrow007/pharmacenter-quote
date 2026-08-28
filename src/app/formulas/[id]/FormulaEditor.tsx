@@ -24,7 +24,7 @@ import { makeTr } from "@/lib/i18n/labels";
 // The Save button figures out which of the two calls to make (or both)
 // by comparing the current state to the loaded snapshot.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -860,6 +860,63 @@ export default function FormulaEditor({
   const [overheadOther, setOverheadOther] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
   );
+
+  // v73: plant overhead comes from the shared reference tables, not constants.
+  //
+  // The three states above seed from lib/overheadCosting.ts, which is now a
+  // FALLBACK. The live figures live in Supabase (sql/overhead_reference.sql),
+  // banded by effective date so a rent step-up applies itself — no code edit,
+  // nothing to diarise. Fetch them and swap in.
+  //
+  // ONLY WHERE THIS VERSION HAS NEVER SAVED ITS OWN ROWS. A saved formula owns
+  // its overhead: it was costed against those figures and must still reproduce
+  // them. Re-pricing somebody's saved version because a lease changed is the
+  // exact thing the snapshot exists to prevent.
+  //
+  // The as-of date is the PRODUCTION date (current_date + quote_lead_days),
+  // not today — see the note in the SQL. That is what the operator was doing
+  // by hand when they picked the autumn rates in August.
+  const usingPlantDefaults = useRef(!seedVersion.costing?.overheadRent);
+  const [overheadMeta, setOverheadMeta] = useState<{
+    asOf: string | null;
+    attention: {
+      label: string;
+      status: string;
+      daysLeft: number | null;
+      camEstimated: boolean;
+    }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/overhead?line=gummy");
+        const json = await res.json();
+        // reason === "not_migrated" lands here too: tables absent on this
+        // project, the constants on screen are already right, stay quiet.
+        if (cancelled || !json?.ok) return;
+        setOverheadMeta({
+          asOf: json.asOf ?? null,
+          attention: json.attention ?? [],
+        });
+        if (!usingPlantDefaults.current) return;
+        // Flip the guard BEFORE setting state so a slow response cannot land
+        // twice and overwrite an edit made in between.
+        usingPlantDefaults.current = false;
+        if (json.rent) setOverheadRent(json.rent);
+        if (json.indirect) setOverheadIndirect(json.indirect);
+        if (json.other) setOverheadOther(json.other);
+      } catch {
+        // Offline or the route is missing. The constants already rendered are
+        // a complete answer — a costing sheet that cannot reach the network
+        // should still cost.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
@@ -5377,6 +5434,47 @@ export default function FormulaEditor({
           >
             {tr("Overhead Costs")}
           </div>
+          {/* v73: provenance strip. The figures below now come from the
+              shared overhead tables resolved to the date this batch will
+              RUN, and anything stale or estimated is named rather than
+              left for someone to notice. */}
+          {overheadMeta?.asOf ? (
+            <div
+              style={{
+                padding: "8px 14px 0",
+                fontSize: 11.5,
+                color: "var(--ink-3, #7b7364)",
+              }}
+            >
+              Plant rates in force on <strong>{overheadMeta.asOf}</strong> — the
+              date this batch is expected to run, not today. These step up on
+              their own; a saved version keeps the figures it was costed with.
+              {overheadMeta.attention.length ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "7px 10px",
+                    borderRadius: 6,
+                    background: "#fdf3e3",
+                    border: "1px solid #e6d3ac",
+                    color: "#7a5b18",
+                  }}
+                >
+                  <strong>Wants a look:</strong>{" "}
+                  {overheadMeta.attention
+                    .map((a) =>
+                      a.status === "expired"
+                        ? `${a.label} — lease band has lapsed, the rate shown is stale`
+                        : a.daysLeft !== null && a.daysLeft <= 90
+                          ? `${a.label} — term ends in ${a.daysLeft} days`
+                          : `${a.label} — CAM is an estimate, not a billed figure`,
+                    )
+                    .join("; ")}
+                  .
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {(() => {
             // v60.1: itemized sub-cards. Monthly overhead = Σ of every
             // line's monthly × share%.
