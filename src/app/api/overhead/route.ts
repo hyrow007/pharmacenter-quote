@@ -1,0 +1,162 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/auth/server";
+
+// GET /api/overhead?line=bottle[&asof=YYYY-MM-DD]
+//
+// The plant's overhead defaults, resolved to a date. Backs the Overhead card on
+// every costing calculator, so there is one set of rent and payroll figures
+// rather than a copy per tool.
+//
+// Reads the overhead_for_line() function rather than the tables directly: the
+// date-band resolution and the per-line share join belong in one place, and SQL
+// is that place. See sql/overhead_reference.sql.
+//
+// WHAT THIS ROUTE DOES NOT DO
+//
+//   - No arithmetic. Rows come back as they are; overheadRowMonthly and friends
+//     in lib/bottleCosting.ts turn them into money. One tested money model.
+//   - No snapshotting. A job that has saved its own overhead rows keeps them.
+//     These are DEFAULTS for new work, not a record of what anything cost.
+//
+// IF THE MIGRATION HAS NOT BEEN RUN the function will not exist. That is not an
+// error worth shouting about — the route says so plainly and the caller falls
+// back to the constants in lib/overheadCosting.ts. This is what lets the code
+// ship before the SQL is applied.
+
+export const runtime = "nodejs";
+
+// Deliberately open-ended: standing up a blister or sachet calculator should be
+// a row in overhead_line_shares, not an edit here.
+const LINE_PATTERN = /^[a-z][a-z0-9_]{1,31}$/;
+
+type Row = {
+  item_key: string;
+  group_key: "rent" | "indirect" | "other";
+  label: string;
+  monthly: number | null;
+  cam: number | null;
+  cam_estimated: boolean;
+  pay_type: "hourly" | "salary" | null;
+  rate: number | null;
+  qty: number | null;
+  tax_pct: number | null;
+  wc_pct: number | null;
+  hours: number | null;
+  qb_account: string | null;
+  share_pct: number | null;
+  source_doc: string | null;
+  verified_on: string | null;
+  effective_from: string;
+  effective_to: string | null;
+  status: "current" | "expired" | "not_yet";
+  days_left: number | null;
+  asof_used: string;
+  sort_order: number;
+};
+
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !user.email?.endsWith("@pharmacenterusa.com")) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(request.url);
+  const line = (url.searchParams.get("line") ?? "").trim().toLowerCase();
+  const asof = (url.searchParams.get("asof") ?? "").trim();
+
+  if (!LINE_PATTERN.test(line)) {
+    return NextResponse.json({ ok: false, error: "bad line key" }, { status: 400 });
+  }
+  // Passing a date is optional. Omitting it lets SQL work out the as-of from
+  // current_date + quote_lead_days, which is the point of the whole design:
+  // the rates step over on their own.
+  if (asof && !/^\d{4}-\d{2}-\d{2}$/.test(asof)) {
+    return NextResponse.json({ ok: false, error: "bad asof date" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase.rpc("overhead_for_line", {
+    p_line_key: line,
+    ...(asof ? { p_asof: asof } : {}),
+  });
+
+  if (error) {
+    // 42883 undefined_function / 42P01 undefined_table — the migration has not
+    // been run on this project yet. Report it as a state, not a failure, so the
+    // caller can fall back to the built-in constants without a scary console.
+    const notMigrated =
+      error.code === "42883" ||
+      error.code === "42P01" ||
+      /overhead_for_line|overhead_items/i.test(error.message ?? "");
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error.message,
+        reason: notMigrated ? "not_migrated" : "query_failed",
+      },
+      { status: notMigrated ? 200 : 500 },
+    );
+  }
+
+  const rows = (data ?? []) as Row[];
+
+  // snake_case out of Postgres, camelCase into the OverheadItem shape the
+  // calculators and lib/bottleCosting.ts already speak. The extra provenance
+  // fields ride along so the UI can flag a lapsed lease or an estimated CAM.
+  const toItem = (r: Row) => ({
+    itemKey: r.item_key,
+    label: r.label,
+    monthly: r.monthly ?? 0,
+    cam: r.cam,
+    camEstimated: r.cam_estimated,
+    payType: r.pay_type,
+    rate: r.rate,
+    qty: r.qty,
+    taxPct: r.tax_pct,
+    wcPct: r.wc_pct,
+    hours: r.hours,
+    qbAccount: r.qb_account,
+    // sharePct is NOT nullable downstream (lib/formulas.ts declares it number),
+    // and a blank share means zero rather than unknown.
+    sharePct: r.share_pct ?? 0,
+    sourceDoc: r.source_doc,
+    verifiedOn: r.verified_on,
+    effectiveFrom: r.effective_from,
+    effectiveTo: r.effective_to,
+    status: r.status,
+    daysLeft: r.days_left,
+  });
+
+  const pick = (g: Row["group_key"]) =>
+    rows.filter((r) => r.group_key === g).map(toItem);
+
+  // Rows a human should look at: a lapsed lease band, one ending within 90
+  // days, or a CAM that is still an estimate. Surfaced here rather than left
+  // for someone to notice, which is the entire reason these rows are dated.
+  const attention = rows
+    .filter(
+      (r) =>
+        r.status !== "current" ||
+        (r.days_left !== null && r.days_left <= 90) ||
+        r.cam_estimated,
+    )
+    .map((r) => ({
+      itemKey: r.item_key,
+      label: r.label,
+      status: r.status,
+      daysLeft: r.days_left,
+      camEstimated: r.cam_estimated,
+    }));
+
+  return NextResponse.json({
+    ok: true,
+    line,
+    asOf: rows[0]?.asof_used ?? asof ?? null,
+    rent: pick("rent"),
+    indirect: pick("indirect"),
+    other: pick("other"),
+    attention,
+  });
+}

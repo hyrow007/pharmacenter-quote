@@ -1730,6 +1730,63 @@ export default function BottleCostingBoard({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [addSlot, setAddSlot] = useState<PackagingSlot>("other");
 
+  // ----------------------------------------------------------------
+  // Plant overhead: refresh the DEFAULTS from the shared reference data
+  // ----------------------------------------------------------------
+  //
+  // The rows above came from the constants in lib/overheadCosting.ts, which are
+  // a fallback. The live figures live in Supabase (sql/overhead_reference.sql),
+  // banded by date so a rent step-up applies itself. Fetch them and swap in.
+  //
+  // ONLY FOR A JOB THAT HAS NEVER SAVED ITS OWN ROWS. Once a costing has been
+  // saved it owns its overhead, and quietly re-pricing someone's saved job
+  // because a lease changed is exactly the behaviour a snapshot exists to
+  // prevent. `initial.overheadRent` present means this job made that choice.
+  const usingPlantDefaults = useRef(!initial?.overheadRent);
+  const [overheadMeta, setOverheadMeta] = useState<{
+    asOf: string | null;
+    attention: {
+      label: string;
+      status: string;
+      daysLeft: number | null;
+      camEstimated: boolean;
+    }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/overhead?line=bottle");
+        const json = await res.json();
+        // reason === "not_migrated" lands here too: the SQL has not been run on
+        // this project yet, the constants on screen are correct, say nothing.
+        if (cancelled || !json?.ok) return;
+        setOverheadMeta({
+          asOf: json.asOf ?? null,
+          attention: json.attention ?? [],
+        });
+        if (!usingPlantDefaults.current) return;
+        // Flip the guard BEFORE the state update so a slow response cannot
+        // land twice and overwrite an edit made in between.
+        usingPlantDefaults.current = false;
+        setSt((p) => ({
+          ...p,
+          overheadRent: json.rent ?? p.overheadRent,
+          overheadIndirect: json.indirect ?? p.overheadIndirect,
+          overheadOther: json.other ?? p.overheadOther,
+        }));
+      } catch {
+        // Offline, blocked, or the route is missing. The constants already
+        // rendered are a complete answer — a costing board that cannot reach
+        // the network should still cost.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const set = <K extends keyof SavedState>(k: K, v: SavedState[K]) =>
     setSt((p) => ({ ...p, [k]: v }));
 
@@ -3103,6 +3160,38 @@ export default function BottleCostingBoard({
             manufacturing and sits at 0%. Suite 300 at 100% does include the
             office floor, and the indirect-labour and other-expense shares are
             still the gummy line&rsquo;s — treat those as a starting figure.
+            {overheadMeta?.asOf ? (
+              <>
+                {" "}
+                Figures are the plant rates in force on{" "}
+                <strong>{overheadMeta.asOf}</strong> — the date this job is
+                expected to run, not today — and step up on their own.
+              </>
+            ) : null}
+            {overheadMeta?.attention?.length ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  background: "#fdf3e3",
+                  border: "1px solid #e6d3ac",
+                  color: "#7a5b18",
+                }}
+              >
+                <strong>Wants a look:</strong>{" "}
+                {overheadMeta.attention
+                  .map((a) =>
+                    a.status === "expired"
+                      ? `${a.label} — lease band has lapsed, the rate shown is stale`
+                      : a.daysLeft !== null && a.daysLeft <= 90
+                        ? `${a.label} — term ends in ${a.daysLeft} days`
+                        : `${a.label} — CAM is an estimate, not a billed figure`,
+                  )
+                  .join("; ")}
+                .
+              </div>
+            ) : null}
           </div>
         </div>
 
