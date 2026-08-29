@@ -475,6 +475,11 @@ function LeaseBreakdownTable({
           minimumFractionDigits: dec,
           maximumFractionDigits: dec,
         });
+  // Dollar-prefixed variant for the job-money columns. The $/mo columns stay
+  // bare because their header already carries the unit; the Job and $/bottle
+  // figures are the ones that read as prices and get the sign.
+  const moneyD = (v: number | null | undefined, dec = 2) =>
+    v === null || v === undefined ? "—" : `$${money(v, dec)}`;
   const days = jobDays !== null && jobDays > 0 ? jobDays : null;
   const daysLabel = days === null ? "—" : days.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const jobOf = (rate: number | null) =>
@@ -484,15 +489,22 @@ function LeaseBreakdownTable({
     return j === null || !quantity || quantity <= 0 ? null : j / quantity;
   };
 
-  // "Space serves" text per pool. Facility rows carry the margin share in the
-  // label because that is exactly where it is applied in the Charged column.
-  const serves = (r: LeaseBreakdownRow) => {
+  // "Space serves", as two stacked lines: the label, then the area maths.
+  // One long nowrap line crowded the Base column right off the screen —
+  // stacking keeps the column narrow without losing the derivation. Facility
+  // rows carry the margin share in the second line because that is exactly
+  // where it is applied in the Charged column.
+  const servesLabel = (r: LeaseBreakdownRow) => {
+    if (r.poolKey === "facility") return "wh + office";
+    if (r.poolKey === "cp_packaging") return "packaging floor";
+    if (r.poolKey === "gummy_manufacturing") return "gummy manufacturing";
+    return r.poolLabel;
+  };
+  const servesDetail = (r: LeaseBreakdownRow) => {
     const area = `${money(r.sqFt, 0)} ft²${r.pctOfSuite !== null ? ` (${r.pctOfSuite}%)` : ""}`;
-    if (r.poolKey === "facility")
-      return `wh + office · ${area}${r.sharePctApplied !== null ? ` × ${r.sharePctApplied}%` : ""}`;
-    if (r.poolKey === "cp_packaging") return `packaging floor · ${area}`;
-    if (r.poolKey === "gummy_manufacturing") return `gummy manufacturing · ${area}`;
-    return `${r.poolLabel} · ${area}`;
+    return r.poolKey === "facility" && r.sharePctApplied !== null
+      ? `${area} × ${r.sharePctApplied}%`
+      : area;
   };
   const divisorLabel = (r: LeaseBreakdownRow) => {
     if (!r.chargedMonthly || r.divisorDays === null) return "";
@@ -545,11 +557,14 @@ function LeaseBreakdownTable({
         <table style={{ ...labTable, minWidth: 1080 }}>
           <thead>
             <tr style={labHeadRow}>
-              <th style={{ ...labTh, textAlign: "left", minWidth: 110 }}>Item</th>
-              <th style={{ ...labTh, textAlign: "left", minWidth: 240 }}>Space serves</th>
-              <th style={{ ...labTh, width: 110 }}>Base ($/mo)</th>
-              <th style={{ ...labTh, width: 100 }}>CAM ($/mo)</th>
-              <th style={{ ...labTh, width: 120 }}>Charged ($/mo)</th>
+              {/* Item gets a FIXED width so the table's surplus space lands in
+                  the data columns, not in a gulf between the suite name and
+                  its description. */}
+              <th style={{ ...labTh, textAlign: "left", width: 105 }}>Item</th>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 175 }}>Space serves</th>
+              <th style={{ ...labTh, width: 115 }}>Base ($/mo)</th>
+              <th style={{ ...labTh, width: 105 }}>CAM ($/mo)</th>
+              <th style={{ ...labTh, width: 125 }}>Charged ($/mo)</th>
               <th style={{ ...labTh, textAlign: "left", minWidth: 150 }}>÷ absorbed over</th>
               <th style={{ ...labTh, width: 100 }}>$ / run-day</th>
               <th style={{ ...labTh, width: 100 }}>Job (×{daysLabel})</th>
@@ -571,7 +586,13 @@ function LeaseBreakdownTable({
                       <td style={{ ...labTd, textAlign: "left", fontWeight: i === 0 ? 700 : 400 }}>
                         {i === 0 ? s.label : ""}
                       </td>
-                      <td style={sub}>{serves(r)}</td>
+                      <td style={{ ...sub, lineHeight: 1.4 }}>
+                        {servesLabel(r)}
+                        <br />
+                        <span style={{ fontSize: 11, opacity: 0.85 }}>
+                          {servesDetail(r)}
+                        </span>
+                      </td>
                       <td style={num}>
                         <Tip tip={`${r.pctOfSuite ?? 100}% of ${s.label}'s lease rent`}>
                           {money(r.baseMonthly)}
@@ -602,14 +623,14 @@ function LeaseBreakdownTable({
                       <td style={num}>
                         {r.chargedMonthly && days !== null ? (
                           <Tip tip={`${money(r.ratePerDay)} × ${daysLabel} days this job holds the floor`}>
-                            {money(jobOf(r.ratePerDay))}
+                            {moneyD(jobOf(r.ratePerDay))}
                           </Tip>
                         ) : (
-                          money(charged ? jobOf(r.ratePerDay) : null)
+                          moneyD(charged ? jobOf(r.ratePerDay) : null)
                         )}
                       </td>
                       <td style={num}>
-                        {money(charged ? perOf(r.ratePerDay) : null, 4)}
+                        {moneyD(charged ? perOf(r.ratePerDay) : null, 4)}
                       </td>
                     </tr>
                   ))}
@@ -618,8 +639,8 @@ function LeaseBreakdownTable({
                       <td style={{ ...sub, fontSize: 11.5 }}>suite subtotal</td>
                       <td style={labTd} colSpan={5} />
                       <td style={{ ...num, fontWeight: 700 }}>{money(suiteRate)}</td>
-                      <td style={{ ...num, fontWeight: 700 }}>{money(jobOf(suiteRate))}</td>
-                      <td style={{ ...num, fontWeight: 700 }}>{money(perOf(suiteRate), 4)}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(suiteRate))}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(suiteRate), 4)}</td>
                     </tr>
                   ) : null}
                 </Fragment>
@@ -642,7 +663,7 @@ function LeaseBreakdownTable({
                   labSum(null)
                 ) : (
                   <Tip tip={`${money(priceRate)} × ${daysLabel}`}>
-                    {money(priceRate * days)}
+                    {moneyD(priceRate * days)}
                   </Tip>
                 )}
               </td>
@@ -651,7 +672,7 @@ function LeaseBreakdownTable({
                   labSum(null)
                 ) : (
                   <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
-                    {money((priceRate * days) / quantity, 4)}
+                    {moneyD((priceRate * days) / quantity, 4)}
                   </Tip>
                 )}
               </td>
