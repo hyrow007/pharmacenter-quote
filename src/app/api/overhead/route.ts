@@ -150,10 +150,42 @@ export async function GET(request: Request) {
       camEstimated: r.cam_estimated,
     }));
 
+  // v74: rent per run-day. Best-effort — if overhead_lease_rate() is missing
+  // (pools migration not run) the caller gets lease: null and the model falls
+  // back to the old row-and-share arithmetic. A missing rate must never be a
+  // hard failure: a board that cannot price is worse than one pricing the old
+  // way.
+  let lease: {
+    perRunDay: number | null;
+    floorRate: number | null;
+    facilityRate: number | null;
+    runDaysPerMonth: number | null;
+    facilitySharePct: number | null;
+  } | null = null;
+  try {
+    const { data: lr, error: lrErr } = await supabase.rpc("overhead_lease_rate", {
+      p_line_key: line,
+      ...(asof ? { p_asof: asof } : {}),
+    });
+    const row = Array.isArray(lr) ? lr[0] : null;
+    if (!lrErr && row) {
+      lease = {
+        perRunDay: row.per_run_day ?? null,
+        floorRate: row.floor_rate ?? null,
+        facilityRate: row.facility_rate ?? null,
+        runDaysPerMonth: row.run_days_per_month ?? null,
+        facilitySharePct: row.facility_share_pct ?? null,
+      };
+    }
+  } catch {
+    // leave lease null
+  }
+
   return NextResponse.json({
     ok: true,
     line,
     asOf: rows[0]?.asof_used ?? asof ?? null,
+    lease,
     rent: pick("rent"),
     indirect: pick("indirect"),
     other: pick("other"),

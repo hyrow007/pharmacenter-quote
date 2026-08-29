@@ -633,3 +633,24 @@ ok('roles carry their own burden',
 ok('0% tax and 0% WC = base rate',
    r2(B.laborBreakdown(1000,L({leaderTaxPct:0, leaderWcPct:0})).roles[0].burdened), 20);
 }
+
+// -- 16. v74 lease per run-day -----------------------------------------
+{
+const ok=(n,got,want)=>console.log((Math.abs((got??-1)-(want??-1))<1e-6?'PASS':'**FAIL**').padEnd(10),n,'got',got,'want',want);
+const base={rentLease:[{label:'S300',monthly:15329.6,cam:4772.39,sharePct:100}],
+  indirectLabor:[],other:[],workingDaysPerMonth:21};
+const oldWay=((15329.6+4772.39)/21)*5/1000;
+ok('falls back to calendar days when rate is null', B.overheadPerUnit(1000,base,5), oldWay);
+ok('absent key == explicit null', B.overheadPerUnit(1000,{...base,leasePerRunDay:null},5), oldWay);
+ok('rate replaces the row arithmetic', B.overheadPerUnit(1000,{...base,leasePerRunDay:467.93},5), 467.93*5/1000);
+ok('rows ignored once a rate is present', B.overheadPerUnit(1000,{...base,rentLease:[],leasePerRunDay:467.93},5), 467.93*5/1000);
+ok('zero rate falls back, rent is never free', B.overheadPerUnit(1000,{...base,leasePerRunDay:0},5), oldWay);
+const withOther={...base,leasePerRunDay:467.93,other:[{label:'Electricity',monthly:4497,sharePct:30}]};
+ok('indirect/other still on working days', B.overheadPerUnit(1000,withOther,5),
+   (467.93*5 + ((4497*0.30)/21)*5)/1000);
+ok('null quantity still null', B.overheadPerUnit(null,withOther,5), null);
+ok('null days still null', B.overheadPerUnit(1000,withOther,null), null);
+ok('doubling run-days doubles the lease charge',
+   B.overheadPerUnit(1000,{...base,leasePerRunDay:467.93},10),
+   2*467.93*5/1000);
+}

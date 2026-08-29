@@ -359,6 +359,16 @@ export type OverheadInputs = {
   indirectLabor: OverheadItem[];
   other: OverheadItem[];
   workingDaysPerMonth: number | null;
+  /**
+   * v74: rent charged per RUN-DAY — the packaging-floor pool plus this line's
+   * share of warehouse and office, over the run-days the line actually works.
+   * Resolved from the database (sql/overhead_pools.sql).
+   *
+   * NULL means "not available", and the model falls back to the old
+   * row-and-share-over-21-calendar-days arithmetic. Null and 0 differ here as
+   * everywhere else: 0 would mean rent is genuinely free.
+   */
+  leasePerRunDay?: number | null;
 };
 
 /**
@@ -912,15 +922,38 @@ export function overheadPerUnit(
   const wdpm = num(overhead.workingDaysPerMonth) ?? DEFAULT_WORKING_DAYS_PER_MONTH;
   if (q === null || q <= 0 || days === null || days <= 0 || wdpm <= 0) return null;
 
-  // Each group converts differently — lease rows add CAM, indirect-labour rows
-  // convert a burdened rate into a monthly figure — so the mode has to travel
-  // with the list. Shared with the gummy tab; see overheadCosting.ts.
-  const monthly =
-    overheadGroupCharged(overhead.rentLease, "lease") +
+  // ---- LEASE ----------------------------------------------------------
+  //
+  // v74: rent is charged PER RUN-DAY, not per calendar day.
+  //
+  // Dividing by 21 assumed the plant does one job at a time. Measured from the
+  // packaging yield log it runs 3.28 jobs in parallel and 67.2 run-days a
+  // month, so a calendar-day divisor over-charged rent by roughly 3x. It also
+  // charged Suite 300 at 100% when only 40% of that suite is packaging floor.
+  //
+  // leasePerRunDay resolves both: it is the packaging-floor pool plus this
+  // line's share of the warehouse-and-office pool, divided by the run-days the
+  // line actually works. See sql/overhead_pools.sql for where the number comes
+  // from, and docs/overhead-allocation-spec.md for why.
+  //
+  // Null falls back to the old row-and-share arithmetic, so a board that cannot
+  // reach the database still costs — it just costs the old way.
+  const leaseRate = num(overhead.leasePerRunDay);
+  const leaseCharge =
+    leaseRate !== null && leaseRate > 0
+      ? leaseRate * days
+      : (overheadGroupCharged(overhead.rentLease, "lease") / wdpm) * days;
+
+  // ---- EVERYTHING ELSE ------------------------------------------------
+  //
+  // Indirect labour and other expenses still use the calendar-day mechanism and
+  // therefore still carry the parallel-runs error. Deliberately left alone for
+  // now so the lease change can be seen in isolation; same fix, same pools.
+  const otherMonthly =
     overheadGroupCharged(overhead.indirectLabor, "labor") +
     overheadGroupCharged(overhead.other);
 
-  return ((monthly / wdpm) * days) / q;
+  return (leaseCharge + (otherMonthly / wdpm) * days) / q;
 }
 
 // ============================================================

@@ -1745,6 +1745,10 @@ export default function BottleCostingBoard({
   const usingPlantDefaults = useRef(!initial?.overheadRent);
   const [overheadMeta, setOverheadMeta] = useState<{
     asOf: string | null;
+    leasePerRunDay: number | null;
+    leaseFloorRate: number | null;
+    leaseFacilityRate: number | null;
+    runDaysPerMonth: number | null;
     attention: {
       label: string;
       status: string;
@@ -1769,6 +1773,10 @@ export default function BottleCostingBoard({
         if (cancelled || !json?.ok) return;
         setOverheadMeta({
           asOf: json.asOf ?? null,
+          leasePerRunDay: json.lease?.perRunDay ?? null,
+          leaseFloorRate: json.lease?.floorRate ?? null,
+          leaseFacilityRate: json.lease?.facilityRate ?? null,
+          runDaysPerMonth: json.lease?.runDaysPerMonth ?? null,
           attention: json.attention ?? [],
         });
         if (!usingPlantDefaults.current) return;
@@ -1957,6 +1965,10 @@ export default function BottleCostingBoard({
         indirectLabor: st.overheadIndirect,
         other: st.overheadOther,
         workingDaysPerMonth: st.workingDaysPerMonth,
+        // v74: rent per run-day, from the shared pools. Null until the fetch
+        // lands (or forever, if the tables are absent) — the model then falls
+        // back to the old row-and-share arithmetic on its own.
+        leasePerRunDay: overheadMeta?.leasePerRunDay ?? null,
       },
       labTesting: {
         rawMaterials: st.labTestRm,
@@ -3172,6 +3184,29 @@ export default function BottleCostingBoard({
                 <strong>{overheadMeta.asOf}</strong> — the date this job is
                 expected to run, not today — and step up on their own.
               </>
+            ) : null}
+            {overheadMeta?.leasePerRunDay ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  background: "var(--paper, #fffdf8)",
+                  border: "1px solid var(--line, #e3dcc9)",
+                }}
+              >
+                <strong>Lease is charged per run-day, not per calendar day.</strong>{" "}
+                The rows above are the leases themselves; what this job actually
+                absorbs is{" "}
+                <strong>${overheadMeta.leasePerRunDay.toFixed(2)}</strong> for
+                every day it occupies the packaging floor — $
+                {overheadMeta.leaseFloorRate?.toFixed(2)} of packaging floor plus
+                ${overheadMeta.leaseFacilityRate?.toFixed(2)} of warehouse and
+                office. The floor runs{" "}
+                {overheadMeta.runDaysPerMonth?.toFixed(1)} job-days a month with
+                about three jobs in parallel, so dividing rent by 21 calendar
+                days charged roughly three times too much.
+              </div>
             ) : null}
             {overheadMeta?.attention?.length ? (
               <div
