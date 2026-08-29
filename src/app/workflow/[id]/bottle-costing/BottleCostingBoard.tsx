@@ -1055,6 +1055,19 @@ export type SavedState = {
   overheadIndirect: OverheadItem[];
   overheadOther: OverheadItem[];
   workingDaysPerMonth: number | null;
+  /**
+   * v74.1: the lease rate this costing was priced against, in $ per run-day.
+   *
+   * Saved WITH the job, for the same reason overheadRent is: a costing that has
+   * been saved owns its figures and must still reproduce them. Without this the
+   * rate came fresh from the API on every load, so a job saved last week would
+   * silently re-price the moment a rent band stepped or a share was retuned —
+   * exactly what the row snapshot exists to prevent.
+   *
+   * Null on a costing saved before this existed, and on a fresh board until the
+   * fetch lands; the plant rate is used in that case.
+   */
+  leasePerRunDay: number | null;
   /** Lab testing as two lists — raw material and finished product. */
   labTestRm: LabTestItem[];
   labTestFp: LabTestItem[];
@@ -1286,6 +1299,10 @@ export function blankState(
     overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
     overheadOther: OVERHEAD_OTHER_DEFAULTS,
     workingDaysPerMonth: DEFAULT_WORKING_DAYS_PER_MONTH,
+    // Null until the plant rate arrives from /api/overhead. Blank means "no
+    // rate yet", never "rent is free" — the model falls back to the old
+    // row-and-share arithmetic rather than costing a job at zero rent.
+    leasePerRunDay: null,
     // Empty, not seeded. Testing varies job to job and a default list would
     // put invented dollars on every quote.
     labTestRm: [],
@@ -1674,6 +1691,11 @@ export default function BottleCostingBoard({
       // one lump sum with one share; carry it across as a single "Other" row
       // so the number survives and is visible, rather than silently resetting
       // the job to the plant defaults it was never costed against.
+      // v74.1: costings saved before the run-day rate existed have no key at
+      // all. `?? null` rather than `?? blank.leasePerRunDay` so the difference
+      // between "saved with a rate" and "predates rates" stays visible — the
+      // fetch fills the second case in, and leaves the first alone.
+      leasePerRunDay: initial.leasePerRunDay ?? null,
       overheadRent: initial.overheadRent ?? blank.overheadRent,
       overheadIndirect: initial.overheadIndirect ?? blank.overheadIndirect,
       overheadOther:
@@ -1779,6 +1801,14 @@ export default function BottleCostingBoard({
           runDaysPerMonth: json.lease?.runDaysPerMonth ?? null,
           attention: json.attention ?? [],
         });
+        // v74.1: the lease RATE is adopted on its own terms, not with the rows.
+        // A job saved before the rate existed has overhead rows but no rate, and
+        // should pick one up; a job that already carries a rate keeps it.
+        setSt((p) =>
+          p.leasePerRunDay === null && json.lease?.perRunDay
+            ? { ...p, leasePerRunDay: json.lease.perRunDay }
+            : p,
+        );
         if (!usingPlantDefaults.current) return;
         // Flip the guard BEFORE the state update so a slow response cannot
         // land twice and overwrite an edit made in between.
@@ -1965,10 +1995,16 @@ export default function BottleCostingBoard({
         indirectLabor: st.overheadIndirect,
         other: st.overheadOther,
         workingDaysPerMonth: st.workingDaysPerMonth,
-        // v74: rent per run-day, from the shared pools. Null until the fetch
-        // lands (or forever, if the tables are absent) — the model then falls
-        // back to the old row-and-share arithmetic on its own.
-        leasePerRunDay: overheadMeta?.leasePerRunDay ?? null,
+        // v74.1: the SAVED rate wins over the live plant rate, exactly as the
+        // saved overhead rows win over the plant defaults. A costing that has
+        // been saved was priced against a particular rate and has to keep
+        // reproducing it; re-pricing somebody's saved job because a rent band
+        // stepped is the thing the snapshot exists to prevent.
+        //
+        // st.leasePerRunDay is seeded from the fetch on a job that has none, so
+        // on a fresh board this is the live rate and on a saved one it is the
+        // rate that job was costed with.
+        leasePerRunDay: st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ?? null,
       },
       labTesting: {
         rawMaterials: st.labTestRm,
@@ -3185,7 +3221,11 @@ export default function BottleCostingBoard({
                 expected to run, not today — and step up on their own.
               </>
             ) : null}
-            {overheadMeta?.leasePerRunDay ? (
+            {/* Show the rate the model is ACTUALLY using — the saved one on a
+                saved job, the plant one otherwise — and say so when they
+                differ. Showing the live rate beside a total computed from a
+                different one is how people stop trusting a screen. */}
+            {st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ? (
               <div
                 style={{
                   marginTop: 8,
@@ -3198,14 +3238,38 @@ export default function BottleCostingBoard({
                 <strong>Lease is charged per run-day, not per calendar day.</strong>{" "}
                 The rows above are the leases themselves; what this job actually
                 absorbs is{" "}
-                <strong>${overheadMeta.leasePerRunDay.toFixed(2)}</strong> for
-                every day it occupies the packaging floor — $
-                {overheadMeta.leaseFloorRate?.toFixed(2)} of packaging floor plus
-                ${overheadMeta.leaseFacilityRate?.toFixed(2)} of warehouse and
-                office. The floor runs{" "}
-                {overheadMeta.runDaysPerMonth?.toFixed(1)} job-days a month with
+                <strong>
+                  $
+                  {(
+                    st.leasePerRunDay ??
+                    overheadMeta?.leasePerRunDay ??
+                    0
+                  ).toFixed(2)}
+                </strong>{" "}
+                for every day it occupies the packaging floor. The floor runs{" "}
+                {overheadMeta?.runDaysPerMonth?.toFixed(1)} job-days a month with
                 about three jobs in parallel, so dividing rent by 21 calendar
                 days charged roughly three times too much.
+                {st.leasePerRunDay &&
+                overheadMeta?.leasePerRunDay &&
+                Math.abs(st.leasePerRunDay - overheadMeta.leasePerRunDay) >
+                  0.005 ? (
+                  <>
+                    {" "}
+                    This costing was saved at that rate and keeps it. The plant
+                    rate is now $
+                    {overheadMeta.leasePerRunDay.toFixed(2)} — reset the Lease
+                    card to adopt it.
+                  </>
+                ) : (
+                  <>
+                    {" "}
+                    That is ${overheadMeta?.leaseFloorRate?.toFixed(2)} of
+                    packaging floor plus $
+                    {overheadMeta?.leaseFacilityRate?.toFixed(2)} of warehouse
+                    and office.
+                  </>
+                )}
               </div>
             ) : null}
             {overheadMeta?.attention?.length ? (
