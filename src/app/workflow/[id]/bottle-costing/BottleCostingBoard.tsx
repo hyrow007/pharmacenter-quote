@@ -2201,9 +2201,14 @@ export default function BottleCostingBoard({
   }, [r, productName, qty, workflowId, customerName, quoteNumber]);
 
   /**
-   * Same endpoint the pricing calculator and gummy formula save through — it
-   * takes a partial state and merges it into the existing row. No bespoke
-   * route for this board; one less thing to keep in step.
+   * Same endpoint the pricing calculator and gummy formula save through.
+   *
+   * This sends ONLY the bottleCosting key and relies on the API to merge it
+   * into the existing state. That merge is real as of the 2026-08-29 fix in
+   * api/workflows/[id]/route.ts — before that the API REPLACED the state
+   * column, and this exact call wiped Q0016's customer, products and
+   * packaging spec. If you ever copy this pattern to a new board, make sure
+   * the endpoint still merges.
    */
   const save = useCallback(async () => {
     setSaving(true);

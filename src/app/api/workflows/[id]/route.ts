@@ -124,7 +124,29 @@ export async function PUT(request: Request, ctx: Ctx) {
     description_override?: string | null;
   } = {};
   if (body.state && typeof body.state === "object") {
-    patch.state = body.state;
+    // MERGE into the existing state — never replace it.
+    //
+    // Callers send partial states: the bottle-costing board sends
+    // { bottleCosting }, the pricing calculator sends { pricing }, and each
+    // believed this endpoint merged. It did not — it replaced the column —
+    // and on 2026-08-29 a bottle-costing save wiped Q0016's customer,
+    // products and packaging spec, taking /workflows down with it. A
+    // top-level shallow merge fixes every caller at once: keys you send
+    // overwrite, keys you do not send survive. /start still works unchanged
+    // because it sends the complete state, which merges to the same result.
+    const { data: existing, error: readErr } = await supabase
+      .from("workflows")
+      .select("state")
+      .eq("id", id)
+      .maybeSingle();
+    if (readErr || !existing) {
+      return NextResponse.json(
+        { ok: false, error: readErr?.message || "not_found" },
+        { status: readErr ? 500 : 404 },
+      );
+    }
+    const current = (existing.state ?? {}) as Record<string, unknown>;
+    patch.state = { ...current, ...body.state } as WorkflowState;
   }
   if (body.status !== undefined) {
     if (!VALID_STATUSES.includes(body.status)) {

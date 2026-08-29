@@ -91,7 +91,7 @@ export default async function WorkflowsPage() {
   const customerIds = Array.from(
     new Set(
       rows
-        .map((r) => (r.state.customerMode === "existing" ? r.state.customerId : null))
+        .map((r) => (r.state?.customerMode === "existing" ? r.state.customerId : null))
         .filter((id): id is string => !!id),
     ),
   );
@@ -123,10 +123,14 @@ export default async function WorkflowsPage() {
   }
 
   // Resolve product names (for single-product label "Name (CODE)").
+  // `?? []` on products: a malformed row (a state saved without its products
+  // array) must degrade to one odd-looking line in the table, not a 500 that
+  // takes the whole inbox down for everyone. That exact failure happened on
+  // 2026-08-29 when a partial-state save wiped Q0016's products.
   const productIds = Array.from(
     new Set(
       rows.flatMap((r) =>
-        r.state.products
+        (r.state?.products ?? [])
           .map((p) => p.productId)
           .filter((pid): pid is string => !!pid && pid !== "new"),
       ),

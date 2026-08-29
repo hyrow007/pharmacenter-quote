@@ -106,7 +106,9 @@ export default async function WorkflowPage({ params }: Ctx) {
     if (c) customer = c;
   }
 
-  const productIds = workflow.state.products
+  // `?? []` guards against a malformed row — a state saved without its
+  // products array must render an empty Products section, not 500 the page.
+  const productIds = (workflow.state.products ?? [])
     .map((p) => p.productId)
     .filter((pid): pid is string => !!pid && pid !== "new");
   const productMap: Record<string, { id: string; name: string; fp_code: string | null; default_unit: string | null }> = {};
@@ -328,7 +330,7 @@ export default async function WorkflowPage({ params }: Ctx) {
           <div style={workflow.status === "won" && workflow.sales_orders?.length ? sectionStyle : lastSectionStyle}>
             <span style={labelStyle}>Products</span>
             <div>
-              {state.products.map((p, idx) => {
+              {(state.products ?? []).map((p, idx) => {
                 const isNew = p.mode === "new";
                 const pr = p.productId ? productMap[p.productId] : null;
                 const name = isNew ? (p.newProduct.name_desc || "New product") : (pr?.name ?? "—");
