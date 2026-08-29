@@ -426,6 +426,7 @@ function OverheadGroup({
   jobDays,
   workingDays,
   quantity,
+  perRunDayRate,
 }: {
   title: string;
   mode: OverheadGroupMode;
@@ -434,6 +435,8 @@ function OverheadGroup({
   jobDays: number | null;
   workingDays: number | null;
   quantity: number | null;
+  /** Lease only: $/run-day the model is charging. See rateDriven below. */
+  perRunDayRate?: number | null;
 }) {
   const patch = (i: number, p: Partial<OverheadItem>) =>
     onChange(list.map((r, n) => (n === i ? { ...r, ...p } : r)));
@@ -464,6 +467,21 @@ function OverheadGroup({
       : ((charged / wd) * jobDays) / quantity;
 
   const groupCharged = overheadGroupCharged(list, mode);
+
+  // v74.2: when the lease is charged per RUN-DAY, the share% x monthly / 21
+  // arithmetic no longer drives anything — the model uses rate x job days. The
+  // rows below stay on screen because the leases themselves are worth seeing,
+  // but their Allocated and $/bottle cells would be reporting a calculation
+  // that is not happening. Showing a number the total does not agree with is
+  // how people stop trusting the screen, so those cells go blank and the group
+  // footer reports the figure the model actually used.
+  const rateDriven = mode === "lease" && !!perRunDayRate && perRunDayRate > 0;
+  const rateJobCost =
+    rateDriven && jobDays !== null ? (perRunDayRate as number) * jobDays : null;
+  const rateJobPerUnit =
+    rateJobCost !== null && quantity && quantity > 0
+      ? rateJobCost / quantity
+      : null;
 
   return (
     <div style={labSub}>
@@ -661,9 +679,11 @@ function OverheadGroup({
                       step="1"
                     />
                   </td>
-                  <td style={labTd}>{labMoney(charged, 2)}</td>
                   <td style={labTd}>
-                    {per === null ? labSum(null) : labMoney(per, 4)}
+                    {rateDriven ? labSum(null) : labMoney(charged, 2)}
+                  </td>
+                  <td style={labTd}>
+                    {rateDriven || per === null ? labSum(null) : labMoney(per, 4)}
                   </td>
                   <td style={labTd}>
                     <button
@@ -713,11 +733,21 @@ function OverheadGroup({
               )}
               {mode !== undefined && <td style={labTd} />}
               <td style={labTd} />
-              <td style={labTd}>{labMoney(groupCharged, 2)}</td>
               <td style={labTd}>
-                {perUnitOf(groupCharged) === null
-                  ? labSum(null)
-                  : labMoney(perUnitOf(groupCharged) as number, 4)}
+                {rateDriven
+                  ? rateJobCost === null
+                    ? labSum(null)
+                    : labMoney(rateJobCost, 2)
+                  : labMoney(groupCharged, 2)}
+              </td>
+              <td style={labTd}>
+                {rateDriven
+                  ? rateJobPerUnit === null
+                    ? labSum(null)
+                    : labMoney(rateJobPerUnit, 4)
+                  : perUnitOf(groupCharged) === null
+                    ? labSum(null)
+                    : labMoney(perUnitOf(groupCharged) as number, 4)}
               </td>
               <td style={labTd} />
             </tr>
@@ -2046,21 +2076,70 @@ export default function BottleCostingBoard({
     [lb],
   );
 
-  /** Charged monthly overhead: every row's share, across all three groups. */
-  const overheadMonthlyCharged = useMemo(
-    () =>
-      overheadGroupCharged(st.overheadRent, "lease") +
-      overheadGroupCharged(st.overheadIndirect, "labor") +
-      overheadGroupCharged(st.overheadOther),
-    [st.overheadRent, st.overheadIndirect, st.overheadOther],
-  );
+  /**
+   * The lease rate this board is actually pricing at: the one frozen onto the
+   * job if it has saved a figure, otherwise today's plant rate. Null means no
+   * rate is available and the old share-and-calendar arithmetic still applies.
+   */
+  const leaseRateEff =
+    st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ?? null;
+  const leaseRateDriven = leaseRateEff !== null && leaseRateEff > 0;
 
-  /** That monthly charge, prorated to this job's days. */
+  /**
+   * Charged monthly overhead across all three groups.
+   *
+   * When the lease is rate-driven the share x monthly arithmetic no longer
+   * describes what the lease costs this line, so the lease part is restated as
+   * the rate x the floor's run-days a month — the monthly rent the rate
+   * recovers at full utilisation. Null when the run-day count has not loaded,
+   * because a monthly figure that does not multiply out to the job total is
+   * worse than a blank.
+   */
+  const overheadMonthlyCharged = useMemo(() => {
+    const rest =
+      overheadGroupCharged(st.overheadIndirect, "labor") +
+      overheadGroupCharged(st.overheadOther);
+    if (!leaseRateDriven) {
+      return overheadGroupCharged(st.overheadRent, "lease") + rest;
+    }
+    const rdpm = overheadMeta?.runDaysPerMonth ?? null;
+    if (rdpm === null || rdpm <= 0) return null;
+    return (leaseRateEff as number) * rdpm + rest;
+  }, [
+    st.overheadRent,
+    st.overheadIndirect,
+    st.overheadOther,
+    leaseRateDriven,
+    leaseRateEff,
+    overheadMeta?.runDaysPerMonth,
+  ]);
+
+  /**
+   * What this job absorbs. Mirrors overheadPerUnit() in lib/bottleCosting.ts
+   * exactly — lease on run-days, everything else still on calendar days — so
+   * the card and the model can never quote different numbers.
+   */
   const overheadJobTotal = useMemo(() => {
     const wd = st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH;
     if (jobDays === null || wd <= 0) return null;
-    return (overheadMonthlyCharged / wd) * jobDays;
-  }, [overheadMonthlyCharged, jobDays, st.workingDaysPerMonth]);
+    const lease = leaseRateDriven
+      ? (leaseRateEff as number) * jobDays
+      : (overheadGroupCharged(st.overheadRent, "lease") / wd) * jobDays;
+    const rest =
+      ((overheadGroupCharged(st.overheadIndirect, "labor") +
+        overheadGroupCharged(st.overheadOther)) /
+        wd) *
+      jobDays;
+    return lease + rest;
+  }, [
+    st.overheadRent,
+    st.overheadIndirect,
+    st.overheadOther,
+    st.workingDaysPerMonth,
+    jobDays,
+    leaseRateDriven,
+    leaseRateEff,
+  ]);
 
   /**
    * Issue a Quote — same customer-facing document the pricing calculator
@@ -3160,6 +3239,7 @@ export default function BottleCostingBoard({
             jobDays={jobDays}
             workingDays={st.workingDaysPerMonth}
             quantity={qty}
+            perRunDayRate={g.mode === "lease" ? leaseRateEff : null}
           />
         ))}
 
@@ -3179,7 +3259,11 @@ export default function BottleCostingBoard({
             <tbody>
               <tr style={labBodyRow}>
                 <td style={{ ...labTh, textAlign: "left" }}>Allocation</td>
-                <td style={labTd}>{labMoney(overheadMonthlyCharged, 2)}</td>
+                <td style={labTd}>
+                  {overheadMonthlyCharged === null
+                    ? labSum(null)
+                    : labMoney(overheadMonthlyCharged, 2)}
+                </td>
                 <td style={labTd}>
                   <LabNum
                     value={st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH}
@@ -3208,11 +3292,23 @@ export default function BottleCostingBoard({
               color: "var(--ink-3, #7b7364)",
             }}
           >
-            Lease shares are set for the bottling line: Suite 300 is offices
-            and packaging, so it carries the job; Suite 400 is gummy
-            manufacturing and sits at 0%. Suite 300 at 100% does include the
-            office floor, and the indirect-labour and other-expense shares are
-            still the gummy line&rsquo;s — treat those as a starting figure.
+            {leaseRateDriven ? (
+              <>
+                Indirect labour and other expenses are still spread over
+                calendar days at the shares shown above — treat those as a
+                starting figure. The lease is no longer share-driven; see
+                below.
+              </>
+            ) : (
+              <>
+                Lease shares are set for the bottling line: Suite 300 is
+                offices and packaging, so it carries the job; Suite 400 is
+                gummy manufacturing and sits at 0%. Suite 300 at 100% does
+                include the office floor, and the indirect-labour and
+                other-expense shares are still the gummy line&rsquo;s — treat
+                those as a starting figure.
+              </>
+            )}
             {overheadMeta?.asOf ? (
               <>
                 {" "}
