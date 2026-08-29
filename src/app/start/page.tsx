@@ -136,7 +136,10 @@ function normalizeState(raw: WorkflowState): WorkflowState {
     ...newProductEntry(),
     ...p,
     uid: p.uid || uid(),
-    newProduct: { name_desc: "", notes: "", ...(p.newProduct ?? {}) },
+    newProduct: {
+      name_desc: p.newProduct?.name_desc ?? "",
+      notes: p.newProduct?.notes ?? "",
+    },
     quantities: p.quantities ?? [""],
     attachments: p.attachments ?? [],
   }));
