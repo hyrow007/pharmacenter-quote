@@ -161,6 +161,31 @@ export async function GET(request: Request) {
     facilityRate: number | null;
     runDaysPerMonth: number | null;
     facilitySharePct: number | null;
+    /**
+     * v75: the rate exploded per suite x pool, so the board can show the
+     * gummy-style logic chain (Base + CAM -> Charged -> ÷ days -> $/run-day)
+     * instead of one untraceable number. Rows that charge this line nothing
+     * are included with charged 0 — a visible zero answers "why isn't this
+     * suite in my price?". Best-effort like the rate itself: null means the
+     * breakdown function isn't migrated, and the board falls back to the
+     * plain rate display.
+     */
+    breakdown:
+      | Array<{
+          suiteKey: string;
+          suiteLabel: string;
+          poolKey: string;
+          poolLabel: string;
+          sqFt: number | null;
+          pctOfSuite: number | null;
+          baseMonthly: number | null;
+          camMonthly: number | null;
+          chargedMonthly: number | null;
+          divisorDays: number | null;
+          ratePerDay: number | null;
+          sharePctApplied: number | null;
+        }>
+      | null;
   } | null = null;
   try {
     const { data: lr, error: lrErr } = await supabase.rpc("overhead_lease_rate", {
@@ -175,7 +200,34 @@ export async function GET(request: Request) {
         facilityRate: row.facility_rate ?? null,
         runDaysPerMonth: row.run_days_per_month ?? null,
         facilitySharePct: row.facility_share_pct ?? null,
+        breakdown: null,
       };
+      // Separate try: an unmigrated breakdown function must not cost the
+      // board its rate. The rate prices; the breakdown only explains.
+      try {
+        const { data: bd, error: bdErr } = await supabase.rpc(
+          "overhead_lease_breakdown",
+          { p_line_key: line, ...(asof ? { p_asof: asof } : {}) },
+        );
+        if (!bdErr && Array.isArray(bd) && bd.length > 0) {
+          lease.breakdown = bd.map((b: Record<string, unknown>) => ({
+            suiteKey: String(b.item_key ?? ""),
+            suiteLabel: String(b.suite_label ?? ""),
+            poolKey: String(b.pool_key ?? ""),
+            poolLabel: String(b.pool_label ?? ""),
+            sqFt: (b.sq_ft as number) ?? null,
+            pctOfSuite: (b.pct_of_suite as number) ?? null,
+            baseMonthly: (b.base_monthly as number) ?? null,
+            camMonthly: (b.cam_monthly as number) ?? null,
+            chargedMonthly: (b.charged_monthly as number) ?? null,
+            divisorDays: (b.divisor_days as number) ?? null,
+            ratePerDay: (b.rate_per_day as number) ?? null,
+            sharePctApplied: (b.share_pct_applied as number) ?? null,
+          }));
+        }
+      } catch {
+        // leave breakdown null
+      }
     }
   } catch {
     // leave lease null

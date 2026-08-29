@@ -18,7 +18,7 @@
  * stale number that looks authoritative.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   computeBottleCosting,
   DEFAULT_LEADER_RATE,
@@ -407,6 +407,259 @@ function LabNum({
         }}
       />
     </span>
+  );
+}
+
+/** One suite x pool line of the lease rate, from /api/overhead. */
+type LeaseBreakdownRow = {
+  suiteKey: string;
+  suiteLabel: string;
+  poolKey: string;
+  poolLabel: string;
+  sqFt: number | null;
+  pctOfSuite: number | null;
+  baseMonthly: number | null;
+  camMonthly: number | null;
+  chargedMonthly: number | null;
+  divisorDays: number | null;
+  ratePerDay: number | null;
+  sharePctApplied: number | null;
+};
+
+/** Dotted-underline figure with a native hover explanation. */
+function Tip({ tip, children }: { tip: string; children: React.ReactNode }) {
+  return (
+    <span
+      title={tip}
+      style={{
+        borderBottom: "1px dotted var(--ink-3, #7b7364)",
+        cursor: "help",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The Lease Expenses card when rent is charged per RUN-DAY (v75).
+ *
+ * Grouped by suite so it reads like the leases do, but every row is ONE
+ * checkable calculation — Base + CAM apportioned by floor area, the margin
+ * share applied where the row says so, then a single division by the days in
+ * the next column. The old Share % column is gone because nothing typed
+ * drives this table: the splits come from the floor plan and the margin
+ * figures in the database, and showing an editable number next to money it
+ * does not move is how people stop trusting a screen.
+ *
+ * Read-only on purpose. Change the floor plan or the shares where they live
+ * (overhead_space_functions / overhead_facility_shares) and every calculator
+ * follows.
+ */
+function LeaseBreakdownTable({
+  rows,
+  jobDays,
+  quantity,
+  effRate,
+}: {
+  rows: LeaseBreakdownRow[];
+  jobDays: number | null;
+  quantity: number | null;
+  /** The rate the model is actually pricing at (saved or live). */
+  effRate: number | null;
+}) {
+  const money = (v: number | null | undefined, dec = 2) =>
+    v === null || v === undefined
+      ? "—"
+      : v.toLocaleString("en-US", {
+          minimumFractionDigits: dec,
+          maximumFractionDigits: dec,
+        });
+  const days = jobDays !== null && jobDays > 0 ? jobDays : null;
+  const daysLabel = days === null ? "—" : days.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const jobOf = (rate: number | null) =>
+    rate === null || days === null ? null : rate * days;
+  const perOf = (rate: number | null) => {
+    const j = jobOf(rate);
+    return j === null || !quantity || quantity <= 0 ? null : j / quantity;
+  };
+
+  // "Space serves" text per pool. Facility rows carry the margin share in the
+  // label because that is exactly where it is applied in the Charged column.
+  const serves = (r: LeaseBreakdownRow) => {
+    const area = `${money(r.sqFt, 0)} ft²${r.pctOfSuite !== null ? ` (${r.pctOfSuite}%)` : ""}`;
+    if (r.poolKey === "facility")
+      return `wh + office · ${area}${r.sharePctApplied !== null ? ` × ${r.sharePctApplied}%` : ""}`;
+    if (r.poolKey === "cp_packaging") return `packaging floor · ${area}`;
+    if (r.poolKey === "gummy_manufacturing") return `gummy manufacturing · ${area}`;
+    return `${r.poolLabel} · ${area}`;
+  };
+  const divisorLabel = (r: LeaseBreakdownRow) => {
+    if (!r.chargedMonthly || r.divisorDays === null) return "";
+    return r.poolKey === "facility"
+      ? `${money(r.divisorDays, 2)} CP run-days`
+      : `${money(r.divisorDays, 1)} run-days, all lines`;
+  };
+  const divisorTip = (r: LeaseBreakdownRow) =>
+    r.poolKey === "facility"
+      ? "Run-days worked by Contract Packaging jobs alone, 12-month average from the yield log"
+      : "Yield log, 12-month average: all packaging lines together, about 3 jobs in parallel";
+  const chargedTip = (r: LeaseBreakdownRow) => {
+    if (!r.chargedMonthly) return "This suite's rent is absorbed by another line, not this one";
+    const sum = `${money(r.baseMonthly)} + ${money(r.camMonthly)}`;
+    return r.sharePctApplied !== null
+      ? `(${sum}) × ${r.sharePctApplied}%`
+      : `${sum} — the whole floor is Contract Packaging work`;
+  };
+
+  // Group rows by suite, preserving order. A suite whose space serves two
+  // pools gets a subtotal line so the per-suite figure is still on screen.
+  const suites: { key: string; label: string; rows: LeaseBreakdownRow[] }[] = [];
+  for (const r of rows) {
+    const last = suites[suites.length - 1];
+    if (last && last.key === r.suiteKey) last.rows.push(r);
+    else suites.push({ key: r.suiteKey, label: r.suiteLabel, rows: [r] });
+  }
+
+  const totRate = rows.reduce((s, r) => s + (r.ratePerDay ?? 0), 0);
+  // Price at what the model actually charges. A saved job keeps its frozen
+  // rate; the strip below the card already explains any difference.
+  const priceRate = effRate ?? totRate;
+  const totBase = rows.reduce((s, r) => s + (r.baseMonthly ?? 0), 0);
+  const totCam = rows.reduce((s, r) => s + (r.camMonthly ?? 0), 0);
+  const totCharged = rows.reduce((s, r) => s + (r.chargedMonthly ?? 0), 0);
+
+  const num: React.CSSProperties = { ...labTd, whiteSpace: "nowrap" };
+  const sub: React.CSSProperties = {
+    ...labTd,
+    fontSize: 12,
+    color: "var(--ink-3, #7b7364)",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  };
+
+  return (
+    <div style={labSub}>
+      <div style={labSubTitle}>Lease Expenses</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ ...labTable, minWidth: 1080 }}>
+          <thead>
+            <tr style={labHeadRow}>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 110 }}>Item</th>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 240 }}>Space serves</th>
+              <th style={{ ...labTh, width: 110 }}>Base ($/mo)</th>
+              <th style={{ ...labTh, width: 100 }}>CAM ($/mo)</th>
+              <th style={{ ...labTh, width: 120 }}>Charged ($/mo)</th>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 150 }}>÷ absorbed over</th>
+              <th style={{ ...labTh, width: 100 }}>$ / run-day</th>
+              <th style={{ ...labTh, width: 100 }}>Job (×{daysLabel})</th>
+              <th style={{ ...labTh, width: 100 }}>$ / bottle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {suites.map((s) => {
+              const multi = s.rows.length > 1;
+              const suiteRate = s.rows.reduce((a, r) => a + (r.ratePerDay ?? 0), 0);
+              const charged = s.rows.some((r) => (r.chargedMonthly ?? 0) > 0);
+              const mute: React.CSSProperties = charged
+                ? {}
+                : { color: "var(--ink-3, #7b7364)" };
+              return (
+                <Fragment key={s.key}>
+                  {s.rows.map((r, i) => (
+                    <tr key={r.poolKey} style={{ ...labBodyRow, ...mute }}>
+                      <td style={{ ...labTd, textAlign: "left", fontWeight: i === 0 ? 700 : 400 }}>
+                        {i === 0 ? s.label : ""}
+                      </td>
+                      <td style={sub}>{serves(r)}</td>
+                      <td style={num}>
+                        <Tip tip={`${r.pctOfSuite ?? 100}% of ${s.label}'s lease rent`}>
+                          {money(r.baseMonthly)}
+                        </Tip>
+                      </td>
+                      <td style={num}>
+                        <Tip tip={`${r.pctOfSuite ?? 100}% of ${s.label}'s CAM`}>
+                          {money(r.camMonthly)}
+                        </Tip>
+                      </td>
+                      <td style={num}>
+                        <Tip tip={chargedTip(r)}>{money(r.chargedMonthly)}</Tip>
+                      </td>
+                      <td style={sub}>
+                        {divisorLabel(r) ? (
+                          <Tip tip={divisorTip(r)}>{divisorLabel(r)}</Tip>
+                        ) : null}
+                      </td>
+                      <td style={num}>
+                        {r.chargedMonthly && r.divisorDays ? (
+                          <Tip tip={`${money(r.chargedMonthly)} ÷ ${money(r.divisorDays, 2)}`}>
+                            {money(r.ratePerDay)}
+                          </Tip>
+                        ) : (
+                          money(r.ratePerDay)
+                        )}
+                      </td>
+                      <td style={num}>
+                        {r.chargedMonthly && days !== null ? (
+                          <Tip tip={`${money(r.ratePerDay)} × ${daysLabel} days this job holds the floor`}>
+                            {money(jobOf(r.ratePerDay))}
+                          </Tip>
+                        ) : (
+                          money(charged ? jobOf(r.ratePerDay) : null)
+                        )}
+                      </td>
+                      <td style={num}>
+                        {money(charged ? perOf(r.ratePerDay) : null, 4)}
+                      </td>
+                    </tr>
+                  ))}
+                  {multi ? (
+                    <tr key={`${s.key}-subtotal`} style={{ fontSize: 12 }}>
+                      <td style={{ ...sub, fontSize: 11.5 }}>suite subtotal</td>
+                      <td style={labTd} colSpan={5} />
+                      <td style={{ ...num, fontWeight: 700 }}>{money(suiteRate)}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{money(jobOf(suiteRate))}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{money(perOf(suiteRate), 4)}</td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+            <tr style={labTotalRow}>
+              <td style={{ ...labTh, textAlign: "left" }}>Group total</td>
+              <td style={labTd} />
+              <td style={num}>{money(totBase)}</td>
+              <td style={num}>{money(totCam)}</td>
+              <td style={num}>{money(totCharged)}</td>
+              <td style={labTd} />
+              <td style={num}>
+                <Tip tip="Sum of every row above — the rate the model charges">
+                  {money(priceRate)}
+                </Tip>
+              </td>
+              <td style={num}>
+                {days === null ? (
+                  labSum(null)
+                ) : (
+                  <Tip tip={`${money(priceRate)} × ${daysLabel}`}>
+                    {money(priceRate * days)}
+                  </Tip>
+                )}
+              </td>
+              <td style={num}>
+                {days === null || !quantity || quantity <= 0 ? (
+                  labSum(null)
+                ) : (
+                  <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
+                    {money((priceRate * days) / quantity, 4)}
+                  </Tip>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -1801,6 +2054,11 @@ export default function BottleCostingBoard({
     leaseFloorRate: number | null;
     leaseFacilityRate: number | null;
     runDaysPerMonth: number | null;
+    /**
+     * v75: the rate exploded per suite x pool so the Lease card can show the
+     * gummy-style logic chain. Display only — the PRICE stays leasePerRunDay.
+     */
+    leaseBreakdown: LeaseBreakdownRow[] | null;
     attention: {
       label: string;
       status: string;
@@ -1829,6 +2087,10 @@ export default function BottleCostingBoard({
           leaseFloorRate: json.lease?.floorRate ?? null,
           leaseFacilityRate: json.lease?.facilityRate ?? null,
           runDaysPerMonth: json.lease?.runDaysPerMonth ?? null,
+          leaseBreakdown:
+            Array.isArray(json.lease?.breakdown) && json.lease.breakdown.length > 0
+              ? (json.lease.breakdown as LeaseBreakdownRow[])
+              : null,
           attention: json.attention ?? [],
         });
         // v74.1: the lease RATE is adopted on its own terms, not with the rows.
@@ -3231,9 +3493,32 @@ export default function BottleCostingBoard({
       <div style={shell}>
         <div style={band}>Overhead Costs</div>
 
+        {/* v75: when the run-day rate is driving AND the database can explain
+            it, the Lease card shows the per-suite logic chain instead of the
+            editable rows — the gummy-style table where every figure traces to
+            the one before it. The editable rows remain the fallback for a
+            board that cannot reach the breakdown (old database, offline). */}
+        {leaseRateDriven && overheadMeta?.leaseBreakdown ? (
+          <LeaseBreakdownTable
+            rows={overheadMeta.leaseBreakdown}
+            jobDays={jobDays}
+            quantity={qty}
+            effRate={leaseRateEff}
+          />
+        ) : (
+          <OverheadGroup
+            title="Lease Expenses"
+            mode={"lease" as OverheadGroupMode}
+            list={st.overheadRent}
+            onChange={(next) => set("overheadRent", next)}
+            jobDays={jobDays}
+            workingDays={st.workingDaysPerMonth}
+            quantity={qty}
+            perRunDayRate={leaseRateEff}
+          />
+        )}
         {(
           [
-            { title: "Lease Expenses", key: "overheadRent", mode: "lease" },
             { title: "Indirect Labor", key: "overheadIndirect", mode: "labor" },
             { title: "Other Expenses", key: "overheadOther", mode: undefined },
           ] as const
@@ -3247,7 +3532,7 @@ export default function BottleCostingBoard({
             jobDays={jobDays}
             workingDays={st.workingDaysPerMonth}
             quantity={qty}
-            perRunDayRate={g.mode === "lease" ? leaseRateEff : null}
+            perRunDayRate={null}
           />
         ))}
 
