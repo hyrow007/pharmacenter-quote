@@ -123,6 +123,29 @@ function newProductEntry(): ProductEntry {
   };
 }
 
+/**
+ * Backfill any missing fields on a loaded state so the form never touches
+ * undefined. A row can arrive sparse — the 2026-08-29 partial-state overwrite
+ * left Q0016 with products missing uid/attachments/notes entirely — and the
+ * form assumes the full ProductEntry shape everywhere. Healing on read means
+ * one repaired-by-hand row (or any future migration gap) opens in the editor
+ * instead of crashing it, and the next save writes the complete shape back.
+ */
+function normalizeState(raw: WorkflowState): WorkflowState {
+  const products = (raw.products ?? []).map((p) => ({
+    ...newProductEntry(),
+    ...p,
+    uid: p.uid || uid(),
+    newProduct: { name_desc: "", notes: "", ...(p.newProduct ?? {}) },
+    quantities: p.quantities ?? [""],
+    attachments: p.attachments ?? [],
+  }));
+  return {
+    ...raw,
+    products: products.length > 0 ? products : [newProductEntry()],
+  };
+}
+
 function blankState(): WorkflowState {
   return {
     workflowUid: uid(),
@@ -334,7 +357,7 @@ function StartWorkflow() {
             const row = data.workflow as WorkflowRow;
             setWorkflowId(row.id);
             setQuoteNumber(row.quote_number);
-            setState(row.state);
+            setState(normalizeState(row.state));
             setHydrated(true);
             return;
           }

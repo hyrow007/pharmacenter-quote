@@ -333,9 +333,13 @@ export default async function WorkflowPage({ params }: Ctx) {
               {(state.products ?? []).map((p, idx) => {
                 const isNew = p.mode === "new";
                 const pr = p.productId ? productMap[p.productId] : null;
-                const name = isNew ? (p.newProduct.name_desc || "New product") : (pr?.name ?? "—");
+                // `?.`/`?? []` on the nested fields: same malformed-row guard
+                // as the products array itself — a repaired or partial product
+                // renders sparse, it does not 500 the page.
+                const name = isNew ? (p.newProduct?.name_desc || "New product") : (pr?.name ?? "—");
                 const code = isNew ? null : pr?.fp_code ?? null;
-                const cleanQs = p.quantities.map(cleanQty).filter((q) => q.length > 0);
+                const cleanQs = (p.quantities ?? []).map(cleanQty).filter((q) => q.length > 0);
+                const attachments = p.attachments ?? [];
                 return (
                   <div key={p.uid} style={productRow}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
@@ -354,9 +358,9 @@ export default async function WorkflowPage({ params }: Ctx) {
                         ) : null}
                       </div>
                     ) : null}
-                    {isNew && p.newProduct.notes ? (
+                    {isNew && p.newProduct?.notes ? (
                       <div style={{ fontSize: 13, color: "var(--ink-2)", whiteSpace: "pre-wrap", lineHeight: 1.5, margin: "6px 0" }}>
-                        {p.newProduct.notes}
+                        {p.newProduct?.notes}
                       </div>
                     ) : null}
                     {cleanQs.length > 0 ? (
@@ -371,11 +375,11 @@ export default async function WorkflowPage({ params }: Ctx) {
                         ))}
                       </div>
                     ) : null}
-                    {p.attachments.length > 0 ? (
+                    {attachments.length > 0 ? (
                       <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6 }}>
-                        {p.attachments.length} attachment{p.attachments.length === 1 ? "" : "s"}:
+                        {attachments.length} attachment{attachments.length === 1 ? "" : "s"}:
                         <ul className="attachment-list">
-                          {p.attachments.map((a) => (
+                          {attachments.map((a) => (
                             <li key={a.path} className="attachment-list__item">
                               {a.url ? (
                                 <a
