@@ -635,9 +635,23 @@ function LeaseBreakdownTable({
                     </tr>
                   ))}
                   {multi ? (
+                    // Every money column foots, so the subtotal reads as a
+                    // complete row of its own — the suite's whole lease, its
+                    // whole CAM, and CP's whole slice — rather than a label
+                    // floating five empty columns away from its numbers.
                     <tr key={`${s.key}-subtotal`} style={{ fontSize: 12 }}>
                       <td style={{ ...sub, fontSize: 11.5 }}>suite subtotal</td>
-                      <td style={labTd} colSpan={5} />
+                      <td style={labTd} />
+                      <td style={{ ...num, fontWeight: 700 }}>
+                        {money(s.rows.reduce((a, r) => a + (r.baseMonthly ?? 0), 0))}
+                      </td>
+                      <td style={{ ...num, fontWeight: 700 }}>
+                        {money(s.rows.reduce((a, r) => a + (r.camMonthly ?? 0), 0))}
+                      </td>
+                      <td style={{ ...num, fontWeight: 700 }}>
+                        {money(s.rows.reduce((a, r) => a + (r.chargedMonthly ?? 0), 0))}
+                      </td>
+                      <td style={labTd} />
                       <td style={{ ...num, fontWeight: 700 }}>{money(suiteRate)}</td>
                       <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(suiteRate))}</td>
                       <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(suiteRate), 4)}</td>
