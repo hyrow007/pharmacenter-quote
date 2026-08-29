@@ -582,7 +582,20 @@ function LeaseBreakdownTable({
               return (
                 <Fragment key={s.key}>
                   {s.rows.map((r, i) => (
-                    <tr key={r.poolKey} style={{ ...labBodyRow, ...mute }}>
+                    // In a multi-row suite the divider belongs UNDER the
+                    // subtotal, not between the suite's own rows and it — the
+                    // subtotal is part of the suite's block, and a line above
+                    // it reads as if the block ended one row early.
+                    <tr
+                      key={r.poolKey}
+                      style={{
+                        ...labBodyRow,
+                        ...(multi && i === s.rows.length - 1
+                          ? { borderBottom: "none" }
+                          : {}),
+                        ...mute,
+                      }}
+                    >
                       <td style={{ ...labTd, textAlign: "left", fontWeight: i === 0 ? 700 : 400 }}>
                         {i === 0 ? s.label : ""}
                       </td>
@@ -639,7 +652,7 @@ function LeaseBreakdownTable({
                     // complete row of its own — the suite's whole lease, its
                     // whole CAM, and CP's whole slice — rather than a label
                     // floating five empty columns away from its numbers.
-                    <tr key={`${s.key}-subtotal`} style={{ fontSize: 12 }}>
+                    <tr key={`${s.key}-subtotal`} style={{ ...labBodyRow, fontSize: 12 }}>
                       <td style={{ ...sub, fontSize: 11.5 }}>suite subtotal</td>
                       <td style={labTd} />
                       <td style={{ ...num, fontWeight: 700 }}>
