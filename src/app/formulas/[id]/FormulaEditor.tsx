@@ -891,7 +891,10 @@ export default function FormulaEditor({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/overhead?line=gummy");
+        // Department key, not calculator key. "gummy" was ambiguous: most bulk
+        // PharmaCenter sells is PURCHASED, not made in Suite 400. This key means
+        // specifically the manufacturing that happens in Suite 400.
+        const res = await fetch("/api/overhead?line=gummy_manufacturing");
         const json = await res.json();
         // reason === "not_migrated" lands here too: tables absent on this
         // project, the constants on screen are already right, stay quiet.

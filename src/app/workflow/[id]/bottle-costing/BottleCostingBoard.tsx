@@ -1757,7 +1757,12 @@ export default function BottleCostingBoard({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/overhead?line=bottle");
+        // The key is the DEPARTMENT, not this calculator. Blisters, sachets,
+        // pouches and kitting run on the same floor with the same equipment and
+        // will ask for the same key — they are not dividing Suite 300 between
+        // them, they are each claiming it for the days they run. Five copies of
+        // one judgement is what went wrong with the rent rows.
+        const res = await fetch("/api/overhead?line=contract_packaging");
         const json = await res.json();
         // reason === "not_migrated" lands here too: the SQL has not been run on
         // this project yet, the constants on screen are correct, say nothing.
