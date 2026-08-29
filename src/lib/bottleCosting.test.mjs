@@ -654,3 +654,55 @@ ok('doubling run-days doubles the lease charge',
    B.overheadPerUnit(1000,{...base,leasePerRunDay:467.93},10),
    2*467.93*5/1000);
 }
+
+// -- 17. occupancy: kitting runs ALONGSIDE the line --------------------
+//
+// jobDays charges rent by elapsed floor time, and the kitters work the same
+// clock hours as the run. occupancyHours = setup + cleaning + max(prod, kit);
+// totalHours (which prices labour) still sums all four phases.
+{
+const ok=(n,got,want)=>console.log((Math.abs((got??-1)-(want??-1))<1e-6?'PASS':'**FAIL**').padEnd(10),n,'got',got,'want',want);
+const L=(o={})=>({bottlesPerMinute:100,
+  setup:{hours:2,leaders:1,operators:2},
+  production:{hours:null,leaders:1,operators:4},
+  cleaning:{hours:2,leaders:0,operators:2},
+  kitting:{hours:null,leaders:0,operators:2},
+  leaderRate:20,operatorRate:17,...o});
+// 12000 bottles @100/min = 2h production; kitting 2 people @25/min/person
+// = 12000/(2*25*60) = 4h -- kitting OUTLASTS the line.
+{
+const b=B.laborBreakdown(12000,L({kittingSpeed:25}));
+ok('slow kitting sets the elapsed clock', b.occupancyHours, 2+2+4);
+ok('labour still counts every man-phase hour', b.totalHours, 2+2+2+4);
+}
+// kitting 2 people @100/min/person = 1h -- fits inside the 2h run.
+{
+const b=B.laborBreakdown(12000,L({kittingSpeed:100}));
+ok('kitting inside the run adds no occupancy', b.occupancyHours, 2+2+2);
+ok('but its man-hours still cost money', b.totalHours, 2+2+2+1);
+}
+// no kitting at all: occupancy is just setup + production + cleaning.
+{
+const b=B.laborBreakdown(12000,L());
+ok('no kitting: occupancy = setup+prod+clean', b.occupancyHours, 2+2+2);
+}
+// typed kitting hours win over the derivation, in occupancy too.
+{
+const b=B.laborBreakdown(12000,L({kitting:{hours:6,leaders:0,operators:2}}));
+ok('typed kitting hours drive occupancy', b.occupancyHours, 2+2+6);
+}
+// end-to-end: overhead charges occupancy days, not total-hours days.
+{
+const r=B.computeBottleCosting({quantity:12000,
+  bom:[{id:'x',slot:'bottle',fpCode:'CA-1',name:'b',qtyPerUnit:1,costPerUnit:0,
+        costStatus:'customer_asset',suppliedBy:'customer',
+        costSource:'Fish Bowl (Inventory)'}],
+  labor:L({kittingSpeed:100}),
+  overhead:{rentLease:[],indirectLabor:[],other:[],
+            workingDaysPerMonth:21,leasePerRunDay:467.97},
+  labTesting:{rawMaterials:[],finishedProduct:[]}});
+// occupancy 6h = 0.75 days, NOT totalHours 7h = 0.875 days.
+ok('computeBottleCosting uses occupancy days',
+   r.overheadPerUnit, (467.97*(6/8))/12000);
+}
+}

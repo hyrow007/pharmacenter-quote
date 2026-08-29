@@ -2066,13 +2066,16 @@ export default function BottleCostingBoard({
   /**
    * How many working days this job occupies the floor.
    *
-   * Total labour hours over an 8-hour day, left FRACTIONAL. Overhead is a
-   * smooth spread rather than something you buy in whole days, so rounding a
-   * 13-hour job up to two would overcharge it by half. Null when there is no
-   * labour estimate at all — the same rule as everywhere else.
+   * OCCUPANCY hours — setup + cleaning + max(production, kitting) — over an
+   * 8-hour day, left FRACTIONAL. Kitting happens alongside the run, not
+   * after it, so summing all four phases would charge rent twice for the
+   * same afternoon; and overhead is a smooth spread rather than something
+   * you buy in whole days, so rounding a 13-hour job up to two would
+   * overcharge it by half. Null when there is no labour estimate at all —
+   * the same rule as everywhere else.
    */
   const jobDays = useMemo(
-    () => (lb === null ? null : lb.totalHours / 8),
+    () => (lb === null ? null : lb.occupancyHours / 8),
     [lb],
   );
 

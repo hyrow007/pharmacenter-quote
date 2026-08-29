@@ -770,6 +770,23 @@ export type LaborRoleBreakdown = {
 export type LaborBreakdown = {
   phases: LaborPhaseBreakdown[];
   totalHours: number;
+  /**
+   * Elapsed hours the job holds the packaging floor:
+   *
+   *   setup + cleaning + max(production, kitting)
+   *
+   * NOT the same as totalHours, and the difference is rent. Kitting runs
+   * ALONGSIDE the line, not after it — the kitters work the same clock hours
+   * as the run. Summing all four phases would charge floor occupancy twice
+   * for the same afternoon. The max() covers the case that matters: a slow
+   * kitting crew that outlasts the line still holds the floor and still
+   * pays for it.
+   *
+   * Labour cost stays on totalHours — man-hours cost money whether they
+   * happen in sequence or in parallel; the payroll does not care. Only the
+   * lease charges by elapsed time.
+   */
+  occupancyHours: number;
   roles: LaborRoleBreakdown[];
   grandTotal: number;
   /** grandTotal / quantity. Null when the quantity is unknown. */
@@ -891,6 +908,7 @@ export function laborBreakdown(
   return {
     phases,
     totalHours: phases.reduce((s, p) => s + p.totalHours, 0),
+    occupancyHours: setupHours + cleanHours + Math.max(prodHours, kitHours),
     roles,
     grandTotal,
     perUnit: q !== null && q > 0 ? grandTotal / q : null,
@@ -969,13 +987,17 @@ export function computeBottleCosting(
   const prodHours = productionHours(q, input.labor.bottlesPerMinute);
   const lab = laborPerUnit(q, input.labor);
 
-  // Overhead is charged by how long the job occupies the floor. With hours as
-  // the unit that is simply total hours over an 8-hour working day — and left
-  // fractional, because overhead is a smooth spread. Rounding a 12-hour job up
-  // to two whole days would overcharge it by a third.
+  // Overhead is charged by how long the job occupies the floor — OCCUPANCY
+  // hours over an 8-hour working day, not total man-phase hours, because
+  // kitting runs alongside the line rather than after it (see occupancyHours
+  // on LaborBreakdown). Left fractional, because overhead is a smooth spread:
+  // rounding a 12-hour job up to two whole days would overcharge it by a
+  // third.
   const lbForDays = laborBreakdown(q, input.labor);
   const jobDays =
-    lbForDays === null ? null : lbForDays.totalHours / DEFAULT_HOURS_PER_DAY;
+    lbForDays === null
+      ? null
+      : lbForDays.occupancyHours / DEFAULT_HOURS_PER_DAY;
 
   const ovh = overheadPerUnit(q, input.overhead, jobDays);
 
