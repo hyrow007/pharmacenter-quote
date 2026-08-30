@@ -4666,7 +4666,20 @@ export default function BottleCostingBoard({
           sale price, so the $ figure can only exist once Margin & Price has
           produced one. */}
       <div style={shell}>
-        <div style={band}>Commissions</div>
+        <div
+          style={{
+            ...band,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Commissions</span>
+          <DecimalPicker
+            value={st.displayDec}
+            onChange={(n) => set("displayDec", n)}
+          />
+        </div>
         <div style={metricGrid}>
           <ParamBlock label="HoS commission %" nowrap>
             <NumField
@@ -4705,7 +4718,20 @@ export default function BottleCostingBoard({
 
       {/* ---------- Costs ---------- */}
       <div style={shell}>
-        <div style={band}>Costs</div>
+        <div
+          style={{
+            ...band,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Costs</span>
+          <DecimalPicker
+            value={st.displayDec}
+            onChange={(n) => set("displayDec", n)}
+          />
+        </div>
         <div style={metricGrid}>
           <ParamBlock label="Material cost / bottle" nowrap>
             <ReadOnly>
@@ -4807,7 +4833,20 @@ export default function BottleCostingBoard({
           convention as the main calculator, deliberately: two shops using
           two different definitions of "30%" is how quotes get mispriced. */}
       <div style={shell} className="bc-price">
-        <div style={band}>Margin &amp; Price</div>
+        <div
+          style={{
+            ...band,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Margin &amp; Price</span>
+          <DecimalPicker
+            value={st.displayDec}
+            onChange={(n) => set("displayDec", n)}
+          />
+        </div>
         <div style={metricGrid}>
           <ParamBlock label="Margin / markup %" nowrap>
             <NumField
