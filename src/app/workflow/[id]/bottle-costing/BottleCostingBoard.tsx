@@ -1569,7 +1569,19 @@ function OverheadGroup({
 }
 
 /**
- * One lab-testing sub-card: Raw Materials or Finished Product.
+ * The tests the lab routinely quotes, with their standard prices
+ * (2026-08-30). Both the Bulk and Finished Product lists offer the same
+ * three; a preset seeds the row, it does not lock it — cost and count stay
+ * editable per job.
+ */
+const LAB_TEST_PRESETS = [
+  { label: "Microbiology", cost: 80 },
+  { label: "Yeast & Mold", cost: 80 },
+  { label: "Actives", cost: 120 },
+] as const;
+
+/**
+ * One lab-testing sub-card: Bulk or Finished Product.
  *
  * Starts empty on purpose. Testing varies by customer and by job, and a seeded
  * list would put dollars on a quote that nobody chose to spend.
@@ -1695,13 +1707,45 @@ function LabTestGroup({
           </tr>
         </tbody>
       </table>
-      <div style={{ padding: "0 14px 12px" }}>
+      <div
+        style={{
+          padding: "0 14px 12px",
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        {/* The three tests the lab actually runs, with their standard prices,
+            one click each. Cost stays editable on the row afterwards — the
+            default is a starting point, not a lock. "Other test" keeps the
+            old blank row for anything off-menu. */}
+        {LAB_TEST_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() =>
+              onChange([...list, { label: p.label, cost: p.cost, qty: 1 }])
+            }
+            style={{
+              padding: "5px 12px",
+              border: "1px solid var(--teal-700, #1d6c7b)",
+              borderRadius: 6,
+              background: "#fff",
+              color: "var(--teal-900, #0f4a56)",
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            + {p.label} (${p.cost})
+          </button>
+        ))}
         <button
           type="button"
           onClick={() => onChange([...list, { label: "", cost: 0, qty: 1 }])}
           style={{
             padding: "5px 12px",
-            border: "1px solid var(--teal-700, #1d6c7b)",
+            border: "1px dashed var(--teal-700, #1d6c7b)",
             borderRadius: 6,
             background: "#fff",
             color: "var(--teal-900, #0f4a56)",
@@ -1710,7 +1754,7 @@ function LabTestGroup({
             cursor: "pointer",
           }}
         >
-          + Add test
+          + Other test
         </button>
       </div>
     </div>
@@ -4453,7 +4497,10 @@ export default function BottleCostingBoard({
           <>
             {(
               [
-                { title: "Raw Materials", key: "labTestRm" },
+                // "Bulk" — the customer's bulk product being packaged — not
+                // "Raw Materials", which on this board would read as bottles
+                // and caps. Storage key stays labTestRm for saved-state compat.
+                { title: "Bulk", key: "labTestRm" },
                 { title: "Finished Product", key: "labTestFp" },
               ] as const
             ).map((g) => (
