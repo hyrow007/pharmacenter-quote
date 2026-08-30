@@ -521,8 +521,11 @@ function LeaseBreakdownTable({
   jobDays,
   quantity,
   effRate,
+  dec = 4,
 }: {
   rows: LeaseBreakdownRow[];
+  /** Decimal places for the $/bottle column — the board-wide picker value. */
+  dec?: number;
   jobDays: number | null;
   quantity: number | null;
   /** The rate the model is actually pricing at (saved or live). */
@@ -703,7 +706,7 @@ function LeaseBreakdownTable({
                         )}
                       </td>
                       <td style={num}>
-                        {moneyD(charged ? perOf(r.ratePerDay) : null, 4)}
+                        {moneyD(charged ? perOf(r.ratePerDay) : null, dec)}
                       </td>
                     </tr>
                   ))}
@@ -727,7 +730,7 @@ function LeaseBreakdownTable({
                       <td style={labTd} />
                       <td style={{ ...num, fontWeight: 700 }}>{money(suiteRate)}</td>
                       <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(suiteRate))}</td>
-                      <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(suiteRate), 4)}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(suiteRate), dec)}</td>
                     </tr>
                   ) : null}
                 </Fragment>
@@ -759,7 +762,7 @@ function LeaseBreakdownTable({
                   labSum(null)
                 ) : (
                   <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
-                    {moneyD((priceRate * days) / quantity, 4)}
+                    {moneyD((priceRate * days) / quantity, dec)}
                   </Tip>
                 )}
               </td>
@@ -800,8 +803,11 @@ function IndirectBreakdownTable({
   jobDays,
   quantity,
   effRate,
+  dec = 4,
 }: {
   rows: IndirectBreakdownRow[];
+  /** Decimal places for the $/bottle column — the board-wide picker value. */
+  dec?: number;
   jobDays: number | null;
   quantity: number | null;
   effRate: number | null;
@@ -960,7 +966,7 @@ function IndirectBreakdownTable({
                           moneyD(jobOf(r.ratePerDay))
                         )}
                       </td>
-                      <td style={num}>{moneyD(perOf(r.ratePerDay), 4)}</td>
+                      <td style={num}>{moneyD(perOf(r.ratePerDay), dec)}</td>
                     </tr>
                   ))}
                   <tr style={{ ...labBodyRow, fontSize: 12 }}>
@@ -975,7 +981,7 @@ function IndirectBreakdownTable({
                     <td style={labTd} />
                     <td style={{ ...num, fontWeight: 700 }}>{money(poolRate)}</td>
                     <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(poolRate))}</td>
-                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(poolRate), 4)}</td>
+                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(poolRate), dec)}</td>
                   </tr>
                 </Fragment>
               );
@@ -1005,7 +1011,7 @@ function IndirectBreakdownTable({
                   labSum(null)
                 ) : (
                   <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
-                    {moneyD((priceRate * days) / quantity, 4)}
+                    {moneyD((priceRate * days) / quantity, dec)}
                   </Tip>
                 )}
               </td>
@@ -1042,8 +1048,11 @@ function OtherBreakdownTable({
   jobDays,
   quantity,
   effRate,
+  dec = 4,
 }: {
   rows: OtherBreakdownRow[];
+  /** Decimal places for the $/bottle column — the board-wide picker value. */
+  dec?: number;
   jobDays: number | null;
   quantity: number | null;
   effRate: number | null;
@@ -1205,7 +1214,7 @@ function OtherBreakdownTable({
                           moneyD(jobOf(r.ratePerDay))
                         )}
                       </td>
-                      <td style={num}>{moneyD(perOf(r.ratePerDay), 4)}</td>
+                      <td style={num}>{moneyD(perOf(r.ratePerDay), dec)}</td>
                     </tr>
                   ))}
                   <tr style={{ ...labBodyRow, fontSize: 12 }}>
@@ -1220,7 +1229,7 @@ function OtherBreakdownTable({
                     <td style={labTd} />
                     <td style={{ ...num, fontWeight: 700 }}>{money(poolRate)}</td>
                     <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(poolRate))}</td>
-                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(poolRate), 4)}</td>
+                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(poolRate), dec)}</td>
                   </tr>
                 </Fragment>
               );
@@ -1250,7 +1259,7 @@ function OtherBreakdownTable({
                   labSum(null)
                 ) : (
                   <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
-                    {moneyD((priceRate * days) / quantity, 4)}
+                    {moneyD((priceRate * days) / quantity, dec)}
                   </Tip>
                 )}
               </td>
@@ -1279,6 +1288,7 @@ function OverheadGroup({
   workingDays,
   quantity,
   perRunDayRate,
+  dec = 4,
 }: {
   title: string;
   mode: OverheadGroupMode;
@@ -1289,6 +1299,7 @@ function OverheadGroup({
   quantity: number | null;
   /** Lease only: $/run-day the model is charging. See rateDriven below. */
   perRunDayRate?: number | null;
+  dec?: number;
 }) {
   const patch = (i: number, p: Partial<OverheadItem>) =>
     onChange(list.map((r, n) => (n === i ? { ...r, ...p } : r)));
@@ -1535,7 +1546,7 @@ function OverheadGroup({
                     {rateDriven ? labSum(null) : labMoney(charged, 2)}
                   </td>
                   <td style={labTd}>
-                    {rateDriven || per === null ? labSum(null) : labMoney(per, 4)}
+                    {rateDriven || per === null ? labSum(null) : labMoney(per, dec)}
                   </td>
                   <td style={labTd}>
                     <button
@@ -1596,10 +1607,10 @@ function OverheadGroup({
                 {rateDriven
                   ? rateJobPerUnit === null
                     ? labSum(null)
-                    : labMoney(rateJobPerUnit, 4)
+                    : labMoney(rateJobPerUnit, dec)
                   : perUnitOf(groupCharged) === null
                     ? labSum(null)
-                    : labMoney(perUnitOf(groupCharged) as number, 4)}
+                    : labMoney(perUnitOf(groupCharged) as number, dec)}
               </td>
               <td style={labTd} />
             </tr>
@@ -1651,11 +1662,13 @@ function LabTestGroup({
   list,
   onChange,
   quantity,
+  dec = 4,
 }: {
   title: string;
   list: LabTestItem[];
   onChange: (next: LabTestItem[]) => void;
   quantity: number | null;
+  dec?: number;
 }) {
   const patch = (i: number, p: Partial<LabTestItem>) =>
     onChange(list.map((r, n) => (n === i ? { ...r, ...p } : r)));
@@ -1731,7 +1744,7 @@ function LabTestGroup({
                 <td style={labTd}>{labMoney(line, 2)}</td>
                 <td style={labTd}>
                   {quantity && quantity > 0
-                    ? labMoney(line / quantity, 4)
+                    ? labMoney(line / quantity, dec)
                     : labSum(null)}
                 </td>
                 <td style={labTd}>
@@ -1761,7 +1774,7 @@ function LabTestGroup({
             <td style={labTd} />
             <td style={labTd}>{labMoney(total, 2)}</td>
             <td style={labTd}>
-              {per === null ? labSum(null) : labMoney(per, 4)}
+              {per === null ? labSum(null) : labMoney(per, dec)}
             </td>
             <td style={labTd} />
           </tr>
@@ -2953,7 +2966,10 @@ export default function BottleCostingBoard({
           operators: st.setupOperators,
         },
         production: {
-          hours: st.prodHoursTotal,
+          // v79: production hours are DERIVED (qty ÷ bottles per minute),
+          // like kitting — the cell is read-only, so no override is passed.
+          // prodHoursTotal stays on SavedState only so old saves still load.
+          hours: null,
           leaders: st.prodLeaders,
           operators: st.prodOperators,
         },
@@ -3246,12 +3262,22 @@ export default function BottleCostingBoard({
               customer asked for is a fact, and trying 24,000 here must not
               quietly rewrite it. Blank restores the workflow's figure. */}
           <ParamBlock label="QTY (Bottles)" nowrap>
-            <NumField
-              value={st.quantityOverride ?? quantity}
-              onChange={(v) =>
-                set("quantityOverride", v === quantity ? null : v)
+            {/* Text input, not type=number, so the thousands separator can
+                render: 12,000 reads as twelve thousand at a glance where
+                12000 has to be counted. Digits only; commas are chrome. */}
+            <input
+              inputMode="numeric"
+              value={
+                (st.quantityOverride ?? quantity)?.toLocaleString("en-US") ??
+                ""
               }
               placeholder="required"
+              onChange={(e) => {
+                const digits = e.target.value.replace(/[^0-9]/g, "");
+                const v = digits === "" ? null : Number(digits);
+                set("quantityOverride", v === quantity ? null : v);
+              }}
+              style={numInput}
             />
           </ParamBlock>
           <ParamBlock label="Line speed (bottles / minute)" nowrap>
@@ -3269,15 +3295,6 @@ export default function BottleCostingBoard({
               value={st.kittingSpeed}
               onChange={(v) => set("kittingSpeed", v)}
             />
-          </ParamBlock>
-          <ParamBlock label="Line time (hours)" nowrap>
-            <ReadOnly>
-              {r.productionHours !== null
-                ? r.productionHours.toLocaleString("en-US", {
-                    maximumFractionDigits: 2,
-                  })
-                : "—"}
-            </ReadOnly>
           </ParamBlock>
           {/* Only when the two differ, so the override is never silent. */}
           {st.quantityOverride !== null &&
@@ -3781,7 +3798,7 @@ export default function BottleCostingBoard({
                     {line.notUsed
                       ? "—"
                       : line.suppliedBy === "customer"
-                        ? money(0)
+                        ? money(0, st.displayDec)
                         : (() => {
                             const c = costFromSource(line);
                             const q = line.qtyPerUnit;
@@ -3791,7 +3808,7 @@ export default function BottleCostingBoard({
                             const w = wasteFactor(line);
                             if (c === null || q === null || w === null)
                               return "—";
-                            return money(q * c * w);
+                            return money(q * c * w, st.displayDec);
                           })()}
                   </ReadOnly>
                   {/* Show the working, not just the answer. The figure above
@@ -3961,13 +3978,14 @@ export default function BottleCostingBoard({
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
                     {lb.phases.map((p, i) => (
                       <td key={p.label} style={labTd}>
-                        {/* Kitting is READ-ONLY. It is a function of the
-                            kitting speed and the people on it, so an editable
-                            cell here would offer to contradict the two inputs
-                            that produce it — and whichever the user changed
-                            last would win silently. Change the speed or the
-                            crew instead. */}
-                        {p.label === "Kitting" ? (
+                        {/* Kitting and Production are READ-ONLY. Each is a
+                            function of inputs typed elsewhere — kitting of
+                            the kitting speed and crew, production of qty ÷
+                            bottles per minute — so an editable cell here
+                            would offer to contradict the inputs that produce
+                            it, and whichever the user changed last would win
+                            silently. Change the speed instead. */}
+                        {p.label === "Kitting" || p.label === "Production" ? (
                           labSum(p.totalHours)
                         ) : (
                           <LabNum
@@ -4002,9 +4020,9 @@ export default function BottleCostingBoard({
                   color: "var(--ink-3, #7b7364)",
                 }}
               >
-                {st.prodHoursTotal === null
-                  ? "Setup and cleaning default to 2 hours. Production is qty ÷ bottles per minute — type over it to override."
-                  : "Production hours typed by hand; clear the field to go back to bottles per minute."}
+                Setup and cleaning default to 2 hours. Production is qty ÷
+                bottles per minute and kitting follows the kitting speed and
+                crew — change those inputs, not these cells.
               </div>
             </div>
 
@@ -4198,7 +4216,7 @@ export default function BottleCostingBoard({
                       <td style={labTd}>{labMoney(role.total, 2)}</td>
                       <td style={labTd}>
                         {qty && qty > 0
-                          ? labMoney(role.total / qty, 4)
+                          ? labMoney(role.total / qty, st.displayDec)
                           : labSum(null)}
                       </td>
                     </tr>
@@ -4210,7 +4228,7 @@ export default function BottleCostingBoard({
                     <td style={labTd}>{labMoney(lb.grandTotal, 2)}</td>
                     <td style={labTd}>
                       {lb.perUnit !== null
-                        ? labMoney(lb.perUnit, 4)
+                        ? labMoney(lb.perUnit, st.displayDec)
                         : labSum(null)}
                     </td>
                   </tr>
@@ -4258,6 +4276,7 @@ export default function BottleCostingBoard({
             jobDays={jobDays}
             quantity={qty}
             effRate={leaseRateEff}
+            dec={st.displayDec}
           />
         ) : (
           <OverheadGroup
@@ -4269,6 +4288,7 @@ export default function BottleCostingBoard({
             workingDays={st.workingDaysPerMonth}
             quantity={qty}
             perRunDayRate={leaseRateEff}
+            dec={st.displayDec}
           />
         )}
         {/* v76: same swap as the lease — the pool table when the rate drives
@@ -4279,6 +4299,7 @@ export default function BottleCostingBoard({
             jobDays={jobDays}
             quantity={qty}
             effRate={indirectRateEff}
+            dec={st.displayDec}
           />
         ) : (
           <OverheadGroup
@@ -4290,6 +4311,7 @@ export default function BottleCostingBoard({
             workingDays={st.workingDaysPerMonth}
             quantity={qty}
             perRunDayRate={null}
+            dec={st.displayDec}
           />
         )}
         {otherRateDriven && overheadMeta?.otherBreakdown ? (
@@ -4298,6 +4320,7 @@ export default function BottleCostingBoard({
             jobDays={jobDays}
             quantity={qty}
             effRate={otherRateEff}
+            dec={st.displayDec}
           />
         ) : (
           <OverheadGroup
@@ -4309,6 +4332,7 @@ export default function BottleCostingBoard({
             workingDays={st.workingDaysPerMonth}
             quantity={qty}
             perRunDayRate={null}
+            dec={st.displayDec}
           />
         )}
 
@@ -4599,6 +4623,7 @@ export default function BottleCostingBoard({
                 list={st[g.key]}
                 onChange={(next) => set(g.key, next)}
                 quantity={qty}
+                dec={st.displayDec}
               />
             ))}
 
