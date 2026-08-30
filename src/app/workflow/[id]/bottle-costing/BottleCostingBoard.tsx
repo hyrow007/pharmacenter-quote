@@ -151,14 +151,73 @@ function ParamBlock({
  * failure this calculator exists to avoid. The only arithmetic here is
  * per-bottle × quantity, which is presentation, not costing.
  */
+/**
+ * Shared decimal chevron picker (< fewer / > more, range 0–4), ported from
+ * the formula tool's Costing tab so the two boards share one convention.
+ * One board-wide value drives every per-bottle figure — adjusting it on any
+ * card adjusts them all, deliberately: two cards showing the same kind of
+ * number at different precisions is how people misread a screen.
+ */
+function DecimalPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const btnStyle = (off: boolean): React.CSSProperties => ({
+    width: 16,
+    height: 18,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    color: off ? "var(--ink-4, #c7cccf)" : "var(--ink-3, #8a9498)",
+    background: "transparent",
+    border: "1px solid var(--line, #e3dcc9)",
+    borderRadius: 3,
+    padding: 0,
+    cursor: off ? "default" : "pointer",
+  });
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, value - 1))}
+        disabled={value <= 0}
+        title="Fewer decimal places"
+        aria-label="Fewer decimal places"
+        style={btnStyle(value <= 0)}
+      >
+        &lt;
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(4, value + 1))}
+        disabled={value >= 4}
+        title="More decimal places"
+        aria-label="More decimal places"
+        style={btnStyle(value >= 4)}
+      >
+        &gt;
+      </button>
+    </span>
+  );
+}
+
 function CardTotal({
   label,
   perUnit,
   quantity,
+  dec = 4,
+  picker,
 }: {
   label: string;
   perUnit: number | null;
   quantity: number | null;
+  dec?: number;
+  picker?: React.ReactNode;
 }) {
   const total =
     perUnit !== null && quantity !== null && quantity > 0
@@ -211,7 +270,8 @@ function CardTotal({
           >
             Total
           </span>
-          <ReadOnly>{perUnit !== null ? money(perUnit) : "—"}</ReadOnly>
+          <ReadOnly>{perUnit !== null ? money(perUnit, dec) : "—"}</ReadOnly>
+          {picker}
         </span>
         {total !== null && (
           <div
@@ -1948,6 +2008,12 @@ export type SavedState = {
    * turning testing ON is a choice, not something to forget to remove.
    */
   labTestingEnabled: boolean;
+  /**
+   * v79: decimal places for the per-bottle figures (0–4), one value for the
+   * whole board — same chevron control as the formula tool's Costing tab.
+   * Display-only; the stored numbers keep full precision.
+   */
+  displayDec: number;
 
   // ---- pricing tier ----
   // For contract-packaging bottles this board IS the pricing calculator, so
@@ -2187,6 +2253,7 @@ export function blankState(
     labTestRm: [],
     labTestFp: [],
     labTestingEnabled: false,
+    displayDec: 4,
     marginPct: DEFAULT_MARGIN_PCT,
     marginMode: "gross-margin",
     hosCommissionPct: DEFAULT_HOS_COMMISSION_PCT,
@@ -2608,6 +2675,7 @@ export default function BottleCostingBoard({
             (initial.labTestFp?.length ?? 0) > 0 ||
             (legacyLabTotal && legacyLabTotal > 0),
         ),
+      displayDec: initial.displayDec ?? blank.displayDec,
       kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
       kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
@@ -3829,6 +3897,13 @@ export default function BottleCostingBoard({
           label="Material cost / bottle"
           perUnit={r.materialsPerUnit}
           quantity={qty}
+          dec={st.displayDec}
+          picker={
+            <DecimalPicker
+              value={st.displayDec}
+              onChange={(n) => set("displayDec", n)}
+            />
+          }
         />
       </div>
 
@@ -4148,6 +4223,13 @@ export default function BottleCostingBoard({
           label="Direct labor / bottle"
           perUnit={r.laborPerUnit}
           quantity={qty}
+          dec={st.displayDec}
+          picker={
+            <DecimalPicker
+              value={st.displayDec}
+              onChange={(n) => set("displayDec", n)}
+            />
+          }
         />
       </div>
 
@@ -4433,6 +4515,13 @@ export default function BottleCostingBoard({
           label="Overhead / bottle"
           perUnit={r.overheadPerUnit}
           quantity={qty}
+          dec={st.displayDec}
+          picker={
+            <DecimalPicker
+              value={st.displayDec}
+              onChange={(n) => set("displayDec", n)}
+            />
+          }
         />
       </div>
 
@@ -4517,6 +4606,13 @@ export default function BottleCostingBoard({
               label="Lab testing / bottle"
               perUnit={r.labTestingPerUnit}
               quantity={qty}
+              dec={st.displayDec}
+              picker={
+                <DecimalPicker
+                  value={st.displayDec}
+                  onChange={(n) => set("displayDec", n)}
+                />
+              }
             />
           </>
         ) : (
@@ -4581,7 +4677,7 @@ export default function BottleCostingBoard({
             <ReadOnly>
               {r.materialsPerUnit !== null ? (
                 <>
-                  {money(r.materialsPerUnit)}
+                  {money(r.materialsPerUnit, st.displayDec)}
                   {pctOf(r.materialsPerUnit)}
                 </>
               ) : (
@@ -4593,7 +4689,7 @@ export default function BottleCostingBoard({
             <ReadOnly>
               {r.laborPerUnit !== null ? (
                 <>
-                  {money(r.laborPerUnit)}
+                  {money(r.laborPerUnit, st.displayDec)}
                   {pctOf(r.laborPerUnit)}
                 </>
               ) : (
@@ -4605,7 +4701,7 @@ export default function BottleCostingBoard({
             <ReadOnly>
               {r.overheadPerUnit !== null ? (
                 <>
-                  {money(r.overheadPerUnit)}
+                  {money(r.overheadPerUnit, st.displayDec)}
                   {pctOf(r.overheadPerUnit)}
                 </>
               ) : (
@@ -4615,12 +4711,12 @@ export default function BottleCostingBoard({
           </ParamBlock>
           <ParamBlock label="Lab testing / bottle" nowrap>
             <ReadOnly>
-              {r.labTestingPerUnit !== null ? money(r.labTestingPerUnit) : "—"}
+              {r.labTestingPerUnit !== null ? money(r.labTestingPerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="True Cost / bottle" nowrap>
             <ReadOnly>
-              {r.costPerUnit !== null ? money(r.costPerUnit) : "—"}
+              {r.costPerUnit !== null ? money(r.costPerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Cost per Thousand" nowrap>
@@ -4693,7 +4789,7 @@ export default function BottleCostingBoard({
         <div style={metricGrid}>
           <ParamBlock label="Price / bottle" nowrap>
             <ReadOnly>
-              {r.salePerUnit !== null ? money(r.salePerUnit) : "—"}
+              {r.salePerUnit !== null ? money(r.salePerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Price per Thousand" nowrap>
