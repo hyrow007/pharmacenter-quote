@@ -154,6 +154,53 @@ function ParamBlock({
  * per-bottle × quantity, which is presentation, not costing.
  */
 /**
+ * Editable price with a draft-while-focused buffer. The margin stays the
+ * stored truth; typing a price back-solves the margin, so a re-render mid-
+ * keystroke cannot fight the user with a reformatted value. Blur or Enter
+ * commits; Escape abandons.
+ */
+function PriceField({
+  value,
+  dec,
+  disabled,
+  onCommit,
+}: {
+  value: number | null;
+  dec: number;
+  disabled?: boolean;
+  onCommit: (price: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      inputMode="decimal"
+      disabled={disabled}
+      style={{ ...numInput, opacity: disabled ? 0.5 : 1 }}
+      value={draft !== null ? draft : value !== null ? value.toFixed(dec) : ""}
+      onFocus={(e) => {
+        setDraft(value !== null ? String(value) : "");
+        e.target.select();
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== null) {
+          const n = Number(draft);
+          if (Number.isFinite(n) && n > 0) onCommit(n);
+        }
+        setDraft(null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(null);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
+
+/**
  * Shared decimal chevron picker (< fewer / > more, range 0–4), ported from
  * the formula tool's Costing tab so the two boards share one convention.
  * One board-wide value drives every per-bottle figure — adjusting it on any
@@ -3244,6 +3291,40 @@ export default function BottleCostingBoard({
     }
   }, [st, workflowId]);
 
+  // ---- price <-> margin back-solving --------------------------------
+  // The margin % stays the single stored truth. Typing a price, or pressing
+  // "Set to break-even", solves the margin that produces that price under
+  // the current mode and writes THAT — so every readout (profit, operating
+  // margin, banner) follows from one number, never from two that can drift.
+  const commissionRate =
+    ((st.hosCommissionPct ?? 0) + (st.repCommissionPct ?? 0)) / 100;
+  const marginFromPrice = (p: number): number | null => {
+    if (r.costPerUnit === null || !(p > 0)) return null;
+    let m: number;
+    if (st.marginMode === "markup") {
+      const denom = r.costPerUnit + p * commissionRate;
+      if (denom <= 0) return null;
+      m = (p / denom - 1) * 100;
+    } else {
+      m = (1 - commissionRate - r.costPerUnit / p) * 100;
+    }
+    // 4 decimal places of percent keeps the typed price round-tripping to
+    // within a hundredth of a cent without storing noise.
+    return Math.round(m * 10000) / 10000;
+  };
+  // The price at which this job's operating profit per run-day exactly meets
+  // the plant break-even: P·qty·(1−c) − cost = BREAKEVEN × days.
+  const breakEvenPrice: number | null =
+    r.totalCost !== null &&
+    qty &&
+    qty > 0 &&
+    jobDays !== null &&
+    jobDays > 0 &&
+    1 - commissionRate > 0
+      ? (BREAKEVEN_OP_PROFIT_PER_RUN_DAY * jobDays + r.totalCost) /
+        (qty * (1 - commissionRate))
+      : null;
+
   const pctOf = (v: number) =>
     r.costPerUnit && r.costPerUnit > 0 ? (
       <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.65 }}>
@@ -4878,9 +4959,46 @@ export default function BottleCostingBoard({
         </div>
         <div style={metricGrid}>
           <ParamBlock label="Price / bottle" nowrap>
-            <ReadOnly>
-              {r.salePerUnit !== null ? money(r.salePerUnit, st.displayDec) : "—"}
-            </ReadOnly>
+            {/* Editable: quoting sometimes starts from the number the
+                customer will see. Typing here back-solves the margin above,
+                so profit, operating margin and the break-even banner all
+                move together. */}
+            <PriceField
+              value={r.salePerUnit}
+              dec={Math.max(st.displayDec, 2)}
+              disabled={r.costPerUnit === null}
+              onCommit={(p) => {
+                const m = marginFromPrice(p);
+                if (m !== null) set("marginPct", m);
+              }}
+            />
+            <button
+              type="button"
+              disabled={breakEvenPrice === null}
+              onClick={() => {
+                if (breakEvenPrice === null) return;
+                const m = marginFromPrice(breakEvenPrice);
+                if (m !== null) set("marginPct", m);
+              }}
+              title="Price this job so its operating profit per run-day exactly meets the plant break-even"
+              style={{
+                marginTop: 6,
+                padding: "4px 10px",
+                border: "1px solid var(--teal-700, #1d6c7b)",
+                borderRadius: 6,
+                background: "#fff",
+                color: "var(--teal-900, #0f4a56)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: breakEvenPrice === null ? "default" : "pointer",
+                opacity: breakEvenPrice === null ? 0.5 : 1,
+              }}
+            >
+              Set to break-even
+              {breakEvenPrice !== null
+                ? ` ($${breakEvenPrice.toFixed(Math.max(st.displayDec, 2))})`
+                : ""}
+            </button>
           </ParamBlock>
           <ParamBlock label="Total Quote Value" nowrap>
             <ReadOnly>
@@ -4890,6 +5008,15 @@ export default function BottleCostingBoard({
           <ParamBlock label="Job operating profit" nowrap>
             <ReadOnly>
               {r.grossProfit !== null ? money(r.grossProfit, 2) : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          {/* The number the break-even banner judges — surfaced as its own
+              metric so the comparison is total-to-total, not total-to-rate. */}
+          <ParamBlock label="Daily operating profit" nowrap>
+            <ReadOnly>
+              {r.grossProfit !== null && jobDays !== null && jobDays > 0
+                ? money(r.grossProfit / jobDays, 2)
+                : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Operating margin" nowrap>
