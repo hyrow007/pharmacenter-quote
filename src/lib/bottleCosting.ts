@@ -881,13 +881,15 @@ export function laborBreakdown(
       labor.production.leaders,
       labor.production.operators,
     ),
-    mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
+    // Kitting before Cleaning: it runs alongside production, so it reads in
+    // process order — you kit while the line runs, then you clean.
     mk(
       "Kitting",
       kitHours,
       labor.kitting?.leaders,
       labor.kitting?.operators,
     ),
+    mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
   ];
 
   const role = (

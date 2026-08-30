@@ -374,7 +374,7 @@ const L={
 const b=B.laborBreakdown(300000,L);
 
 ok('house defaults are 2 h', [B.DEFAULT_SETUP_HOURS,B.DEFAULT_CLEANING_HOURS], [2,2]);
-ok('setup + cleaning default to 2 h', [b.phases[0].totalHours,b.phases[2].totalHours], [2,2]);
+ok('setup + cleaning default to 2 h', [b.phases[0].totalHours,b.phases[3].totalHours], [2,2]);
 ok('production takes the typed hours', b.phases[1].totalHours, 32);
 ok('total hours', b.totalHours, 36);
 
@@ -401,7 +401,7 @@ ok('  ...laborPerUnit null too',  B.laborPerUnit(12000,n), null);
 
 // an explicit 0 survives -- "no cleaning on this job" must not become 2 h
 ok('explicit 0 cleaning stays 0',
-   B.laborBreakdown(300000,{...L, cleaning:{...L.cleaning, hours:0}}).phases[2].totalHours, 0);
+   B.laborBreakdown(300000,{...L, cleaning:{...L.cleaning, hours:0}}).phases[3].totalHours, 0);
 
 // the wrapper agrees with the breakdown
 ok('laborPerUnit matches', B.laborPerUnit(300000,L), b.perUnit);
@@ -425,14 +425,14 @@ ok('kitting default is 0 h', B.DEFAULT_KITTING_HOURS, 0);
 
 // four phases, kitting last
 const b=B.laborBreakdown(12000, base);
-ok('four phases', b.phases.map(p=>p.label), ['Setup','Production','Cleaning','Kitting']);
-ok('kitting sits last',   b.phases[3].label, 'Kitting');
-ok('kitting hours default 0', b.phases[3].totalHours, 0);
-ok('a 0-hour phase adds no man hours', b.phases[3].operatorManHours, 0);
+ok('four phases', b.phases.map(p=>p.label), ['Setup','Production','Kitting','Cleaning']);
+ok('kitting rides with production', b.phases[2].label, 'Kitting');
+ok('kitting hours default 0', b.phases[2].totalHours, 0);
+ok('a 0-hour phase adds no man hours', b.phases[2].operatorManHours, 0);
 
 // with hours typed it contributes like any other phase
 const k=B.laborBreakdown(12000,{...base, kitting:{hours:4, leaders:0, operators:2}});
-ok('kitting 4 h x 2 ops = 8 man hours', k.phases[3].operatorManHours, 8);
+ok('kitting 4 h x 2 ops = 8 man hours', k.phases[2].operatorManHours, 8);
 ok('total hours includes kitting', k.totalHours, 2+10+2+4);
 ok('operator man hours roll up', k.roles[1].manHours, 2*2 + 10*3 + 2*2 + 4*2);
 
@@ -444,7 +444,7 @@ ok('by exactly its own man hours x rate',
 // a costing saved before kitting existed must not crash
 {
 const legacy={...base}; delete legacy.kitting;
-ok('missing kitting is tolerated', B.laborBreakdown(12000,legacy).phases[3].totalHours, 0);
+ok('missing kitting is tolerated', B.laborBreakdown(12000,legacy).phases[2].totalHours, 0);
 ok('  ...and prices the same as an empty one',
    B.laborPerUnit(12000,legacy), B.laborPerUnit(12000,base));
 }
@@ -466,36 +466,36 @@ const base={
 };
 
 // no speed -> still 0, nothing invented
-ok('no kitting speed -> 0 h', B.laborBreakdown(12000,base).phases[3].totalHours, 0);
+ok('no kitting speed -> 0 h', B.laborBreakdown(12000,base).phases[2].totalHours, 0);
 
 // 12,000 bottles, 2 people at 25 b/min/person = 50 b/min -> 4 hours
 const k=B.laborBreakdown(12000,{...base, kittingSpeed:25});
-ok('derived kitting hours', r4(k.phases[3].totalHours), 4);
-ok('  ...= qty / (people x speed x 60)', r4(k.phases[3].totalHours), r4(12000/(2*25*60)));
+ok('derived kitting hours', r4(k.phases[2].totalHours), 4);
+ok('  ...= qty / (people x speed x 60)', r4(k.phases[2].totalHours), r4(12000/(2*25*60)));
 
 // doubling the crew halves the hours...
 const k4=B.laborBreakdown(12000,{
   ...base, kittingSpeed:25, kitting:{hours:null, leaders:0, operators:4}});
-ok('twice the people, half the time', r4(k4.phases[3].totalHours), 2);
+ok('twice the people, half the time', r4(k4.phases[2].totalHours), 2);
 // ...but the man hours, and so the cost, are unchanged
 ok('man hours unchanged by headcount',
-   r4(k4.phases[3].operatorManHours), r4(k.phases[3].operatorManHours));
+   r4(k4.phases[2].operatorManHours), r4(k.phases[2].operatorManHours));
 ok('  ...so the grand total is unchanged', r4(k4.grandTotal), r4(k.grandTotal));
 
 // a typed value still wins over the derivation
 ok('typed hours beat the speed',
    B.laborBreakdown(12000,{...base, kittingSpeed:25,
-     kitting:{hours:6, leaders:0, operators:2}}).phases[3].totalHours, 6);
+     kitting:{hours:6, leaders:0, operators:2}}).phases[2].totalHours, 6);
 
 // speed with nobody on kitting cannot produce hours
 ok('speed but no crew -> 0 h',
    B.laborBreakdown(12000,{...base, kittingSpeed:25,
-     kitting:{hours:null, leaders:0, operators:0}}).phases[3].totalHours, 0);
+     kitting:{hours:null, leaders:0, operators:0}}).phases[2].totalHours, 0);
 
 // leaders count as people too
 ok('leaders count toward kitting crew',
    r4(B.laborBreakdown(12000,{...base, kittingSpeed:25,
-     kitting:{hours:null, leaders:1, operators:1}}).phases[3].totalHours), 4);
+     kitting:{hours:null, leaders:1, operators:1}}).phases[2].totalHours), 4);
 
 // and the line speed still drives production independently
 ok('production still from line speed', B.laborBreakdown(12000,base).phases[1].totalHours, 5);
@@ -520,13 +520,13 @@ const L=(kitHours)=>({
 });
 
 // null lets the speed drive it
-ok('null hours -> derived', r4(B.laborBreakdown(12000,L(null)).phases[3].totalHours), 4);
+ok('null hours -> derived', r4(B.laborBreakdown(12000,L(null)).phases[2].totalHours), 4);
 // a real typed 0 is still honoured -- "we are not kitting this one"
-ok('explicit 0 stays 0',    B.laborBreakdown(12000,L(0)).phases[3].totalHours, 0);
+ok('explicit 0 stays 0',    B.laborBreakdown(12000,L(0)).phases[2].totalHours, 0);
 // and the two must NOT be the same thing
 ok('null and 0 differ',
-   B.laborBreakdown(12000,L(null)).phases[3].totalHours !==
-   B.laborBreakdown(12000,L(0)).phases[3].totalHours, true);
+   B.laborBreakdown(12000,L(null)).phases[2].totalHours !==
+   B.laborBreakdown(12000,L(0)).phases[2].totalHours, true);
 }
 
 // ---- suite 14: overhead rows + lab testing lists (scoped) ----

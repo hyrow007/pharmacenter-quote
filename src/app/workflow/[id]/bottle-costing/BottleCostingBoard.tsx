@@ -3976,7 +3976,7 @@ export default function BottleCostingBoard({
                 <tbody>
                   <tr style={labTotalRow}>
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
-                    {lb.phases.map((p, i) => (
+                    {lb.phases.map((p) => (
                       <td key={p.label} style={labTd}>
                         {/* Kitting and Production are READ-ONLY. Each is a
                             function of inputs typed elsewhere — kitting of
@@ -3992,13 +3992,9 @@ export default function BottleCostingBoard({
                             value={p.totalHours}
                             onChange={(n) =>
                               set(
-                                (
-                                  [
-                                    "setupHours",
-                                    "prodHoursTotal",
-                                    "cleaningHours",
-                                  ] as const
-                                )[i],
+                                p.label === "Setup"
+                                  ? "setupHours"
+                                  : "cleaningHours",
                                 n,
                               )
                             }
@@ -4052,8 +4048,8 @@ export default function BottleCostingBoard({
                         keys: [
                           "setupLeaders",
                           "prodLeaders",
-                          "cleaningLeaders",
                           "kittingLeaders",
+                          "cleaningLeaders",
                         ],
                       },
                       {
@@ -4062,8 +4058,8 @@ export default function BottleCostingBoard({
                         keys: [
                           "setupOperators",
                           "prodOperators",
-                          "cleaningOperators",
                           "kittingOperators",
+                          "cleaningOperators",
                         ],
                       },
                     ] as const
@@ -4684,6 +4680,19 @@ export default function BottleCostingBoard({
               onChange={(v) => set("repCommissionPct", v)}
             />
           </ParamBlock>
+          <ParamBlock label="Commissions / bottle" nowrap>
+            <ReadOnly>
+              {r.hosCommission !== null &&
+              r.repCommission !== null &&
+              qty &&
+              qty > 0
+                ? money(
+                    (r.hosCommission + r.repCommission) / qty,
+                    st.displayDec,
+                  )
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
           <ParamBlock label="Total commissions" nowrap>
             <ReadOnly>
               {r.hosCommission !== null && r.repCommission !== null
@@ -4739,14 +4748,27 @@ export default function BottleCostingBoard({
               {r.labTestingPerUnit !== null ? money(r.labTestingPerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
+          {/* Display-only: commission is a % of the SALE price, so it lives
+              in the pricing math, not in costPerUnit — True Cost stays the
+              make-cost. It appears here so the card shows every per-bottle
+              dollar the job carries in one place. Blank until a price
+              exists, since without one there is nothing to take a % of. */}
+          <ParamBlock label="Commissions / bottle" nowrap>
+            <ReadOnly>
+              {r.hosCommission !== null &&
+              r.repCommission !== null &&
+              qty &&
+              qty > 0
+                ? money(
+                    (r.hosCommission + r.repCommission) / qty,
+                    st.displayDec,
+                  )
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
           <ParamBlock label="True Cost / bottle" nowrap>
             <ReadOnly>
               {r.costPerUnit !== null ? money(r.costPerUnit, st.displayDec) : "—"}
-            </ReadOnly>
-          </ParamBlock>
-          <ParamBlock label="Cost per Thousand" nowrap>
-            <ReadOnly>
-              {r.costPerUnit !== null ? money(r.costPerUnit * 1000, 2) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Total Job Cost" nowrap>
@@ -4815,11 +4837,6 @@ export default function BottleCostingBoard({
           <ParamBlock label="Price / bottle" nowrap>
             <ReadOnly>
               {r.salePerUnit !== null ? money(r.salePerUnit, st.displayDec) : "—"}
-            </ReadOnly>
-          </ParamBlock>
-          <ParamBlock label="Price per Thousand" nowrap>
-            <ReadOnly>
-              {r.salePerUnit !== null ? money(r.salePerUnit * 1000, 2) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Total Quote Value" nowrap>
