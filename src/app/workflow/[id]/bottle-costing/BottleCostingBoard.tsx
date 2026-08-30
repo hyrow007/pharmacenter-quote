@@ -4170,7 +4170,17 @@ export default function BottleCostingBoard({
               <tr style={labHeadRow}>
                 <th style={{ ...labTh, textAlign: "left" }} />
                 <th style={{ ...labTh, width: 170 }}>Charged / month</th>
-                <th style={{ ...labTh, width: 170 }}>Working days</th>
+                {/* v77: when every group is rate-driven, Working days drives
+                    nothing — an editable input that moves no number teaches
+                    people the screen lies. The column becomes the figure
+                    that DOES drive: the combined rate per run-day. The
+                    editable input returns only in fallback mode, where the
+                    calendar spread still uses it. */}
+                <th style={{ ...labTh, width: 170 }}>
+                  {leaseRateDriven && indirectRateDriven && otherRateDriven
+                    ? "Rate / run-day"
+                    : "Working days"}
+                </th>
                 <th style={{ ...labTh, width: 170 }}>Job days</th>
                 <th style={{ ...labTh, width: 170 }}>Job total</th>
               </tr>
@@ -4184,11 +4194,20 @@ export default function BottleCostingBoard({
                     : labMoney(overheadMonthlyCharged, 2)}
                 </td>
                 <td style={labTd}>
-                  <LabNum
-                    value={st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH}
-                    onChange={(n) => set("workingDaysPerMonth", n)}
-                    step="1"
-                  />
+                  {leaseRateDriven && indirectRateDriven && otherRateDriven ? (
+                    labMoney(
+                      (leaseRateEff as number) +
+                        (indirectRateEff as number) +
+                        (otherRateEff as number),
+                      2,
+                    )
+                  ) : (
+                    <LabNum
+                      value={st.workingDaysPerMonth ?? DEFAULT_WORKING_DAYS_PER_MONTH}
+                      onChange={(n) => set("workingDaysPerMonth", n)}
+                      step="1"
+                    />
+                  )}
                 </td>
                 {/* Job days is hours ÷ 8, left fractional — overhead is a
                     smooth spread, so rounding a 13-hour job up to two whole
@@ -4249,11 +4268,15 @@ export default function BottleCostingBoard({
                 expected to run, not today — and step up on their own.
               </>
             ) : null}
-            {/* Show the rate the model is ACTUALLY using — the saved one on a
-                saved job, the plant one otherwise — and say so when they
-                differ. Showing the live rate beside a total computed from a
-                different one is how people stop trusting a screen. */}
-            {st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ? (
+            {/* The pool tables above now explain the rates row by row, so the
+                old prose explainer is gone (it also misstated 52.08 CP
+                run-days as the floor's throughput — the floor runs 67.2).
+                What remains is the one thing the tables cannot say: whether
+                this job is priced at a rate FROZEN by an earlier save that
+                differs from today's plant rate. */}
+            {st.leasePerRunDay &&
+            overheadMeta?.leasePerRunDay &&
+            Math.abs(st.leasePerRunDay - overheadMeta.leasePerRunDay) > 0.005 ? (
               <div
                 style={{
                   marginTop: 8,
@@ -4263,41 +4286,52 @@ export default function BottleCostingBoard({
                   border: "1px solid var(--line, #e3dcc9)",
                 }}
               >
-                <strong>Lease is charged per run-day, not per calendar day.</strong>{" "}
-                The rows above are the leases themselves; what this job actually
-                absorbs is{" "}
                 <strong>
-                  $
-                  {(
-                    st.leasePerRunDay ??
-                    overheadMeta?.leasePerRunDay ??
-                    0
-                  ).toFixed(2)}
+                  This costing was saved at ${st.leasePerRunDay.toFixed(2)}
+                  /run-day of lease and keeps that rate.
                 </strong>{" "}
-                for every day it occupies the packaging floor. The floor runs{" "}
-                {overheadMeta?.runDaysPerMonth?.toFixed(1)} job-days a month with
-                about three jobs in parallel, so dividing rent by 21 calendar
-                days charged roughly three times too much.
-                {st.leasePerRunDay &&
-                overheadMeta?.leasePerRunDay &&
-                Math.abs(st.leasePerRunDay - overheadMeta.leasePerRunDay) >
-                  0.005 ? (
-                  <>
-                    {" "}
-                    This costing was saved at that rate and keeps it. The plant
-                    rate is now $
-                    {overheadMeta.leasePerRunDay.toFixed(2)} — reset the Lease
-                    card to adopt it.
-                  </>
-                ) : (
-                  <>
-                    {" "}
-                    That is ${overheadMeta?.leaseFloorRate?.toFixed(2)} of
-                    packaging floor plus $
-                    {overheadMeta?.leaseFacilityRate?.toFixed(2)} of warehouse
-                    and office.
-                  </>
-                )}
+                The plant rate is now ${overheadMeta.leasePerRunDay.toFixed(2)}
+                {" "}— re-save after resetting to adopt it.
+              </div>
+            ) : null}
+            {st.indirectPerRunDay &&
+            overheadMeta?.indirectPerRunDay &&
+            Math.abs(st.indirectPerRunDay - overheadMeta.indirectPerRunDay) >
+              0.005 ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  background: "var(--paper, #fffdf8)",
+                  border: "1px solid var(--line, #e3dcc9)",
+                }}
+              >
+                <strong>
+                  Saved at ${st.indirectPerRunDay.toFixed(2)}/run-day of
+                  indirect labour.
+                </strong>{" "}
+                The plant rate is now $
+                {overheadMeta.indirectPerRunDay.toFixed(2)}.
+              </div>
+            ) : null}
+            {st.otherPerRunDay &&
+            overheadMeta?.otherPerRunDay &&
+            Math.abs(st.otherPerRunDay - overheadMeta.otherPerRunDay) > 0.005 ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  background: "var(--paper, #fffdf8)",
+                  border: "1px solid var(--line, #e3dcc9)",
+                }}
+              >
+                <strong>
+                  Saved at ${st.otherPerRunDay.toFixed(2)}/run-day of other
+                  expenses.
+                </strong>{" "}
+                The plant rate is now ${overheadMeta.otherPerRunDay.toFixed(2)}.
               </div>
             ) : null}
             {overheadMeta?.attention?.length ? (
