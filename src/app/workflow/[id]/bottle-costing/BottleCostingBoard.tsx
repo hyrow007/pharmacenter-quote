@@ -1897,6 +1897,13 @@ export type SavedState = {
   /** Lab testing as two lists — raw material and finished product. */
   labTestRm: LabTestItem[];
   labTestFp: LabTestItem[];
+  /**
+   * v78: master switch for the Lab Testing card. Off means the job carries no
+   * testing dollars at all — the lists are kept (toggling back on restores
+   * them) but excluded from the model. Off is the default on a fresh board;
+   * turning testing ON is a choice, not something to forget to remove.
+   */
+  labTestingEnabled: boolean;
 
   // ---- pricing tier ----
   // For contract-packaging bottles this board IS the pricing calculator, so
@@ -2135,6 +2142,7 @@ export function blankState(
     // put invented dollars on every quote.
     labTestRm: [],
     labTestFp: [],
+    labTestingEnabled: false,
     marginPct: DEFAULT_MARGIN_PCT,
     marginMode: "gross-margin",
     hosCommissionPct: DEFAULT_HOS_COMMISSION_PCT,
@@ -2545,6 +2553,17 @@ export default function BottleCostingBoard({
           ? [{ label: "Lab testing (migrated)", cost: legacyLabTotal, qty: 1 }]
           : []),
       labTestFp: initial.labTestFp ?? [],
+      // Costings saved before the toggle existed have no flag. A job that was
+      // saved WITH tests on it was priced with those dollars, so it comes back
+      // on; anything else comes back off. `??` keeps a deliberate saved false
+      // even on a job whose (retained) lists still hold rows.
+      labTestingEnabled:
+        initial.labTestingEnabled ??
+        Boolean(
+          (initial.labTestRm?.length ?? 0) > 0 ||
+            (initial.labTestFp?.length ?? 0) > 0 ||
+            (legacyLabTotal && legacyLabTotal > 0),
+        ),
       kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
       kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
@@ -2872,10 +2891,15 @@ export default function BottleCostingBoard({
         otherPerRunDay:
           st.otherPerRunDay ?? overheadMeta?.otherPerRunDay ?? null,
       },
-      labTesting: {
-        rawMaterials: st.labTestRm,
-        finishedProduct: st.labTestFp,
-      },
+      // Toggled off, the model sees empty lists — the job carries no testing
+      // dollars. The typed rows stay in state so switching back on restores
+      // them instead of punishing a mis-click with retyping.
+      labTesting: st.labTestingEnabled
+        ? {
+            rawMaterials: st.labTestRm,
+            finishedProduct: st.labTestFp,
+          }
+        : { rawMaterials: [], finishedProduct: [] },
       pricing: {
         marginPct: st.marginPct,
         marginMode: st.marginMode,
@@ -4376,28 +4400,99 @@ export default function BottleCostingBoard({
           Seeded EMPTY. A default list would put invented dollars on a quote,
           and testing genuinely varies job to job. */}
       <div style={shell}>
-        <div style={band}>Lab Testing</div>
+        <div
+          style={{
+            ...band,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <span>Lab Testing</span>
+          {/* Off/On master switch. Off = the job carries no testing dollars;
+              the typed rows are kept for a later re-enable. */}
+          <div style={{ display: "flex", gap: 0 }}>
+            {(
+              [
+                { label: "Off", value: false },
+                { label: "On", value: true },
+              ] as const
+            ).map((o, i) => {
+              const active = st.labTestingEnabled === o.value;
+              return (
+                <button
+                  key={o.label}
+                  type="button"
+                  onClick={() => set("labTestingEnabled", o.value)}
+                  style={{
+                    padding: "4px 14px",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    border: "1px solid var(--teal-700, #1d6c7b)",
+                    borderRadius:
+                      i === 0 ? "6px 0 0 6px" : "0 6px 6px 0",
+                    borderLeftWidth: i === 0 ? 1 : 0,
+                    cursor: "pointer",
+                    background: active
+                      ? "var(--teal-700, #1d6c7b)"
+                      : "#fff",
+                    color: active ? "#fff" : "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        {(
-          [
-            { title: "Raw Materials", key: "labTestRm" },
-            { title: "Finished Product", key: "labTestFp" },
-          ] as const
-        ).map((g) => (
-          <LabTestGroup
-            key={g.title}
-            title={g.title}
-            list={st[g.key]}
-            onChange={(next) => set(g.key, next)}
-            quantity={qty}
-          />
-        ))}
+        {st.labTestingEnabled ? (
+          <>
+            {(
+              [
+                { title: "Raw Materials", key: "labTestRm" },
+                { title: "Finished Product", key: "labTestFp" },
+              ] as const
+            ).map((g) => (
+              <LabTestGroup
+                key={g.title}
+                title={g.title}
+                list={st[g.key]}
+                onChange={(next) => set(g.key, next)}
+                quantity={qty}
+              />
+            ))}
 
-        <CardTotal
-          label="Lab testing / bottle"
-          perUnit={r.labTestingPerUnit}
-          quantity={qty}
-        />
+            <CardTotal
+              label="Lab testing / bottle"
+              perUnit={r.labTestingPerUnit}
+              quantity={qty}
+            />
+          </>
+        ) : (
+          <div
+            style={{
+              padding: "14px 16px",
+              fontSize: 13.5,
+              fontStyle: "italic",
+              color: "var(--ink-3, #7b7364)",
+            }}
+          >
+            No lab testing on this job — nothing is added to the cost. Switch
+            On to add testing costs.
+            {st.labTestRm.length + st.labTestFp.length > 0 && (
+              <>
+                {" "}
+                {st.labTestRm.length + st.labTestFp.length} entered test
+                {st.labTestRm.length + st.labTestFp.length === 1 ? "" : "s"}{" "}
+                kept and currently excluded.
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ---------- Costs ---------- */}
