@@ -4542,6 +4542,37 @@ export default function BottleCostingBoard({
         )}
       </div>
 
+      {/* ---------- Commissions ----------
+          Its own card, above Costs. The rates are terms of the deal, not a
+          cost of making the bottles, so they read separately — but the
+          dollars still land in gross profit below. Commission is a % of the
+          sale price, so the $ figure can only exist once Margin & Price has
+          produced one. */}
+      <div style={shell}>
+        <div style={band}>Commissions</div>
+        <div style={metricGrid}>
+          <ParamBlock label="HoS commission %" nowrap>
+            <NumField
+              value={st.hosCommissionPct}
+              onChange={(v) => set("hosCommissionPct", v)}
+            />
+          </ParamBlock>
+          <ParamBlock label="Sales rep commission %" nowrap>
+            <NumField
+              value={st.repCommissionPct}
+              onChange={(v) => set("repCommissionPct", v)}
+            />
+          </ParamBlock>
+          <ParamBlock label="Total commissions" nowrap>
+            <ReadOnly>
+              {r.hosCommission !== null && r.repCommission !== null
+                ? money(r.hosCommission + r.repCommission, 2)
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
+        </div>
+      </div>
+
       {/* ---------- Costs ---------- */}
       <div style={shell}>
         <div style={band}>Costs</div>
@@ -4658,18 +4689,6 @@ export default function BottleCostingBoard({
               <option value="markup">Markup (% on cost)</option>
             </select>
           </ParamBlock>
-          <ParamBlock label="HoS commission %" nowrap>
-            <NumField
-              value={st.hosCommissionPct}
-              onChange={(v) => set("hosCommissionPct", v)}
-            />
-          </ParamBlock>
-          <ParamBlock label="Sales rep commission %" nowrap>
-            <NumField
-              value={st.repCommissionPct}
-              onChange={(v) => set("repCommissionPct", v)}
-            />
-          </ParamBlock>
         </div>
         <div style={metricGrid}>
           <ParamBlock label="Price / bottle" nowrap>
@@ -4685,13 +4704,6 @@ export default function BottleCostingBoard({
           <ParamBlock label="Total Quote Value" nowrap>
             <ReadOnly>
               {r.totalRevenue !== null ? money(r.totalRevenue, 2) : "—"}
-            </ReadOnly>
-          </ParamBlock>
-          <ParamBlock label="Commissions" nowrap>
-            <ReadOnly>
-              {r.hosCommission !== null && r.repCommission !== null
-                ? money(r.hosCommission + r.repCommission, 2)
-                : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Gross profit" nowrap>
