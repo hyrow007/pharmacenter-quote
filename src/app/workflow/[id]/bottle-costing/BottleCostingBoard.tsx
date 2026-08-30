@@ -51,6 +51,8 @@ import {
   type PackagingSlot,
   type BottleCostingInputs,
   type MarginMode,
+  BREAKEVEN_OP_PROFIT_PER_RUN_DAY,
+  BREAKEVEN_ASOF,
 } from "@/lib/bottleCosting";
 import {
   OVERHEAD_RENT_DEFAULTS_BOTTLE,
@@ -4898,6 +4900,49 @@ export default function BottleCostingBoard({
             </ReadOnly>
           </ParamBlock>
         </div>
+
+        {/* Plant break-even yardstick. Display-only: the number a run-day of
+            operating profit has to clear before the COMPANY makes money,
+            derived from the trailing-12 P&L (see BREAKEVEN_OP_PROFIT_PER_
+            RUN_DAY in lib/bottleCosting.ts for the full arithmetic). It never
+            enters the price - it tells the quoter whether the margin they
+            typed actually feeds the business or just feeds the job. */}
+        {r.grossProfit !== null && jobDays !== null && jobDays > 0 && (
+          (() => {
+            const perDay = r.grossProfit / jobDays;
+            const above = perDay >= BREAKEVEN_OP_PROFIT_PER_RUN_DAY;
+            return (
+              <div
+                style={{
+                  margin: "0 14px 14px",
+                  padding: "9px 12px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  background: above ? "#eef7ee" : "#fdf3e0",
+                  border: above
+                    ? "1px solid #bcd9bc"
+                    : "1px solid #e8cf9a",
+                  color: above ? "#2f5d31" : "#7a4f00",
+                }}
+              >
+                <strong>
+                  {above ? "Above" : "Below"} plant break-even:
+                </strong>{" "}
+                this job earns ${perDay.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                {" "}of operating profit per run-day against the ~$
+                {BREAKEVEN_OP_PROFIT_PER_RUN_DAY.toLocaleString("en-US")} a CP
+                run-day must clear for the company to break even
+                ({BREAKEVEN_ASOF}, full utilization).
+                {!above && (
+                  <>
+                    {" "}Below it, the job still contributes — but the company
+                    loses money overall at this rate.
+                  </>
+                )}
+              </div>
+            );
+          })()
+        )}
       </div>
 
       {/* ---------- Action bar ----------

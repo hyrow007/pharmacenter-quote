@@ -1081,6 +1081,32 @@ export const DEFAULT_REP_COMMISSION_PCT = 3;
 export const DEFAULT_MARGIN_PCT = 30;
 
 /**
+ * Plant break-even: the job operating profit a CP run-day must generate for
+ * the company to break even at the operating line.
+ *
+ * Derived 2026-08-30 from the QuickBooks P&L, trailing 12 months
+ * (Aug 2025 - Jul 2026, accrual):
+ *
+ *   Operating expenses                      $3,150,417 /yr
+ *   less costs the job costing already
+ *   recovers (rent $466k, indirect pool
+ *   ~$396k, other pool ~$180k, direct line
+ *   labor ~$350k est., commissions $30k)    -$1,422,000 /yr
+ *   = unallocated company costs             ~$1,728,000 /yr = ~$144,000 /mo
+ *
+ *   / 88.2 plant production days            = ~$1,632 /production-day
+ *   CP share: x 63.12% margin share
+ *   / 52.08 CP run-days                     = ~$1,745 /CP-run-day
+ *
+ * Assumes FULL utilization (67.2 + 21 days actually run) and an estimated
+ * line-vs-office salary split. Re-derive when the P&L moves materially or
+ * payroll detail firms up the split. Display-only: it never enters the
+ * costing math, it is the yardstick the result is judged against.
+ */
+export const BREAKEVEN_OP_PROFIT_PER_RUN_DAY = 1745;
+export const BREAKEVEN_ASOF = "TTM Aug 2025\u2013Jul 2026";
+
+/**
  * Turn a true cost into a sale price.
  *
  * Commissions are a percentage OF THE SALE PRICE, but they are also a cost
