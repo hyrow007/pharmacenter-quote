@@ -5037,7 +5037,11 @@ export default function BottleCostingBoard({
         {r.grossProfit !== null && jobDays !== null && jobDays > 0 && (
           (() => {
             const perDay = r.grossProfit / jobDays;
-            const above = perDay >= BREAKEVEN_OP_PROFIT_PER_RUN_DAY;
+            // $1/day of tolerance: the margin is stored to 4 decimal places
+            // of percent, so "Set to break-even" can land at $1,744.9999 —
+            // and a banner that calls its own button's result a miss teaches
+            // people to distrust both.
+            const above = perDay >= BREAKEVEN_OP_PROFIT_PER_RUN_DAY - 1;
             return (
               <div
                 style={{
