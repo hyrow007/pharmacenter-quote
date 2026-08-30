@@ -4848,7 +4848,7 @@ export default function BottleCostingBoard({
           />
         </div>
         <div style={metricGrid}>
-          <ParamBlock label="Margin / markup %" nowrap>
+          <ParamBlock label="Target margin / markup %" nowrap>
             <NumField
               value={st.marginPct}
               onChange={(v) => set("marginPct", v)}
@@ -4867,7 +4867,9 @@ export default function BottleCostingBoard({
                 width: "100%",
               }}
             >
-              <option value="gross-margin">Gross margin (% of price)</option>
+              <option value="gross-margin">
+                Operating margin (% of price, after commissions)
+              </option>
               <option value="markup">Markup (% on cost)</option>
             </select>
           </ParamBlock>
@@ -4883,12 +4885,12 @@ export default function BottleCostingBoard({
               {r.totalRevenue !== null ? money(r.totalRevenue, 2) : "—"}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Gross profit" nowrap>
+          <ParamBlock label="Job operating profit" nowrap>
             <ReadOnly>
               {r.grossProfit !== null ? money(r.grossProfit, 2) : "—"}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Realised margin" nowrap>
+          <ParamBlock label="Operating margin" nowrap>
             <ReadOnly>
               {r.effectiveMarginPct !== null
                 ? `${r.effectiveMarginPct.toFixed(1)}%`
