@@ -706,3 +706,31 @@ ok('computeBottleCosting uses occupancy days',
    r.overheadPerUnit, (467.97*(6/8))/12000);
 }
 }
+
+// -- 18. v76 indirect labour per run-day -------------------------------
+{
+const ok=(n,got,want)=>console.log((Math.abs((got??-1)-(want??-1))<1e-6?'PASS':'**FAIL**').padEnd(10),n,'got',got,'want',want);
+const base={rentLease:[],other:[],workingDaysPerMonth:21,leasePerRunDay:467.97,
+  indirectLabor:[{label:'PM',monthly:0,payType:'salary',rate:4525.41,qty:1,
+    taxPct:8.5,wcPct:4,hours:173.33,sharePct:25}]};
+const oldIndirect=(4525.41*1.125*0.25/21)*1.5;
+ok('indirect falls back to calendar days when rate is null',
+   B.overheadPerUnit(1000,base,1.5), (467.97*1.5+oldIndirect)/1000);
+ok('indirect rate replaces the row arithmetic',
+   B.overheadPerUnit(1000,{...base,indirectPerRunDay:383.00},1.5),
+   (467.97*1.5+383.00*1.5)/1000);
+ok('indirect rows ignored once a rate is present',
+   B.overheadPerUnit(1000,{...base,indirectLabor:[],indirectPerRunDay:383.00},1.5),
+   (467.97*1.5+383.00*1.5)/1000);
+ok('zero indirect rate falls back, people are never free',
+   B.overheadPerUnit(1000,{...base,indirectPerRunDay:0},1.5),
+   (467.97*1.5+oldIndirect)/1000);
+const withOther={...base,indirectPerRunDay:383.00,
+  other:[{label:'Electricity',monthly:4497,sharePct:30}]};
+ok('other still on working days beside both rates',
+   B.overheadPerUnit(1000,withOther,1.5),
+   (467.97*1.5+383.00*1.5+((4497*0.30)/21)*1.5)/1000);
+ok('both rates double when days double',
+   B.overheadPerUnit(1000,{...base,indirectLabor:[],indirectPerRunDay:383.00},3),
+   (467.97*3+383.00*3)/1000);
+}

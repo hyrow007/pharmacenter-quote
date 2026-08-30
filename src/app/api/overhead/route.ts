@@ -233,11 +233,60 @@ export async function GET(request: Request) {
     // leave lease null
   }
 
+  // v76: indirect labour per run-day, same best-effort contract as the lease.
+  // Named indirectPools rather than replacing `indirect` below — that key is
+  // the raw payroll rows and stays, because the rates are computed FROM them
+  // and the board still shows the people.
+  let indirectPools: {
+    perRunDay: number | null;
+    breakdown: Array<{
+      itemKey: string;
+      roleLabel: string;
+      poolKey: string;
+      poolLabel: string;
+      burdenedMonthly: number | null;
+      chargedMonthly: number | null;
+      divisorDays: number | null;
+      ratePerDay: number | null;
+      sharePctApplied: number | null;
+    }>;
+  } | null = null;
+  try {
+    const { data: ib, error: ibErr } = await supabase.rpc(
+      "overhead_indirect_breakdown",
+      { p_line_key: line, ...(asof ? { p_asof: asof } : {}) },
+    );
+    if (!ibErr && Array.isArray(ib) && ib.length > 0) {
+      const breakdown = ib.map((b: Record<string, unknown>) => ({
+        itemKey: String(b.item_key ?? ""),
+        roleLabel: String(b.role_label ?? ""),
+        poolKey: String(b.pool_key ?? ""),
+        poolLabel: String(b.pool_label ?? ""),
+        burdenedMonthly: (b.burdened_monthly as number) ?? null,
+        chargedMonthly: (b.charged_monthly as number) ?? null,
+        divisorDays: (b.divisor_days as number) ?? null,
+        ratePerDay: (b.rate_per_day as number) ?? null,
+        sharePctApplied: (b.share_pct_applied as number) ?? null,
+      }));
+      const perRunDay = breakdown.reduce(
+        (s, r) => s + (r.ratePerDay ?? 0),
+        0,
+      );
+      indirectPools = {
+        perRunDay: Math.round(perRunDay * 100) / 100,
+        breakdown,
+      };
+    }
+  } catch {
+    // leave indirectPools null — the calculators fall back to row shares.
+  }
+
   return NextResponse.json({
     ok: true,
     line,
     asOf: rows[0]?.asof_used ?? asof ?? null,
     lease,
+    indirectPools,
     rent: pick("rent"),
     indirect: pick("indirect"),
     other: pick("other"),

@@ -369,6 +369,20 @@ export type OverheadInputs = {
    * everywhere else: 0 would mean rent is genuinely free.
    */
   leasePerRunDay?: number | null;
+  /**
+   * v76: indirect payroll charged per RUN-DAY, same cure as the lease.
+   *
+   * Production-support people (manager, mechanic, quality) spread over ALL
+   * production days in the plant at equal weight — 67.2 packaging run-days
+   * plus 21 gummy batch-days — because their day is consumed by jobs running,
+   * whichever floor they run on. Warehouse and purchasing take the line's
+   * gross-margin share over its own run-days, exactly like warehouse rent.
+   * Resolved from sql/overhead_indirect_pools.sql.
+   *
+   * NULL falls back to the row-share-over-calendar-days arithmetic, same as
+   * the lease; 0 would claim these people are free and is not honoured.
+   */
+  indirectPerRunDay?: number | null;
 };
 
 /**
@@ -962,16 +976,24 @@ export function overheadPerUnit(
       ? leaseRate * days
       : (overheadGroupCharged(overhead.rentLease, "lease") / wdpm) * days;
 
-  // ---- EVERYTHING ELSE ------------------------------------------------
+  // ---- INDIRECT LABOUR ------------------------------------------------
   //
-  // Indirect labour and other expenses still use the calendar-day mechanism and
-  // therefore still carry the parallel-runs error. Deliberately left alone for
-  // now so the lease change can be seen in isolation; same fix, same pools.
-  const otherMonthly =
-    overheadGroupCharged(overhead.indirectLabor, "labor") +
-    overheadGroupCharged(overhead.other);
+  // v76: same rate mechanism as the lease. Falls back to the old row-share
+  // over calendar days when the pools have not resolved a rate.
+  const indirectRate = num(overhead.indirectPerRunDay);
+  const indirectCharge =
+    indirectRate !== null && indirectRate > 0
+      ? indirectRate * days
+      : (overheadGroupCharged(overhead.indirectLabor, "labor") / wdpm) * days;
 
-  return (leaseCharge + (otherMonthly / wdpm) * days) / q;
+  // ---- OTHER EXPENSES -------------------------------------------------
+  //
+  // Still on the calendar-day mechanism, and therefore still carrying the
+  // parallel-runs error. Last one standing; same fix, same pools, next.
+  const otherCharge =
+    (overheadGroupCharged(overhead.other) / wdpm) * days;
+
+  return (leaseCharge + indirectCharge + otherCharge) / q;
 }
 
 // ============================================================
