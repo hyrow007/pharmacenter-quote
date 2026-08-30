@@ -765,8 +765,26 @@ function IndirectBreakdownTable({
     return j === null || !quantity || quantity <= 0 ? null : j / quantity;
   };
 
+  // What the person actually DOES plus its scope — the justification for
+  // their pool. "Both floors" marks a time-driven scope (production days can
+  // charge them fairly); "entire operation" marks an economics-driven one
+  // (they also serve floorless work like bulk resale, so margin share is the
+  // only fair divisor). Per-role, because "goods and buying" stretched one
+  // phrase over two different jobs.
+  const SERVES: Record<string, string> = {
+    production_manager: "oversees all production, both floors",
+    plant_mechanic: "maintains all machines, both floors",
+    quality_manager: "releases every job, both floors",
+    quality_tech: "releases every job, both floors",
+    quality_tech_ii: "releases every job, both floors",
+    warehouse_staff: "moves goods, entire operation",
+    purchasing_logistics: "buys materials, entire operation",
+  };
   const serves = (r: IndirectBreakdownRow) =>
-    r.poolKey === "facility" ? "goods and buying, all lines" : "every job, both floors";
+    SERVES[r.itemKey] ??
+    (r.poolKey === "facility"
+      ? "serves the entire operation"
+      : "serves production, both floors");
   const divisorLabel = (r: IndirectBreakdownRow) =>
     r.divisorDays === null
       ? ""
