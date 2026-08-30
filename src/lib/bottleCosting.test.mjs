@@ -734,3 +734,26 @@ ok('both rates double when days double',
    B.overheadPerUnit(1000,{...base,indirectLabor:[],indirectPerRunDay:383.00},3),
    (467.97*3+383.00*3)/1000);
 }
+
+// -- 19. v77 other expenses per run-day --------------------------------
+{
+const ok=(n,got,want)=>console.log((Math.abs((got??-1)-(want??-1))<1e-6?'PASS':'**FAIL**').padEnd(10),n,'got',got,'want',want);
+const base={rentLease:[],indirectLabor:[],workingDaysPerMonth:21,
+  leasePerRunDay:467.97,indirectPerRunDay:383.00,
+  other:[{label:'Electricity',monthly:4497,sharePct:30}]};
+const oldOther=((4497*0.30)/21)*1.5;
+ok('other falls back to calendar days when rate is null',
+   B.overheadPerUnit(1000,base,1.5),(467.97*1.5+383.00*1.5+oldOther)/1000);
+ok('other rate replaces the row arithmetic',
+   B.overheadPerUnit(1000,{...base,otherPerRunDay:176.98},1.5),
+   ((467.97+383.00+176.98)*1.5)/1000);
+ok('other rows ignored once a rate is present',
+   B.overheadPerUnit(1000,{...base,other:[],otherPerRunDay:176.98},1.5),
+   ((467.97+383.00+176.98)*1.5)/1000);
+ok('zero other rate falls back, power is never free',
+   B.overheadPerUnit(1000,{...base,otherPerRunDay:0},1.5),
+   (467.97*1.5+383.00*1.5+oldOther)/1000);
+ok('all three rates scale together with days',
+   B.overheadPerUnit(1000,{...base,other:[],otherPerRunDay:176.98},3),
+   ((467.97+383.00+176.98)*3)/1000);
+}

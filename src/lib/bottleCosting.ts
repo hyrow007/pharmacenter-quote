@@ -383,6 +383,15 @@ export type OverheadInputs = {
    * the lease; 0 would claim these people are free and is not honoured.
    */
   indirectPerRunDay?: number | null;
+  /**
+   * v77: other expenses charged per RUN-DAY — the last calendar-day holdout.
+   * Electricity and repairs run with production days (both floors, equal
+   * weight); insurance, licenses, cleaning, warehouse supplies and misc
+   * utilities take the line's margin share like everything else that serves
+   * the entire operation. Resolved from sql/overhead_other_pools.sql, same
+   * fallback contract as the lease and indirect rates.
+   */
+  otherPerRunDay?: number | null;
 };
 
 /**
@@ -988,10 +997,14 @@ export function overheadPerUnit(
 
   // ---- OTHER EXPENSES -------------------------------------------------
   //
-  // Still on the calendar-day mechanism, and therefore still carrying the
-  // parallel-runs error. Last one standing; same fix, same pools, next.
+  // v77: the last calendar-day holdout joins the rate mechanism. All three
+  // overhead groups now speak the same language: a per-run-day rate from the
+  // pools, with the old row-share arithmetic as the offline fallback.
+  const otherRate = num(overhead.otherPerRunDay);
   const otherCharge =
-    (overheadGroupCharged(overhead.other) / wdpm) * days;
+    otherRate !== null && otherRate > 0
+      ? otherRate * days
+      : (overheadGroupCharged(overhead.other) / wdpm) * days;
 
   return (leaseCharge + indirectCharge + otherCharge) / q;
 }

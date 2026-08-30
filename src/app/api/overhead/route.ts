@@ -281,12 +281,58 @@ export async function GET(request: Request) {
     // leave indirectPools null — the calculators fall back to row shares.
   }
 
+  // v77: other expenses per run-day. Same best-effort contract; `other`
+  // below stays the raw rows.
+  let otherPools: {
+    perRunDay: number | null;
+    breakdown: Array<{
+      itemKey: string;
+      expenseLabel: string;
+      qbAccount: string | null;
+      poolKey: string;
+      poolLabel: string;
+      monthly: number | null;
+      chargedMonthly: number | null;
+      divisorDays: number | null;
+      ratePerDay: number | null;
+      sharePctApplied: number | null;
+    }>;
+  } | null = null;
+  try {
+    const { data: ob, error: obErr } = await supabase.rpc(
+      "overhead_other_breakdown",
+      { p_line_key: line, ...(asof ? { p_asof: asof } : {}) },
+    );
+    if (!obErr && Array.isArray(ob) && ob.length > 0) {
+      const breakdown = ob.map((b: Record<string, unknown>) => ({
+        itemKey: String(b.item_key ?? ""),
+        expenseLabel: String(b.expense_label ?? ""),
+        qbAccount: (b.qb_account as string) ?? null,
+        poolKey: String(b.pool_key ?? ""),
+        poolLabel: String(b.pool_label ?? ""),
+        monthly: (b.monthly as number) ?? null,
+        chargedMonthly: (b.charged_monthly as number) ?? null,
+        divisorDays: (b.divisor_days as number) ?? null,
+        ratePerDay: (b.rate_per_day as number) ?? null,
+        sharePctApplied: (b.share_pct_applied as number) ?? null,
+      }));
+      const perRunDay = breakdown.reduce((s, r) => s + (r.ratePerDay ?? 0), 0);
+      otherPools = {
+        perRunDay: Math.round(perRunDay * 100) / 100,
+        breakdown,
+      };
+    }
+  } catch {
+    // leave otherPools null
+  }
+
   return NextResponse.json({
     ok: true,
     line,
     asOf: rows[0]?.asof_used ?? asof ?? null,
     lease,
     indirectPools,
+    otherPools,
     rent: pick("rent"),
     indirect: pick("indirect"),
     other: pick("other"),

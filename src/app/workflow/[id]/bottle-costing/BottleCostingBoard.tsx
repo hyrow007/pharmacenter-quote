@@ -957,6 +957,251 @@ function IndirectBreakdownTable({
   );
 }
 
+/** One expense line of the other-expenses rate, from /api/overhead. */
+type OtherBreakdownRow = {
+  itemKey: string;
+  expenseLabel: string;
+  qbAccount: string | null;
+  poolKey: string;
+  poolLabel: string;
+  monthly: number | null;
+  chargedMonthly: number | null;
+  divisorDays: number | null;
+  ratePerDay: number | null;
+  sharePctApplied: number | null;
+};
+
+/**
+ * The Other Expenses card when charged per RUN-DAY (v77) — the last
+ * calendar-day holdout, on the same grammar as the lease and the people.
+ * Electricity and repairs run with production days at equal weight;
+ * everything else serves the entire operation and takes the margin share.
+ */
+function OtherBreakdownTable({
+  rows,
+  jobDays,
+  quantity,
+  effRate,
+}: {
+  rows: OtherBreakdownRow[];
+  jobDays: number | null;
+  quantity: number | null;
+  effRate: number | null;
+}) {
+  const money = (v: number | null | undefined, dec = 2) =>
+    v === null || v === undefined
+      ? "—"
+      : v.toLocaleString("en-US", {
+          minimumFractionDigits: dec,
+          maximumFractionDigits: dec,
+        });
+  const moneyD = (v: number | null | undefined, dec = 2) =>
+    v === null || v === undefined ? "—" : `$${money(v, dec)}`;
+  const days = jobDays !== null && jobDays > 0 ? jobDays : null;
+  const daysLabel =
+    days === null ? "—" : days.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const jobOf = (rate: number | null) =>
+    rate === null || days === null ? null : rate * days;
+  const perOf = (rate: number | null) => {
+    const j = jobOf(rate);
+    return j === null || !quantity || quantity <= 0 ? null : j / quantity;
+  };
+
+  const SERVES: Record<string, string> = {
+    electricity: "powers the machines, both floors",
+    repairs_maintenance: "maintains machines and building, both floors",
+    warehouse_supplies: "goods handling, entire operation",
+    insurance: "covers the entire operation",
+    licenses_permits: "licenses the entire operation",
+    cleaning: "janitorial, entire operation",
+    other_utilities: "serves the entire operation",
+  };
+  const serves = (r: OtherBreakdownRow) =>
+    SERVES[r.itemKey] ??
+    (r.poolKey === "facility"
+      ? "serves the entire operation"
+      : "serves production, both floors");
+  const divisorLabel = (r: OtherBreakdownRow) =>
+    r.divisorDays === null
+      ? ""
+      : r.poolKey === "facility"
+        ? `${money(r.divisorDays, 2)} CP run-days`
+        : `${money(r.divisorDays, 1)} days, all lines`;
+  const divisorTip = (r: OtherBreakdownRow) =>
+    r.poolKey === "facility"
+      ? "Run-days worked by Contract Packaging jobs alone, 12-month average"
+      : "All production days in the plant: packaging run-days plus gummy batch-days, equal weight";
+  const chargedTip = (r: OtherBreakdownRow) =>
+    r.sharePctApplied !== null
+      ? `${money(r.monthly)} × ${r.sharePctApplied}% CP margin share`
+      : "Full monthly cost — this expense runs with production days";
+
+  const pools: { key: string; rows: OtherBreakdownRow[] }[] = [];
+  for (const r of rows) {
+    const last = pools[pools.length - 1];
+    if (last && last.key === r.poolKey) last.rows.push(r);
+    else pools.push({ key: r.poolKey, rows: [r] });
+  }
+
+  const totRate = rows.reduce((s, r) => s + (r.ratePerDay ?? 0), 0);
+  const priceRate = effRate ?? totRate;
+  const totMonthly = rows.reduce((s, r) => s + (r.monthly ?? 0), 0);
+  const totCharged = rows.reduce((s, r) => s + (r.chargedMonthly ?? 0), 0);
+
+  const num: React.CSSProperties = { ...labTd, whiteSpace: "nowrap" };
+  const sub: React.CSSProperties = {
+    ...labTd,
+    fontSize: 12,
+    color: "var(--ink-3, #7b7364)",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  };
+
+  return (
+    <div style={labSub}>
+      <div style={labSubTitle}>Other Expenses</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ ...labTable, minWidth: 1050 }}>
+          <thead>
+            <tr style={labHeadRow}>
+              <th style={{ ...labTh, textAlign: "left", width: 190 }}>Item</th>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 185 }}>Serves</th>
+              <th style={{ ...labTh, width: 115 }}>Monthly ($/mo)</th>
+              <th style={{ ...labTh, width: 120 }}>Charged ($/mo)</th>
+              <th style={{ ...labTh, textAlign: "left", minWidth: 145 }}>÷ absorbed over</th>
+              <th style={{ ...labTh, width: 100 }}>$ / run-day</th>
+              <th style={{ ...labTh, width: 100 }}>Job (×{daysLabel})</th>
+              <th style={{ ...labTh, width: 100 }}>$ / bottle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pools.map((p) => {
+              const poolRate = p.rows.reduce((a, r) => a + (r.ratePerDay ?? 0), 0);
+              return (
+                <Fragment key={p.key}>
+                  <tr>
+                    <td
+                      colSpan={8}
+                      style={{
+                        ...labTd,
+                        textAlign: "left",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                        color: "var(--ink-3, #7b7364)",
+                        paddingTop: 12,
+                      }}
+                    >
+                      {p.key === "facility"
+                        ? `Facility — × ${p.rows[0]?.sharePctApplied ?? ""}% CP margin share, like warehouse and office rent`
+                        : "Production support — runs with the floors"}
+                    </td>
+                  </tr>
+                  {p.rows.map((r, i) => (
+                    <tr
+                      key={r.itemKey}
+                      style={{
+                        ...labBodyRow,
+                        ...(i === p.rows.length - 1 ? { borderBottom: "none" } : {}),
+                      }}
+                    >
+                      <td style={{ ...labTd, textAlign: "left", lineHeight: 1.4 }}>
+                        {r.expenseLabel}
+                        {r.qbAccount ? (
+                          <>
+                            <br />
+                            <span style={{ fontSize: 11, color: "var(--ink-3, #7b7364)" }}>
+                              QB {r.qbAccount}
+                            </span>
+                          </>
+                        ) : null}
+                      </td>
+                      <td style={sub}>{serves(r)}</td>
+                      <td style={num}>{money(r.monthly)}</td>
+                      <td style={num}>
+                        <Tip tip={chargedTip(r)}>{money(r.chargedMonthly)}</Tip>
+                      </td>
+                      <td style={sub}>
+                        {divisorLabel(r) ? (
+                          <Tip tip={divisorTip(r)}>{divisorLabel(r)}</Tip>
+                        ) : null}
+                      </td>
+                      <td style={num}>
+                        {r.chargedMonthly && r.divisorDays ? (
+                          <Tip tip={`${money(r.chargedMonthly)} ÷ ${money(r.divisorDays, 2)}`}>
+                            {money(r.ratePerDay)}
+                          </Tip>
+                        ) : (
+                          money(r.ratePerDay)
+                        )}
+                      </td>
+                      <td style={num}>
+                        {days !== null && r.ratePerDay ? (
+                          <Tip tip={`${money(r.ratePerDay)} × ${daysLabel} days`}>
+                            {moneyD(jobOf(r.ratePerDay))}
+                          </Tip>
+                        ) : (
+                          moneyD(jobOf(r.ratePerDay))
+                        )}
+                      </td>
+                      <td style={num}>{moneyD(perOf(r.ratePerDay), 4)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ ...labBodyRow, fontSize: 12 }}>
+                    <td style={{ ...sub, fontSize: 11.5 }}>pool subtotal</td>
+                    <td style={labTd} />
+                    <td style={{ ...num, fontWeight: 700 }}>
+                      {money(p.rows.reduce((a, r) => a + (r.monthly ?? 0), 0))}
+                    </td>
+                    <td style={{ ...num, fontWeight: 700 }}>
+                      {money(p.rows.reduce((a, r) => a + (r.chargedMonthly ?? 0), 0))}
+                    </td>
+                    <td style={labTd} />
+                    <td style={{ ...num, fontWeight: 700 }}>{money(poolRate)}</td>
+                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(jobOf(poolRate))}</td>
+                    <td style={{ ...num, fontWeight: 700 }}>{moneyD(perOf(poolRate), 4)}</td>
+                  </tr>
+                </Fragment>
+              );
+            })}
+            <tr style={labTotalRow}>
+              <td style={{ ...labTh, textAlign: "left" }}>Group total</td>
+              <td style={labTd} />
+              <td style={{ ...num, color: "var(--ink-3, #7b7364)" }}>{money(totMonthly)}</td>
+              <td style={{ ...num, fontWeight: 700 }}>{money(totCharged)}</td>
+              <td style={labTd} />
+              <td style={num}>
+                <Tip tip="Sum of every row above — the rate the model charges">
+                  {money(priceRate)}
+                </Tip>
+              </td>
+              <td style={num}>
+                {days === null ? (
+                  labSum(null)
+                ) : (
+                  <Tip tip={`${money(priceRate)} × ${daysLabel}`}>
+                    {moneyD(priceRate * days)}
+                  </Tip>
+                )}
+              </td>
+              <td style={num}>
+                {days === null || !quantity || quantity <= 0 ? (
+                  labSum(null)
+                ) : (
+                  <Tip tip={`${money(priceRate * days)} ÷ ${quantity.toLocaleString()} bottles`}>
+                    {moneyD((priceRate * days) / quantity, 4)}
+                  </Tip>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /**
  * One overhead sub-card: Lease Expenses, Indirect Labor or Other Expenses.
  *
@@ -1647,6 +1892,8 @@ export type SavedState = {
   leasePerRunDay: number | null;
   /** v76: indirect payroll per run-day, snapshotted on the same terms. */
   indirectPerRunDay: number | null;
+  /** v77: other expenses per run-day, snapshotted on the same terms. */
+  otherPerRunDay: number | null;
   /** Lab testing as two lists — raw material and finished product. */
   labTestRm: LabTestItem[];
   labTestFp: LabTestItem[];
@@ -1883,6 +2130,7 @@ export function blankState(
     // row-and-share arithmetic rather than costing a job at zero rent.
     leasePerRunDay: null,
     indirectPerRunDay: null,
+    otherPerRunDay: null,
     // Empty, not seeded. Testing varies job to job and a default list would
     // put invented dollars on every quote.
     labTestRm: [],
@@ -2277,6 +2525,7 @@ export default function BottleCostingBoard({
       // fetch fills the second case in, and leaves the first alone.
       leasePerRunDay: initial.leasePerRunDay ?? null,
       indirectPerRunDay: initial.indirectPerRunDay ?? null,
+      otherPerRunDay: initial.otherPerRunDay ?? null,
       overheadRent: initial.overheadRent ?? blank.overheadRent,
       overheadIndirect: initial.overheadIndirect ?? blank.overheadIndirect,
       overheadOther:
@@ -2360,6 +2609,9 @@ export default function BottleCostingBoard({
     /** v76: indirect payroll per run-day, same contract as the lease. */
     indirectPerRunDay: number | null;
     indirectBreakdown: IndirectBreakdownRow[] | null;
+    /** v77: other expenses per run-day. */
+    otherPerRunDay: number | null;
+    otherBreakdown: OtherBreakdownRow[] | null;
     attention: {
       label: string;
       status: string;
@@ -2398,6 +2650,12 @@ export default function BottleCostingBoard({
             json.indirectPools.breakdown.length > 0
               ? (json.indirectPools.breakdown as IndirectBreakdownRow[])
               : null,
+          otherPerRunDay: json.otherPools?.perRunDay ?? null,
+          otherBreakdown:
+            Array.isArray(json.otherPools?.breakdown) &&
+            json.otherPools.breakdown.length > 0
+              ? (json.otherPools.breakdown as OtherBreakdownRow[])
+              : null,
           attention: json.attention ?? [],
         });
         // v74.1: the lease RATE is adopted on its own terms, not with the rows.
@@ -2409,6 +2667,8 @@ export default function BottleCostingBoard({
             next.leasePerRunDay = json.lease.perRunDay;
           if (next.indirectPerRunDay === null && json.indirectPools?.perRunDay)
             next.indirectPerRunDay = json.indirectPools.perRunDay;
+          if (next.otherPerRunDay === null && json.otherPools?.perRunDay)
+            next.otherPerRunDay = json.otherPools.perRunDay;
           return next;
         });
         if (!usingPlantDefaults.current) return;
@@ -2609,6 +2869,8 @@ export default function BottleCostingBoard({
         leasePerRunDay: st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ?? null,
         indirectPerRunDay:
           st.indirectPerRunDay ?? overheadMeta?.indirectPerRunDay ?? null,
+        otherPerRunDay:
+          st.otherPerRunDay ?? overheadMeta?.otherPerRunDay ?? null,
       },
       labTesting: {
         rawMaterials: st.labTestRm,
@@ -2665,6 +2927,10 @@ export default function BottleCostingBoard({
   const indirectRateEff =
     st.indirectPerRunDay ?? overheadMeta?.indirectPerRunDay ?? null;
   const indirectRateDriven = indirectRateEff !== null && indirectRateEff > 0;
+  /** v77: and for other expenses — the whole overhead card on one language. */
+  const otherRateEff =
+    st.otherPerRunDay ?? overheadMeta?.otherPerRunDay ?? null;
+  const otherRateDriven = otherRateEff !== null && otherRateEff > 0;
 
   /**
    * Charged monthly overhead across all three groups.
@@ -2678,19 +2944,27 @@ export default function BottleCostingBoard({
    */
   const overheadMonthlyCharged = useMemo(() => {
     const rdpm = overheadMeta?.runDaysPerMonth ?? null;
-    const other = overheadGroupCharged(st.overheadOther);
-    const leasePart = leaseRateDriven
-      ? rdpm !== null && rdpm > 0
-        ? (leaseRateEff as number) * rdpm
-        : null
-      : overheadGroupCharged(st.overheadRent, "lease");
-    const indirectPart = indirectRateDriven
-      ? rdpm !== null && rdpm > 0
-        ? (indirectRateEff as number) * rdpm
-        : null
-      : overheadGroupCharged(st.overheadIndirect, "labor");
-    if (leasePart === null || indirectPart === null) return null;
-    return leasePart + indirectPart + other;
+    const part = (
+      driven: boolean,
+      rate: number | null,
+      fallback: number,
+    ): number | null =>
+      driven ? (rdpm !== null && rdpm > 0 ? (rate as number) * rdpm : null) : fallback;
+    const leasePart = part(
+      leaseRateDriven, leaseRateEff,
+      overheadGroupCharged(st.overheadRent, "lease"),
+    );
+    const indirectPart = part(
+      indirectRateDriven, indirectRateEff,
+      overheadGroupCharged(st.overheadIndirect, "labor"),
+    );
+    const otherPart = part(
+      otherRateDriven, otherRateEff,
+      overheadGroupCharged(st.overheadOther),
+    );
+    if (leasePart === null || indirectPart === null || otherPart === null)
+      return null;
+    return leasePart + indirectPart + otherPart;
   }, [
     st.overheadRent,
     st.overheadIndirect,
@@ -2699,6 +2973,8 @@ export default function BottleCostingBoard({
     leaseRateEff,
     indirectRateDriven,
     indirectRateEff,
+    otherRateDriven,
+    otherRateEff,
     overheadMeta?.runDaysPerMonth,
   ]);
 
@@ -2716,8 +2992,9 @@ export default function BottleCostingBoard({
     const indirect = indirectRateDriven
       ? (indirectRateEff as number) * jobDays
       : (overheadGroupCharged(st.overheadIndirect, "labor") / wd) * jobDays;
-    const other =
-      (overheadGroupCharged(st.overheadOther) / wd) * jobDays;
+    const other = otherRateDriven
+      ? (otherRateEff as number) * jobDays
+      : (overheadGroupCharged(st.overheadOther) / wd) * jobDays;
     return lease + indirect + other;
   }, [
     st.overheadRent,
@@ -2729,6 +3006,8 @@ export default function BottleCostingBoard({
     leaseRateEff,
     indirectRateDriven,
     indirectRateEff,
+    otherRateDriven,
+    otherRateEff,
   ]);
 
   /**
@@ -3863,16 +4142,25 @@ export default function BottleCostingBoard({
             perRunDayRate={null}
           />
         )}
-        <OverheadGroup
-          title="Other Expenses"
-          mode={undefined as OverheadGroupMode}
-          list={st.overheadOther}
-          onChange={(next) => set("overheadOther", next)}
-          jobDays={jobDays}
-          workingDays={st.workingDaysPerMonth}
-          quantity={qty}
-          perRunDayRate={null}
-        />
+        {otherRateDriven && overheadMeta?.otherBreakdown ? (
+          <OtherBreakdownTable
+            rows={overheadMeta.otherBreakdown}
+            jobDays={jobDays}
+            quantity={qty}
+            effRate={otherRateEff}
+          />
+        ) : (
+          <OverheadGroup
+            title="Other Expenses"
+            mode={undefined as OverheadGroupMode}
+            list={st.overheadOther}
+            onChange={(next) => set("overheadOther", next)}
+            jobDays={jobDays}
+            workingDays={st.workingDaysPerMonth}
+            quantity={qty}
+            perRunDayRate={null}
+          />
+        )}
 
         {/* ---- Job Allocation ---- */}
         <div style={labSub}>
@@ -3923,7 +4211,13 @@ export default function BottleCostingBoard({
               color: "var(--ink-3, #7b7364)",
             }}
           >
-            {leaseRateDriven && indirectRateDriven ? (
+            {leaseRateDriven && indirectRateDriven && otherRateDriven ? (
+              <>
+                All three overhead groups are charged per run-day from the
+                pool tables above — nothing on this card spreads over
+                calendar days or a typed share any more.
+              </>
+            ) : leaseRateDriven && indirectRateDriven ? (
               <>
                 Lease and indirect labour are charged per run-day from the
                 pool tables above. Only Other Expenses still spreads over
