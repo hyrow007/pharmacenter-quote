@@ -68,8 +68,10 @@ import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalcula
  * builds behind tasks #348 and #349, and CSS is full of quotes.
  */
 const PRINT_CSS = [
+  /* Letterhead is print-only. */
+  ".bc-print-only { display: none; }",
   "@media print {",
-  "  @page { size: letter portrait; margin: 0.5in; }",
+  "  .bc-print-only { display: block !important; }",
   "  body { background: #fff !important; }",
   "  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
   /* App chrome, the back pill, the lede paragraph, the action bar and every
@@ -77,6 +79,18 @@ const PRINT_CSS = [
      Hiding ALL buttons at once (chevrons, toggles, presets, Remove, Save)
      is the whole interactivity story here, since every control is a button. */
   "  header, nav, .bc-actions, .bc-noprint, .lede, button { display: none !important; }",
+  /* Exception to the button purge: the component picker's picked state IS
+     the printed part name. It prints as bare text. */
+  "  button.bc-part { display: block !important; border: none !important; background: none !important; padding: 0 !important; font-size: 8pt !important; cursor: default; }",
+  /* The page shell around the board stays cream on screen; paper is white. */
+  "  html, body, main, .page, .page__inner { background: #fff !important; }",
+  /* The materials grid and the labor/overhead tables are sized for a
+     1240px screen; letter paper is ~720px. Fractional grid tracks and
+     auto table layout let everything shrink to fit instead of running
+     off the right edge. */
+  "  .bc-mat-row { grid-template-columns: 60px 1.5fr 55px 75px 32px 55px !important; gap: 5px !important; font-size: 8pt !important; }",
+  "  .bc-card table { table-layout: auto !important; }",
+  "  .bc-card th, .bc-card td { width: auto !important; min-width: 0 !important; }",
   /* Everything renders pure black on white, like the formula sheet (its
      print v28). Banners keep their border so they still read as callouts. */
   "  .bc-print-root, .bc-print-root * {",
@@ -85,7 +99,22 @@ const PRINT_CSS = [
   "    text-shadow: none !important;",
   "    box-shadow: none !important;",
   "  }",
-  "  .bc-print-root { font-size: 9pt; }",
+  "  .bc-print-root { font-size: 10pt; }",
+  /* Heading tiers, normalized like the formula sheet: card titles 13pt/800,
+     sub-card titles 11pt/700; field labels keep their ~8.5pt uppercase. */
+  "  .bc-card > div:first-child { font-size: 13pt !important; font-weight: 800 !important; padding: 6px 10px !important; }",
+  "  .bc-sub > div:first-child { font-size: 11pt !important; font-weight: 700 !important; }",
+  /* One major card per page, like the costing sheet: Direct Labor,
+     Overhead and Lab Testing each start fresh; Commissions opens the
+     summary page that Costs and Margin & Price share. */
+  "  .bc-page { break-before: page; page-break-before: always; }",
+  /* Row rules match the formula sheet exactly. */
+  "  .bc-card tbody tr { border-bottom: 0.5pt solid #d6d1c2 !important; }",
+  /* Delete-affordance cells (a lone x button) vanish with their column. */
+  "  .bc-card td:has(> button:only-child) { display: none !important; }",
+  /* The on-screen page heading gives way to the letterhead, and the small
+     identity line above the action bar duplicates the footer margin box. */
+  "  .eyebrow, .page-header__title, .bc-screen-ident { display: none !important; }",
   /* Cards: keep whole when they fit; the engine falls back to splitting a
      card taller than a page (Overhead), where the sub-tables below become
      the unit that refuses to split. A title must never orphan. */
@@ -2475,8 +2504,12 @@ function ComponentPicker({
 
   return (
     <div ref={boxRef} style={{ position: "relative" }}>
+      {/* bc-part: this button IS the printed part name — the print sheet
+          hides every other button but exempts this one, stripped of its
+          border, so the Fishbowl column doesn't print blank. */}
       <button
         type="button"
+        className="bc-part"
         onClick={() => setOpen((v) => !v)}
         style={{
           width: "100%",
@@ -3404,6 +3437,103 @@ export default function BottleCostingBoard({
       className="bc-print-root"
       style={{ display: "flex", flexDirection: "column", gap: 14 }}
     >
+      {/* Page geometry + footer margin boxes. Interpolated at render time
+          because the @bottom-center identity strip carries the quote number
+          and product; quotes/backslashes/newlines are stripped so the value
+          cannot break out of the CSS string (same guard as the formula
+          editor's printFooterIdentity). Kept as a joined array — NOT a
+          template literal — per the #348/#349 backtick rule. */}
+      <style>
+        {[
+          "@media print {",
+          "  @page {",
+          "    size: letter;",
+          "    margin: 18.5mm 10mm 22mm 10mm;",
+          '    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9pt; color: #000; font-family: sans-serif; text-align: right; padding-right: 5mm; }',
+          '    @bottom-center { content: "' +
+            [quoteNumber, customerName, productName]
+              .filter(Boolean)
+              .join("  \u00B7  ")
+              .replace(/["\\\r\n]/g, " ") +
+            '"; font-size: 9pt; color: #000; font-family: sans-serif; text-align: center; }',
+          "  }",
+          "  @page :first { margin-top: 12mm; }",
+          "}",
+        ].join("\n")}
+      </style>
+
+      {/* Letterhead — page 1 only, in-flow, exactly the formula sheet's
+          shape: centered document title, uppercase letterspaced subtitle
+          naming the sheet, then one wrapping meta row above a 1.5px rule. */}
+      <div
+        className="bc-print-only bc-print-header"
+        style={{
+          marginBottom: 14,
+          paddingBottom: 8,
+          borderBottom: "1.5px solid #0f4a56",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: "#0f4a56",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.1,
+            }}
+          >
+            Bottle Costing Sheet
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#4a5c60",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            Costing
+          </div>
+        </div>
+        <div
+          style={{
+            marginTop: 29,
+            display: "flex",
+            gap: 18,
+            flexWrap: "wrap",
+            fontSize: 11,
+            color: "#333",
+          }}
+        >
+          <span>
+            <strong style={{ color: "#0f4a56" }}>Quote</strong> {quoteNumber}
+          </span>
+          <span>
+            <strong style={{ color: "#0f4a56" }}>Customer</strong>{" "}
+            {customerName || "—"}
+          </span>
+          <span>
+            <strong style={{ color: "#0f4a56" }}>Product</strong>{" "}
+            {productName || "—"}
+          </span>
+          <span>
+            <strong style={{ color: "#0f4a56" }}>QTY</strong>{" "}
+            {qty !== null && qty > 0 ? qty.toLocaleString("en-US") : "—"}{" "}
+            bottles
+          </span>
+          <span suppressHydrationWarning>
+            <strong style={{ color: "#0f4a56" }}>Printed</strong>{" "}
+            {new Date().toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+        </div>
+      </div>
       {/* ---------- Considerations ---------- */}
       <div className="bc-card" style={shell}>
         <div style={band}>Considerations</div>
@@ -3472,6 +3602,7 @@ export default function BottleCostingBoard({
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
           {/* Column headers — six columns is too many to read unlabelled. */}
           <div
+            className="bc-mat-row"
             style={{
               display: "grid",
               gridTemplateColumns: MATERIALS_COLUMNS,
@@ -3501,6 +3632,7 @@ export default function BottleCostingBoard({
             return (
               <div
                 key={line.id}
+                className="bc-mat-row"
                 style={{
                   display: "grid",
                   gridTemplateColumns: MATERIALS_COLUMNS,
@@ -4081,7 +4213,7 @@ export default function BottleCostingBoard({
           same way: five stacked sub-tables walking Shifts -> Hours -> Man
           Hours -> Rates -> Money. Every number below comes from `lb`, the
           model's single pass; nothing here does its own arithmetic. */}
-      <div className="bc-card" style={shell}>
+      <div className="bc-card bc-page" style={shell}>
         <div style={band}>Direct Labor Costs</div>
         {lb === null ? (
           <div
@@ -4410,7 +4542,7 @@ export default function BottleCostingBoard({
           not — this board reads OVERHEAD_RENT_DEFAULTS_BOTTLE, which charges
           Suite 300 (packaging) and zeroes Suite 400 (gummy manufacturing). The
           gummy tab does the opposite. Do not collapse the two back together. */}
-      <div className="bc-card" style={shell}>
+      <div className="bc-card bc-page" style={shell}>
         <div style={band}>Overhead Costs</div>
 
         {/* v75: when the run-day rate is driving AND the database can explain
@@ -4704,7 +4836,7 @@ export default function BottleCostingBoard({
 
           Seeded EMPTY. A default list would put invented dollars on a quote,
           and testing genuinely varies job to job. */}
-      <div className="bc-card" style={shell}>
+      <div className="bc-card bc-page" style={shell}>
         <div
           style={{
             ...band,
@@ -4817,7 +4949,7 @@ export default function BottleCostingBoard({
           dollars still land in gross profit below. Commission is a % of the
           sale price, so the $ figure can only exist once Margin & Price has
           produced one. */}
-      <div className="bc-card" style={shell}>
+      <div className="bc-card bc-page" style={shell}>
         <div
           style={{
             ...band,
@@ -5251,7 +5383,10 @@ export default function BottleCostingBoard({
         </button>
       </div>
 
-      <div style={{ fontSize: 12, opacity: 0.6, textAlign: "right" }}>
+      <div
+        className="bc-screen-ident"
+        style={{ fontSize: 12, opacity: 0.6, textAlign: "right" }}
+      >
         {quoteNumber} · {customerName} · {productName}
       </div>
 
