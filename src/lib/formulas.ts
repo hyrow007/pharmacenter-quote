@@ -460,6 +460,12 @@ export type GummyFormulaCosting = {
   overheadRent?: OverheadItem[] | null;
   overheadIndirect?: OverheadItem[] | null;
   overheadOther?: OverheadItem[] | null;
+  /** v73: pool-model rate snapshots ($ per batch-day), stamped on save so a
+   *  version keeps reproducing the rates it was costed with. Null on
+   *  versions saved before the pool model existed. */
+  leasePerBatchDay?: number | null;
+  indirectPerBatchDay?: number | null;
+  otherPerBatchDay?: number | null;
   /** v60.3: decimal precision for the Direct Labor Costs and Overhead
    *  Costs cards' computed figures (money shows this many decimals;
    *  per-gummy readouts show +2). Null = default 2. */

@@ -69,6 +69,14 @@ import {
   OVERHEAD_OTHER_DEFAULTS,
   INDIRECT_HOURS_PER_MONTH,
 } from "@/lib/overheadCosting";
+import {
+  LeaseBreakdownTable,
+  IndirectBreakdownTable,
+  OtherBreakdownTable,
+  type LeaseBreakdownRow,
+  type IndirectBreakdownRow,
+  type OtherBreakdownRow,
+} from "@/app/components/overheadBreakdown";
 
 // -----------------------------------------------------------------------------
 // v72: the default overhead rows moved to lib/overheadCosting.ts so the bottle
@@ -860,6 +868,19 @@ export default function FormulaEditor({
   const [overheadOther, setOverheadOther] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
   );
+  // v73: pool-model rate snapshots, same contract as the bottle board's
+  // (its v74.1): null until either a save stamped them or the plant rate
+  // arrives from /api/overhead and is adopted ONCE. A saved version keeps
+  // reproducing the rates it was costed with; a fresh one takes today's.
+  const [leasePerBatchDay, setLeasePerBatchDay] = useState<number | null>(
+    () => seedVersion.costing?.leasePerBatchDay ?? null,
+  );
+  const [indirectPerBatchDay, setIndirectPerBatchDay] = useState<number | null>(
+    () => seedVersion.costing?.indirectPerBatchDay ?? null,
+  );
+  const [otherPerBatchDay, setOtherPerBatchDay] = useState<number | null>(
+    () => seedVersion.costing?.otherPerBatchDay ?? null,
+  );
 
   // v73: plant overhead comes from the shared reference tables, not constants.
   //
@@ -885,6 +906,12 @@ export default function FormulaEditor({
       daysLeft: number | null;
       camEstimated: boolean;
     }[];
+    leasePerBatchDay: number | null;
+    leaseBreakdown: LeaseBreakdownRow[] | null;
+    indirectPerBatchDay: number | null;
+    indirectBreakdown: IndirectBreakdownRow[] | null;
+    otherPerBatchDay: number | null;
+    otherBreakdown: OtherBreakdownRow[] | null;
   } | null>(null);
 
   useEffect(() => {
@@ -902,7 +929,25 @@ export default function FormulaEditor({
         setOverheadMeta({
           asOf: json.asOf ?? null,
           attention: json.attention ?? [],
+          // v73: the pool-model layer. For the gummy line a "run-day" IS a
+          // batch-day: Suite 400 charged direct over 21 days of practical
+          // capacity, warehouse/office x the line's margin share, production
+          // support at the plant-wide per-production-day rate.
+          leasePerBatchDay: json.lease?.perRunDay ?? null,
+          leaseBreakdown: json.lease?.breakdown ?? null,
+          indirectPerBatchDay: json.indirectPools?.perRunDay ?? null,
+          indirectBreakdown: json.indirectPools?.breakdown ?? null,
+          otherPerBatchDay: json.otherPools?.perRunDay ?? null,
+          otherBreakdown: json.otherPools?.breakdown ?? null,
         });
+        // Adopt-once: a version saved WITH rates keeps them; only nulls
+        // (fresh versions, or versions saved before v73) take today's.
+        if (json.lease?.perRunDay)
+          setLeasePerBatchDay((v) => v ?? json.lease.perRunDay);
+        if (json.indirectPools?.perRunDay)
+          setIndirectPerBatchDay((v) => v ?? json.indirectPools.perRunDay);
+        if (json.otherPools?.perRunDay)
+          setOtherPerBatchDay((v) => v ?? json.otherPools.perRunDay);
         if (!usingPlantDefaults.current) return;
         // Flip the guard BEFORE setting state so a slow response cannot land
         // twice and overwrite an edit made in between.
@@ -959,6 +1004,9 @@ export default function FormulaEditor({
       overheadRent,
       overheadIndirect,
       overheadOther,
+      leasePerBatchDay,
+      indirectPerBatchDay,
+      otherPerBatchDay,
       laborDec,
       overheadDec,
       topDec,
@@ -994,6 +1042,9 @@ export default function FormulaEditor({
     overheadRent,
     overheadIndirect,
     overheadOther,
+    leasePerBatchDay,
+    indirectPerBatchDay,
+    otherPerBatchDay,
     laborDec,
     overheadDec,
     topDec,
@@ -1113,6 +1164,9 @@ export default function FormulaEditor({
               overheadIndirect:
                 seed.costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: seed.costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
+              leasePerBatchDay: seed.costing.leasePerBatchDay ?? null,
+              indirectPerBatchDay: seed.costing.indirectPerBatchDay ?? null,
+              otherPerBatchDay: seed.costing.otherPerBatchDay ?? null,
               laborDec: seed.costing.laborDec ?? 2,
               overheadDec: seed.costing.overheadDec ?? 2,
               topDec: seed.costing.topDec ?? 4,
@@ -1148,6 +1202,9 @@ export default function FormulaEditor({
               overheadRent: OVERHEAD_RENT_DEFAULTS_GUMMY,
               overheadIndirect: OVERHEAD_INDIRECT_DEFAULTS,
               overheadOther: OVERHEAD_OTHER_DEFAULTS,
+              leasePerBatchDay: null,
+              indirectPerBatchDay: null,
+              otherPerBatchDay: null,
               laborDec: 2,
               overheadDec: 2,
               topDec: 4,
@@ -2219,9 +2276,27 @@ export default function FormulaEditor({
     );
     return costYieldUnits > 0 ? grand / costYieldUnits : null;
   })();
+  // v73: effective pool-model rates — the version's stamped rate when it
+  // has one, today's plant rate otherwise. When all three are known the
+  // whole overhead card switches to $/batch-day; the row-and-share
+  // arithmetic below stays as the offline / pre-migration fallback.
+  const leaseRateEffG = leasePerBatchDay ?? overheadMeta?.leasePerBatchDay ?? null;
+  const indirectRateEffG =
+    indirectPerBatchDay ?? overheadMeta?.indirectPerBatchDay ?? null;
+  const otherRateEffG = otherPerBatchDay ?? overheadMeta?.otherPerBatchDay ?? null;
+  const overheadRatePerBatchDay =
+    leaseRateEffG !== null &&
+    leaseRateEffG > 0 &&
+    indirectRateEffG !== null &&
+    indirectRateEffG > 0 &&
+    otherRateEffG !== null &&
+    otherRateEffG > 0
+      ? leaseRateEffG + indirectRateEffG + otherRateEffG
+      : null;
+
   // v65: Overhead Cost / gummy for the top card — same math as the
-  // Overhead Costs card's Batch Allocation (Σ allocated monthly ÷
-  // working days × batch days ÷ Target Yield).
+  // Overhead Costs card's Batch Allocation (pool rates × batch days when
+  // driven; Σ allocated monthly ÷ working days × batch days otherwise).
   const overheadCostPerGummy = (() => {
     const H = INDIRECT_HOURS_PER_MONTH;
     // Mirrors effRate/burdenedOf in the Overhead Costs card exactly so
@@ -2251,6 +2326,8 @@ export default function FormulaEditor({
     const batchDays =
       (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
     const workDays = workingDaysPerMonth ?? 21;
+    if (overheadRatePerBatchDay !== null && costYieldUnits > 0)
+      return (overheadRatePerBatchDay * batchDays) / costYieldUnits;
     return workDays > 0 && costYieldUnits > 0
       ? ((totalMonthly / workDays) * batchDays) / costYieldUnits
       : null;
@@ -5627,6 +5704,19 @@ export default function FormulaEditor({
               workDays > 0 && costYieldUnits > 0
                 ? ((charged / workDays) * batchDays) / costYieldUnits
                 : 0;
+            // v73: when every group has a pool rate AND the database can
+            // explain it row by row, the card shows the logic-chain tables
+            // instead of the editable rows — same swap as the bottle board.
+            const rateDriven =
+              overheadRatePerBatchDay !== null &&
+              !!overheadMeta?.leaseBreakdown?.length &&
+              !!overheadMeta?.indirectBreakdown?.length &&
+              !!overheadMeta?.otherBreakdown?.length;
+            const batchOverheadEff = rateDriven
+              ? overheadRatePerBatchDay! * batchDays
+              : batchOverhead;
+            const perGummyEff =
+              costYieldUnits > 0 ? batchOverheadEff / costYieldUnits : 0;
             /* v64: sortable columns. Clicking a header physically reorders
                the card's row list (so the order saves with the formula);
                clicking the same header again flips the direction. Only
@@ -5727,7 +5817,50 @@ export default function FormulaEditor({
             );
             return (
               <>
-                {groups.map((g) => (
+                {groups.map((g) => {
+                  if (rateDriven && g.title === "Lease Expenses")
+                    return (
+                      <LeaseBreakdownTable
+                        key={g.title}
+                        rows={overheadMeta!.leaseBreakdown!}
+                        jobDays={batchDays > 0 ? batchDays : null}
+                        quantity={costYieldUnits > 0 ? costYieldUnits : null}
+                        effRate={leaseRateEffG}
+                        dec={overheadDec + 2}
+                        unit="gummy"
+                        unitPlural="gummies"
+                        lineLabel="Gummy"
+                      />
+                    );
+                  if (rateDriven && g.title === "Indirect Labor")
+                    return (
+                      <IndirectBreakdownTable
+                        key={g.title}
+                        rows={overheadMeta!.indirectBreakdown!}
+                        jobDays={batchDays > 0 ? batchDays : null}
+                        quantity={costYieldUnits > 0 ? costYieldUnits : null}
+                        effRate={indirectRateEffG}
+                        dec={overheadDec + 2}
+                        unit="gummy"
+                        unitPlural="gummies"
+                        lineLabel="Gummy"
+                      />
+                    );
+                  if (rateDriven && g.title === "Other Expenses")
+                    return (
+                      <OtherBreakdownTable
+                        key={g.title}
+                        rows={overheadMeta!.otherBreakdown!}
+                        jobDays={batchDays > 0 ? batchDays : null}
+                        quantity={costYieldUnits > 0 ? costYieldUnits : null}
+                        effRate={otherRateEffG}
+                        dec={overheadDec + 2}
+                        unit="gummy"
+                        unitPlural="gummies"
+                        lineLabel="Gummy"
+                      />
+                    );
+                  return (
                   <div key={g.title} className="fe-cost-sub" style={subCard}>
                     <div style={subTitle}>{tr(g.title)}</div>
                     <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -6050,10 +6183,58 @@ export default function FormulaEditor({
                       </tbody>
                     </table>
                   </div>
-                ))}
+                  );
+                })}
                 {/* Allocation — total of the three sub-cards spread over
                     working days and charged by batch days. v63: its own
                     sub-card, matching the expense cards above. */}
+                {rateDriven ? (
+                  <div className="fe-cost-sub" style={subCard}>
+                    <div style={subTitle}>{tr("Batch Allocation")}</div>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        tableLayout: "fixed",
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
+                          <th style={{ ...othNW, width: "24%" }}>
+                            {tr("Rate / Batch-Day")}
+                          </th>
+                          <th style={{ ...othNW, width: "16%" }}>
+                            {tr("Batch Days")}
+                          </th>
+                          <th style={othNW}>{tr("Batch Overhead")}</th>
+                          <th style={othNW}>{tr("Cost per Gummy")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={otd}>{roMoney(overheadRatePerBatchDay ?? 0)}</td>
+                          <td style={otd}>{batchDays.toLocaleString("en-US")}</td>
+                          <td style={otd}>{roMoney(batchOverheadEff)}</td>
+                          <td style={otd}>{roMoney(perGummyEff, overheadDec + 2)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div
+                      style={{
+                        padding: "4px 14px 10px",
+                        fontSize: 12,
+                        color: "var(--ink-3, #7b7364)",
+                      }}
+                    >
+                      All three groups charge per batch-day from the pool
+                      tables above. Facility slices divide by 21 batch-days a
+                      month — PRACTICAL CAPACITY, assumed rather than
+                      measured: the kettle is not yet at full utilization and
+                      manufacturing days are not yet logged. Idle-day
+                      overhead lands at company level, not on this batch.
+                    </div>
+                  </div>
+                ) : (
                 <div className="fe-cost-sub" style={subCard}>
                   <div style={subTitle}>{tr("Batch Allocation")}</div>
                   <table
@@ -6114,6 +6295,7 @@ export default function FormulaEditor({
                     </tbody>
                   </table>
                 </div>
+                )}
                 {/* v60.4: decimal picker — bottom-right, same placement
                     convention as Material Costs. */}
                 <div
