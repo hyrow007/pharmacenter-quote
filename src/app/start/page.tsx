@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
-import { formatQuoteNumber, blankPackagingSpecBottles } from "@/lib/workflows";
+import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters } from "@/lib/workflows";
 import PackagingSpecSection from "./PackagingSpecSection";
+import PackagingSpecBlistersSection from "./PackagingSpecBlistersSection";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
@@ -1304,6 +1305,25 @@ function StartWorkflow() {
                         ...cur,
                         packagingSpec: updater(
                           cur.packagingSpec ?? blankPackagingSpecBottles(),
+                        ),
+                      }))
+                    }
+                  />
+                ) : null}
+
+                {/* Packaging spec (CP → Blisters) — the PandaDoc Packaging
+                    Form (Blisters) questionnaire, per product. Same
+                    fill-now-or-later contract as the bottles spec; the
+                    blister costing board reads it to seed the finished-unit
+                    structure (blisters per carton, film/foil supplied-by …). */}
+                {isContractPackaging && state.form === "blisters" ? (
+                  <PackagingSpecBlistersSection
+                    spec={p.blisterSpec}
+                    onChange={(updater) =>
+                      setProduct(p.uid, (cur) => ({
+                        ...cur,
+                        blisterSpec: updater(
+                          cur.blisterSpec ?? blankPackagingSpecBlisters(),
                         ),
                       }))
                     }

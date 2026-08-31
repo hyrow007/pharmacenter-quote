@@ -72,6 +72,10 @@ export type ProductEntry = {
   // the PandaDoc "Packaging Specification Form (Bottles)". Optional and
   // fillable-later; a future PandaDoc sync pushes it into a real form.
   packagingSpec?: PackagingSpecBottles;
+  // Contract Packaging → Blisters: same idea, mirroring the PandaDoc
+  // "Packaging Form (Blisters)". A product carries at most one of the two —
+  // whichever matches the workflow's packaging type.
+  blisterSpec?: PackagingSpecBlisters;
   // Hydrated display fields — not persisted to JSONB. Marked optional so the
   // server-loaded rows (which won't have them) typecheck.
   _name?: string | null;
@@ -284,6 +288,174 @@ export function blankPackagingSpecBottles(): PackagingSpecBottles {
     retailExpPrintFormatOther: "", retailExpPrintLine: "",
     retailOtherPrintRequired: "", retailOtherPrintWhat: "", retailOtherPrintSource: "", retailOtherPrintLine: "",
     retailPrintLocation: "", retailPrintColor: "",
+    safetySealRequired: "", safetySealSuppliedBy: "", insertRequired: "", insertSuppliedBy: "",
+    stickersRequired: "", stickersSuppliedBy: "", stickersWhere: "", retailExtraOther: "",
+    bundlingRequired: "", bundleUnitsPerBundle: "", bundleShrinkWrap: "", bundleShrinkWrapSuppliedBy: "",
+    bundleTrays: "", bundleTraysSuppliedBy: "", bundleOther: "",
+    bundleStickersRequired: "", bundleStickersWhere: "", bundleExtraOther: "",
+    innerPackRequired: "", innerPackSuppliedBy: "", innerPackHow: "", innerPackHowOther: "",
+    innerPackQty: "", innerPackSize: "", innerPackLabelInfo: "", innerPackLabelSize: "",
+    masterBoxSuppliedBy: "", masterBoxQty: "", masterBoxSize: "", masterBoxLabelInfo: "", masterBoxLabelSize: "",
+    palletType: "", palletTypeOther: "", palletSize: "", palletSizeOther: "",
+    palletConfig: "", palletDimensionLimits: "",
+    palletLabelRequired: "", palletLabelInfo: "", palletLabelSize: "", palletTemptale: "",
+    additionalInfo: "",
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Packaging Specification Form (Blisters) — PandaDoc "Packaging Form (Blisters)"
+// -----------------------------------------------------------------------------
+// Field-for-field mirror of the blister card form (sections A–L), MINUS what
+// the workflow captures elsewhere (company, product name/code, dosage type,
+// attachments — dosage details stay here like the bottles spec does so the
+// spec is self-contained for the PandaDoc sync). Same conventions as
+// PackagingSpecBottles: everything a string, "" = unanswered, yes/no fields
+// hold "yes" | "no", supplied-by fields hold "pharmacenter" | "customer",
+// picklists pair with an *Other free-text field.
+export type PackagingSpecBlisters = {
+  formVersion: string; // "blisters-202210"
+
+  // --- Section A — product / bulk ---
+  bulkSuppliedBy: string;          // "" | "pharmacenter" | "customer"
+  bulkProductCode: string;         // PC bulk code when PharmaCenter-supplied
+  dosageType: string;              // tablet | capsule | softgel | gummy | other
+  dosageTypeOther: string;
+  dosageSize: string;              // e.g. "00"
+  dosageShape: string;
+
+  // --- Section B — blister card ---
+  cardFormatCode: string;          // tooling format, e.g. "C709", "A703"
+  cardCount: string;               // doses per blister card, e.g. "15"
+  cardLengthMm: string;
+  cardWidthMm: string;
+
+  // --- Section C — film (forming web) ---
+  filmSuppliedBy: string;
+  filmMaterial: string;            // pvc | pvdc | aclar | pet | other
+  filmMaterialOther: string;
+  filmThickness: string;           // 7.5-mil | 10-mil | 12-mil | other
+  filmThicknessOther: string;
+  filmColor: string;               // natural | amber | white | other
+  filmColorOther: string;
+
+  // --- Section D — lidding (foil) ---
+  liddingSuppliedBy: string;
+  liddingMaterial: string;         // aluminum | paper-alu | child-resistant | other
+  liddingMaterialOther: string;
+  liddingThickness: string;        // 20-um | 25-um | other
+  liddingThicknessOther: string;
+  liddingColor: string;            // natural | white | other
+  liddingColorOther: string;
+  liddingPreprinted: string;       // yes/no — pre-printed foil vs plain
+  liddingPrintSides: string;       // single | double (when pre-printed)
+
+  // --- Section E — blister card extras ---
+  perforationRequired: string;     // yes/no
+  butterflyHoleRequired: string;   // yes/no
+
+  // --- Section F — lot & date coding ---
+  codingType: string;              // printed-thermal | embossed | none | other
+  codingTypeOther: string;
+  lotPrintRequired: string;        // yes/no
+  lotPrintSource: string;
+  lotPrintFormat: string;          // e.g. "Lot: L####"
+  expPrintRequired: string;        // yes/no
+  expPrintSource: string;
+  expPrintFormat: string;          // e.g. "EXP: MM/YYYY"
+  otherPrintRequired: string;      // yes/no
+  otherPrintWhat: string;
+  otherPrintSource: string;
+
+  // --- Section G — secondary/retail packaging ---
+  retailRequired: string;          // yes/no — when yes, the finished unit is
+  //                                  the carton, not the blister card
+  retailSuppliedBy: string;
+  retailType: string;              // ifc | carton | display-box | bifold-card | other
+  retailTypeOther: string;
+  retailBlistersPerPack: string;   // blisters per finished unit
+  // G.1 — retail printing
+  retailArtwork: string;
+  retailPrintWhere: string;        // where lot/EXP go on the retail pack
+  retailPrintColor: string;
+  retailPrintFormat: string;
+  retailLotSource: string;
+  retailExpSource: string;
+  // G.2 — retail extra applications
+  safetySealRequired: string;      // yes/no
+  safetySealSuppliedBy: string;
+  insertRequired: string;          // yes/no
+  insertSuppliedBy: string;
+  stickersRequired: string;        // yes/no
+  stickersSuppliedBy: string;
+  stickersWhere: string;
+  retailExtraOther: string;
+
+  // --- Section H — bundling ---
+  bundlingRequired: string;        // yes/no
+  bundleUnitsPerBundle: string;
+  bundleShrinkWrap: string;        // yes/no
+  bundleShrinkWrapSuppliedBy: string;
+  bundleTrays: string;             // yes/no
+  bundleTraysSuppliedBy: string;
+  bundleOther: string;
+  // H.1 — bundle extra applications
+  bundleStickersRequired: string;  // yes/no
+  bundleStickersWhere: string;
+  bundleExtraOther: string;
+
+  // --- Section I — inner pack ---
+  innerPackRequired: string;       // yes/no
+  innerPackSuppliedBy: string;
+  innerPackHow: string;            // upright | laydown | bulk | other
+  innerPackHowOther: string;
+  innerPackQty: string;
+  innerPackSize: string;
+  innerPackLabelInfo: string;
+  innerPackLabelSize: string;
+
+  // --- Section J — master box ---
+  masterBoxSuppliedBy: string;
+  masterBoxQty: string;            // finished units or inner cases per box
+  masterBoxSize: string;
+  masterBoxLabelInfo: string;
+  masterBoxLabelSize: string;
+
+  // --- Section K — pallet ---
+  palletType: string;              // gma-wood | heat-treated | plastic | other
+  palletTypeOther: string;
+  palletSize: string;              // 48x40 | 48x42 | euro | other
+  palletSizeOther: string;
+  palletConfig: string;
+  palletDimensionLimits: string;
+  palletLabelRequired: string;     // yes/no
+  palletLabelInfo: string;
+  palletLabelSize: string;
+  palletTemptale: string;          // yes/no
+
+  // --- Section L — additional ---
+  additionalInfo: string;
+};
+
+/** A fresh, fully-blank Packaging Spec (Blisters) — every field "". */
+export function blankPackagingSpecBlisters(): PackagingSpecBlisters {
+  return {
+    formVersion: "blisters-202210",
+    bulkSuppliedBy: "", bulkProductCode: "", dosageType: "", dosageTypeOther: "", dosageSize: "", dosageShape: "",
+    cardFormatCode: "", cardCount: "", cardLengthMm: "", cardWidthMm: "",
+    filmSuppliedBy: "", filmMaterial: "", filmMaterialOther: "",
+    filmThickness: "", filmThicknessOther: "", filmColor: "", filmColorOther: "",
+    liddingSuppliedBy: "", liddingMaterial: "", liddingMaterialOther: "",
+    liddingThickness: "", liddingThicknessOther: "", liddingColor: "", liddingColorOther: "",
+    liddingPreprinted: "", liddingPrintSides: "",
+    perforationRequired: "", butterflyHoleRequired: "",
+    codingType: "", codingTypeOther: "",
+    lotPrintRequired: "", lotPrintSource: "", lotPrintFormat: "",
+    expPrintRequired: "", expPrintSource: "", expPrintFormat: "",
+    otherPrintRequired: "", otherPrintWhat: "", otherPrintSource: "",
+    retailRequired: "", retailSuppliedBy: "", retailType: "", retailTypeOther: "", retailBlistersPerPack: "",
+    retailArtwork: "", retailPrintWhere: "", retailPrintColor: "", retailPrintFormat: "",
+    retailLotSource: "", retailExpSource: "",
     safetySealRequired: "", safetySealSuppliedBy: "", insertRequired: "", insertSuppliedBy: "",
     stickersRequired: "", stickersSuppliedBy: "", stickersWhere: "", retailExtraOther: "",
     bundlingRequired: "", bundleUnitsPerBundle: "", bundleShrinkWrap: "", bundleShrinkWrapSuppliedBy: "",
