@@ -70,10 +70,51 @@ import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalcula
 const PRINT_CSS = [
   "@media print {",
   "  @page { size: letter portrait; margin: 0.5in; }",
-  "  header, nav, .bc-actions { display: none !important; }",
-  "  .bc-price, .bc-actions { break-inside: avoid; }",
   "  body { background: #fff !important; }",
   "  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+  /* App chrome, the back pill, the lede paragraph, the action bar and every
+     interactive control disappear — the sheet is the numbers, not the tool.
+     Hiding ALL buttons at once (chevrons, toggles, presets, Remove, Save)
+     is the whole interactivity story here, since every control is a button. */
+  "  header, nav, .bc-actions, .bc-noprint, .lede, button { display: none !important; }",
+  /* Everything renders pure black on white, like the formula sheet (its
+     print v28). Banners keep their border so they still read as callouts. */
+  "  .bc-print-root, .bc-print-root * {",
+  "    color: #000 !important;",
+  "    background: #fff !important;",
+  "    text-shadow: none !important;",
+  "    box-shadow: none !important;",
+  "  }",
+  "  .bc-print-root { font-size: 9pt; }",
+  /* Cards: keep whole when they fit; the engine falls back to splitting a
+     card taller than a page (Overhead), where the sub-tables below become
+     the unit that refuses to split. A title must never orphan. */
+  "  .bc-card { break-inside: avoid; page-break-inside: avoid; border-color: #000 !important; }",
+  "  .bc-sub { break-inside: avoid; page-break-inside: avoid; border-color: #999 !important; }",
+  "  .bc-card > div:first-child { break-after: avoid; page-break-after: avoid; border-bottom: 1pt solid #000 !important; }",
+  /* Tables tighten like the gummy costing sheet: small caps headers, thin
+     rules, numeric cells hugging their numbers. */
+  "  .bc-card table { width: 100% !important; border-collapse: collapse !important; }",
+  "  .bc-card thead th { font-size: 6.5pt !important; word-break: normal !important; hyphens: none !important; }",
+  "  .bc-card td, .bc-card th { padding: 2px 4px !important; }",
+  "  .bc-card td, .bc-card td input, .bc-card td select { font-size: 8pt !important; }",
+  "  .bc-card thead tr { border-bottom: 1pt solid #000 !important; }",
+  "  .bc-card tbody tr { border-bottom: 0.5pt solid #ccc !important; }",
+  "  .bc-card tr { break-inside: avoid; page-break-inside: avoid; }",
+  /* Inputs and selects print as their values: no boxes, no arrows. */
+  "  .bc-print-root input, .bc-print-root select {",
+  "    border: none !important;",
+  "    background: none !important;",
+  "    appearance: none !important;",
+  "    -webkit-appearance: none !important;",
+  "    field-sizing: content;",
+  "    max-width: 100% !important;",
+  "  }",
+  "  .bc-card td input { text-align: right !important; width: auto !important; }",
+  /* Tooltip affordances (dotted underlines) are screen chrome. */
+  "  .bc-print-root span[title] { border-bottom: none !important; cursor: default; }",
+  /* Open picker popups never print. */
+  "  .bc-pop { display: none !important; }",
   "}",
   // The component dropdown renders inside the Material Costs card, whose
   // overflow:hidden (there to clip the rounded corners) was cutting the
@@ -663,7 +704,7 @@ function LeaseBreakdownTable({
   };
 
   return (
-    <div style={labSub}>
+    <div className="bc-sub" style={labSub}>
       <div style={labSubTitle}>Lease Expenses</div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ ...labTable, minWidth: 1080 }}>
@@ -938,7 +979,7 @@ function IndirectBreakdownTable({
   };
 
   return (
-    <div style={labSub}>
+    <div className="bc-sub" style={labSub}>
       <div style={labSubTitle}>Indirect Labor</div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ ...labTable, minWidth: 1050 }}>
@@ -1176,7 +1217,7 @@ function OtherBreakdownTable({
   };
 
   return (
-    <div style={labSub}>
+    <div className="bc-sub" style={labSub}>
       <div style={labSubTitle}>Other Expenses</div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ ...labTable, minWidth: 1050 }}>
@@ -1396,7 +1437,7 @@ function OverheadGroup({
       : null;
 
   return (
-    <div style={labSub}>
+    <div className="bc-sub" style={labSub}>
       <div style={labSubTitle}>{title}</div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ ...labTable, minWidth: mode === "labor" ? 1150 : 760 }}>
@@ -1726,7 +1767,7 @@ function LabTestGroup({
   const per = quantity && quantity > 0 ? total / quantity : null;
 
   return (
-    <div style={labSub}>
+    <div className="bc-sub" style={labSub}>
       <div style={labSubTitle}>{title}</div>
       <table style={labTable}>
         <thead>
@@ -3325,6 +3366,31 @@ export default function BottleCostingBoard({
         (qty * (1 - commissionRate))
       : null;
 
+  // -- Print / Save PDF ------------------------------------------------
+  // Same pattern as the formula editor (its v72): the browser names a saved
+  // PDF after document.title, so swap in "Q0016 - <product> - Bottle
+  // Costing" for the duration of the print and restore after.
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    if (!printing) return;
+    const prevTitle = document.title;
+    document.title = [quoteNumber, productName || "Bottle Costing", "Costing"]
+      .filter(Boolean)
+      .join(" - ");
+    const t = window.setTimeout(() => {
+      window.print();
+      window.setTimeout(() => {
+        setPrinting(false);
+        document.title = prevTitle;
+      }, 300);
+    }, 120);
+    return () => {
+      window.clearTimeout(t);
+      document.title = prevTitle;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printing]);
+
   const pctOf = (v: number) =>
     r.costPerUnit && r.costPerUnit > 0 ? (
       <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.65 }}>
@@ -3334,9 +3400,12 @@ export default function BottleCostingBoard({
     ) : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div
+      className="bc-print-root"
+      style={{ display: "flex", flexDirection: "column", gap: 14 }}
+    >
       {/* ---------- Considerations ---------- */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div style={band}>Considerations</div>
         <div style={metricGrid}>
           {/* Editable, because the quantity on the request is often a
@@ -3398,7 +3467,7 @@ export default function BottleCostingBoard({
       </div>
 
       {/* ---------- Bill of materials ---------- */}
-      <div style={shell} className="bc-materials">
+      <div style={shell} className="bc-materials bc-card">
         <div style={band}>Material Costs</div>
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
           {/* Column headers — six columns is too many to read unlabelled. */}
@@ -4012,7 +4081,7 @@ export default function BottleCostingBoard({
           same way: five stacked sub-tables walking Shifts -> Hours -> Man
           Hours -> Rates -> Money. Every number below comes from `lb`, the
           model's single pass; nothing here does its own arithmetic. */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div style={band}>Direct Labor Costs</div>
         {lb === null ? (
           <div
@@ -4042,7 +4111,7 @@ export default function BottleCostingBoard({
                 express that as a fraction of a shift was arithmetic in the
                 head for no gain. Production carries its derived line time,
                 and stays editable like the rest. */}
-            <div style={labSub}>
+            <div className="bc-sub" style={labSub}>
               <div style={labSubTitle}>Hours</div>
               <table style={labTable}>
                 <thead>
@@ -4106,7 +4175,7 @@ export default function BottleCostingBoard({
             </div>
 
             {/* ---- Line Crew ---- */}
-            <div style={labSub}>
+            <div className="bc-sub" style={labSub}>
               <div style={labSubTitle}>Line Crew</div>
               <table style={labTable}>
                 <thead>
@@ -4171,7 +4240,7 @@ export default function BottleCostingBoard({
             </div>
 
             {/* ---- Man Hours (computed) ---- */}
-            <div style={labSub}>
+            <div className="bc-sub" style={labSub}>
               <div style={labSubTitle}>Man Hours</div>
               <table style={labTable}>
                 <thead>
@@ -4213,7 +4282,7 @@ export default function BottleCostingBoard({
             </div>
 
             {/* ---- Pay Rates ---- */}
-            <div style={labSub}>
+            <div className="bc-sub" style={labSub}>
               <div style={labSubTitle}>Pay Rates</div>
               <table style={labTable}>
                 <thead>
@@ -4274,7 +4343,7 @@ export default function BottleCostingBoard({
             </div>
 
             {/* ---- Job Labor Costs ---- */}
-            <div style={labSub}>
+            <div className="bc-sub" style={labSub}>
               <div style={labSubTitle}>Job Labor Costs</div>
               <table style={labTable}>
                 <thead>
@@ -4341,7 +4410,7 @@ export default function BottleCostingBoard({
           not — this board reads OVERHEAD_RENT_DEFAULTS_BOTTLE, which charges
           Suite 300 (packaging) and zeroes Suite 400 (gummy manufacturing). The
           gummy tab does the opposite. Do not collapse the two back together. */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div style={band}>Overhead Costs</div>
 
         {/* v75: when the run-day rate is driving AND the database can explain
@@ -4416,7 +4485,7 @@ export default function BottleCostingBoard({
         )}
 
         {/* ---- Job Allocation ---- */}
-        <div style={labSub}>
+        <div className="bc-sub" style={labSub}>
           <div style={labSubTitle}>Job Allocation</div>
           <table style={labTable}>
             <thead>
@@ -4635,7 +4704,7 @@ export default function BottleCostingBoard({
 
           Seeded EMPTY. A default list would put invented dollars on a quote,
           and testing genuinely varies job to job. */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div
           style={{
             ...band,
@@ -4748,7 +4817,7 @@ export default function BottleCostingBoard({
           dollars still land in gross profit below. Commission is a % of the
           sale price, so the $ figure can only exist once Margin & Price has
           produced one. */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div
           style={{
             ...band,
@@ -4800,7 +4869,7 @@ export default function BottleCostingBoard({
       </div>
 
       {/* ---------- Costs ---------- */}
-      <div style={shell}>
+      <div className="bc-card" style={shell}>
         <div
           style={{
             ...band,
@@ -4915,7 +4984,7 @@ export default function BottleCostingBoard({
           calculator, so cost has to carry through to a price. Same margin
           convention as the main calculator, deliberately: two shops using
           two different definitions of "30%" is how quotes get mispriced. */}
-      <div style={shell} className="bc-price">
+      <div style={shell} className="bc-price bc-card">
         <div
           style={{
             ...band,
@@ -5096,7 +5165,7 @@ export default function BottleCostingBoard({
         )}
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={() => setPrinting(true)}
           title='Open the browser print dialog. Choose "Save as PDF" for a copy of this costing.'
           style={{
             background: "#fff",

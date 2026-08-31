@@ -83,6 +83,7 @@ export default async function BottleCostingPage({ params }: Ctx) {
         <div className="page__inner">
           <a
             href={`/workflow/${w.id}`}
+            className="bc-noprint"
             style={{
               display: "inline-flex",
               alignItems: "center",
