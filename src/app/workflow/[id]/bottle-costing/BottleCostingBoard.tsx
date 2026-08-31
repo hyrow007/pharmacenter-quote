@@ -88,9 +88,24 @@ const PRINT_CSS = [
      1240px screen; letter paper is ~720px. Fractional grid tracks and
      auto table layout let everything shrink to fit instead of running
      off the right edge. */
-  "  .bc-mat-row { grid-template-columns: 60px 1.5fr 55px 75px 32px 55px !important; gap: 5px !important; font-size: 8pt !important; }",
+  /* Materials, minimal edition: the six-column screen grid cannot survive
+     a 720px page (v1 printed crushed columns and blank part names), so each
+     component prints as ONE flowing line — slot, part, supplied-by, cost
+     source, waste, then the $/bottle pushed to the right edge. The header
+     row has nothing to head and disappears. */
+  "  .bc-mat-head { display: none !important; }",
+  "  .bc-mat-row { display: flex !important; flex-wrap: wrap !important; align-items: baseline !important; gap: 2px 10px !important; font-size: 8pt !important; padding: 3px 0 !important; border-bottom: 0.5pt solid #d6d1c2; break-inside: avoid; page-break-inside: avoid; }",
+  "  .bc-mat-row > div { width: auto !important; min-width: 0 !important; }",
+  "  .bc-mat-row > div:last-child { margin-left: auto !important; text-align: right !important; }",
+  "  .bc-mat-row select { font-size: 7.5pt !important; }",
   "  .bc-card table { table-layout: auto !important; }",
   "  .bc-card th, .bc-card td { width: auto !important; min-width: 0 !important; }",
+  /* v1 printed the overhead tables' scrollbars and clipped their last two
+     columns: every scroll wrapper opens up on paper, and the 8-9 column
+     breakdown tables drop to 7pt so they fit the sheet. */
+  "  .bc-print-root [style*=overflow] { overflow: visible !important; }",
+  "  .bc-sub table th { font-size: 6pt !important; }",
+  "  .bc-sub table td, .bc-sub table td input, .bc-sub table td select { font-size: 7pt !important; }",
   /* Everything renders pure black on white, like the formula sheet (its
      print v28). Banners keep their border so they still read as callouts. */
   "  .bc-print-root, .bc-print-root * {",
@@ -99,15 +114,14 @@ const PRINT_CSS = [
   "    text-shadow: none !important;",
   "    box-shadow: none !important;",
   "  }",
-  "  .bc-print-root { font-size: 10pt; }",
+  "  .bc-print-root { font-size: 10pt; gap: 8px !important; }",
   /* Heading tiers, normalized like the formula sheet: card titles 13pt/800,
      sub-card titles 11pt/700; field labels keep their ~8.5pt uppercase. */
   "  .bc-card > div:first-child { font-size: 13pt !important; font-weight: 800 !important; padding: 6px 10px !important; }",
   "  .bc-sub > div:first-child { font-size: 11pt !important; font-weight: 700 !important; }",
-  /* One major card per page, like the costing sheet: Direct Labor,
-     Overhead and Lab Testing each start fresh; Commissions opens the
-     summary page that Costs and Margin & Price share. */
-  "  .bc-page { break-before: page; page-break-before: always; }",
+  /* v2: the forced page-per-card breaks left half-empty pages; cards now
+     flow continuously (user request: minimal). .bc-page kept as an inert
+     hook should a per-card mode ever return. */
   /* Row rules match the formula sheet exactly. */
   "  .bc-card tbody tr { border-bottom: 0.5pt solid #d6d1c2 !important; }",
   /* Delete-affordance cells (a lone x button) vanish with their column. */
@@ -115,11 +129,14 @@ const PRINT_CSS = [
   /* The on-screen page heading gives way to the letterhead, and the small
      identity line above the action bar duplicates the footer margin box. */
   "  .eyebrow, .page-header__title, .bc-screen-ident { display: none !important; }",
-  /* Cards: keep whole when they fit; the engine falls back to splitting a
-     card taller than a page (Overhead), where the sub-tables below become
-     the unit that refuses to split. A title must never orphan. */
-  "  .bc-card { break-inside: avoid; page-break-inside: avoid; border-color: #000 !important; }",
+  /* Packing, minimal-gap edition: cards FLOW and split freely so no page
+     prints half empty; the keep-together unit is one level down — each
+     sub-table, metric grid and total footer jumps whole. Titles still
+     cannot strand at a page bottom. */
+  "  .bc-card { break-inside: auto; border-color: #000 !important; }",
   "  .bc-sub { break-inside: avoid; page-break-inside: avoid; border-color: #999 !important; }",
+  "  .bc-card > div { break-inside: avoid; page-break-inside: avoid; }",
+  "  .bc-materials > div { break-inside: auto !important; }",
   "  .bc-card > div:first-child { break-after: avoid; page-break-after: avoid; border-bottom: 1pt solid #000 !important; }",
   /* Tables tighten like the gummy costing sheet: small caps headers, thin
      rules, numeric cells hugging their numbers. */
@@ -3602,7 +3619,7 @@ export default function BottleCostingBoard({
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
           {/* Column headers — six columns is too many to read unlabelled. */}
           <div
-            className="bc-mat-row"
+            className="bc-mat-row bc-mat-head"
             style={{
               display: "grid",
               gridTemplateColumns: MATERIALS_COLUMNS,
@@ -3936,6 +3953,7 @@ export default function BottleCostingBoard({
                   </select>
                   {suppliedByFromSpec(line.slot, spec) !== line.suppliedBy && (
                     <div
+                      className="bc-noprint"
                       style={{
                         marginTop: 3,
                         fontSize: 11,
@@ -4135,6 +4153,7 @@ export default function BottleCostingBoard({
 
           {/* Add a component the spec did not ask for. */}
           <div
+            className="bc-noprint"
             style={{
               display: "flex",
               gap: 8,
