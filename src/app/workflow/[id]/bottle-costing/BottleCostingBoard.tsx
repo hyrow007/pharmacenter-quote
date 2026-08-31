@@ -104,12 +104,15 @@ const PRINT_CSS = [
      columns: every scroll wrapper opens up on paper, and the 8-9 column
      breakdown tables drop to 7pt so they fit the sheet. */
   "  .bc-print-root [style*=overflow] { overflow: visible !important; }",
-  "  .bc-sub table th { font-size: 6pt !important; }",
-  "  .bc-sub table td, .bc-sub table td input, .bc-sub table td select { font-size: 7pt !important; }",
+  "  .bc-sub table { width: 100% !important; }",
+  "  .bc-sub table th { font-size: 5.5pt !important; padding: 1px 3px !important; letter-spacing: 0 !important; }",
+  "  .bc-sub table td, .bc-sub table td input, .bc-sub table td select { font-size: 6.5pt !important; }",
+  "  .bc-sub table td { padding: 1px 3px !important; }",
   /* Everything renders pure black on white, like the formula sheet (its
      print v28). Banners keep their border so they still read as callouts. */
   "  .bc-print-root, .bc-print-root * {",
   "    color: #000 !important;",
+  "    -webkit-text-fill-color: #000 !important;",
   "    background: #fff !important;",
   "    text-shadow: none !important;",
   "    box-shadow: none !important;",
@@ -138,6 +141,10 @@ const PRINT_CSS = [
   "  .bc-card > div { break-inside: avoid; page-break-inside: avoid; }",
   "  .bc-materials > div { break-inside: auto !important; }",
   "  .bc-card > div:first-child { break-after: avoid; page-break-after: avoid; border-bottom: 1pt solid #000 !important; }",
+  /* A card's TOTAL footer stranded at the top of a page reads like an
+     orphaned number. break-before: avoid pins it to whatever precedes it —
+     if the last sub-table jumps, the total jumps with it. */
+  "  .bc-total { break-before: avoid-page; page-break-before: avoid; break-inside: avoid; }",
   /* Tables tighten like the gummy costing sheet: small caps headers, thin
      rules, numeric cells hugging their numbers. */
   "  .bc-card table { width: 100% !important; border-collapse: collapse !important; }",
@@ -361,6 +368,7 @@ function CardTotal({
       : null;
   return (
     <div
+      className="bc-total"
       style={{
         display: "flex",
         alignItems: "baseline",
