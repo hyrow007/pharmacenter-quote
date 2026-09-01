@@ -1326,6 +1326,20 @@ export type SavedState = {
   /** Units per minute PER PERSON on bundling. */
   bundlingSpeed: number | null;
   /**
+   * WEB YIELDS — the bridge between how Fishbowl prices the webs and how the
+   * job consumes them. Film and foil are bought by the roll (or kg, or foot):
+   * the part's cost is per UOM, not per blister. These say how many BLISTERS
+   * one UOM of each web forms, so
+   *
+   *   qty per finished unit = blisters per unit / blisters per UOM
+   *
+   * and the ordinary qty x cost x waste arithmetic prices the web correctly.
+   * Null = not stated yet, which BLOCKS the film/foil lines rather than
+   * multiplying a roll price by the blister count and quoting nonsense.
+   */
+  filmBlistersPerUom: number | null;
+  liddingBlistersPerUom: number | null;
+  /**
    * Bottles in one master box, for a job WITHOUT an inner pack.
    *
    * With an inner pack the master box is counted in inners instead, and this
@@ -1581,19 +1595,18 @@ export function blankState(
       slot: s.slot,
       fpCode: null,
       name: s.label,
-      // Film and foil are consumed once per BLISTER, so their per-unit
-      // quantity is the blisters-per-unit count. A master box is shared
-      // across the units inside it; an inner pack arrives blank.
+      // Film and foil are priced per UOM of web, and how many blisters a
+      // UOM forms is not known until the yield is typed — so they start
+      // BLANK and block, exactly like an unchosen part. A master box is
+      // shared across the units inside it; an inner pack arrives blank.
       qtyPerUnit:
         s.slot === "master_box"
           ? bottlesPerMasterBox && bottlesPerMasterBox > 0
             ? 1 / bottlesPerMasterBox
             : null
-          : s.key === "inner_pack"
+          : s.key === "inner_pack" || s.perBlister
             ? null
-            : s.perBlister
-              ? bpu
-              : 1,
+            : 1,
       costPerUnit: null,
       costStatus: "no_cost",
       suppliedBy: suppliedByForDef(s, spec ?? null),
@@ -1611,6 +1624,8 @@ export function blankState(
     packoutSpeed: null,
     cartoningSpeed: null,
     bundlingSpeed: null,
+    filmBlistersPerUom: null,
+    liddingBlistersPerUom: null,
     bottlesPerMasterBox,
     // No spec question to seed these from, and no house standard worth
     // assuming — a blank that the user fills in is honest, a guessed 6 is not.
@@ -2279,9 +2294,17 @@ export default function BlisterCostingBoard({
                   ? 1 / p.bottlesPerMasterBox
                   : null
                 : meta?.perBlister
-                  ? p.blistersPerUnit && p.blistersPerUnit > 0
-                    ? p.blistersPerUnit
-                    : 1
+                  ? (() => {
+                      const y =
+                        key === "film"
+                          ? p.filmBlistersPerUom
+                          : p.liddingBlistersPerUom;
+                      const bpu =
+                        p.blistersPerUnit && p.blistersPerUnit > 0
+                          ? p.blistersPerUnit
+                          : 1;
+                      return y && y > 0 ? bpu / y : null;
+                    })()
                   : 1,
           costPerUnit: null,
           costStatus: "no_cost",
@@ -2372,21 +2395,36 @@ export default function BlisterCostingBoard({
             ...l,
             qtyPerUnit: perInner && perInner > 0 ? 1 / perInner : null,
           };
-        // Film and foil are consumed once per BLISTER, so their per-unit
-        // quantity tracks the blisters-per-unit input the same way the
-        // containers track their counts.
-        if (slotKeyOf(l)?.perBlister)
+        // Film and lidding: one UOM of web forms `blistersPerUom` blisters,
+        // and each finished unit consumes `blistersPerUnit` of them —
+        //   qty per unit = blisters per unit / blisters per UOM.
+        // Missing yield leaves the line null (blocked), never a guess.
+        const def = slotKeyOf(l);
+        if (def?.perBlister) {
+          const yieldPerUom =
+            def.key === "film"
+              ? st.filmBlistersPerUom
+              : st.liddingBlistersPerUom;
+          const bpu =
+            st.blistersPerUnit && st.blistersPerUnit > 0
+              ? st.blistersPerUnit
+              : 1;
           return {
             ...l,
             qtyPerUnit:
-              st.blistersPerUnit && st.blistersPerUnit > 0
-                ? st.blistersPerUnit
-                : 1,
+              yieldPerUom && yieldPerUom > 0 ? bpu / yieldPerUom : null,
           };
+        }
         return l;
       }),
     }));
-  }, [bottlesPerMasterBoxEffective, st.bottlesPerInnerPack, st.blistersPerUnit]);
+  }, [
+    bottlesPerMasterBoxEffective,
+    st.bottlesPerInnerPack,
+    st.blistersPerUnit,
+    st.filmBlistersPerUom,
+    st.liddingBlistersPerUom,
+  ]);
 
   const inputs: BlisterCostingInputs = useMemo(
     () => ({
@@ -2909,16 +2947,25 @@ export default function BlisterCostingBoard({
               placeholder="20"
             />
           </ParamBlock>
-          <ParamBlock label="Line speed (blisters / minute)" nowrap>
-            <ReadOnly>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>
-                {effBpm !== null
-                  ? effBpm.toLocaleString("en-US", {
-                      maximumFractionDigits: 1,
-                    })
-                  : "—"}
-              </span>
-            </ReadOnly>
+          <ParamBlock label="Line speed (blisters / minute)">
+            {/* Boxed like the inputs around it, so the derived figure sits on
+                the same baseline instead of floating — but visibly read-only:
+                dashed border, muted paper. */}
+            <div
+              style={{
+                ...numInput,
+                border: "1px dashed var(--line, #cfc7b4)",
+                background: "transparent",
+                color: "var(--teal-900, #0f4a56)",
+                fontWeight: 700,
+                textAlign: "right",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {effBpm !== null
+                ? effBpm.toLocaleString("en-US", { maximumFractionDigits: 1 })
+                : "—"}
+            </div>
           </ParamBlock>
           {/* Several blisters usually go into one carton — the FINISHED UNIT
               everything on this board is priced per. Seeded from the
@@ -2930,23 +2977,47 @@ export default function BlisterCostingBoard({
               placeholder="1"
             />
           </ParamBlock>
+          {/* Web yields: Fishbowl prices film and foil per UOM (a roll, a kg,
+              a foot — whatever the part is stocked in), and these convert
+              that price to per-blister. Required before the film and foil
+              lines can price: a roll price multiplied by a blister count is
+              exactly the plausible-looking nonsense this board refuses. */}
+          <ParamBlock label="Film yield (blisters / UOM)">
+            <NumField
+              value={st.filmBlistersPerUom}
+              onChange={(v) => set("filmBlistersPerUom", v)}
+              placeholder="required"
+            />
+          </ParamBlock>
+          <ParamBlock label="Lidding yield (blisters / UOM)">
+            <NumField
+              value={st.liddingBlistersPerUom}
+              onChange={(v) => set("liddingBlistersPerUom", v)}
+              placeholder="required"
+            />
+          </ParamBlock>
           {/* Per PERSON, unlike the line speed. The hand stations scale with
               headcount: two people pack twice as fast, whereas the line runs
               at its own pace whoever is watching it. Blank = the job skips
               that station. */}
-          <ParamBlock label="Packout speed (units / min / person)" nowrap>
+          {/* No `nowrap` on these three: the labels are the longest on the
+              board and a forced single line overflows a 200px grid track
+              straight into the neighbouring label. Wrapping to two lines is
+              the fix, not smaller words — "units / min / person" is the unit
+              and it stays. */}
+          <ParamBlock label="Packout speed (units / min / person)">
             <NumField
               value={st.packoutSpeed}
               onChange={(v) => set("packoutSpeed", v)}
             />
           </ParamBlock>
-          <ParamBlock label="Cartoning speed (units / min / person)" nowrap>
+          <ParamBlock label="Cartoning speed (units / min / person)">
             <NumField
               value={st.cartoningSpeed}
               onChange={(v) => set("cartoningSpeed", v)}
             />
           </ParamBlock>
-          <ParamBlock label="Bundling speed (units / min / person)" nowrap>
+          <ParamBlock label="Bundling speed (units / min / person)">
             <NumField
               value={st.bundlingSpeed}
               onChange={(v) => set("bundlingSpeed", v)}
@@ -3053,7 +3124,12 @@ export default function BlisterCostingBoard({
                       ALWAYS for the master box — otherwise a spec with no
                       units-per-box would render no caption and leave nowhere
                       to type the number. */}
-                  {(line.slot === "master_box" ||
+                  {/* Film and foil are excluded: their fraction comes from
+                      the web yield in Considerations, and offering a second
+                      place to type the same ratio is how two numbers learn
+                      to disagree. They get a read-only caption below. */}
+                  {!slotKeyOf(line)?.perBlister &&
+                    (line.slot === "master_box" ||
                     line.slot === "inner_pack" ||
                     (line.qtyPerUnit !== null &&
                       line.qtyPerUnit > 0 &&
@@ -3170,6 +3246,33 @@ export default function BlisterCostingBoard({
                           )}
                       </div>
                     )}
+                  {/* Film and foil: read-only, because the ratio is DERIVED
+                      from the web yield typed in Considerations — the one
+                      place that number lives. */}
+                  {(() => {
+                    const def = slotKeyOf(line);
+                    if (!def?.perBlister) return null;
+                    const y =
+                      def.key === "film"
+                        ? st.filmBlistersPerUom
+                        : st.liddingBlistersPerUom;
+                    return (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          textTransform: "none",
+                          letterSpacing: 0,
+                          color: "var(--ink-3, #7b7364)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {y && y > 0
+                          ? `yield: ${y.toLocaleString("en-US")} blisters / UOM`
+                          : "needs a web yield — see Considerations"}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   {line.notUsed ? (
