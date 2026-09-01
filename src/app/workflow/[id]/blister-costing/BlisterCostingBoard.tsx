@@ -1486,6 +1486,11 @@ type SlotDef = {
 };
 
 const SLOTS: SlotDef[] = [
+  // The bulk itself — Melissa's sheet always carried a "Tab/m (C.S)" row,
+  // priced at $0 when customer-supplied but VISIBLE, so the costing reads as
+  // the whole job. Bulk is a product, not a packaging component, so Fishbowl's
+  // packaging picker has nothing for it: the row defaults to Manual pricing.
+  { key: "bulk", slot: "other", label: "Bulk (doses)", presenceKey: null, suppliedKey: "bulkSuppliedBy", waste: 3 },
   { key: "film", slot: "other", label: "Film (forming web)", presenceKey: null, suppliedKey: "filmSuppliedBy", waste: 15, perBlister: true },
   { key: "lidding", slot: "other", label: "Lidding (foil)", presenceKey: null, suppliedKey: "liddingSuppliedBy", waste: 20, perBlister: true },
   { key: "retail", slot: "carton", label: "Retail / unit carton", presenceKey: "retailRequired", suppliedKey: "retailSuppliedBy", waste: 3 },
@@ -1630,6 +1635,12 @@ export function blankState(
   // form, editable on the row like every other count.
   const sealRaw = Number(spec?.safetySealQty ?? "");
   const sealQty = Number.isFinite(sealRaw) && sealRaw > 0 ? sealRaw : 1;
+  // Doses per finished unit: the card count times the blisters that go into
+  // one unit. Null until the form states a card count — a customer-supplied
+  // bulk resolves at $0 regardless, so the blank only gates PC-supplied bulk.
+  const cardRaw = Number(spec?.cardCount ?? "");
+  const dosesPerUnit =
+    Number.isFinite(cardRaw) && cardRaw > 0 ? cardRaw * bpu : null;
   return {
     // The list is generated FROM THE SPEC, not fixed. A job with no retail
     // carton simply has no carton row to explain away.
@@ -1655,11 +1666,15 @@ export function blankState(
               ? null
               : s.key === "safety_seal"
                 ? sealQty
-                : 1,
+                : s.key === "bulk"
+                  ? dosesPerUnit
+                  : 1,
       costPerUnit: null,
       costStatus: "no_cost",
       suppliedBy: suppliedByForDef(s, spec ?? null),
-      costSource: DEFAULT_COST_SOURCE,
+      // Bulk has no Fishbowl packaging record to price from — Manual is the
+      // only source that can ever resolve it, so start there.
+      costSource: s.key === "bulk" ? "Manual" : DEFAULT_COST_SOURCE,
       wastePct: s.waste,
       manualCostPerUnit: null,
       inventoryCostPerUnit: null,
@@ -2366,7 +2381,7 @@ export default function BlisterCostingBoard({
           costPerUnit: null,
           costStatus: "no_cost",
           suppliedBy: suppliedByForDef(meta, spec),
-          costSource: DEFAULT_COST_SOURCE,
+          costSource: meta?.key === "bulk" ? "Manual" : DEFAULT_COST_SOURCE,
           wastePct: meta?.waste ?? DEFAULT_WASTE_PCT[slot],
           manualCostPerUnit: null,
           inventoryCostPerUnit: null,
@@ -3330,12 +3345,15 @@ export default function BlisterCostingBoard({
                       </div>
                     );
                   })()}
-                  {/* Safety seal: an editable per-unit COUNT, because some
-                      jobs seal both ends — 2 seals per unit. Unlike the
+                  {/* Safety seal and bulk: an editable per-unit COUNT —
+                      2 seals per unit, 56 doses per carton. Unlike the
                       shared containers this is a straight multiplier, so it
                       writes qtyPerUnit directly rather than 1/n. Seeded from
-                      the packaging form's "Seals per unit" answer. */}
-                  {slotKeyOf(line)?.key === "safety_seal" && !line.notUsed && (
+                      the packaging form (seals per unit; card count times
+                      blisters per unit for the bulk). */}
+                  {(slotKeyOf(line)?.key === "safety_seal" ||
+                    slotKeyOf(line)?.key === "bulk") &&
+                    !line.notUsed && (
                     <div
                       style={{
                         fontSize: 11,
@@ -3385,7 +3403,9 @@ export default function BlisterCostingBoard({
                           background: "#fff",
                         }}
                       />
-                      seals per unit
+                      {slotKeyOf(line)?.key === "bulk"
+                        ? "doses per unit"
+                        : "seals per unit"}
                     </div>
                   )}
                 </div>

@@ -90,7 +90,12 @@ export async function GET(request: Request) {
   const words = q
     ? q
         .split(/[\s/]+/)
-        .map((w) => w.replace(/[%_,()-]/g, " ").trim())
+        // Strip ilike wildcards (%_) and the characters that would break the
+        // .or() syntax (, and parens) — but KEEP hyphens: part numbers are
+        // hyphenated ("PC-PK-0135"), and turning the hyphens into spaces
+        // inside a single word built a pattern no fp_code could ever match.
+        // That is why searching by part number silently returned nothing.
+        .map((w) => w.replace(/[%_,()]/g, " ").trim())
         .filter((w) => w.length > 1)
         .slice(0, 6)
     : [];
