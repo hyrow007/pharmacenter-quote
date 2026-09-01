@@ -1232,32 +1232,50 @@ function NumField({
   value,
   onChange,
   placeholder,
-  step,
 }: {
   value: number | null;
   onChange: (v: number | null) => void;
   placeholder?: string;
-  step?: string;
 }) {
+  // Text input, not type=number, so thousands separators can render: a
+  // 5,000-blister film yield reads as five thousand at a glance where 5000
+  // has to be counted — same treatment the QTY input has always had.
+  //
+  // A draft string carries the text WHILE FOCUSED, so commas never appear
+  // mid-typing and a trailing "5." survives long enough to become 5.5; the
+  // formatted view returns on blur. The stored number is untouched by any of
+  // this — formatting is chrome, not data.
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown =
+    draft !== null
+      ? draft
+      : value !== null
+        ? value.toLocaleString("en-US", { maximumFractionDigits: 6 })
+        : "";
   return (
     <input
-      type="number"
-      step={step ?? "any"}
-      value={value ?? ""}
+      inputMode="decimal"
+      value={shown}
       placeholder={placeholder}
       onChange={(e) => {
         const raw = e.target.value;
-        if (raw === "") return onChange(null);
-        const n = Number(raw);
-        onChange(Number.isFinite(n) ? n : null);
+        setDraft(raw);
+        const cleaned = raw.replace(/,/g, "");
+        if (cleaned.trim() === "") return onChange(null);
+        const n = Number(cleaned);
+        if (Number.isFinite(n)) onChange(n);
       }}
+      onBlur={() => setDraft(null)}
       onFocus={(e) => {
-        // Deferred by a frame, per #206. Chrome does not select a number
-        // input's contents synchronously on focus, so the first keystroke
-        // prepends to the existing digits instead of replacing them — typing
-        // 5 over 10 gave 510. This handler had kept the synchronous form and
-        // therefore still had the bug; the inline quantity editor below was
-        // fixed but the manual $/each field here was not.
+        setDraft(
+          value !== null
+            ? String(value)
+            : "",
+        );
+        // Deferred by a frame, per #206. Chrome does not select an input's
+        // contents synchronously on focus, so the first keystroke prepends
+        // to the existing digits instead of replacing them — typing 5 over
+        // 10 gave 510.
         const el = e.currentTarget;
         setTimeout(() => {
           try {
@@ -1465,7 +1483,7 @@ const SLOTS: SlotDef[] = [
   { key: "safety_seal", slot: "safety_seal", label: "Safety seal", presenceKey: "safetySealRequired", suppliedKey: "safetySealSuppliedBy", waste: 5 },
   { key: "insert", slot: "insert", label: "Insert", presenceKey: "insertRequired", suppliedKey: "insertSuppliedBy", waste: 5 },
   { key: "sticker", slot: "label", label: "Sticker(s)", presenceKey: "stickersRequired", suppliedKey: "stickersSuppliedBy", waste: 10 },
-  { key: "bundle", slot: "other", label: "Bundling material (shrink / tray)", presenceKey: "bundlingRequired", suppliedKey: "bundleShrinkWrapSuppliedBy", waste: 5 },
+  { key: "bundle", slot: "other", label: "Bundling/Kitting material", presenceKey: "bundlingRequired", suppliedKey: "bundleShrinkWrapSuppliedBy", waste: 5 },
   { key: "inner_pack", slot: "inner_pack", label: "Inner pack", presenceKey: "innerPackRequired", suppliedKey: "innerPackSuppliedBy", waste: 2 },
   { key: "master_box", slot: "master_box", label: "Master box", presenceKey: null, suppliedKey: "masterBoxSuppliedBy", waste: 2 },
 ];

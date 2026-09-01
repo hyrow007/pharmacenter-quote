@@ -371,7 +371,7 @@ export default function PackagingSpecBlistersSection({ spec, onChange }: Props) 
             </>
           ) : null}
 
-          <div style={groupTitle}>Bundling or Kitting</div>
+          <div style={groupTitle}>Bundling/Kitting material</div>
           <div style={rowStyle}>
             <YesNo ctx={ctx} k="bundlingRequired" label="Bundling or kitting required?" />
             {s.bundlingRequired === "yes" ? (
