@@ -1748,7 +1748,16 @@ function ComponentPicker({
       <button
         type="button"
         className="bc-part"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() =>
+          setOpen((v) => {
+            const next = !v;
+            // A typed-in part opens with its CURRENT text in the box, so a
+            // noticed error is corrected in place — edit, press Enter —
+            // rather than cleared and retyped from scratch.
+            if (next && current.customPart) setQ(current.name);
+            return next;
+          })
+        }
         style={{
           width: "100%",
           textAlign: "left",
@@ -3082,7 +3091,13 @@ export default function BottleCostingBoard({
                           // keeping them would let the old part's price hide
                           // behind the new part's name.
                           costSource: "Manual",
-                          manualCostPerUnit: null,
+                          // …but RENAMING an already-typed part is a
+                          // correction, not a new part: its manual price
+                          // survives the edit. Only switching from a Fishbowl
+                          // part starts the price blank.
+                          manualCostPerUnit: line.customPart
+                            ? line.manualCostPerUnit
+                            : null,
                           costPerUnit: null,
                           inventoryCostPerUnit: null,
                           lastOrderCostPerUnit: null,
