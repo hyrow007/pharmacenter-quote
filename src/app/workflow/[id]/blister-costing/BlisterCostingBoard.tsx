@@ -2394,6 +2394,24 @@ export default function BlisterCostingBoard({
   const removeLine = (id: string) =>
     setSt((p) => ({ ...p, bom: p.bom.filter((l) => l.id !== id) }));
 
+  // ---- drag-and-drop row reordering (same pattern as the formula editor's
+  // ingredient rows). Order is presentation the user owns: the BOM array's
+  // order IS what renders and what saves, so a drop is just a splice.
+  // Only the ⋮⋮ HANDLE is draggable — putting `draggable` on the whole row
+  // div would fight text selection inside its inputs.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const reorderLine = (fromId: string, toId: string) =>
+    setSt((p) => {
+      const bom = [...p.bom];
+      const from = bom.findIndex((l) => l.id === fromId);
+      const to = bom.findIndex((l) => l.id === toId);
+      if (from < 0 || to < 0 || from === to) return p;
+      const [moved] = bom.splice(from, 1);
+      bom.splice(to, 0, moved);
+      return { ...p, bom };
+    });
+
   /**
    * Does this job bundle bottles into inner packs before they go in the case?
    *
@@ -3152,12 +3170,38 @@ export default function BlisterCostingBoard({
               <div
                 key={line.id}
                 className="bc-mat-row"
+                onDragOver={(e) => {
+                  // preventDefault is what marks this a valid drop target —
+                  // without it onDrop never fires.
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dropTargetId !== line.id) setDropTargetId(line.id);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear the hint when the pointer truly leaves the
+                  // row, not when it moves between the row's own children.
+                  const next = e.relatedTarget as Node | null;
+                  if (next && e.currentTarget.contains(next)) return;
+                  if (dropTargetId === line.id) setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fromId = e.dataTransfer.getData("text/plain");
+                  setDraggingId(null);
+                  setDropTargetId(null);
+                  if (fromId && fromId !== line.id) reorderLine(fromId, line.id);
+                }}
                 style={{
                   display: "grid",
                   gridTemplateColumns: MATERIALS_COLUMNS,
                   gap: 8,
                   alignItems: "start",
-                  opacity: line.notUsed ? 0.55 : 1,
+                  opacity:
+                    draggingId === line.id ? 0.4 : line.notUsed ? 0.55 : 1,
+                  borderTop:
+                    dropTargetId === line.id && draggingId !== line.id
+                      ? "2px solid var(--teal-700, #1d6c7b)"
+                      : "2px solid transparent",
                 }}
               >
                 <div
@@ -3170,6 +3214,36 @@ export default function BlisterCostingBoard({
                     paddingTop: 9,
                   }}
                 >
+                  {/* The one draggable element on the row. Hidden on print
+                      via bc-noprint — a reorder affordance is chrome, not
+                      costing. */}
+                  <span
+                    className="bc-noprint"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", line.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggingId(line.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropTargetId(null);
+                    }}
+                    title="Drag to reorder"
+                    aria-label="Drag to reorder"
+                    style={{
+                      display: "inline-block",
+                      marginRight: 6,
+                      fontSize: 13,
+                      lineHeight: 1,
+                      color: "var(--ink-3, #8a9498)",
+                      cursor: "grab",
+                      userSelect: "none",
+                      opacity: draggingId === line.id ? 0.9 : 0.35,
+                    }}
+                  >
+                    ⋮⋮
+                  </span>
                   {slotLabel}
                   {/* The liner has no row of its own (it arrives in the cap),
                       so the spec's answer is surfaced here — otherwise the
