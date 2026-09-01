@@ -384,6 +384,8 @@ export type PackagingSpecBlisters = {
   // G.2 — retail extra applications
   safetySealRequired: string;      // yes/no
   safetySealSuppliedBy: string;
+  /** Seals per finished unit — some jobs seal both ends, so 2. */
+  safetySealQty: string;
   insertRequired: string;          // yes/no
   insertSuppliedBy: string;
   stickersRequired: string;        // yes/no
@@ -456,7 +458,7 @@ export function blankPackagingSpecBlisters(): PackagingSpecBlisters {
     retailRequired: "", retailSuppliedBy: "", retailType: "", retailTypeOther: "", retailBlistersPerPack: "",
     retailArtwork: "", retailPrintWhere: "", retailPrintColor: "", retailPrintFormat: "",
     retailLotSource: "", retailExpSource: "",
-    safetySealRequired: "", safetySealSuppliedBy: "", insertRequired: "", insertSuppliedBy: "",
+    safetySealRequired: "", safetySealSuppliedBy: "", safetySealQty: "", insertRequired: "", insertSuppliedBy: "",
     stickersRequired: "", stickersSuppliedBy: "", stickersWhere: "", retailExtraOther: "",
     bundlingRequired: "", bundleUnitsPerBundle: "", bundleShrinkWrap: "", bundleShrinkWrapSuppliedBy: "",
     bundleTrays: "", bundleTraysSuppliedBy: "", bundleOther: "",

@@ -1626,6 +1626,10 @@ export function blankState(
       ? unitsPerInner * bottlesPerMasterBox
       : null
     : bottlesPerMasterBox;
+  // Seals per finished unit — some jobs seal both ends. Seeded from the
+  // form, editable on the row like every other count.
+  const sealRaw = Number(spec?.safetySealQty ?? "");
+  const sealQty = Number.isFinite(sealRaw) && sealRaw > 0 ? sealRaw : 1;
   return {
     // The list is generated FROM THE SPEC, not fixed. A job with no retail
     // carton simply has no carton row to explain away.
@@ -1649,7 +1653,9 @@ export function blankState(
               : null
             : s.perBlister
               ? null
-              : 1,
+              : s.key === "safety_seal"
+                ? sealQty
+                : 1,
       costPerUnit: null,
       costStatus: "no_cost",
       suppliedBy: suppliedByForDef(s, spec ?? null),
@@ -3324,6 +3330,64 @@ export default function BlisterCostingBoard({
                       </div>
                     );
                   })()}
+                  {/* Safety seal: an editable per-unit COUNT, because some
+                      jobs seal both ends — 2 seals per unit. Unlike the
+                      shared containers this is a straight multiplier, so it
+                      writes qtyPerUnit directly rather than 1/n. Seeded from
+                      the packaging form's "Seals per unit" answer. */}
+                  {slotKeyOf(line)?.key === "safety_seal" && !line.notUsed && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        color: "var(--ink-3, #7b7364)",
+                        marginTop: 2,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={
+                          line.qtyPerUnit !== null && line.qtyPerUnit > 0
+                            ? Math.round(line.qtyPerUnit)
+                            : ""
+                        }
+                        onFocus={(e) => {
+                          const el = e.currentTarget;
+                          setTimeout(() => {
+                            try {
+                              el.select();
+                            } catch {}
+                          }, 0);
+                        }}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          setLine(line.id, {
+                            qtyPerUnit:
+                              Number.isFinite(n) && n > 0 ? Math.round(n) : null,
+                          });
+                        }}
+                        style={{
+                          width: 44,
+                          padding: "1px 4px",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          textAlign: "right",
+                          color: "var(--teal-900, #0f4a56)",
+                          background: "#fff",
+                        }}
+                      />
+                      seals per unit
+                    </div>
+                  )}
                 </div>
                 <div>
                   {line.notUsed ? (

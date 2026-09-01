@@ -351,7 +351,10 @@ export default function PackagingSpecBlistersSection({ spec, onChange }: Props) 
               <div style={rowStyle}>
                 <YesNo ctx={ctx} k="safetySealRequired" label="Safety seal?" />
                 {s.safetySealRequired === "yes" ? (
-                  <Supplied ctx={ctx} k="safetySealSuppliedBy" label="Seal supplied by" />
+                  <>
+                    <Supplied ctx={ctx} k="safetySealSuppliedBy" label="Seal supplied by" />
+                    <Text ctx={ctx} k="safetySealQty" label="Seals per unit" placeholder="1" />
+                  </>
                 ) : null}
                 <YesNo ctx={ctx} k="insertRequired" label="Insert?" />
                 {s.insertRequired === "yes" ? (
