@@ -462,6 +462,11 @@ export default function WorkflowActions({
     (workflow.state.type ?? "") === "contract-packaging" &&
     (workflow.state.form ?? "") === "bottles";
 
+  /** Contract-packaging blisters — same reasoning, its own board. */
+  const isCpBlisters =
+    (workflow.state.type ?? "") === "contract-packaging" &&
+    (workflow.state.form ?? "") === "blisters";
+
   const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
   return (
@@ -673,9 +678,10 @@ export default function WorkflowActions({
             have none of that shape: the customer supplies the components and
             we sell labour plus overhead. Pointing a bottles workflow at this
             calculator produces a quote built from the wrong model with an
-            empty cost, so both entry points are hidden for bottles and the
-            Bottles calculator below carries the job end to end. */}
-        {!isCpBottles && (
+            empty cost, so both entry points are hidden for bottles and
+            blisters alike — each has a calculator below that carries the job
+            end to end. */}
+        {!isCpBottles && !isCpBlisters && (
           <>
             <a
               href={`/pricing?from=${workflow.id}&issue=1`}
@@ -729,8 +735,8 @@ export default function WorkflowActions({
         {/* Bottle costing — the Contract-Packaging counterpart to the gummy
             formula. Gated on the same two facts the /start form records:
             quote type is contract-packaging AND the packaging type is bottles.
-            Anything else (blisters, sachets, pouches, kitting) has a different
-            bill of materials and would need its own board. */}
+            Sachets, pouches and kitting have a different bill of materials
+            and still need boards of their own. */}
         {isCpBottles && (
           <a
             href={`/workflow/${workflow.id}/bottle-costing`}
@@ -740,6 +746,22 @@ export default function WorkflowActions({
             <span>Pricing Calculator (Bottles) →</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
               Components + line crew + margin → price per bottle.
+            </span>
+          </a>
+        )}
+
+        {/* Blister costing — same architecture, its own labour model: stroke
+            speed x blisters per stroke with the house 20% penalty, and hand
+            stations (packout / cartoning / bundling) at per-person speeds. */}
+        {isCpBlisters && (
+          <a
+            href={`/workflow/${workflow.id}/blister-costing`}
+            style={editAction}
+            aria-label="Open the blisters pricing calculator"
+          >
+            <span>Pricing Calculator (Blisters) →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Film + foil + crews + margin → price per finished unit.
             </span>
           </a>
         )}
