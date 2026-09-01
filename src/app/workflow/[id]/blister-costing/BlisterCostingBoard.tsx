@@ -1309,6 +1309,15 @@ export type ComponentOption = {
   /** Per-each, from the last purchase order. Feeds the cost-source picker. */
   last_order_cost_per_unit: number | null;
   cost_status: CostStatus;
+  /**
+   * Raw Fishbowl figures, denominated in the purchase UOM (a roll, a kg).
+   * For film and foil these ARE the price: the web yield in Considerations
+   * converts per-UOM to per-blister, so a part the view flags uom_unresolved
+   * is perfectly priceable on a web row.
+   */
+  inventory_cost_per_purchase_unit: number | null;
+  last_order_cost_per_purchase_unit: number | null;
+  inventory_cost_uom: string | null;
 };
 
 export type SavedState = {
@@ -1605,6 +1614,18 @@ export function blankState(
   // form is silent — a bare blister card IS the finished unit.
   const bpuRaw = Number(spec?.retailBlistersPerPack ?? "");
   const bpu = Number.isFinite(bpuRaw) && bpuRaw > 0 ? bpuRaw : 1;
+  // Container counts, also from the form — SEEDS, not law: every one lands in
+  // an editable input. With an inner pack in play the form's masterBoxQty is
+  // labelled "Units / inner cases per box" and counts INNERS, so the same
+  // number routes to a different field depending on that answer.
+  const innerReq = (spec?.innerPackRequired ?? "") === "yes";
+  const ipRaw = Number(spec?.innerPackQty ?? "");
+  const unitsPerInner = Number.isFinite(ipRaw) && ipRaw > 0 ? ipRaw : null;
+  const unitsPerBox = innerReq
+    ? unitsPerInner && bottlesPerMasterBox
+      ? unitsPerInner * bottlesPerMasterBox
+      : null
+    : bottlesPerMasterBox;
   return {
     // The list is generated FROM THE SPEC, not fixed. A job with no retail
     // carton simply has no carton row to explain away.
@@ -1619,12 +1640,16 @@ export function blankState(
       // shared across the units inside it; an inner pack arrives blank.
       qtyPerUnit:
         s.slot === "master_box"
-          ? bottlesPerMasterBox && bottlesPerMasterBox > 0
-            ? 1 / bottlesPerMasterBox
+          ? unitsPerBox && unitsPerBox > 0
+            ? 1 / unitsPerBox
             : null
-          : s.key === "inner_pack" || s.perBlister
-            ? null
-            : 1,
+          : s.key === "inner_pack"
+            ? unitsPerInner && unitsPerInner > 0
+              ? 1 / unitsPerInner
+              : null
+            : s.perBlister
+              ? null
+              : 1,
       costPerUnit: null,
       costStatus: "no_cost",
       suppliedBy: suppliedByForDef(s, spec ?? null),
@@ -1644,11 +1669,13 @@ export function blankState(
     bundlingSpeed: null,
     filmBlistersPerUom: null,
     liddingBlistersPerUom: null,
-    bottlesPerMasterBox,
-    // No spec question to seed these from, and no house standard worth
-    // assuming — a blank that the user fills in is honest, a guessed 6 is not.
-    bottlesPerInnerPack: null,
-    innersPerMasterBox: null,
+    // With an inner pack the box counts inners (the form's masterBoxQty
+    // answer), and the direct units-per-box field stays blank; without one
+    // the same answer is a straight units count. Both remain editable on
+    // their Material Costs rows — these are starting values off the form.
+    bottlesPerMasterBox: innerReq ? null : bottlesPerMasterBox,
+    bottlesPerInnerPack: unitsPerInner,
+    innersPerMasterBox: innerReq ? bottlesPerMasterBox : null,
     setupHours: DEFAULT_SETUP_HOURS,
     setupLeaders: 1,
     setupOperators: 2,
@@ -1970,9 +1997,15 @@ function ComponentPicker({
               <div style={{ fontSize: 12.5, opacity: 0.8 }}>{r.name}</div>
               <div style={{ fontSize: 11.5, marginTop: 2 }}>
                 <StatusChip status={r.cost_status} />{" "}
+                {/* On a web row (film / foil) a UOM-unresolved part is still
+                    priceable — the yield converts it — so show the raw
+                    per-UOM price rather than a discouraging "no cost". */}
                 {r.effective_cost_per_unit !== null
                   ? money(r.effective_cost_per_unit)
-                  : "no cost"}
+                  : (slotKey === "film" || slotKey === "lidding") &&
+                      r.inventory_cost_per_purchase_unit !== null
+                    ? `${money(r.inventory_cost_per_purchase_unit, 2)} / ${r.inventory_cost_uom || "UOM"}`
+                    : "no cost"}
               </div>
             </button>
           ))}
@@ -3312,24 +3345,44 @@ export default function BlisterCostingBoard({
                       slotKey={slotKeyOf(line)?.key}
                       current={line}
                       spec={spec}
-                      onPick={(opt) =>
+                      onPick={(opt) => {
+                        // Film and foil are priced PER UOM OF WEB (a roll, a
+                        // kg) — the view flags those parts uom_unresolved
+                        // because it cannot convert them to eaches, but on a
+                        // web row the yield in Considerations IS the
+                        // conversion. So the raw per-purchase-unit figures
+                        // become the row's costs, and the status clears:
+                        // qty (bpu ÷ yield) × cost-per-UOM prices correctly.
+                        const web = Boolean(slotKeyOf(line)?.perBlister);
+                        const rawInv =
+                          opt?.inventory_cost_per_purchase_unit ?? null;
+                        const webPriced =
+                          web &&
+                          opt?.cost_status === "uom_unresolved" &&
+                          rawInv !== null;
                         setLine(line.id, {
                           fpCode: opt?.fp_code ?? null,
                           name: opt?.name ?? slotLabel,
                           // Clearing or choosing a real part both end any
                           // custom description that was here before.
                           customPart: false,
-                          costPerUnit: opt?.effective_cost_per_unit ?? null,
+                          costPerUnit: webPriced
+                            ? rawInv
+                            : (opt?.effective_cost_per_unit ?? null),
                           // Both Fishbowl figures are stored so the source
                           // picker can switch between them without a refetch.
-                          inventoryCostPerUnit:
-                            opt?.effective_cost_per_unit ?? null,
-                          lastOrderCostPerUnit:
-                            opt?.last_order_cost_per_unit ?? null,
-                          costStatus: opt?.cost_status ?? "no_cost",
+                          inventoryCostPerUnit: webPriced
+                            ? rawInv
+                            : (opt?.effective_cost_per_unit ?? null),
+                          lastOrderCostPerUnit: webPriced
+                            ? (opt?.last_order_cost_per_purchase_unit ?? null)
+                            : (opt?.last_order_cost_per_unit ?? null),
+                          costStatus: webPriced
+                            ? "ok"
+                            : (opt?.cost_status ?? "no_cost"),
                           zeroCostConfirmed: false,
-                        })
-                      }
+                        });
+                      }}
                       onCustom={(text) =>
                         setLine(line.id, {
                           fpCode: null,
@@ -3493,7 +3546,6 @@ export default function BlisterCostingBoard({
                               setLine(line.id, { manualCostPerUnit: v })
                             }
                             placeholder="$ / each"
-                            step="0.0001"
                           />
                         </div>
                       )}
@@ -3611,7 +3663,12 @@ export default function BlisterCostingBoard({
                           : null;
                       const parts: string[] = [];
                       if (line.qtyPerUnit !== null && line.qtyPerUnit !== 1)
-                        parts.push(money(c) + " each");
+                        // Web rows are priced per UOM of web, not per each —
+                        // saying "each" there would misname the yield math.
+                        parts.push(
+                          money(c) +
+                            (slotKeyOf(line)?.perBlister ? " / UOM" : " each"),
+                        );
                       if (w !== null && w > 0 && w < 100)
                         parts.push("incl. " + w + "% waste");
                       if (!parts.length) return null;

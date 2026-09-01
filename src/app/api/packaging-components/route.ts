@@ -63,7 +63,12 @@ export async function GET(request: Request) {
     // last-order one is divided down below rather than in SQL, which keeps
     // this a code change instead of a migration someone has to remember to run.
     .select(
-      "fp_code, name, category, owner, effective_cost_per_unit, cost_status, last_order_cost_per_purchase_unit, effective_units_per_purchase_unit",
+      // inventory_cost_per_purchase_unit + inventory_cost_uom ride along for
+      // the blister board's web materials (film, foil): those are priced per
+      // roll/kg — a UOM the view cannot convert to eaches — but the board's
+      // web-yield input IS the conversion, so it prices from the raw
+      // per-purchase-unit figure instead of blocking on uom_unresolved.
+      "fp_code, name, category, owner, effective_cost_per_unit, cost_status, last_order_cost_per_purchase_unit, effective_units_per_purchase_unit, inventory_cost_per_purchase_unit, inventory_cost_uom",
     )
     .eq("active", true);
 
@@ -112,6 +117,8 @@ export async function GET(request: Request) {
     cost_status: string;
     last_order_cost_per_purchase_unit: number | null;
     effective_units_per_purchase_unit: number | null;
+    inventory_cost_per_purchase_unit: number | null;
+    inventory_cost_uom: string | null;
   };
 
   // Lower is better. Word hits dominate, then the slot match, then whether we
@@ -154,6 +161,14 @@ export async function GET(request: Request) {
       effective_cost_per_unit: r.effective_cost_per_unit,
       cost_status: r.cost_status,
       last_order_cost_per_unit: perEach(r),
+      // Raw figures, exactly as Fishbowl reported them, for web materials
+      // whose per-each conversion is a job-level yield rather than a part
+      // property. Customer assets stay a hard 0 here too.
+      inventory_cost_per_purchase_unit:
+        r.owner === "customer" ? 0 : r.inventory_cost_per_purchase_unit,
+      last_order_cost_per_purchase_unit:
+        r.owner === "customer" ? 0 : r.last_order_cost_per_purchase_unit,
+      inventory_cost_uom: r.inventory_cost_uom,
     }));
 
   return NextResponse.json({ ok: true, rows });
