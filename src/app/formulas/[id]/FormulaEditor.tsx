@@ -4587,6 +4587,9 @@ export default function FormulaEditor({
           batchKg={batchKg}
           cfaBatchKg={cfaBatchKg}
           benchBatchG={benchBatchG}
+          labelClaims={labelClaims}
+          gummyPieceWeightG={gummyPieceWeightG}
+          wetCastPieceWeightG={wetCastPieceWeightG}
         />
       ) : null}
       {/* v56: Costing ingredient list — every unique ingredient used
@@ -7759,12 +7762,23 @@ function ScaleUpBlendCards({
   batchKg,
   cfaBatchKg,
   benchBatchG,
+  labelClaims,
+  gummyPieceWeightG,
+  wetCastPieceWeightG,
 }: {
   groups: Record<string, GummyFormulaIngredient[]>;
   rmById: Map<string, RawMaterialOption>;
   batchKg: number;
   cfaBatchKg: number;
   benchBatchG: number;
+  /** Claim context for the Secondary Blend's Overage % column. The
+   *  displayed percentage is the SAME claim-anchored value the bench
+   *  derives — row grams vs claimBaseGramsForBench — NOT recomputed
+   *  from the scaled kilograms (grams and kg scale by the same factor,
+   *  so a scaled-side rederivation cancels to 0% — the F0016 bug). */
+  labelClaims: LabelClaim[];
+  gummyPieceWeightG: number;
+  wetCastPieceWeightG: number;
 }) {
   const tr = makeTr(useLang());
   const DASH = "\u2014";
@@ -8228,10 +8242,32 @@ function ScaleUpBlendCards({
             ["Overage %", "Kilograms", "% of finished product", "Residual Moisture %"],
             "Total secondary blend",
             (c, r) => {
-              if (c === "Overage %")
-                return r.sourceLabelClaimId
-                  ? `${Format.pctSigned(Number(r.overagePct) || 0)}%`
-                  : null;
+              if (c === "Overage %") {
+                // Mirror the bench's OverageInput derivation exactly:
+                // overage% = (bench grams ÷ claim baseline − 1) × 100,
+                // legacy 0-gram rows treated as at-baseline (0%), and
+                // the same 2-decimal snap. r.overagePct is stale — the
+                // bench stopped writing it when grams became the sole
+                // source of truth — so it must not be read here.
+                if (!r.sourceLabelClaimId) return null;
+                const claim = labelClaims.find(
+                  (lc) => lc.id === r.sourceLabelClaimId,
+                );
+                const baseG = claim
+                  ? claimBaseGramsForBench(
+                      claim,
+                      benchBatchG ?? 0,
+                      wetCastPieceWeightG ?? 0,
+                      gummyPieceWeightG ?? 0,
+                    )
+                  : 0;
+                if (baseG <= 0) return null;
+                const actualG = Number(r.grams) || 0;
+                const effectiveG = actualG > 0 ? actualG : baseG;
+                const pct =
+                  Math.round((effectiveG / baseG - 1) * 100 * 100) / 100;
+                return `${Format.pctSigned(pct)}%`;
+              }
               if (c === "Kilograms") return fmtKg(cfaKg(Number(r.grams) || 0), secDec);
               if (c === "% of finished product")
                 return `${Format.pctCompact(blendPctFin(r))}%`;
