@@ -749,7 +749,8 @@ export default function FormulaEditor({
     () => ({ ...(seedVersion.costing?.sources ?? {}) }),
   );
   // v56.5: manually-entered $/kg per ingredient (used when the row's
-  // Cost Source is "Manual").
+  // Cost Source is "Manual" or "Customer Supplied" — the latter is the
+  // customer's own figure, typed in the same way).
   const [manualCostByKey, setManualCostByKey] = useState<Record<string, number>>(
     () => ({ ...(seedVersion.costing?.manualCosts ?? {}) }),
   );
@@ -2216,7 +2217,10 @@ export default function FormulaEditor({
       const src = costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
       if (src === "Fish Bowl (Inventory)") return e.inventoryCostPerKg;
       if (src === "Fish Bowl (Last Order)") return e.lastOrderCostPerKg;
-      if (src === "Manual") return manualCostByKey[e.key] ?? null;
+      // "Customer Supplied" is Manual's twin: the customer quoted the
+      // cost, but the operator still types it in — same map, same rules.
+      if (src === "Manual" || src === "Customer Supplied")
+        return manualCostByKey[e.key] ?? null;
       return null; // App — wired a different way later
     };
     // Batch Total sum = Σ (Total QTY × resolved $/kg); the "—" line
@@ -4804,9 +4808,13 @@ export default function FormulaEditor({
                             <option value="Fish Bowl (Last Order)">Fish Bowl (Last Order)</option>
                             <option value="App">App</option>
                             <option value="Manual">Manual</option>
+                            <option value="Customer Supplied">
+                              {tr("Customer Supplied")}
+                            </option>
                           </select>
                         </td>
-                        {/* Cost ($/kg) — Manual = editable input; the two
+                        {/* Cost ($/kg) — Manual / Customer Supplied =
+                            editable input; the two
                             Fishbowl sources read the nightly sync's
                             inventory-average and last-PO costs. App stays
                             nulled (it gets wired a different way later). */}
@@ -4855,8 +4863,9 @@ export default function FormulaEditor({
                                 : "—";
                             return null;
                           })() ??
-                          ((costSourceByKey[e.key] ?? "Fish Bowl (Inventory)") ===
-                          "Manual" ? (
+                          (["Manual", "Customer Supplied"].includes(
+                            costSourceByKey[e.key] ?? "Fish Bowl (Inventory)",
+                          ) ? (
                             <DollarWrap>
                               <input
                                 type="number"

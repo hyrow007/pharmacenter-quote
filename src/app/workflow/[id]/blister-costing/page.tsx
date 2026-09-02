@@ -58,13 +58,40 @@ export default async function BlisterCostingPage({ params }: Ctx) {
   );
   const quantity = Number.isFinite(firstQty) && firstQty > 0 ? firstQty : null;
 
-  const customerName =
+  // The workflow stores an existing customer as an ID, not a name — the name
+  // lives in the customers table. Resolving it here is what puts the real
+  // customer on the board header and the print sheet instead of "—".
+  let customerName =
     (state.customerName as string) ??
     ((state.newCustomer as Record<string, string> | undefined)?.name ?? "—");
-  const productName =
+  const customerId = state.customerId as string | undefined;
+  if (customerId) {
+    const { data: c } = await supabase
+      .from("customers")
+      .select("name")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (c?.name) customerName = c.name;
+  }
+
+  // Same story for the product: an existing pick is an ID into products, a
+  // new one carries its name on newProduct. The generic fallback only
+  // remains for a malformed record.
+  let productName =
+    ((product.newProduct as Record<string, string> | undefined)?.name_desc ||
+      null) ??
     (product.productName as string) ??
     (product.name as string) ??
     "Blistered product";
+  const productId = product.productId as string | undefined;
+  if (productId && productId !== "new") {
+    const { data: p } = await supabase
+      .from("products")
+      .select("name")
+      .eq("id", productId)
+      .maybeSingle();
+    if (p?.name) productName = p.name;
+  }
 
   const initial = (state.blisterCosting as SavedState | undefined) ?? null;
 

@@ -307,6 +307,8 @@ const es: Record<string, string> = {
   "Total weighed input": "Total de entrada pesada",
   "Derived from the bench-top formula — batch size equals Total Primary Blend.":
     "Derivada de la fórmula de mesa — el tamaño de lote equivale al total de la mezcla primaria.",
+  // ---- Costing: cost sources (v65) ----
+  "Customer Supplied": "Suministrado por el cliente",
 };
 
 export function makeTr(lang: Lang) {
