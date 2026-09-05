@@ -232,14 +232,20 @@ function ParamBlock({
   label,
   children,
   nowrap,
+  hint,
 }: {
   label: string;
   children: React.ReactNode;
   nowrap?: boolean;
+  /** Hover explainer — shown as a native tooltip on the label, marked by a
+   *  small ⓘ so the affordance is discoverable. Used to disambiguate the
+   *  margin metrics ("which margin am I looking at?"). */
+  hint?: string;
 }) {
   return (
     <div>
       <div
+        title={hint}
         style={{
           fontSize: 11.5,
           fontWeight: 700,
@@ -248,9 +254,18 @@ function ParamBlock({
           color: "var(--teal-700, #1d6c7b)",
           marginBottom: 6,
           whiteSpace: nowrap ? "nowrap" : undefined,
+          cursor: hint ? "help" : undefined,
         }}
       >
         {label}
+        {hint ? (
+          <span
+            aria-hidden="true"
+            style={{ marginLeft: 4, opacity: 0.55, fontWeight: 600 }}
+          >
+            ⓘ
+          </span>
+        ) : null}
       </div>
       {children}
     </div>
@@ -4986,10 +5001,30 @@ export default function BlisterCostingBoard({
                 : "—"}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Operating margin" nowrap>
+          <ParamBlock
+            label="Operating margin"
+            nowrap
+            hint="Operating margin = (price − ALL costs) ÷ price. Counts materials, labor, overhead, lab testing AND commissions — the margin the business actually keeps on this job."
+          >
             <ReadOnly>
               {r.effectiveMarginPct !== null
                 ? `${r.effectiveMarginPct.toFixed(1)}%`
+                : "—"}
+            </ReadOnly>
+          </ParamBlock>
+          <ParamBlock
+            label="Gross margin (materials)"
+            nowrap
+            hint="Gross margin on MATERIALS ONLY = (price − material cost) ÷ price. Ignores labor, overhead, lab testing and commissions — the classic manufacturing gross margin, useful for comparing against industry benchmarks. Always higher than the operating margin."
+          >
+            <ReadOnly>
+              {r.salePerUnit !== null &&
+              r.salePerUnit > 0 &&
+              r.materialsPerUnit !== null
+                ? `${(
+                    ((r.salePerUnit - r.materialsPerUnit) / r.salePerUnit) *
+                    100
+                  ).toFixed(1)}%`
                 : "—"}
             </ReadOnly>
           </ParamBlock>
