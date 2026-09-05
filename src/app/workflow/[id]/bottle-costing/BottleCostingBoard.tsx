@@ -2349,7 +2349,11 @@ export default function BottleCostingBoard({
   // saved it owns its overhead, and quietly re-pricing someone's saved job
   // because a lease changed is exactly the behaviour a snapshot exists to
   // prevent. `initial.overheadRent` present means this job made that choice.
-  const usingPlantDefaults = useRef(!initial?.overheadRent);
+  // Multi-product: the one-time plant-defaults adoption keys off the FIRST
+  // product's saved costing, same as the single-product board always did
+  // (other products' bundles get the per-run-day RATES patched separately;
+  // their overhead ROWS come from blankState defaults).
+  const usingPlantDefaults = useRef(!products[0]?.initial?.overheadRent);
   const [overheadMeta, setOverheadMeta] = useState<{
     asOf: string | null;
     leasePerRunDay: number | null;
