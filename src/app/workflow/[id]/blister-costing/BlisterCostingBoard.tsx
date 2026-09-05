@@ -1755,7 +1755,8 @@ function ComponentPicker({
   onPick,
   onCustom,
 }: {
-  slot: PackagingSlot;
+  /** "bulk" routes the search to the products table (PC-BK / CA-BK). */
+  slot: PackagingSlot | "bulk";
   /** SlotDef key — several entries share the "other" Fishbowl category, so
    * the category alone cannot pick the right suggestion seed. */
   slotKey?: string;
@@ -3508,7 +3509,9 @@ export default function BlisterCostingBoard({
                     </div>
                   ) : (
                     <ComponentPicker
-                      slot={line.slot}
+                      slot={
+                        slotKeyOf(line)?.key === "bulk" ? "bulk" : line.slot
+                      }
                       slotKey={slotKeyOf(line)?.key}
                       current={line}
                       spec={spec}

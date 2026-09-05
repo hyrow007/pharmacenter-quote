@@ -55,6 +55,73 @@ export async function GET(request: Request) {
   const slot = (url.searchParams.get("slot") ?? "").trim();
   const q = (url.searchParams.get("q") ?? "").trim();
 
+  // Bulk mode: bulk is a PRODUCT (PC-BK / CA-BK), not a packaging part, so
+  // the packaging_components view has nothing for it — the Fishbowl sync
+  // only loads -PK-/-LL-/-UC- parts there. Every active Fishbowl PRODUCT
+  // syncs into the products table though, and the product-costs sync adds
+  // its per-each average, so bulk rows search there instead. CA-BK items
+  // are customer stock → a hard $0, same convention as CA packaging parts.
+  // (CA-BK codes that exist only as Fishbowl PARTS won't appear until -BK-
+  // is added to the sync's part filter — office-server change, pending.)
+  if (slot === "bulk") {
+    let pq = supabase
+      .from("products")
+      .select("fp_code, name, avg_cost")
+      .eq("active", true)
+      .ilike("fp_code", "%-BK-%");
+    const bulkWords = q
+      ? q
+          .split(/[\s/]+/)
+          .map((w) => w.replace(/[%_,()]/g, " ").trim())
+          .filter((w) => w.length > 1)
+          .slice(0, 6)
+      : [];
+    if (bulkWords.length) {
+      pq = pq.or(
+        bulkWords
+          .flatMap((w) => [`fp_code.ilike.%${w}%`, `name.ilike.%${w}%`])
+          .join(","),
+      );
+    }
+    const { data: bkData, error: bkError } = await pq.limit(200);
+    if (bkError) {
+      return NextResponse.json(
+        { ok: false, error: bkError.message },
+        { status: 500 },
+      );
+    }
+    type BkRow = { fp_code: string; name: string; avg_cost: number | null };
+    const bkRank = (r: BkRow) => {
+      const hay = `${r.fp_code} ${r.name}`.toLowerCase();
+      return (
+        -bulkWords.filter((w) => hay.includes(w.toLowerCase())).length * 50
+      );
+    };
+    const bkRows = ((bkData ?? []) as BkRow[])
+      .sort((a, b) => bkRank(a) - bkRank(b) || a.name.localeCompare(b.name))
+      .slice(0, 60)
+      .map((r) => {
+        const customer = r.fp_code.toUpperCase().startsWith("CA");
+        return {
+          fp_code: r.fp_code,
+          name: r.name,
+          category: null,
+          owner: customer ? "customer" : "pharmacenter",
+          effective_cost_per_unit: customer ? 0 : r.avg_cost,
+          cost_status: customer
+            ? "customer_asset"
+            : r.avg_cost !== null
+              ? "ok"
+              : "no_cost",
+          last_order_cost_per_unit: null,
+          inventory_cost_per_purchase_unit: null,
+          last_order_cost_per_purchase_unit: null,
+          inventory_cost_uom: null,
+        };
+      });
+    return NextResponse.json({ ok: true, rows: bkRows });
+  }
+
   let query = supabase
     .from("packaging_components_costed")
     // last_order_cost_per_purchase_unit + effective_units_per_purchase_unit

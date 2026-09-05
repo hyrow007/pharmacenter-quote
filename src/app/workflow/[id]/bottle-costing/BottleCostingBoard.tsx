@@ -1654,7 +1654,8 @@ function ComponentPicker({
   onPick,
   onCustom,
 }: {
-  slot: PackagingSlot;
+  /** "bulk" routes the search to the products table (PC-BK / CA-BK). */
+  slot: PackagingSlot | "bulk";
   current: BomLine;
   spec: Record<string, string> | null;
   onPick: (opt: ComponentOption | null) => void;
@@ -3241,7 +3242,7 @@ export default function BottleCostingBoard({
                     </div>
                   ) : (
                     <ComponentPicker
-                      slot={line.slot}
+                      slot={isBulkLine ? "bulk" : line.slot}
                       current={line}
                       spec={spec}
                       onPick={(opt) =>
