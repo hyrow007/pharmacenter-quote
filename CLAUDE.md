@@ -118,3 +118,30 @@ Open `Quote.html` directly in a browser (no build step). The single-file
 A Print/Save PDF button calls `window.print()`. CSS hides the editor pane and
 the stage chrome; only the `.sheet` is visible. `@page { size: letter; margin: 0; }`
 matches the on-screen 8.5×11 layout 1-to-1.
+
+## Costing-board feature baseline (applies to EVERY quoting/costing tool)
+
+Any new pricing calculator or costing board built for this app (bottles,
+blisters, and whatever comes next — sachets, pouches, kitting…) must ship
+with ALL of the following from day one. These were retrofitted between the
+bottle and blister boards once; do not make a third board that lacks them:
+
+1. **Drag-and-drop row reordering** on Material Costs — ⋮⋮ handle only
+   (never the whole row), teal drop indicator, order persists in the saved
+   BOM array. Handle hidden on print (`bc-noprint`).
+2. **Comma-formatted number fields** — text input (`inputMode="decimal"`),
+   draft-string while focused, `toLocaleString` on blur. Values always show
+   thousands separators when blurred.
+3. **Part search by product number** — the picker API keeps hyphens so
+   "PC-PK-0135" matches fp_code (already in /api/packaging-components).
+4. **Typed-in (custom) parts are editable in place** — reopening the picker
+   pre-fills the current name, and a rename preserves the manual cost.
+5. **Bulk is always a visible row option** — even when customer-supplied
+   (shown as an explicit $0), with a doses-per-unit count box and Manual
+   pricing (bulk is a product, not a packaging component).
+6. **Quantity boxes where counts matter** — safety seals per unit, doses
+   per unit, units per inner pack / master box — seeded from the packaging
+   spec but always editable on the board.
+7. **Real customer + product names** resolved server-side (customers /
+   products tables) on the board header and print sheet — never IDs or
+   generic placeholders.

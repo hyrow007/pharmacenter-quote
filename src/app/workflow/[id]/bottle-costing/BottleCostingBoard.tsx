@@ -2107,7 +2107,10 @@ export default function BottleCostingBoard({
   });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [addSlot, setAddSlot] = useState<PackagingSlot>("other");
+  // "bulk" is a pseudo-slot: it stores as slot "other" (the picker API has
+  // no bulk category — bulk is a product, not a packaging component) but
+  // gets its own label, Manual pricing, and a doses-per-bottle count box.
+  const [addSlot, setAddSlot] = useState<PackagingSlot | "bulk">("other");
 
   // ---- drag-and-drop row reordering (ported from the blister board, which
   // ported it from the formula editor's ingredient rows). Order is
@@ -2253,7 +2256,38 @@ export default function BottleCostingBoard({
    * The id carries a timestamp so a slot can appear twice (two label types,
    * say) without the two rows sharing a key.
    */
-  const addLine = (slot: PackagingSlot) => {
+  const addLine = (slot: PackagingSlot | "bulk") => {
+    if (slot === "bulk") {
+      // Mirrors the blister board's bulk row: Manual pricing (Fishbowl's
+      // packaging view can't cost a PC-BK product), supplied-by from the
+      // spec's bulk answer, and doses-per-bottle seeded from the bottle
+      // count. The row is visible even when customer-supplied so the $0
+      // is stated rather than implied.
+      const doses = Number(String(spec?.bottleCount ?? "").replace(/[^0-9.]/g, ""));
+      setSt((p) => ({
+        ...p,
+        bom: [
+          ...p.bom,
+          {
+            id: `added-bulk-${Date.now()}`,
+            slot: "other",
+            fpCode: null,
+            name: "Bulk (doses)",
+            qtyPerUnit: Number.isFinite(doses) && doses > 0 ? doses : null,
+            costPerUnit: null,
+            costStatus: "no_cost",
+            suppliedBy:
+              spec?.bulkSuppliedBy === "customer" ? "customer" : "pharmacenter",
+            costSource: "Manual",
+            wastePct: 3,
+            manualCostPerUnit: null,
+            inventoryCostPerUnit: null,
+            lastOrderCostPerUnit: null,
+          },
+        ],
+      }));
+      return;
+    }
     const meta = SLOTS.find((s) => s.slot === slot);
     setSt((p) => ({
       ...p,
@@ -2905,8 +2939,12 @@ export default function BottleCostingBoard({
             <div style={{ textAlign: "right" }}>$ / bottle</div>
           </div>
           {st.bom.map((line) => {
-            const slotLabel =
-              SLOTS.find((s) => s.slot === line.slot)?.label ?? line.slot;
+            // Bulk rows share slot "other" with the filler row, so the
+            // label is recovered from the id instead of the slot.
+            const isBulkLine = line.id.includes("-bulk-");
+            const slotLabel = isBulkLine
+              ? "Bulk (doses)"
+              : SLOTS.find((s) => s.slot === line.slot)?.label ?? line.slot;
             const issue = r.issues.find((i) => i.lineId === line.id);
             return (
               <div
@@ -3003,6 +3041,63 @@ export default function BottleCostingBoard({
                       }}
                     >
                       liner: {LINER_LABEL[spec?.closureLiner ?? ""]}
+                    </div>
+                  )}
+                  {/* Direct per-bottle counts — bulk doses and safety seals
+                      multiply the unit cost UP (qtyPerUnit > 1), unlike the
+                      shared containers below whose count divides it down. */}
+                  {(isBulkLine || line.slot === "safety_seal") && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        color: "var(--ink-3, #7b7364)",
+                        marginTop: 3,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        step="1"
+                        placeholder="?"
+                        value={
+                          line.qtyPerUnit !== null && line.qtyPerUnit > 0
+                            ? Math.round(line.qtyPerUnit)
+                            : ""
+                        }
+                        onFocus={(e) => {
+                          const el = e.currentTarget;
+                          setTimeout(() => {
+                            try {
+                              el.select();
+                            } catch {}
+                          }, 0);
+                        }}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          setLine(line.id, {
+                            qtyPerUnit:
+                              Number.isFinite(n) && n > 0 ? Math.round(n) : null,
+                          });
+                        }}
+                        style={{
+                          width: 44,
+                          padding: "1px 4px",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          textAlign: "right",
+                          color: "var(--teal-900, #0f4a56)",
+                          background: "#fff",
+                        }}
+                      />
+                      {isBulkLine ? "doses per bottle" : "seals per bottle"}
                     </div>
                   )}
                   {/* A component shared across several bottles — the master box
@@ -3499,7 +3594,9 @@ export default function BottleCostingBoard({
             </span>
             <select
               value={addSlot}
-              onChange={(e) => setAddSlot(e.target.value as PackagingSlot)}
+              onChange={(e) =>
+                setAddSlot(e.target.value as PackagingSlot | "bulk")
+              }
               style={{
                 padding: "6px 8px",
                 border: "1px solid var(--line, #e3dcc9)",
@@ -3508,6 +3605,7 @@ export default function BottleCostingBoard({
                 background: "#fff",
               }}
             >
+              <option value="bulk">Bulk (doses)</option>
               {SLOTS.map((s) => (
                 <option key={s.slot} value={s.slot}>
                   {s.label}
