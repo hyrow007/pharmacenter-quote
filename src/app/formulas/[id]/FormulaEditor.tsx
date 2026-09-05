@@ -10833,6 +10833,17 @@ function BlendSectionCard({
                                     solidsOverride: null,
                                   })
                                 }
+                                onRenameCustom={(name) =>
+                                  // Pure rename: same identity fields as
+                                  // onPickCustom, but the cost/solids
+                                  // overrides survive — fixing a typo is
+                                  // not choosing a new substance.
+                                  onUpdate(row.id, {
+                                    rawMaterialId: null,
+                                    rawMaterialFpCode: null,
+                                    customName: name,
+                                  })
+                                }
                                 onClear={() =>
                                   onUpdate(row.id, {
                                     rawMaterialId: null,
@@ -13907,6 +13918,7 @@ function IngredientPicker({
   rawMaterials,
   onPick,
   onPickCustom,
+  onRenameCustom,
   onClear,
 }: {
   // Minimal shape so both GummyFormulaIngredient and LabelClaim rows can
@@ -13924,6 +13936,14 @@ function IngredientPicker({
   // (not-in-Fishbowl, not-in-raw_materials) ingredient. Parent stores the
   // name on the row and clears rawMaterialId / rawMaterialFpCode.
   onPickCustom: (name: string) => void;
+  /** Optional in-place rename path for a row whose identity is ALREADY the
+   *  custom name (F0018's "Sagextra" → "SageXtra"). Falls back to
+   *  onPickCustom when absent. Kept separate so blend rows can preserve
+   *  their cost/solids overrides on a pure rename — the picker's
+   *  onPickCustom resets them, which is right for a pick and wrong for a
+   *  typo fix. Only offered when the identity is a customName; curated and
+   *  Fishbowl names come from the catalog and stay read-only. */
+  onRenameCustom?: (name: string) => void;
   onClear: () => void;
 }) {
   const tr = makeTr(useLang());
@@ -13932,6 +13952,10 @@ function IngredientPicker({
   // to a raw material OR carries a custom name.
   const hasCustom = !resolved && !!row.customName && row.customName.trim() !== "";
   const [editing, setEditing] = useState<boolean>(!resolved && !hasCustom);
+  // Non-null while the rep is renaming a custom ingredient in place —
+  // carries the draft text. Enter/blur commits, Escape cancels, an empty
+  // or unchanged draft commits nothing.
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
 
   // Auto-collapse to picked state if the row already carries a resolved
   // raw material AND we're not mid-edit.
@@ -13955,6 +13979,38 @@ function IngredientPicker({
 
   if ((resolved || hasCustom) && !editing) {
     const customLabel = row.customName ?? "";
+    // In-place rename: swap the pill for a bare text input pre-filled with
+    // the current name. This does NOT open the search dropdown — renaming
+    // is not re-picking, so no suggestion list, no custom-add option.
+    if (hasCustom && renameDraft !== null) {
+      const commit = () => {
+        const next = renameDraft.trim();
+        setRenameDraft(null);
+        if (next !== "" && next !== customLabel)
+          (onRenameCustom ?? onPickCustom)(next);
+      };
+      return (
+        <input
+          type="text"
+          value={renameDraft}
+          autoFocus
+          onChange={(e) => setRenameDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setRenameDraft(null);
+            }
+          }}
+          className="pricing__input"
+          aria-label="Rename custom ingredient"
+          style={{ width: "100%" }}
+        />
+      );
+    }
     return (
       <div
         className="pricing__input"
@@ -13966,6 +14022,9 @@ function IngredientPicker({
         title={resolved?.name ?? customLabel}
       >
         <span
+          onDoubleClick={
+            hasCustom ? () => setRenameDraft(customLabel) : undefined
+          }
           style={{
             flex: 1,
             minWidth: 0,
@@ -13989,6 +14048,29 @@ function IngredientPicker({
             <span style={{ color: "var(--ink-2, #415056)" }}>{customLabel}</span>
           )}
         </span>
+        {/* Rename pencil — custom identities only. Curated / Fishbowl
+            names come from the catalog and are corrected there, not here.
+            Double-clicking the name does the same thing. */}
+        {hasCustom ? (
+          <button
+            type="button"
+            onClick={() => setRenameDraft(customLabel)}
+            title={tr("Rename")}
+            aria-label="Rename custom ingredient"
+            style={{
+              fontSize: 13,
+              lineHeight: 1,
+              color: "var(--teal-700, #1d6c7b)",
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              opacity: 0.45,
+            }}
+          >
+            ✎
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {

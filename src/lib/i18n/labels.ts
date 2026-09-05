@@ -309,6 +309,7 @@ const es: Record<string, string> = {
     "Derivada de la fórmula de mesa — el tamaño de lote equivale al total de la mezcla primaria.",
   // ---- Costing: cost sources (v65) ----
   "Customer Supplied": "Suministrado por el cliente",
+  Rename: "Renombrar",
 };
 
 export function makeTr(lang: Lang) {
