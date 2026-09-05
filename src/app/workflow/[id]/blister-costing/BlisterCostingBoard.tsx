@@ -1349,11 +1349,12 @@ export type SavedState = {
    * QUOTING on the spec itself.
    */
   quantityOverride: number | null;
-  /** What-if quantity scenarios (scenario tabs, same UX as the gummy
-   *  Costing tab). The LIST persists with the costing; the ACTIVE
-   *  selection is screen-local and never saved. Each scenario re-derives
-   *  the whole board — materials, labor, overhead, price — at its qty. */
-  scenarios: { id: string; name: string; qty: number }[];
+  /** Scenario tabs. Each scenario is a COMPLETE board snapshot — BOM,
+   *  speeds, crew, margin, everything — so edits on one tab never bleed
+   *  into another (qty-only scenarios did exactly that and it read as a
+   *  bug). The list persists with the costing; the ACTIVE selection is
+   *  screen-local. Base lives in the top-level fields as always. */
+  scenarios: { id: string; name: string; state: Omit<SavedState, "scenarios"> }[];
   /** Machine strokes per minute — the nameplate figure. */
   strokesPerMinute: number | null;
   /** Blisters formed per stroke (tooling-dependent). */
@@ -2245,10 +2246,99 @@ export default function BlisterCostingBoard({
   });
   const [saving, setSaving] = useState(false);
   // Scenario tabs — selection and chrome are screen-local; the list lives
-  // in st.scenarios and saves with the board.
+  // in st.scenarios and saves with the board. While a scenario is active,
+  // `st` IS that scenario's working copy; the Base snapshot waits in
+  // baseStashRef until you tab back (or Save, which writes both).
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   const [renamingScenarioId, setRenamingScenarioId] = useState<string | null>(null);
   const [hoveredScenarioId, setHoveredScenarioId] = useState<string | null>(null);
+  const baseStashRef = useRef<Omit<SavedState, "scenarios"> | null>(null);
+  const stripScenarios = (x: SavedState): Omit<SavedState, "scenarios"> => {
+    const { scenarios: _drop, ...rest } = x;
+    return rest;
+  };
+  // One-time normalization: pre-scenario saves have no list, and the short
+  // -lived qty-only shape ({id,name,qty}) upgrades to a full snapshot of
+  // the base with that quantity.
+  useEffect(() => {
+    setSt((prev) => {
+      const list = (prev.scenarios ?? []) as unknown as Array<
+        { id: string; name: string; state?: Omit<SavedState, "scenarios">; qty?: number }
+      >;
+      if (prev.scenarios && list.every((sc) => sc && sc.state)) return prev;
+      const { scenarios: _d, ...rest } = prev;
+      return {
+        ...prev,
+        scenarios: list.map((sc) =>
+          sc.state
+            ? { id: sc.id, name: sc.name, state: sc.state }
+            : {
+                id: sc.id,
+                name: sc.name,
+                state: {
+                  ...rest,
+                  quantityOverride:
+                    typeof sc.qty === "number" ? sc.qty : rest.quantityOverride,
+                },
+              },
+        ),
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /** Switch tabs: write the outgoing tab's working copy home, load the
+   *  incoming tab's snapshot. The scenarios list rides along untouched. */
+  const selectTab = (nextId: string | null) => {
+    if (nextId === activeScenarioId) return;
+    const cur = stripScenarios(st);
+    let scenarios = st.scenarios ?? [];
+    if (activeScenarioId === null) {
+      baseStashRef.current = cur;
+    } else {
+      scenarios = scenarios.map((sc) =>
+        sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+      );
+    }
+    if (nextId === null) {
+      const base = baseStashRef.current ?? cur;
+      setSt({ ...base, scenarios });
+    } else {
+      const target = scenarios.find((sc) => sc.id === nextId);
+      if (!target) return;
+      setSt({ ...target.state, scenarios });
+    }
+    setActiveScenarioId(nextId);
+  };
+  const addScenario = () => {
+    const id = "sc_" + Math.random().toString(36).slice(2, 9);
+    const cur = stripScenarios(st);
+    let scenarios = st.scenarios ?? [];
+    if (activeScenarioId === null) {
+      baseStashRef.current = cur;
+    } else {
+      scenarios = scenarios.map((sc) =>
+        sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+      );
+    }
+    // A new scenario is a copy of whatever you are looking at — tweak from
+    // there rather than starting blank.
+    scenarios = [
+      ...scenarios,
+      { id, name: `Scenario ${scenarios.length + 1}`, state: cur },
+    ];
+    setSt({ ...cur, scenarios });
+    setActiveScenarioId(id);
+  };
+  const deleteScenario = (id: string) => {
+    const scenarios = (st.scenarios ?? []).filter((x) => x.id !== id);
+    if (activeScenarioId === id) {
+      const base = baseStashRef.current ?? stripScenarios(st);
+      setSt({ ...base, scenarios });
+      setActiveScenarioId(null);
+    } else {
+      setSt((p) => ({ ...p, scenarios }));
+    }
+  };
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [addSlot, setAddSlot] = useState<string>("film");
 
@@ -2466,11 +2556,14 @@ export default function BlisterCostingBoard({
     activeScenarioId !== null
       ? (st.scenarios ?? []).find((sc) => sc.id === activeScenarioId) ?? null
       : null;
-  // The active scenario's quantity overrides everything downstream —
-  // materials, labor hours, overhead days, price — exactly like the gummy
-  // Costing tab's what-if yields. Base = the override / workflow figure.
-  const baseQty = st.quantityOverride ?? quantity;
-  const qty = activeScenario ? activeScenario.qty : baseQty;
+  // `st` is the working copy of whichever tab is active, so the ordinary
+  // derivation is already scenario-aware. Base's quantity comes from the
+  // stash while a scenario is on screen (for the Base pill's label).
+  const qty = st.quantityOverride ?? quantity;
+  const baseQty =
+    activeScenarioId === null
+      ? qty
+      : (baseStashRef.current?.quantityOverride ?? quantity);
 
   /**
    * The planning line speed: strokes/min x blisters per stroke x (1 - penalty).
@@ -2849,16 +2942,28 @@ export default function BlisterCostingBoard({
   const save = useCallback(async () => {
     setSaving(true);
     try {
+      // The saved shape ALWAYS carries Base in the top-level fields.
+      // While a scenario is on screen, `st` is that scenario's working
+      // copy — so sync it into its slot and restore Base from the stash
+      // before persisting. Saving from any tab saves every tab.
+      const cur = stripScenarios(st);
+      const scenarios = (st.scenarios ?? []).map((sc) =>
+        sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+      );
+      const payload: SavedState = {
+        ...(activeScenarioId === null ? cur : (baseStashRef.current ?? cur)),
+        scenarios,
+      };
       const res = await fetch(`/api/workflows/${workflowId}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state: { blisterCosting: st } }),
+        body: JSON.stringify({ state: { blisterCosting: payload } }),
       });
       if (res.ok) setSavedAt(new Date().toLocaleTimeString());
     } finally {
       setSaving(false);
     }
-  }, [st, workflowId]);
+  }, [st, workflowId, activeScenarioId]);
 
   // ---- price <-> margin back-solving --------------------------------
   // The margin % stays the single stored truth. Typing a price, or pressing
@@ -3072,7 +3177,7 @@ export default function BlisterCostingBoard({
             <>
               <button
                 type="button"
-                onClick={() => setActiveScenarioId(null)}
+                onClick={() => selectTab(null)}
                 style={pillStyle(activeScenarioId === null)}
               >
                 Base — {baseQty !== null ? baseQty.toLocaleString("en-US") : "—"}
@@ -3116,7 +3221,7 @@ export default function BlisterCostingBoard({
                   <button
                     key={sc.id}
                     type="button"
-                    onClick={() => setActiveScenarioId(sc.id)}
+                    onClick={() => selectTab(sc.id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setRenamingScenarioId(sc.id);
@@ -3127,19 +3232,22 @@ export default function BlisterCostingBoard({
                     style={pillStyle(active)}
                   >
                     {sc.name || "Scenario"} —{" "}
-                    {Math.round(sc.qty).toLocaleString("en-US")}
+                    {(() => {
+                      const q =
+                        activeScenarioId === sc.id
+                          ? qty
+                          : (sc.state?.quantityOverride ?? quantity);
+                      return q !== null && q !== undefined
+                        ? Math.round(q).toLocaleString("en-US")
+                        : "—";
+                    })()}
                     {hoveredScenarioId === sc.id ? (
                       <span
                         role="button"
                         aria-label="Delete scenario"
                         onClick={(e) => {
                           e.stopPropagation();
-                          set(
-                            "scenarios",
-                            (st.scenarios ?? []).filter((x) => x.id !== sc.id),
-                          );
-                          if (activeScenarioId === sc.id)
-                            setActiveScenarioId(null);
+                          deleteScenario(sc.id);
                           setHoveredScenarioId(null);
                         }}
                         style={{ marginLeft: 8, fontWeight: 700, opacity: 0.75 }}
@@ -3155,18 +3263,7 @@ export default function BlisterCostingBoard({
         })()}
         <button
           type="button"
-          onClick={() => {
-            const id = "sc_" + Math.random().toString(36).slice(2, 9);
-            set("scenarios", [
-              ...(st.scenarios ?? []),
-              {
-                id,
-                name: `Scenario ${(st.scenarios ?? []).length + 1}`,
-                qty: qty ?? 0,
-              },
-            ]);
-            setActiveScenarioId(id);
-          }}
+          onClick={addScenario}
           style={{
             padding: "6px 12px",
             borderRadius: 999,
@@ -3201,20 +3298,9 @@ export default function BlisterCostingBoard({
               onChange={(e) => {
                 const digits = e.target.value.replace(/[^0-9]/g, "");
                 const v = digits === "" ? null : Number(digits);
-                if (activeScenario) {
-                  // Scenario active — the quantity edited HERE is the
-                  // scenario's, never the base override underneath it.
-                  set(
-                    "scenarios",
-                    (st.scenarios ?? []).map((sc) =>
-                      sc.id === activeScenario.id
-                        ? { ...sc, qty: v ?? 0 }
-                        : sc,
-                    ),
-                  );
-                } else {
-                  set("quantityOverride", v === quantity ? null : v);
-                }
+                // st is the active tab's working copy, so this lands on
+                // the scenario when one is open and on Base otherwise.
+                set("quantityOverride", v === quantity ? null : v);
               }}
               style={numInput}
             />
