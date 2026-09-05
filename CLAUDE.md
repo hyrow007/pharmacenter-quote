@@ -152,6 +152,10 @@ bottle and blister boards once; do not make a third board that lacks them:
    qty-only: edits on one tab must not bleed into another. Base persists
    in the top-level saved fields, scenarios in `scenarios[].state`;
    Save from any tab persists all tabs. Selection is screen-local.
-   Strip hidden on print.
+   Strip hidden on print. **The Base pill is renamable too** (right-click,
+   same UX as scenario pills); the name persists in a `baseName` field
+   that is GLOBAL like the scenarios list — tab switches must carry the
+   live working copy's `baseName`, never roll it back from a snapshot
+   or the Base stash.
 9. **Gross margin (materials) readout** with hover explainers (ⓘ) on both
    margin metrics in the Margin & Price card.

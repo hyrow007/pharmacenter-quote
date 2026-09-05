@@ -1355,6 +1355,10 @@ export type SavedState = {
    *  bug). The list persists with the costing; the ACTIVE selection is
    *  screen-local. Base lives in the top-level fields as always. */
   scenarios: { id: string; name: string; state: Omit<SavedState, "scenarios"> }[];
+  /** Display name for the Base tab (right-click to rename, like scenario
+   *  pills). GLOBAL like the scenarios list — never swapped by tab loads;
+   *  older saves lack it and render as "Base". */
+  baseName?: string;
   /** Machine strokes per minute — the nameplate figure. */
   strokesPerMinute: number | null;
   /** Blisters formed per stroke (tooling-dependent). */
@@ -1703,6 +1707,7 @@ export function blankState(
     })),
     quantityOverride: null,
     scenarios: [],
+    baseName: "Base",
     strokesPerMinute: null,
     blistersPerStroke: null,
     speedPenaltyPct: DEFAULT_SPEED_PENALTY_PCT,
@@ -2301,11 +2306,14 @@ export default function BlisterCostingBoard({
     }
     if (nextId === null) {
       const base = baseStashRef.current ?? cur;
-      setSt({ ...base, scenarios });
+      // baseName is global chrome (like the scenarios list): the working
+      // copy always carries the live name, so it never rolls back to the
+      // stash's copy.
+      setSt({ ...base, scenarios, baseName: cur.baseName ?? base.baseName });
     } else {
       const target = scenarios.find((sc) => sc.id === nextId);
       if (!target) return;
-      setSt({ ...target.state, scenarios });
+      setSt({ ...target.state, scenarios, baseName: cur.baseName });
     }
     setActiveScenarioId(nextId);
   };
@@ -2333,7 +2341,7 @@ export default function BlisterCostingBoard({
     const scenarios = (st.scenarios ?? []).filter((x) => x.id !== id);
     if (activeScenarioId === id) {
       const base = baseStashRef.current ?? stripScenarios(st);
-      setSt({ ...base, scenarios });
+      setSt({ ...base, scenarios, baseName: st.baseName ?? base.baseName });
       setActiveScenarioId(null);
     } else {
       setSt((p) => ({ ...p, scenarios }));
@@ -2953,6 +2961,10 @@ export default function BlisterCostingBoard({
       const payload: SavedState = {
         ...(activeScenarioId === null ? cur : (baseStashRef.current ?? cur)),
         scenarios,
+        // The working copy always carries the live Base name (it is global
+        // chrome, like the scenarios list) — the stash's copy may be stale
+        // if Base was renamed while a scenario was on screen.
+        baseName: cur.baseName,
       };
       const res = await fetch(`/api/workflows/${workflowId}`, {
         method: "PUT",
@@ -3175,13 +3187,44 @@ export default function BlisterCostingBoard({
           });
           return (
             <>
-              <button
-                type="button"
-                onClick={() => selectTab(null)}
-                style={pillStyle(activeScenarioId === null)}
-              >
-                Base — {baseQty !== null ? baseQty.toLocaleString("en-US") : "—"}
-              </button>
+              {renamingScenarioId === "__base__" ? (
+                <input
+                  autoFocus
+                  type="text"
+                  defaultValue={st.baseName || "Base"}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape")
+                      (e.target as HTMLInputElement).blur();
+                  }}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name) set("baseName", name);
+                    setRenamingScenarioId(null);
+                  }}
+                  style={{
+                    width: 140,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    padding: "6px 14px",
+                    border: "1px solid var(--teal-700, #1d6c7b)",
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => selectTab(null)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setRenamingScenarioId("__base__");
+                  }}
+                  title="Right-click to rename"
+                  style={pillStyle(activeScenarioId === null)}
+                >
+                  {st.baseName || "Base"} —{" "}
+                  {baseQty !== null ? baseQty.toLocaleString("en-US") : "—"}
+                </button>
+              )}
               {(st.scenarios ?? []).map((sc) => {
                 const active = activeScenarioId === sc.id;
                 if (renamingScenarioId === sc.id) {

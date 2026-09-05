@@ -482,6 +482,9 @@ export type GummyFormulaCosting = {
   /** v69: what-if scenarios — each re-runs the whole Costing tab at a
    *  different quantity. Null/empty = just the base (Scale up) yield. */
   scenarios?: CostScenario[] | null;
+  /** v80: display name for the Base pill (right-click to rename, same as
+   *  scenario pills). Null/absent renders as "Base". */
+  baseName?: string | null;
 };
 
 /** One costing scenario (v69). */

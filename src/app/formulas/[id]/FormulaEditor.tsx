@@ -850,6 +850,10 @@ export default function FormulaEditor({
   const [costScenarios, setCostScenarios] = useState<CostScenario[]>(
     () => seedVersion.costing?.scenarios ?? [],
   );
+  // v80: the Base pill is renamable too (right-click), same as scenarios.
+  const [costBaseName, setCostBaseName] = useState<string>(
+    () => seedVersion.costing?.baseName ?? "Base",
+  );
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   // v69.2: pill interactions — right-click renames in place; a hover ×
   // deletes. Both screen-local.
@@ -1015,6 +1019,7 @@ export default function FormulaEditor({
       labTestingFp,
       labDec,
       scenarios: costScenarios,
+      baseName: costBaseName,
     };
   }, [
     costingDec,
@@ -1053,6 +1058,7 @@ export default function FormulaEditor({
     labTestingFp,
     labDec,
     costScenarios,
+    costBaseName,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1175,6 +1181,7 @@ export default function FormulaEditor({
               labTestingFp: seed.costing.labTestingFp ?? null,
               labDec: seed.costing.labDec ?? 2,
               scenarios: seed.costing.scenarios ?? [],
+              baseName: seed.costing.baseName ?? "Base",
             }
           : {
               dec: 3,
@@ -1213,6 +1220,7 @@ export default function FormulaEditor({
               labTestingFp: null,
               labDec: 2,
               scenarios: [],
+              baseName: "Base",
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -4419,14 +4427,44 @@ export default function FormulaEditor({
             });
             return (
               <>
-                <button
-                  type="button"
-                  onClick={() => setActiveScenarioId(null)}
-                  style={pillStyle(activeScenarioId === null)}
-                >
-                  {tr("Base")} —{" "}
-                  {Math.round(targetYieldUnits).toLocaleString("en-US")}
-                </button>
+                {renamingScenarioId === "__base__" ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    defaultValue={costBaseName || "Base"}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape")
+                        (e.target as HTMLInputElement).blur();
+                    }}
+                    onBlur={(e) => {
+                      const name = e.target.value.trim();
+                      if (name) setCostBaseName(name);
+                      setRenamingScenarioId(null);
+                    }}
+                    className="pricing__input"
+                    style={{
+                      width: 140,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      padding: "6px 14px",
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveScenarioId(null)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setRenamingScenarioId("__base__");
+                    }}
+                    title="Right-click to rename"
+                    style={pillStyle(activeScenarioId === null)}
+                  >
+                    {costBaseName === "Base" ? tr("Base") : costBaseName} —{" "}
+                    {Math.round(targetYieldUnits).toLocaleString("en-US")}
+                  </button>
+                )}
                 {costScenarios.map((s) => {
                   const active = activeScenarioId === s.id;
                   if (renamingScenarioId === s.id) {
