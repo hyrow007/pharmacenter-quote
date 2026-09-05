@@ -2,7 +2,10 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/auth/server";
 import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
 import AppHeader from "../../../_components/AppHeader";
-import BlisterCostingBoard, { type SavedState } from "./BlisterCostingBoard";
+import BlisterCostingBoard, {
+  type BoardProduct,
+  type SavedState,
+} from "./BlisterCostingBoard";
 
 // /workflow/[id]/blister-costing
 //
@@ -43,20 +46,12 @@ export default async function BlisterCostingPage({ params }: Ctx) {
     redirect(`/workflow/${w.id}`);
   }
 
-  const products = Array.isArray(state.products)
+  const rawProducts = Array.isArray(state.products)
     ? (state.products as Record<string, unknown>[])
     : [];
-  const product = products[0] ?? {};
-  const spec =
-    (product.blisterSpec as Record<string, string> | undefined) ?? null;
-
-  const quantities = Array.isArray(product.quantities)
-    ? (product.quantities as unknown[])
-    : [];
-  const firstQty = Number(
-    String(quantities[0] ?? "").toString().replace(/[^0-9.]/g, ""),
-  );
-  const quantity = Number.isFinite(firstQty) && firstQty > 0 ? firstQty : null;
+  // A malformed workflow with no products still gets one (blank) Base tab
+  // rather than a board that cannot render at all.
+  const productRows = rawProducts.length > 0 ? rawProducts : [{}];
 
   // The workflow stores an existing customer as an ID, not a name — the name
   // lives in the customers table. Resolving it here is what puts the real
@@ -74,26 +69,57 @@ export default async function BlisterCostingPage({ params }: Ctx) {
     if (c?.name) customerName = c.name;
   }
 
-  // Same story for the product: an existing pick is an ID into products, a
-  // new one carries its name on newProduct. The generic fallback only
-  // remains for a malformed record.
-  let productName =
-    ((product.newProduct as Record<string, string> | undefined)?.name_desc ||
-      null) ??
-    (product.productName as string) ??
-    (product.name as string) ??
-    "Blistered product";
-  const productId = product.productId as string | undefined;
-  if (productId && productId !== "new") {
-    const { data: p } = await supabase
+  // Same story for the products: an existing pick is an ID into products,
+  // a new one carries its name on newProduct. One `.in()` query resolves
+  // every picked name; the generic fallback only remains for a malformed
+  // record. Each product on the workflow becomes one Base tab on the board.
+  const pickedIds = productRows
+    .map((p) => p.productId as string | undefined)
+    .filter((id): id is string => Boolean(id) && id !== "new");
+  const namesById = new Map<string, string>();
+  if (pickedIds.length > 0) {
+    const { data: rows } = await supabase
       .from("products")
-      .select("name")
-      .eq("id", productId)
-      .maybeSingle();
-    if (p?.name) productName = p.name;
+      .select("id, name")
+      .in("id", pickedIds);
+    for (const r of rows ?? []) {
+      if (r?.id && r?.name) namesById.set(String(r.id), String(r.name));
+    }
   }
 
-  const initial = (state.blisterCosting as SavedState | undefined) ?? null;
+  // blisterCosting keeps its historical meaning — the FIRST product's cost
+  // build-up — so every reader of single-product workflows still works.
+  // Products 2..n ride in blisterCostingMore, index-aligned.
+  const more = Array.isArray(state.blisterCostingMore)
+    ? (state.blisterCostingMore as (SavedState | null)[])
+    : [];
+  const products: BoardProduct[] = productRows.map((product, i) => {
+    const spec =
+      (product.blisterSpec as Record<string, string> | undefined) ?? null;
+    const quantities = Array.isArray(product.quantities)
+      ? (product.quantities as unknown[])
+      : [];
+    const firstQty = Number(
+      String(quantities[0] ?? "").toString().replace(/[^0-9.]/g, ""),
+    );
+    const quantity =
+      Number.isFinite(firstQty) && firstQty > 0 ? firstQty : null;
+    const productId = product.productId as string | undefined;
+    const name =
+      (productId && productId !== "new"
+        ? namesById.get(productId)
+        : undefined) ??
+      ((product.newProduct as Record<string, string> | undefined)?.name_desc ||
+        null) ??
+      (product.productName as string) ??
+      (product.name as string) ??
+      "Blistered product";
+    const initial =
+      i === 0
+        ? ((state.blisterCosting as SavedState | undefined) ?? null)
+        : (more[i - 1] ?? null);
+    return { name, quantity, spec, initial };
+  });
 
   return (
     <div className="app-shell">
@@ -148,10 +174,7 @@ export default async function BlisterCostingPage({ params }: Ctx) {
             workflowId={w.id}
             quoteNumber={formatQuoteNumber(w.quote_number)}
             customerName={customerName}
-            productName={productName}
-            quantity={quantity}
-            spec={spec}
-            initial={initial}
+            products={products}
           />
         </div>
       </main>

@@ -156,6 +156,15 @@ bottle and blister boards once; do not make a third board that lacks them:
    same UX as scenario pills); the name persists in a `baseName` field
    that is GLOBAL like the scenarios list — tab switches must carry the
    live working copy's `baseName`, never roll it back from a snapshot
-   or the Base stash.
+   or the Base stash. **Multi-product workflows get ONE BASE TAB PER
+   PRODUCT**, each with its own scenarios (variants of that base) and its
+   own spec/qty seeding: the strip shows every product's Base pill
+   (default-named after the product when there is more than one, thin
+   divider between product groups) and "+ Scenario" adds under the ACTIVE
+   base. Persistence: the historical single key (`bottleCosting` /
+   `blisterCosting`) stays the FIRST product's bundle so old readers keep
+   working; products 2..n save to `bottleCostingMore` /
+   `blisterCostingMore`, index-aligned with `state.products[1..]`. Save
+   from any tab persists every product's bundle.
 9. **Gross margin (materials) readout** with hover explainers (ⓘ) on both
    margin metrics in the Margin & Price card.

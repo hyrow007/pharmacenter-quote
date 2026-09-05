@@ -2003,25 +2003,27 @@ function StatusChip({ status }: { status: CostStatus }) {
 // ============================================================
 // Board
 // ============================================================
-export default function BottleCostingBoard({
-  workflowId,
-  quoteNumber,
-  customerName,
-  productName,
-  quantity,
-  spec,
-  initial,
-}: {
-  workflowId: string;
-  quoteNumber: string;
-  customerName: string;
-  productName: string;
+
+/** One product tab's inputs, straight off the workflow. A workflow with
+ *  several products gets one of these per product — and one Base pill
+ *  (plus its own scenarios) per product on the board. */
+export type BoardProduct = {
+  name: string;
   quantity: number | null;
   spec: Record<string, string> | null;
   initial: SavedState | null;
-}) {
+};
+
+/** Build the working state for one product: its saved costing hydrated
+ *  over a spec-seeded blank, with every pre-list save shape migrated.
+ *  Extracted verbatim from the old useState initializer when the board
+ *  went multi-product — one hydration per Base tab. */
+function hydrateSaved(
+  initial: SavedState | null,
+  spec: Record<string, string> | null,
+): SavedState {
   // masterBoxQty — verified key name. See the note on `suggested` above.
-  const [st, setSt] = useState<SavedState>(() => {
+  {
     const perBox = Number(spec?.masterBoxQty ?? "");
     const blank = blankState(
       Number.isFinite(perBox) && perBox > 0 ? perBox : null,
@@ -2132,7 +2134,43 @@ export default function BottleCostingBoard({
         wastePct: l.wastePct ?? DEFAULT_WASTE_PCT[l.slot],
       })),
     };
-  });
+  }
+}
+
+export default function BottleCostingBoard({
+  workflowId,
+  quoteNumber,
+  customerName,
+  products,
+}: {
+  workflowId: string;
+  quoteNumber: string;
+  customerName: string;
+  products: BoardProduct[];
+}) {
+  // ---- Multi-product dimension -------------------------------------
+  // Every product on the workflow gets its own Base tab with its own
+  // scenarios. All the machinery below is written against ONE product;
+  // the others wait, fully composed, in productStatesRef until their
+  // Base pill is clicked. `activeBaseIdx` picks which product the
+  // single-product code path is currently looking at.
+  const [activeBaseIdx, setActiveBaseIdx] = useState(0);
+  const productStatesRef = useRef<SavedState[] | null>(null);
+  if (productStatesRef.current === null)
+    productStatesRef.current = products.map((p) =>
+      hydrateSaved(p.initial, p.spec),
+    );
+  // Ref edits (rename / delete on an INACTIVE product's pills) don't
+  // re-render on their own — this ticks the strip after one.
+  const [, forcePillRefresh] = useState(0);
+  const productName =
+    products[activeBaseIdx]?.name ?? "Bottled product";
+  const quantity = products[activeBaseIdx]?.quantity ?? null;
+  const spec = products[activeBaseIdx]?.spec ?? null;
+
+  const [st, setSt] = useState<SavedState>(
+    () => productStatesRef.current![0],
+  );
   const [saving, setSaving] = useState(false);
   // Scenario tabs — selection and chrome are screen-local; the list lives
   // in st.scenarios and saves with the board. While a scenario is active,
@@ -2230,6 +2268,49 @@ export default function BottleCostingBoard({
     } else {
       setSt((p) => ({ ...p, scenarios }));
     }
+  };
+  /** The active product's COMPLETE bundle — Base in the top-level fields,
+   *  the active tab synced into its slot — composed exactly the way save()
+   *  persists it. */
+  const composeActive = (): SavedState => {
+    const cur = stripScenarios(st);
+    const scenarios = (st.scenarios ?? []).map((sc) =>
+      sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+    );
+    return {
+      ...(activeScenarioId === null ? cur : (baseStashRef.current ?? cur)),
+      scenarios,
+      baseName: cur.baseName,
+    };
+  };
+  /** Jump to another product's Base tab (or straight to one of its
+   *  scenarios). The outgoing product's bundle is written home first, so
+   *  nothing bleeds between products any more than between scenarios. */
+  const selectBase = (idx: number, scenarioId: string | null = null) => {
+    if (idx === activeBaseIdx) {
+      selectTab(scenarioId);
+      return;
+    }
+    const bundles = productStatesRef.current!;
+    bundles[activeBaseIdx] = composeActive();
+    const next = bundles[idx];
+    setActiveBaseIdx(idx);
+    if (scenarioId) {
+      const target = (next.scenarios ?? []).find((s) => s.id === scenarioId);
+      if (target) {
+        baseStashRef.current = stripScenarios(next);
+        setSt({
+          ...target.state,
+          scenarios: next.scenarios ?? [],
+          baseName: next.baseName,
+        });
+        setActiveScenarioId(scenarioId);
+        return;
+      }
+    }
+    baseStashRef.current = null;
+    setSt(next);
+    setActiveScenarioId(null);
   };
   const [savedAt, setSavedAt] = useState<string | null>(null);
   // "bulk" is a pseudo-slot: it stores as slot "other" (the picker API has
@@ -2345,6 +2426,20 @@ export default function BottleCostingBoard({
             next.otherPerRunDay = json.otherPools.perRunDay;
           return next;
         });
+        // The OTHER products' bundles wait in the ref and never see the
+        // setSt above — adopt the plant rates into any of them still at
+        // null, so switching to a second Base tab later doesn't cost
+        // against missing overhead rates.
+        productStatesRef.current = (productStatesRef.current ?? []).map(
+          (b) => ({
+            ...b,
+            leasePerRunDay: b.leasePerRunDay ?? json.lease?.perRunDay ?? null,
+            indirectPerRunDay:
+              b.indirectPerRunDay ?? json.indirectPools?.perRunDay ?? null,
+            otherPerRunDay:
+              b.otherPerRunDay ?? json.otherPools?.perRunDay ?? null,
+          }),
+        );
         if (!usingPlantDefaults.current) return;
         // Flip the guard BEFORE the state update so a slow response cannot
         // land twice and overwrite an edit made in between.
@@ -2819,16 +2914,28 @@ export default function BottleCostingBoard({
         // if Base was renamed while a scenario was on screen.
         baseName: cur.baseName,
       };
+      // Save persists EVERY product's bundle, not just the one on screen:
+      // bottleCosting keeps its historical meaning (first product) so every
+      // existing reader still works, and products 2..n ride in
+      // bottleCostingMore, index-aligned with state.products[1..].
+      const bundles = [...(productStatesRef.current ?? [payload])];
+      bundles[activeBaseIdx] = payload;
+      productStatesRef.current = bundles;
       const res = await fetch(`/api/workflows/${workflowId}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state: { bottleCosting: payload } }),
+        body: JSON.stringify({
+          state: {
+            bottleCosting: bundles[0],
+            bottleCostingMore: bundles.slice(1),
+          },
+        }),
       });
       if (res.ok) setSavedAt(new Date().toLocaleTimeString());
     } finally {
       setSaving(false);
     }
-  }, [st, workflowId, activeScenarioId]);
+  }, [st, workflowId, activeScenarioId, activeBaseIdx]);
 
   // ---- price <-> margin back-solving --------------------------------
   // The margin % stays the single stored truth. Typing a price, or pressing
@@ -3038,120 +3145,183 @@ export default function BottleCostingBoard({
             fontWeight: 700,
             cursor: "pointer",
           });
+          // One group per product: its Base pill (named after the product
+          // when the workflow has several) followed by that product's own
+          // scenarios. The active product renders live values from `st`;
+          // the rest read their composed bundles out of productStatesRef.
+          const bundles = productStatesRef.current!;
+          const renameInputStyle: React.CSSProperties = {
+            width: 140,
+            fontSize: 12,
+            fontWeight: 700,
+            borderRadius: 999,
+            padding: "6px 14px",
+            border: "1px solid var(--teal-700, #1d6c7b)",
+          };
           return (
             <>
-              {renamingScenarioId === "__base__" ? (
-                <input
-                  autoFocus
-                  type="text"
-                  defaultValue={st.baseName || "Base"}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === "Escape")
-                      (e.target as HTMLInputElement).blur();
-                  }}
-                  onBlur={(e) => {
-                    const name = e.target.value.trim();
-                    if (name) set("baseName", name);
-                    setRenamingScenarioId(null);
-                  }}
-                  style={{
-                    width: 140,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    borderRadius: 999,
-                    padding: "6px 14px",
-                    border: "1px solid var(--teal-700, #1d6c7b)",
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => selectTab(null)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setRenamingScenarioId("__base__");
-                  }}
-                  title="Right-click to rename"
-                  style={pillStyle(activeScenarioId === null)}
-                >
-                  {st.baseName || "Base"} —{" "}
-                  {baseQty !== null ? baseQty.toLocaleString("en-US") : "—"}
-                </button>
-              )}
-              {(st.scenarios ?? []).map((sc) => {
-                const active = activeScenarioId === sc.id;
-                if (renamingScenarioId === sc.id) {
-                  return (
-                    <input
-                      key={sc.id}
-                      autoFocus
-                      type="text"
-                      defaultValue={sc.name}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === "Escape")
-                          (e.target as HTMLInputElement).blur();
-                      }}
-                      onBlur={(e) => {
-                        const name = e.target.value.trim();
-                        if (name)
-                          set(
-                            "scenarios",
-                            (st.scenarios ?? []).map((x) =>
-                              x.id === sc.id ? { ...x, name } : x,
-                            ),
-                          );
-                        setRenamingScenarioId(null);
-                      }}
-                      style={{
-                        width: 140,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        borderRadius: 999,
-                        padding: "6px 14px",
-                        border: "1px solid var(--teal-700, #1d6c7b)",
-                      }}
-                    />
-                  );
-                }
+              {products.map((prod, i) => {
+                const isActiveProduct = i === activeBaseIdx;
+                const bundle = isActiveProduct ? null : bundles[i];
+                const bName =
+                  (isActiveProduct ? st.baseName : bundle?.baseName) ||
+                  (products.length > 1 ? prod.name : "Base");
+                const bQty = isActiveProduct
+                  ? baseQty
+                  : (bundle?.quantityOverride ?? prod.quantity);
+                const scList = isActiveProduct
+                  ? (st.scenarios ?? [])
+                  : (bundle?.scenarios ?? []);
+                const renameKey = `__base__${i}`;
                 return (
-                  <button
-                    key={sc.id}
-                    type="button"
-                    onClick={() => selectTab(sc.id)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setRenamingScenarioId(sc.id);
-                    }}
-                    onMouseEnter={() => setHoveredScenarioId(sc.id)}
-                    onMouseLeave={() => setHoveredScenarioId(null)}
-                    title="Right-click to rename"
-                    style={pillStyle(active)}
-                  >
-                    {sc.name || "Scenario"} —{" "}
-                    {(() => {
-                      const q =
-                        activeScenarioId === sc.id
-                          ? qty
-                          : (sc.state?.quantityOverride ?? quantity);
-                      return q !== null && q !== undefined
-                        ? Math.round(q).toLocaleString("en-US")
-                        : "—";
-                    })()}
-                    {hoveredScenarioId === sc.id ? (
+                  <Fragment key={`prod-${i}`}>
+                    {i > 0 ? (
                       <span
-                        role="button"
-                        aria-label="Delete scenario"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteScenario(sc.id);
-                          setHoveredScenarioId(null);
+                        aria-hidden="true"
+                        style={{
+                          width: 1,
+                          height: 20,
+                          background: "var(--line, #e3dcc9)",
+                          margin: "0 4px",
                         }}
-                        style={{ marginLeft: 8, fontWeight: 700, opacity: 0.75 }}
-                      >
-                        ×
-                      </span>
+                      />
                     ) : null}
-                  </button>
+                    {renamingScenarioId === renameKey ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        defaultValue={bName}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape")
+                            (e.target as HTMLInputElement).blur();
+                        }}
+                        onBlur={(e) => {
+                          const name = e.target.value.trim();
+                          if (name) {
+                            if (isActiveProduct) set("baseName", name);
+                            else {
+                              bundles[i] = { ...bundles[i], baseName: name };
+                              forcePillRefresh((v) => v + 1);
+                            }
+                          }
+                          setRenamingScenarioId(null);
+                        }}
+                        style={renameInputStyle}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => selectBase(i)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setRenamingScenarioId(renameKey);
+                        }}
+                        title="Right-click to rename"
+                        style={pillStyle(
+                          isActiveProduct && activeScenarioId === null,
+                        )}
+                      >
+                        {bName} —{" "}
+                        {bQty !== null && bQty !== undefined
+                          ? Math.round(bQty).toLocaleString("en-US")
+                          : "—"}
+                      </button>
+                    )}
+                    {scList.map((sc) => {
+                      const active =
+                        isActiveProduct && activeScenarioId === sc.id;
+                      if (renamingScenarioId === sc.id) {
+                        return (
+                          <input
+                            key={sc.id}
+                            autoFocus
+                            type="text"
+                            defaultValue={sc.name}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === "Escape")
+                                (e.target as HTMLInputElement).blur();
+                            }}
+                            onBlur={(e) => {
+                              const name = e.target.value.trim();
+                              if (name) {
+                                if (isActiveProduct)
+                                  set(
+                                    "scenarios",
+                                    (st.scenarios ?? []).map((x) =>
+                                      x.id === sc.id ? { ...x, name } : x,
+                                    ),
+                                  );
+                                else {
+                                  bundles[i] = {
+                                    ...bundles[i],
+                                    scenarios: (bundles[i].scenarios ?? []).map(
+                                      (x) =>
+                                        x.id === sc.id ? { ...x, name } : x,
+                                    ),
+                                  };
+                                  forcePillRefresh((v) => v + 1);
+                                }
+                              }
+                              setRenamingScenarioId(null);
+                            }}
+                            style={renameInputStyle}
+                          />
+                        );
+                      }
+                      return (
+                        <button
+                          key={sc.id}
+                          type="button"
+                          onClick={() => selectBase(i, sc.id)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setRenamingScenarioId(sc.id);
+                          }}
+                          onMouseEnter={() => setHoveredScenarioId(sc.id)}
+                          onMouseLeave={() => setHoveredScenarioId(null)}
+                          title="Right-click to rename"
+                          style={pillStyle(active)}
+                        >
+                          {sc.name || "Scenario"} —{" "}
+                          {(() => {
+                            const q = active
+                              ? qty
+                              : (sc.state?.quantityOverride ?? prod.quantity);
+                            return q !== null && q !== undefined
+                              ? Math.round(q).toLocaleString("en-US")
+                              : "—";
+                          })()}
+                          {hoveredScenarioId === sc.id ? (
+                            <span
+                              role="button"
+                              aria-label="Delete scenario"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isActiveProduct) deleteScenario(sc.id);
+                                else {
+                                  bundles[i] = {
+                                    ...bundles[i],
+                                    scenarios: (
+                                      bundles[i].scenarios ?? []
+                                    ).filter((x) => x.id !== sc.id),
+                                  };
+                                  forcePillRefresh((v) => v + 1);
+                                }
+                                setHoveredScenarioId(null);
+                              }}
+                              style={{
+                                marginLeft: 8,
+                                fontWeight: 700,
+                                opacity: 0.75,
+                              }}
+                            >
+                              ×
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
                 );
               })}
             </>

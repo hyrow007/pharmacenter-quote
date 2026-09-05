@@ -624,6 +624,11 @@ export type WorkflowState = {
   // authoritative. Shape lives in app/workflow/[id]/bottle-costing
   // (SavedState); typed loosely here to avoid a lib -> app import cycle.
   bottleCosting?: Record<string, unknown>;
+  // Multi-product workflows: bottleCosting stays the FIRST product's cost
+  // build-up (so every existing reader keeps working), and products 2..n
+  // save here, index-aligned with state.products[1..]. Same for blisters.
+  bottleCostingMore?: Record<string, unknown>[];
+  blisterCostingMore?: Record<string, unknown>[];
   // Reference to a snapshotted version in the gummy_formulas catalog. See
   // /lib/formulas.ts (GummyFormulaReference). Small enough to store on the
   // state row without bloating it — cached identity fields let the workflow
