@@ -3717,11 +3717,32 @@ export default function BlisterCostingBoard({
                       {line.costSource === "Manual" && (
                         <div style={{ marginTop: 4 }}>
                           <NumField
-                            value={line.manualCostPerUnit ?? null}
-                            onChange={(v) =>
-                              setLine(line.id, { manualCostPerUnit: v })
+                            value={
+                              slotKeyOf(line)?.key === "bulk"
+                                ? line.manualCostPerUnit !== null &&
+                                  line.manualCostPerUnit !== undefined
+                                  ? line.manualCostPerUnit * 1000
+                                  : null
+                                : line.manualCostPerUnit ?? null
                             }
-                            placeholder="$ / each"
+                            onChange={(v) =>
+                              setLine(line.id, {
+                                // Bulk is bought per 1,000 doses (house
+                                // rule) — the box takes the per-M price
+                                // and stores it ÷1,000. See bottle board.
+                                manualCostPerUnit:
+                                  slotKeyOf(line)?.key === "bulk"
+                                    ? v === null
+                                      ? null
+                                      : v / 1000
+                                    : v,
+                              })
+                            }
+                            placeholder={
+                              slotKeyOf(line)?.key === "bulk"
+                                ? "$ / 1,000 doses"
+                                : "$ / each"
+                            }
                           />
                         </div>
                       )}

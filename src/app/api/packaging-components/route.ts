@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   if (slot === "bulk") {
     let pq = supabase
       .from("products")
-      .select("fp_code, name, avg_cost")
+      .select("fp_code, name, avg_cost, default_unit")
       .eq("active", true)
       .ilike("fp_code", "%-BK-%");
     const bulkWords = q
@@ -90,7 +90,12 @@ export async function GET(request: Request) {
         { status: 500 },
       );
     }
-    type BkRow = { fp_code: string; name: string; avg_cost: number | null };
+    type BkRow = {
+      fp_code: string;
+      name: string;
+      avg_cost: number | null;
+      default_unit: string | null;
+    };
     const bkRank = (r: BkRow) => {
       const hay = `${r.fp_code} ${r.name}`.toLowerCase();
       return (
@@ -102,21 +107,29 @@ export async function GET(request: Request) {
       .slice(0, 60)
       .map((r) => {
         const customer = r.fp_code.toUpperCase().startsWith("CA");
+        // Business rule (Jairo, 2026-09-05): bulk products are ALWAYS
+        // stocked per 1,000 eaches in Fishbowl, so per-dose = avg_cost
+        // ÷ 1,000. PC-BK-0021 at $21.305/M → $0.0213/dose. The raw per-M
+        // figure still rides along as a reference so a wrong-looking
+        // price can be traced back to its source at a glance.
+        const perDose = r.avg_cost !== null ? r.avg_cost / 1000 : null;
         return {
           fp_code: r.fp_code,
           name: r.name,
           category: null,
           owner: customer ? "customer" : "pharmacenter",
-          effective_cost_per_unit: customer ? 0 : r.avg_cost,
+          effective_cost_per_unit: customer ? 0 : perDose,
           cost_status: customer
             ? "customer_asset"
-            : r.avg_cost !== null
-              ? "ok"
-              : "no_cost",
+            : perDose === null
+              ? "no_cost"
+              : "ok",
           last_order_cost_per_unit: null,
-          inventory_cost_per_purchase_unit: null,
+          // Raw reference figure + its unit, in the same fields the
+          // blister board's web pricing reads ("$X / kg" caption).
+          inventory_cost_per_purchase_unit: customer ? 0 : r.avg_cost,
           last_order_cost_per_purchase_unit: null,
-          inventory_cost_uom: null,
+          inventory_cost_uom: r.default_unit,
         };
       });
     return NextResponse.json({ ok: true, rows: bkRows });

@@ -3426,12 +3426,32 @@ export default function BottleCostingBoard({
                       </select>
                       {line.costSource === "Manual" && (
                         <div style={{ marginTop: 4 }}>
+                          {/* Bulk is bought per 1,000 doses (house rule), so
+                              the Manual box takes the per-M price as printed
+                              on the PO and stores it ÷1,000 — typing 25
+                              means $25/1,000 = $0.025/dose, never $25 a
+                              dose. Everything else stays per-each. */}
                           <NumField
-                            value={line.manualCostPerUnit ?? null}
-                            onChange={(v) =>
-                              setLine(line.id, { manualCostPerUnit: v })
+                            value={
+                              isBulkLine
+                                ? line.manualCostPerUnit !== null &&
+                                  line.manualCostPerUnit !== undefined
+                                  ? line.manualCostPerUnit * 1000
+                                  : null
+                                : line.manualCostPerUnit ?? null
                             }
-                            placeholder="$ / each"
+                            onChange={(v) =>
+                              setLine(line.id, {
+                                manualCostPerUnit: isBulkLine
+                                  ? v === null
+                                    ? null
+                                    : v / 1000
+                                  : v,
+                              })
+                            }
+                            placeholder={
+                              isBulkLine ? "$ / 1,000 doses" : "$ / each"
+                            }
                           />
                         </div>
                       )}
@@ -3549,7 +3569,11 @@ export default function BottleCostingBoard({
                           : null;
                       const parts: string[] = [];
                       if (line.qtyPerUnit !== null && line.qtyPerUnit !== 1)
-                        parts.push(money(c) + " each");
+                        parts.push(
+                          isBulkLine
+                            ? money(c * 1000, 2) + " / 1,000"
+                            : money(c) + " each",
+                        );
                       if (w !== null && w > 0 && w < 100)
                         parts.push("incl. " + w + "% waste");
                       if (!parts.length) return null;
