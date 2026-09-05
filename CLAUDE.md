@@ -145,3 +145,10 @@ bottle and blister boards once; do not make a third board that lacks them:
 7. **Real customer + product names** resolved server-side (customers /
    products tables) on the board header and print sheet — never IDs or
    generic placeholders.
+8. **Scenario tabs** — what-if quantity pills above Considerations (same
+   UX as the gummy Costing tab): Base + named scenarios, right-click to
+   rename, hover × to delete, "+ Scenario" to add. The list saves with
+   the costing; the active selection is screen-local. The active
+   scenario's qty re-derives the ENTIRE board. Strip hidden on print.
+9. **Gross margin (materials) readout** with hover explainers (ⓘ) on both
+   margin metrics in the Margin & Price card.

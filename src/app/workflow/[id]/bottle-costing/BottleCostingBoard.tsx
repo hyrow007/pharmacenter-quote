@@ -1326,6 +1326,11 @@ export type SavedState = {
    * QUOTING on the spec itself.
    */
   quantityOverride: number | null;
+  /** What-if quantity scenarios (scenario tabs, same UX as the gummy
+   *  Costing tab). The LIST persists with the costing; the ACTIVE
+   *  selection is screen-local and never saved. Each scenario re-derives
+   *  the whole board — materials, labor, overhead, price — at its qty. */
+  scenarios: { id: string; name: string; qty: number }[];
   bottlesPerMinute: number | null;
   /** Bottles per minute PER PERSON on kitting. Drives the kitting hours. */
   kittingSpeed: number | null;
@@ -1611,6 +1616,7 @@ export function blankState(
       lastOrderCostPerUnit: null,
     })),
     quantityOverride: null,
+    scenarios: [],
     bottlesPerMinute: null,
     kittingSpeed: null,
     bottlesPerMasterBox,
@@ -2122,6 +2128,11 @@ export default function BottleCostingBoard({
     };
   });
   const [saving, setSaving] = useState(false);
+  // Scenario tabs — selection and chrome are screen-local; the list lives
+  // in st.scenarios and saves with the board.
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [renamingScenarioId, setRenamingScenarioId] = useState<string | null>(null);
+  const [hoveredScenarioId, setHoveredScenarioId] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   // "bulk" is a pseudo-slot: it stores as slot "other" (the picker API has
   // no bulk category — bulk is a product, not a packaging component) but
@@ -2356,7 +2367,15 @@ export default function BottleCostingBoard({
    * otherwise the workflow's. Resolved once here so no card can be looking at
    * a different number than the card next to it.
    */
-  const qty = st.quantityOverride ?? quantity;
+  const activeScenario =
+    activeScenarioId !== null
+      ? (st.scenarios ?? []).find((sc) => sc.id === activeScenarioId) ?? null
+      : null;
+  // The active scenario's quantity overrides everything downstream —
+  // materials, labor hours, overhead days, price — exactly like the gummy
+  // Costing tab's what-if yields. Base = the override / workflow figure.
+  const baseQty = st.quantityOverride ?? quantity;
+  const qty = activeScenario ? activeScenario.qty : baseQty;
 
   /**
    * Bottles in one master box.
@@ -2863,6 +2882,158 @@ export default function BottleCostingBoard({
           </span>
         </div>
       </div>
+      {/* ---------- Scenario tabs ---------- */}
+      {/* What-if quantities, same pills as the gummy Costing tab: Base is
+          the workflow / override figure, each scenario re-runs the whole
+          board at its own qty. Right-click renames, hover × deletes. The
+          strip is chrome — hidden on print. */}
+      <div
+        className="bc-noprint"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          marginBottom: 14,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.09em",
+            textTransform: "uppercase",
+            color: "var(--ink-3, #8a9498)",
+          }}
+        >
+          Scenarios
+        </span>
+        {(() => {
+          const pillStyle = (active: boolean): React.CSSProperties => ({
+            padding: "6px 14px",
+            borderRadius: 999,
+            border: `1px solid ${active ? "var(--teal-700, #1d6c7b)" : "var(--line, #e3dcc9)"}`,
+            background: active
+              ? "var(--teal-700, #1d6c7b)"
+              : "var(--paper, #fffdf8)",
+            color: active ? "#fff" : "var(--teal-900, #0f4a56)",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          });
+          return (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveScenarioId(null)}
+                style={pillStyle(activeScenarioId === null)}
+              >
+                Base — {baseQty !== null ? baseQty.toLocaleString("en-US") : "—"}
+              </button>
+              {(st.scenarios ?? []).map((sc) => {
+                const active = activeScenarioId === sc.id;
+                if (renamingScenarioId === sc.id) {
+                  return (
+                    <input
+                      key={sc.id}
+                      autoFocus
+                      type="text"
+                      defaultValue={sc.name}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === "Escape")
+                          (e.target as HTMLInputElement).blur();
+                      }}
+                      onBlur={(e) => {
+                        const name = e.target.value.trim();
+                        if (name)
+                          set(
+                            "scenarios",
+                            (st.scenarios ?? []).map((x) =>
+                              x.id === sc.id ? { ...x, name } : x,
+                            ),
+                          );
+                        setRenamingScenarioId(null);
+                      }}
+                      style={{
+                        width: 140,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 999,
+                        padding: "6px 14px",
+                        border: "1px solid var(--teal-700, #1d6c7b)",
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <button
+                    key={sc.id}
+                    type="button"
+                    onClick={() => setActiveScenarioId(sc.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setRenamingScenarioId(sc.id);
+                    }}
+                    onMouseEnter={() => setHoveredScenarioId(sc.id)}
+                    onMouseLeave={() => setHoveredScenarioId(null)}
+                    title="Right-click to rename"
+                    style={pillStyle(active)}
+                  >
+                    {sc.name || "Scenario"} —{" "}
+                    {Math.round(sc.qty).toLocaleString("en-US")}
+                    {hoveredScenarioId === sc.id ? (
+                      <span
+                        role="button"
+                        aria-label="Delete scenario"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          set(
+                            "scenarios",
+                            (st.scenarios ?? []).filter((x) => x.id !== sc.id),
+                          );
+                          if (activeScenarioId === sc.id)
+                            setActiveScenarioId(null);
+                          setHoveredScenarioId(null);
+                        }}
+                        style={{ marginLeft: 8, fontWeight: 700, opacity: 0.75 }}
+                      >
+                        ×
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </>
+          );
+        })()}
+        <button
+          type="button"
+          onClick={() => {
+            const id = "sc_" + Math.random().toString(36).slice(2, 9);
+            set("scenarios", [
+              ...(st.scenarios ?? []),
+              {
+                id,
+                name: `Scenario ${(st.scenarios ?? []).length + 1}`,
+                qty: qty ?? 0,
+              },
+            ]);
+            setActiveScenarioId(id);
+          }}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px dashed var(--line, #e3dcc9)",
+            background: "transparent",
+            color: "var(--teal-700, #1d6c7b)",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          + Scenario
+        </button>
+      </div>
       {/* ---------- Considerations ---------- */}
       <div className="bc-card" style={shell}>
         <div style={band}>Considerations</div>
@@ -2878,18 +3049,40 @@ export default function BottleCostingBoard({
                 12000 has to be counted. Digits only; commas are chrome. */}
             <input
               inputMode="numeric"
-              value={
-                (st.quantityOverride ?? quantity)?.toLocaleString("en-US") ??
-                ""
-              }
+              value={qty?.toLocaleString("en-US") ?? ""}
               placeholder="required"
               onChange={(e) => {
                 const digits = e.target.value.replace(/[^0-9]/g, "");
                 const v = digits === "" ? null : Number(digits);
-                set("quantityOverride", v === quantity ? null : v);
+                if (activeScenario) {
+                  // Scenario active — the quantity edited HERE is the
+                  // scenario's, never the base override underneath it.
+                  set(
+                    "scenarios",
+                    (st.scenarios ?? []).map((sc) =>
+                      sc.id === activeScenario.id
+                        ? { ...sc, qty: v ?? 0 }
+                        : sc,
+                    ),
+                  );
+                } else {
+                  set("quantityOverride", v === quantity ? null : v);
+                }
               }}
               style={numInput}
             />
+            {activeScenario ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--teal-700, #1d6c7b)",
+                  fontWeight: 600,
+                  marginTop: 3,
+                }}
+              >
+                editing “{activeScenario.name}”
+              </div>
+            ) : null}
           </ParamBlock>
           <ParamBlock label="Line speed (bottles / minute)" nowrap>
             <NumField
