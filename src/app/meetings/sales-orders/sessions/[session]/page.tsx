@@ -34,7 +34,7 @@ export default async function SessionDetailPage({
 
   const { session: sessionId } = await params;
 
-  const { data: session } = await supabase
+  const { data: sessionRaw } = await supabase
     .from("meeting_sessions")
     .select(
       "id, session_date, source, summary_md, attendees, created_at, meeting_type_id",
@@ -42,9 +42,21 @@ export default async function SessionDetailPage({
     .eq("id", sessionId)
     .maybeSingle();
 
-  if (!session) notFound();
+  if (!sessionRaw) notFound();
 
-  const { data: notes } = await supabase
+  // Cast through unknown — supabase-js is inconsistent about typing
+  // runtime `.select(string)` calls, so we lock the shape ourselves.
+  const session = sessionRaw as unknown as {
+    id: string;
+    session_date: string;
+    source: string;
+    summary_md: string | null;
+    attendees: string[] | null;
+    created_at: string;
+    meeting_type_id: string;
+  };
+
+  const { data: notesRaw } = await supabase
     .from("meeting_so_notes")
     .select(
       "id, so_number, note_md, action_items, status_flag, fishbowl_snapshot, created_at",
@@ -52,9 +64,24 @@ export default async function SessionDetailPage({
     .eq("session_id", sessionId)
     .order("so_number", { ascending: true });
 
+  const notes = (notesRaw ?? []) as unknown as Array<{
+    id: string;
+    so_number: string;
+    note_md: string | null;
+    action_items: Array<{
+      text?: string;
+      owner?: string;
+      due_date?: string;
+      done?: boolean;
+    }> | null;
+    status_flag: string | null;
+    fishbowl_snapshot: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+
   // Live Fishbowl state for every SO mentioned — one query, joined
   // client-side, so we can render "at meeting vs. now" deltas.
-  const soNumbers = (notes ?? []).map((n) => n.so_number as string);
+  const soNumbers = notes.map((n) => n.so_number);
   const liveById = new Map<
     string,
     {
@@ -65,21 +92,28 @@ export default async function SessionDetailPage({
     }
   >();
   if (soNumbers.length > 0) {
-    const { data: liveRows } = await supabase
+    const { data: liveRowsRaw } = await supabase
       .from("fishbowl_sales_orders")
       .select("so_number, status_name, is_open, date_first_ship, total_price")
       .in("so_number", soNumbers);
-    (liveRows ?? []).forEach((r) => {
-      liveById.set(r.so_number as string, {
-        status_name: (r.status_name as string | null) ?? null,
-        is_open: r.is_open as boolean,
-        date_first_ship: (r.date_first_ship as string | null) ?? null,
-        total_price: (r.total_price as number | null) ?? null,
+    const liveRows = (liveRowsRaw ?? []) as unknown as Array<{
+      so_number: string;
+      status_name: string | null;
+      is_open: boolean;
+      date_first_ship: string | null;
+      total_price: number | null;
+    }>;
+    liveRows.forEach((r) => {
+      liveById.set(r.so_number, {
+        status_name: r.status_name,
+        is_open: r.is_open,
+        date_first_ship: r.date_first_ship,
+        total_price: r.total_price,
       });
     });
   }
 
-  const attendees = (session.attendees as string[] | null) ?? [];
+  const attendees = session.attendees ?? [];
 
   return (
     <div className="app-shell">

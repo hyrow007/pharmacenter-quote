@@ -53,18 +53,39 @@ export default async function SalesOrderDetailPage({
 
   const { so } = await params;
 
-  const { data: row } = await supabase
+  const { data: rowRaw } = await supabase
     .from("fishbowl_sales_orders")
     .select(COLS)
     .eq("so_number", so)
     .maybeSingle();
 
-  if (!row) notFound();
+  if (!rowRaw) notFound();
+
+  // supabase-js can't statically type a runtime-composed column string, so
+  // the query returns `GenericStringError`. Same escape hatch as
+  // /api/sales-orders — cast once through unknown to the shape we know
+  // Postgres actually returned.
+  const row = rowRaw as unknown as {
+    so_number: string;
+    status_id: number | null;
+    status_name: string | null;
+    is_open: boolean;
+    customer_name: string | null;
+    customer_po: string | null;
+    salesman: string | null;
+    note: string | null;
+    date_issued: string | null;
+    date_first_ship: string | null;
+    subtotal: number | null;
+    total_price: number | null;
+    items: SoItem[] | null;
+    synced_at: string | null;
+  };
 
   // Meeting notes about this SO — newest session first. Joins the
   // session date + type name inline so we can render the timeline
   // without a second lookup.
-  const { data: noteRows } = await supabase
+  const { data: noteRowsRaw } = await supabase
     .from("meeting_so_notes")
     .select(
       "id, session_id, note_md, action_items, status_flag, fishbowl_snapshot, created_at, " +
@@ -74,10 +95,32 @@ export default async function SalesOrderDetailPage({
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const items = ((row.items as unknown as SoItem[]) ?? []).filter((it) =>
+  // Same cast-through-unknown escape hatch as the row fetch above —
+  // supabase-js can't type a runtime-composed .select() string.
+  const noteRows = (noteRowsRaw ?? []) as unknown as Array<{
+    id: string;
+    session_id: string;
+    note_md: string | null;
+    action_items: Array<{
+      text?: string;
+      owner?: string;
+      due_date?: string;
+      done?: boolean;
+    }> | null;
+    status_flag: string | null;
+    fishbowl_snapshot: Record<string, unknown> | null;
+    created_at: string;
+    meeting_sessions: {
+      session_date: string | null;
+      source: string | null;
+      meeting_type_id: string | null;
+    } | null;
+  }>;
+
+  const items = (row.items ?? []).filter((it) =>
     it.type_id ? SALE_TYPE_IDS.has(it.type_id) : false,
   );
-  const freshness = describeFreshness(row.synced_at as string | null);
+  const freshness = describeFreshness(row.synced_at);
 
   return (
     <div className="app-shell">
