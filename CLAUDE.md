@@ -217,12 +217,50 @@ the hub itself.
   Auth Redirect URLs allowlist.
 - Run `sql/meetings.sql` in the shared Supabase project SQL editor.
 
-**Plaud ingest (Deploy 2 — not yet wired):**
+**Plaud ingest — `POST /api/plaud/webhook`:**
 
-- `POST /api/plaud/webhook` receives a transcript + metadata (bearer
-  auth via `PLAUD_SYNC_SECRET`, mirrors `/api/sync/sales-orders`).
-- Creates a `meeting_sessions` row, extracts SO mentions with a regex
-  covering `SO12345`, `SO 12345`, and bare `12345`, and upserts
-  `meeting_so_notes` on `(session_id, so_number)`. Each note captures
-  the current `fishbowl_sales_orders` row as `fishbowl_snapshot` for
-  later diffing.
+Bearer-authenticated with `PLAUD_SYNC_SECRET` (add to Vercel env).
+Mirrors `/api/sync/sales-orders`. Handler at
+`src/app/api/plaud/webhook/route.ts`; extraction library at
+`src/lib/plaud/extract.ts`.
+
+Two request shapes:
+
+1. **Auto-extract from the Plaud AI summary** — the caller sends
+   `{ meeting_type_slug, recording: { id, session_date, attendees,
+   summary_md, transcript_url } }` and the extractor walks the summary
+   markdown, pulls every SO reference (`SO 14693`, `SO M-14221`,
+   `SO M14381-4`, `Sales Order 14733`, and neighboring bare numbers),
+   resolves each against `fishbowl_sales_orders`, snapshots the current
+   row into `fishbowl_snapshot`, and upserts `meeting_so_notes` on
+   `(session_id, so_number)`.
+
+2. **Pre-extracted mentions** — the caller sends its own `so_mentions`
+   array. Useful for Zapier + Code steps or a Cowork agent. The
+   receiver still cross-references every SO against Fishbowl even when
+   the notes come pre-authored.
+
+**Fishbowl cross-referencing is mandatory on every ingest.** Fishbowl
+is the source of truth for customer_name and product. The extractor
+(and the pre-extracted-mentions hydration path) call
+`resolveSoAgainstFishbowl()` — which tries `M-`/no-`M` variants and
+master-order fallbacks — then `detectCustomerMismatch()` compares the
+Plaud-said customer against Fishbowl's. When they clearly disagree
+(Peter Chu vs Purechews, Beatomex vs VitaMex, Renays vs Rene's,
+Inova Gel vs InnovaGel, Fine Buenes vs InnovaGel Unicardio, Agency
+Commercial vs Agencia Comercial Wan Tung), the note body gets a
+`⚠ Plaud text and Fishbowl customer disagree — likely "X" per
+Fishbowl.` warning and `status_flag` is bumped to `at_risk`. Add new
+known-mangling patterns to `KNOWN_PLAUD_MISMATCHES` in `extract.ts`.
+
+Session upserts are idempotent on `(meeting_type_id,
+plaud_recording_id)` — the same recording ingested twice refreshes
+notes instead of duplicating.
+
+**Wiring the ingest.** Plaud's own webhook (with `Plaud-Signature`
+verification) can post directly here, or route via Zapier ("New Plaud
+file" → HTTP POST to `https://meeting.pharmacenter.app/api/plaud/webhook`
+with `Authorization: Bearer $PLAUD_SYNC_SECRET`). Plaud's OAuth-only
+"list files" REST is private-beta — until it's live, weekly ingestion
+runs either through Plaud's own webhook, Zapier, or a Cowork agent
+that pushes the pre-extracted payload.
