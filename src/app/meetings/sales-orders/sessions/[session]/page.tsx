@@ -462,6 +462,7 @@ function customerFor(
       customer_name?: string | null;
     }
   >,
+  knownCustomers: string[],
 ): string {
   const snap = (n.fishbowl_snapshot as Record<string, unknown> | null) ?? null;
   const snapCust =
@@ -476,7 +477,19 @@ function customerFor(
   // Look for a leading bold span in note_md: "**Customer Name** — product"
   const noteMd = (n.note_md as string | null) ?? "";
   const boldMatch = /^\*\*([^*\n]+)\*\*/m.exec(noteMd.trim());
-  if (boldMatch) return boldMatch[1].trim();
+  if (boldMatch) {
+    const raw = boldMatch[1].trim();
+    // Merge with a known Fishbowl customer if the note-md fallback is a
+    // substring either way — catches "Cunsa" ↔ "Cunsa International LLC",
+    // "Worldwide" ↔ "WORLDWIDE COSMETICS INC.", etc. so the same customer
+    // doesn't get split across two buckets.
+    const rawL = raw.toLowerCase();
+    const merged = knownCustomers.find((k) => {
+      const kL = k.toLowerCase();
+      return kL.includes(rawL) || rawL.includes(kL);
+    });
+    return merged ?? raw;
+  }
   return "Not in current Fishbowl mirror";
 }
 
@@ -503,9 +516,25 @@ function groupNotesByCustomer(
     }
   >,
 ): Array<[string, NoteRow[]]> {
+  // First pass: collect every Fishbowl-verified customer name in this
+  // session, so the note-md fallback can fuzzy-merge into a known bucket
+  // rather than spawning a duplicate.
+  const knownCustomers = new Set<string>();
+  for (const n of notes) {
+    const snap = (n.fishbowl_snapshot as Record<string, unknown> | null) ?? null;
+    if (typeof snap?.customer_name === "string" && snap.customer_name.trim()) {
+      knownCustomers.add((snap.customer_name as string).trim());
+    }
+    const live = liveById.get(n.so_number as string);
+    if (live?.customer_name && live.customer_name.trim()) {
+      knownCustomers.add(live.customer_name.trim());
+    }
+  }
+  const knownList = Array.from(knownCustomers);
+
   const buckets = new Map<string, NoteRow[]>();
   for (const n of notes) {
-    const cust = customerFor(n, liveById);
+    const cust = customerFor(n, liveById, knownList);
     const arr = buckets.get(cust) ?? [];
     arr.push(n);
     buckets.set(cust, arr);
