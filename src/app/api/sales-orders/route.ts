@@ -67,9 +67,16 @@ export async function GET(request: Request) {
     );
   }
 
-  const rows = data ?? [];
+  // supabase-js cannot statically parse a runtime-composed column string,
+  // so it types the rows as GenericStringError. The shape is ours; cast.
+  const rows = (data ?? []) as unknown as Array<
+    Record<string, unknown> & { synced_at?: string | null }
+  >;
   const syncedAt = rows.reduce<string | null>(
-    (m, r) => (r.synced_at && (!m || r.synced_at > m) ? r.synced_at : m),
+    (m, r) =>
+      typeof r.synced_at === "string" && (!m || r.synced_at > m)
+        ? r.synced_at
+        : m,
     null,
   );
   return NextResponse.json({
