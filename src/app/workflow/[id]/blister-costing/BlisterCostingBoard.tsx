@@ -3314,9 +3314,17 @@ export default function BlisterCostingBoard({
               {products.map((prod, i) => {
                 const isActiveProduct = i === activeBaseIdx;
                 const bundle = isActiveProduct ? null : bundles[i];
+                // On a multi-product board the default label is the PRODUCT
+                // name — a literal "Base" (blankState's default, or an old
+                // single-product save) counts as "never renamed" there,
+                // because three pills all reading "Base" identify nothing.
+                const rawName = isActiveProduct
+                  ? st.baseName
+                  : bundle?.baseName;
                 const bName =
-                  (isActiveProduct ? st.baseName : bundle?.baseName) ||
-                  (products.length > 1 ? prod.name : "Base");
+                  products.length > 1
+                    ? (rawName && rawName !== "Base" ? rawName : prod.name)
+                    : rawName || "Base";
                 const bQty = isActiveProduct
                   ? baseQty
                   : (bundle?.quantityOverride ?? prod.quantity);
