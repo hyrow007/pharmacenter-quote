@@ -191,7 +191,8 @@ the hub itself.
 **Tables (see `sql/meetings.sql`):**
 
 - `meeting_types` — hub tiles (slug, name, tagline, cadence, active).
-- `meeting_sessions` — one row per meeting held (type, date, source, plaud_recording_id, summary, attendees).
+- `meeting_sessions` — one row per meeting held (type, date, source, plaud_recording_id, summary, attendees, other_business).
+- `meeting_sessions.other_business jsonb` — cross-cutting topics that don't tie to a single SO (Shandong load status, Line 2 sequence, film/cash question, etc.). Populated by the Plaud webhook via `extractOtherBusinessFromSummary()`. Shape: `[{ title, note_md, action_items[] }]`. Rendered as its own "Other business" section on the session page below "Sales orders discussed".
 - `meeting_so_notes` — per-SO commentary from a session; carries a
   `fishbowl_snapshot` jsonb of the SO's state at ingest time. Views diff
   that snapshot against the current `fishbowl_sales_orders` row to

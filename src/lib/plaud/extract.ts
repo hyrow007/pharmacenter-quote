@@ -23,6 +23,20 @@ type AnySupabase = any;
 
 // ---- Types ---------------------------------------------------------------
 
+export type OtherBusinessItem = {
+  /** Short title — e.g. "Shandong load status" or "Line 2 sequence". */
+  title: string;
+  /** Full body text carved from the Plaud bullet. */
+  note_md: string;
+  /** Structured follow-ups; may be empty. */
+  action_items: Array<{
+    text: string;
+    owner?: string;
+    due_date?: string;
+    done?: boolean;
+  }>;
+};
+
 export type SoMention = {
   /** Canonical so_number as it exists in Fishbowl (e.g. "14693", "M-14221"). */
   so_number: string;
@@ -312,6 +326,103 @@ export async function extractMentionsFromSummary(
         ? (fishbowl as unknown as Record<string, unknown>)
         : null,
       customer_mismatch: mismatch,
+    });
+  }
+  return out;
+}
+
+// ---- Other business extraction ------------------------------------------
+
+/**
+ * Cross-cutting topics that don't tie to a single SO — the "Other
+ * business" section in the 8/25 curated PDF (Shandong load status,
+ * Line 2 sequence, film/cash question, Cunsa packaging campaign notes
+ * about extra packers, etc.).
+ *
+ * Walks top-level bullets (single `-` at start of line) in the Plaud AI
+ * summary. Any bullet whose header + body contain NO SO reference is
+ * kept as an OtherBusinessItem. Bullets with SO refs are left to
+ * extractMentionsFromSummary. Skips the boilerplate "Meeting
+ * Information", "Meeting Notes", "Next Arrangements", and "AI
+ * Suggestions" section headers.
+ */
+export function extractOtherBusinessFromSummary(
+  summary_md: string,
+): OtherBusinessItem[] {
+  const out: OtherBusinessItem[] = [];
+  // Match each top-level bullet: line starts with "- ", followed by
+  // possibly-indented continuation lines until the next top-level bullet
+  // or a heading. Using multiline exec loop rather than a giant regex.
+  const lines = summary_md.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Skip section headings and blank lines.
+    if (/^\s{0,3}#{1,6}\s/.test(line) || line.trim() === "") {
+      i++;
+      continue;
+    }
+    // Top-level bullet: line starts with "- " (no leading indent).
+    if (!/^-\s+/.test(line)) {
+      i++;
+      continue;
+    }
+    // Carve the whole bullet block.
+    const start = i;
+    let j = i + 1;
+    while (j < lines.length) {
+      const nxt = lines[j];
+      if (/^-\s+/.test(nxt)) break; // next top-level bullet
+      if (/^\s{0,3}#{1,6}\s/.test(nxt)) break; // new heading
+      j++;
+    }
+    const block = lines.slice(start, j).join("\n").trim();
+    i = j;
+
+    // Skip if the block references any SO — that goes to SO notes.
+    SO_RE.lastIndex = 0;
+    if (SO_RE.test(block)) continue;
+    // Skip lightweight AI-summary meta lines like "> Date: …",
+    // "> Participants: …" which sometimes float outside the main
+    // structure.
+    if (/^-\s+>\s/.test(lines[start])) continue;
+
+    // Extract a title from the first line. Plaud usually formats as:
+    //   - Topic Title: Bulk Availability …
+    //   - <mark …>Topic Title: HARDWARE Highlights
+    //   - Kunza September Needs and Bulk Planning
+    // Strip leading "- ", strip a "Topic Title:" prefix, strip HTML
+    // <mark> tags, and trim.
+    let header = lines[start]
+      .replace(/^-\s+/, "")
+      .replace(/<\/?[^>]+>/g, "")
+      .trim();
+    const topicMatch = /^Topic\s+Title:\s*(.+)$/i.exec(header);
+    if (topicMatch) header = topicMatch[1].trim();
+    // If the header still ends with a colon (from "Topic Title: ..."
+    // being on its own line and the actual title on the next), grab the
+    // next non-blank line.
+    if (header.endsWith(":") && start + 1 < lines.length) {
+      header = lines[start + 1].replace(/^\s*-\s+/, "").trim() || header;
+    }
+    if (!header) continue;
+
+    // Body = the block minus the header line, cleaned up. Strip leading
+    // "- " markers on continuation lines so the rendered markdown reads
+    // as flowing prose rather than a nested list.
+    const bodyLines = lines
+      .slice(start + 1, j)
+      .map((l) => l.replace(/^\s*-\s+/, ""))
+      .map((l) => l.replace(/<\/?[^>]+>/g, ""));
+    // Drop trailing blanks.
+    while (bodyLines.length && bodyLines[bodyLines.length - 1].trim() === "")
+      bodyLines.pop();
+    const body = bodyLines.join("\n").trim();
+
+    out.push({
+      title: header,
+      note_md: body,
+      action_items: [],
     });
   }
   return out;

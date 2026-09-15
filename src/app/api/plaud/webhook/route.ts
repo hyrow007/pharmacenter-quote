@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   extractMentionsFromSummary,
+  extractOtherBusinessFromSummary,
   resolveSoAgainstFishbowl,
   detectCustomerMismatch,
   type SoMention,
@@ -253,6 +254,26 @@ export async function POST(request: Request) {
     inserted += 1;
   }
 
+  // Other business — cross-cutting topics that don't tie to any SO
+  // (Shandong load status, line 2 sequence, film/cash, etc.). Extracted
+  // only when the caller passes summary_md — pre-supplied so_mentions
+  // implies the caller already curated their own bucketing.
+  let otherBusinessCount = 0;
+  if (typeof rec.summary_md === "string" && rec.summary_md.length > 0) {
+    const otherBusiness = extractOtherBusinessFromSummary(rec.summary_md);
+    otherBusinessCount = otherBusiness.length;
+    const { error: obErr } = await supabase
+      .from("meeting_sessions")
+      .update({ other_business: otherBusiness })
+      .eq("id", sessionId);
+    if (obErr) {
+      console.error(
+        "meeting_sessions other_business update failed:",
+        obErr.message,
+      );
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     session_id: sessionId,
@@ -260,6 +281,7 @@ export async function POST(request: Request) {
     total_mentions: mentions.length,
     mismatched,
     snapshotted,
+    other_business: otherBusinessCount,
   });
 }
 

@@ -60,9 +60,17 @@ create table if not exists public.meeting_sessions (
   transcript_url    text,                   -- pointer to raw transcript (if any)
   summary_md        text,                   -- summary/notes for the whole session
   attendees         text[] not null default '{}',
+  -- Cross-cutting topics that don't tie to a single SO (Shandong load,
+  -- line 2 sequence, film/cash question, etc.). Populated by the Plaud
+  -- webhook via extractOtherBusinessFromSummary(). Shape:
+  --   [{ title: string, note_md: string, action_items: [{...}] }]
+  other_business    jsonb not null default '[]'::jsonb,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
+-- Add for existing installations.
+alter table public.meeting_sessions
+  add column if not exists other_business jsonb not null default '[]'::jsonb;
 
 create index if not exists meeting_sessions_type_date_idx
   on public.meeting_sessions (meeting_type_id, session_date desc);

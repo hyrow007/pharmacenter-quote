@@ -37,7 +37,7 @@ export default async function SessionDetailPage({
   const { data: sessionRaw } = await supabase
     .from("meeting_sessions")
     .select(
-      "id, session_date, source, summary_md, attendees, created_at, meeting_type_id",
+      "id, session_date, source, summary_md, attendees, other_business, created_at, meeting_type_id",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -52,9 +52,22 @@ export default async function SessionDetailPage({
     source: string;
     summary_md: string | null;
     attendees: string[] | null;
+    other_business:
+      | Array<{
+          title: string;
+          note_md?: string | null;
+          action_items?: Array<{
+            text?: string;
+            owner?: string;
+            due_date?: string;
+            done?: boolean;
+          }>;
+        }>
+      | null;
     created_at: string;
     meeting_type_id: string;
   };
+  const otherBusiness = session.other_business ?? [];
 
   const { data: notesRaw } = await supabase
     .from("meeting_so_notes")
@@ -379,6 +392,89 @@ export default async function SessionDetailPage({
               )}
             </div>
           )}
+
+          {/* Other business — cross-cutting topics that don't tie to a
+              single SO. Shandong load status, line 2 sequence, film/cash
+              questions, etc. Mirrors the "Otros temas" section from the
+              8/25 curated PDF. Only rendered when the session has any. */}
+          {otherBusiness.length > 0 ? (
+            <div style={{ marginTop: 32 }}>
+              <h2
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  fontSize: 24,
+                  fontWeight: 600,
+                  color: "var(--teal-900, #0f4a56)",
+                  margin: "0 0 12px",
+                }}
+              >
+                Other business
+              </h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                {otherBusiness.map((item, i) => {
+                  const ai = item.action_items ?? [];
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "14px 16px",
+                        background: "var(--paper, #fffdf8)",
+                        border: "1px solid var(--stone, #e3dcc9)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily:
+                            "'Cormorant Garamond', Georgia, serif",
+                          fontSize: 18,
+                          fontWeight: 600,
+                          color: "var(--teal-900, #0f4a56)",
+                          lineHeight: 1.2,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {item.title}
+                      </div>
+                      {item.note_md ? (
+                        <div
+                          style={{
+                            fontSize: 13,
+                            lineHeight: 1.55,
+                            color: "var(--ink-1, #1f2a2d)",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {item.note_md}
+                        </div>
+                      ) : null}
+                      {ai.length > 0 ? (
+                        <ul
+                          style={{
+                            margin: "8px 0 0",
+                            paddingLeft: 18,
+                            fontSize: 12.5,
+                            color: "var(--ink-2, #415056)",
+                          }}
+                        >
+                          {ai.map((a, idx) => (
+                            <li key={idx}>
+                              {a.text}
+                              {a.owner ? ` — ${a.owner}` : ""}
+                              {a.due_date
+                                ? ` (due ${formatDate(a.due_date)})`
+                                : ""}
+                              {a.done ? " ✓" : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       </main>
     </div>
