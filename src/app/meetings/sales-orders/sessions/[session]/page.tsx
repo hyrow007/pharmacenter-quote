@@ -89,12 +89,15 @@ export default async function SessionDetailPage({
       is_open: boolean;
       date_first_ship: string | null;
       total_price: number | null;
+      customer_name: string | null;
     }
   >();
   if (soNumbers.length > 0) {
     const { data: liveRowsRaw } = await supabase
       .from("fishbowl_sales_orders")
-      .select("so_number, status_name, is_open, date_first_ship, total_price")
+      .select(
+        "so_number, status_name, is_open, date_first_ship, total_price, customer_name",
+      )
       .in("so_number", soNumbers);
     const liveRows = (liveRowsRaw ?? []) as unknown as Array<{
       so_number: string;
@@ -102,6 +105,7 @@ export default async function SessionDetailPage({
       is_open: boolean;
       date_first_ship: string | null;
       total_price: number | null;
+      customer_name: string | null;
     }>;
     liveRows.forEach((r) => {
       liveById.set(r.so_number, {
@@ -109,6 +113,7 @@ export default async function SessionDetailPage({
         is_open: r.is_open,
         date_first_ship: r.date_first_ship,
         total_price: r.total_price,
+        customer_name: r.customer_name,
       });
     });
   }
@@ -205,9 +210,53 @@ export default async function SessionDetailPage({
               No SO notes on this session yet.
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              {(notes ?? []).map((n) => {
-                const so = n.so_number as string;
+            <div style={{ display: "grid", gap: 24 }}>
+              {groupNotesByCustomer(notes, liveById).map(
+                ([customer, customerNotes]) => (
+                  <section key={customer}>
+                    {/* Customer group header — serif, matches the 8/25 PDF
+                        format Olivia's team already uses on paper. */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        marginBottom: 10,
+                        paddingBottom: 6,
+                        borderBottom: "1px solid var(--stone, #e3dcc9)",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontFamily:
+                            "'Cormorant Garamond', Georgia, serif",
+                          fontSize: 22,
+                          fontWeight: 600,
+                          color: "var(--teal-900, #0f4a56)",
+                          margin: 0,
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {customer}
+                      </h3>
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          color: "var(--ink-3, #8a9498)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {customerNotes.length}{" "}
+                        {customerNotes.length === 1 ? "SO" : "SOs"}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {customerNotes.map((n) => {
+                        const so = n.so_number as string;
                 const snap = (n.fishbowl_snapshot as Record<
                   string,
                   unknown
@@ -324,6 +373,10 @@ export default async function SessionDetailPage({
                   </div>
                 );
               })}
+                    </div>
+                  </section>
+                ),
+              )}
             </div>
           )}
         </div>
@@ -377,4 +430,95 @@ function formatDate(iso: string | null | undefined): string {
     month: "short",
     day: "numeric",
   });
+}
+
+// Group the session's SO notes by customer, matching the 8/25 curated
+// PDF layout (customer header, then the SOs under it). Resolution order
+// for a note's customer:
+//   1. fishbowl_snapshot.customer_name  — Fishbowl at ingest time (truth)
+//   2. liveById[so_number].customer_name — falls back to right-now Fishbowl
+//      if the snapshot is null (SO wasn't in the mirror at ingest)
+//   3. Extract the "**Customer**" bold prefix from note_md — the auto
+//      extractor and hand-refined seeds both put the customer name in a
+//      leading bold span
+//   4. "Not in current Fishbowl mirror" — last resort so orphan notes
+//      still land in a bucket rather than falling out of the render
+//
+// Customer groups sort alphabetically (case-insensitive). Within each,
+// SOs sort by numeric-aware so_number (14221 before 14328 before M-14221),
+// so master orders and dash-suffixed variants sit alongside their siblings.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NoteRow = any;
+
+function customerFor(
+  n: NoteRow,
+  liveById: Map<
+    string,
+    {
+      status_name: string | null;
+      is_open: boolean;
+      date_first_ship: string | null;
+      total_price: number | null;
+      customer_name?: string | null;
+    }
+  >,
+): string {
+  const snap = (n.fishbowl_snapshot as Record<string, unknown> | null) ?? null;
+  const snapCust =
+    typeof snap?.customer_name === "string" && snap.customer_name.trim()
+      ? (snap.customer_name as string).trim()
+      : null;
+  if (snapCust) return snapCust;
+  const live = liveById.get(n.so_number as string);
+  if (live && typeof live.customer_name === "string" && live.customer_name.trim()) {
+    return live.customer_name.trim();
+  }
+  // Look for a leading bold span in note_md: "**Customer Name** — product"
+  const noteMd = (n.note_md as string | null) ?? "";
+  const boldMatch = /^\*\*([^*\n]+)\*\*/m.exec(noteMd.trim());
+  if (boldMatch) return boldMatch[1].trim();
+  return "Not in current Fishbowl mirror";
+}
+
+function soSortKey(so: string): [number, string] {
+  // Numeric-aware: pull leading digits (ignoring an optional M- prefix)
+  // as the primary sort key so 14221 < 14328 numerically, while master
+  // orders (M-14221) and dashed sub-orders (14814-1) still sort with
+  // their siblings by the base number.
+  const m = /^M-?(\d+)/.exec(so) ?? /^(\d+)/.exec(so);
+  const n = m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+  return [n, so];
+}
+
+function groupNotesByCustomer(
+  notes: NoteRow[],
+  liveById: Map<
+    string,
+    {
+      status_name: string | null;
+      is_open: boolean;
+      date_first_ship: string | null;
+      total_price: number | null;
+      customer_name?: string | null;
+    }
+  >,
+): Array<[string, NoteRow[]]> {
+  const buckets = new Map<string, NoteRow[]>();
+  for (const n of notes) {
+    const cust = customerFor(n, liveById);
+    const arr = buckets.get(cust) ?? [];
+    arr.push(n);
+    buckets.set(cust, arr);
+  }
+  for (const arr of buckets.values()) {
+    arr.sort((a, b) => {
+      const [aN, aS] = soSortKey(a.so_number);
+      const [bN, bS] = soSortKey(b.so_number);
+      if (aN !== bN) return aN - bN;
+      return aS.localeCompare(bS);
+    });
+  }
+  return Array.from(buckets.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { sensitivity: "base" }),
+  );
 }
