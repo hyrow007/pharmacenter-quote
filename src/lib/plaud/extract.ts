@@ -14,22 +14,12 @@
 // catches transcription errors (b/v swaps, homophones, dropped M-
 // prefixes) automatically without a curator having to notice.
 
-// The supabase client is passed in — we accept any variant (service-role
-// or ssr-wrapped) since we only need `.from().select().in().maybeSingle()`
-// off it. Typing as unknown-shaped avoids fighting the client's generic
-// parameters across call sites.
-type AnySupabase = {
-  from: (table: string) => {
-    select: (cols: string) => {
-      in: (col: string, values: string[]) => {
-        limit: (n: number) => Promise<{ data: unknown; error: unknown }>;
-      };
-      eq: (col: string, val: string) => {
-        maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
-      };
-    };
-  };
-};
+// The supabase client is passed in — accept any variant (service-role or
+// ssr-wrapped). Typing as `any` sidesteps supabase-js's aggressively
+// generic client type, which cascades into "Type instantiation is
+// excessively deep" at every call site otherwise.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabase = any;
 
 // ---- Types ---------------------------------------------------------------
 
