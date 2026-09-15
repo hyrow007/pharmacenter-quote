@@ -15,26 +15,37 @@ export default async function Home({
 
   // Detect the vanity subdomain so we can swap copy + post-sign-in
   // landing. formula.pharmacenter.app is a standalone entry point for
-  // the gummy formula catalog; quote.pharmacenter.app (and everything
-  // else) still lands on the quoting workflow inbox.
+  // the gummy formula catalog; meeting.pharmacenter.app fronts the
+  // meetings hub; quote.pharmacenter.app (and everything else) still
+  // lands on the quoting workflow inbox.
   const hostHeader = (await headers()).get("host") ?? "";
   const isFormulaHost = hostHeader.startsWith("formula.");
+  const isMeetingHost = hostHeader.startsWith("meeting.");
 
   if (user) {
-    redirect(isFormulaHost ? "/formulas" : "/workflows");
+    if (isFormulaHost) redirect("/formulas");
+    if (isMeetingHost) redirect("/meetings");
+    redirect("/workflows");
   }
 
   const params = await searchParams;
   const showError = params?.auth_error === "1";
 
   // Sign-in copy — swapped per subdomain so operators landing on
-  // formula.pharmacenter.app see "Formula / Catalog" instead of the
+  // formula.pharmacenter.app see "Formula / Catalog" and those on
+  // meeting.pharmacenter.app see "Meeting / Hub" instead of the
   // generic quoting-tool language.
   const copy = isFormulaHost
     ? {
         titleTop: "Formula",
         titleSub: "Catalog",
         lede: "Internal catalog of PharmaCenter's gummy formulas — bench recipes, scale-up parameters, label claims, and material costing. Sign in with your PharmaCenter Google account to continue.",
+      }
+    : isMeetingHost
+    ? {
+        titleTop: "Meeting",
+        titleSub: "Hub",
+        lede: "Internal hub for PharmaCenter's recurring meetings — open sales orders, action items, and cross-referenced Fishbowl state. Sign in with your PharmaCenter Google account to continue.",
       }
     : {
         titleTop: "Quote",

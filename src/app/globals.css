@@ -1582,3 +1582,47 @@ h1 {
   color: var(--ink-1);
   font-weight: 600;
 }
+
+/* ============================================================
+   Meetings — print rules
+   Used by every /meetings/* page. Hides the app chrome, back
+   pills, toolbars, and paginator so Print / Save-PDF produces a
+   clean black-on-white letter page of the current filtered
+   table. Elements tagged .meetings-noprint are hidden; the
+   freshness stamp and table stay.
+   ============================================================ */
+
+@media print {
+  .app-nav,
+  .meetings-noprint {
+    display: none !important;
+  }
+  .app-shell,
+  .page {
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .page__inner,
+  .page__inner--narrow {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 12px 18px !important;
+  }
+  body,
+  html {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+  /* Tables and pills lose their soft-cream backgrounds so ink is
+     saved on paper and the page reads at speed. */
+  table {
+    background: #fff !important;
+  }
+  thead tr {
+    background: #f2f2f2 !important;
+  }
+}

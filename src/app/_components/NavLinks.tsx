@@ -24,11 +24,13 @@ import { makeT, type Lang } from "@/lib/i18n/dict";
 // Formulas link — each subdomain presents as its own product.
 export default function NavLinks({
   onFormulaHost,
+  onMeetingHost,
   appContext,
   lang,
 }: {
   onFormulaHost: boolean;
-  appContext: "quote" | "formulas" | "packing-list";
+  onMeetingHost: boolean;
+  appContext: "quote" | "formulas" | "packing-list" | "meetings";
   lang: Lang;
 }) {
   const pathname = usePathname() || "";
@@ -38,6 +40,7 @@ export default function NavLinks({
   const isWorkflows =
     pathname === "/workflows" || pathname.startsWith("/workflow/") || pathname === "/start";
   const isFormulas = pathname.startsWith("/formulas");
+  const isMeetings = pathname.startsWith("/meetings");
   const isFeedback = pathname.startsWith("/feedback");
   const isAdmin = pathname.startsWith("/admin");
 
@@ -67,14 +70,22 @@ export default function NavLinks({
           {t("navLists")}
         </a>
       ) : null}
+      {appContext === "meetings" ? (
+        <Link
+          href={onMeetingHost ? "/meetings" : "https://meeting.pharmacenter.app/meetings"}
+          className={`app-nav__link${isMeetings ? " app-nav__link--active" : ""}`}
+        >
+          Meetings
+        </Link>
+      ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and
           shared by all PharmaCenter apps (packing list links here too).
           From the formula subdomain they're absolute URLs — a relative
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
         href={
-          onFormulaHost
-            ? "https://quote.pharmacenter.app/feedback?from=formulas"
+          onFormulaHost || onMeetingHost
+            ? `https://quote.pharmacenter.app/feedback?from=${appContext}`
             : appContext === "quote"
               ? "/feedback"
               : `/feedback?from=${appContext}`
@@ -85,7 +96,11 @@ export default function NavLinks({
       </Link>
       {effectiveAdmin ? (
         <Link
-          href={onFormulaHost ? "https://quote.pharmacenter.app/admin" : "/admin"}
+          href={
+            onFormulaHost || onMeetingHost
+              ? "https://quote.pharmacenter.app/admin"
+              : "/admin"
+          }
           className={`app-nav__link${isAdmin ? " app-nav__link--active" : ""}`}
         >
           <svg

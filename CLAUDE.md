@@ -32,6 +32,7 @@ packing-list key.
 | `pharmacenter-quote`             | Quote (data)    | **yes — primary storage**       |
 | `pharmacenter-quote-counter`     | Quote (QT####)  | **yes — sequential doc number** |
 | `pharmacenter-quote-users`       | Quote (reps)    | **yes — saved sales reps**      |
+| `pharmacenter-quote-meetings-…`  | Meetings hub    | **yes — namespaced UI settings**|
 | `pharmacenter-packing-list`      | Packing List    | **NEVER — leave it alone**      |
 | `pharmacenter-pl-counter`        | Packing List    | **NEVER — leave it alone**      |
 | `pharmacenter-pl-users`          | Packing List    | **NEVER — leave it alone**      |
@@ -168,3 +169,60 @@ bottle and blister boards once; do not make a third board that lacks them:
    from any tab persists every product's bundle.
 9. **Gross margin (materials) readout** with hover explainers (ⓘ) on both
    margin metrics in the Margin & Price card.
+
+## Meetings hub — meeting.pharmacenter.app
+
+The meeting subdomain is a sibling of the formula subdomain: same Next.js
+app, host-based rewrite in `middleware.ts` fronts it at `/meetings`.
+Sales Orders is the first meeting type; more (production, leadership,
+etc.) drop in as rows in `public.meeting_types` without a code change to
+the hub itself.
+
+**Routes:**
+
+| Path                                             | Purpose                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| `/meetings`                                      | Hub — one card per active meeting type                        |
+| `/meetings/sales-orders`                         | Sales Orders landing — session history + "Open orders" link   |
+| `/meetings/sales-orders/all`                     | Working open-orders table for the weekly meeting              |
+| `/meetings/sales-orders/orders/[so]`             | One SO — live Fishbowl state + every meeting note about it    |
+| `/meetings/sales-orders/sessions/[session]`      | One weekly session — SOs discussed with at-meeting-vs-now diffs |
+
+**Tables (see `sql/meetings.sql`):**
+
+- `meeting_types` — hub tiles (slug, name, tagline, cadence, active).
+- `meeting_sessions` — one row per meeting held (type, date, source, plaud_recording_id, summary, attendees).
+- `meeting_so_notes` — per-SO commentary from a session; carries a
+  `fishbowl_snapshot` jsonb of the SO's state at ingest time. Views diff
+  that snapshot against the current `fishbowl_sales_orders` row to
+  surface deltas (status moved, ship date slipped, closed since).
+
+**Data rules:**
+
+- Read-only against `fishbowl_sales_orders`; never touch the office
+  server or Fishbowl directly, and never confuse it with the Packing
+  List app's `public.sales_orders`.
+- Freshness: every meetings screen shows "Synced &lt;relative time&gt;"
+  from `max(synced_at)`. Age &gt; 26 h renders a red banner
+  ("last night's Fishbowl sync did not run"). Never imply real-time.
+- Closed-order history begins Sep 15, 2026 (the day the sync first
+  ran). Include-closed toggle exists but its list will be sparse at
+  launch and fills in nightly — the empty state says so.
+
+**Ops (one-time, when ready):**
+
+- Add `meeting.pharmacenter.app` as a domain on the Vercel project.
+- CNAME `meeting` → `cname.vercel-dns.com` at Wix.
+- Add `https://meeting.pharmacenter.app/auth/callback` to the Supabase
+  Auth Redirect URLs allowlist.
+- Run `sql/meetings.sql` in the shared Supabase project SQL editor.
+
+**Plaud ingest (Deploy 2 — not yet wired):**
+
+- `POST /api/plaud/webhook` receives a transcript + metadata (bearer
+  auth via `PLAUD_SYNC_SECRET`, mirrors `/api/sync/sales-orders`).
+- Creates a `meeting_sessions` row, extracts SO mentions with a regex
+  covering `SO12345`, `SO 12345`, and bare `12345`, and upserts
+  `meeting_so_notes` on `(session_id, so_number)`. Each note captures
+  the current `fishbowl_sales_orders` row as `fishbowl_snapshot` for
+  later diffing.

@@ -20,6 +20,15 @@ function isFormulaHost(host: string | null): boolean {
   return host.startsWith("formula.");
 }
 
+// meeting.pharmacenter.app is the meetings hub — a sibling of the
+// formula subdomain that fronts /meetings. Same substring rule so
+// preview URLs (meeting-<hash>.vercel.app doesn't match, but
+// meeting.localhost:3000 does) behave consistently.
+function isMeetingHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("meeting.");
+}
+
 // v48.6: formulas are only reachable on the formula subdomain. A
 // /formulas page request arriving on the quote host gets a permanent
 // redirect to the same path on formula.<domain>. Scoped to hosts that
@@ -34,6 +43,17 @@ function shouldRewriteToFormulas(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
   if (pathname.startsWith("/formulas")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  return true;
+}
+
+// Same shape as the formula rewrite guard — carve out /api, /auth,
+// anything already under /meetings, and Next.js internals so those
+// requests pass through unchanged from either host.
+function shouldRewriteToMeetings(pathname: string): boolean {
+  if (pathname.startsWith("/api")) return false;
+  if (pathname.startsWith("/auth")) return false;
+  if (pathname.startsWith("/meetings")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }
@@ -77,6 +97,19 @@ export async function middleware(request: NextRequest) {
     return redirectResponse;
   }
 
+  // Meetings mirror the same pattern — page routes only live on the
+  // meeting subdomain. A stray /meetings on the quote host 308s over
+  // so bookmarks and pasted links land on the right identity.
+  if (isQuoteHost(host) && request.nextUrl.pathname.startsWith("/meetings")) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.host = (host as string).replace(/^quote\./, "meeting.");
+    const redirectResponse = NextResponse.redirect(redirectUrl, 308);
+    authResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  }
+
   if (isFormulaHost(host)) {
     const { pathname, search, searchParams } = request.nextUrl;
     // Loop-guard: when /formulas discovers there's no valid Supabase
@@ -103,6 +136,30 @@ export async function middleware(request: NextRequest) {
       const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       // Forward the auth session cookies onto the rewrite response so
       // sign-in state survives the URL swap.
+      authResponse.cookies.getAll().forEach((cookie) => {
+        rewriteResponse.cookies.set(cookie);
+      });
+      return rewriteResponse;
+    }
+  }
+
+  // Same shape as the formula rewrite. meeting.pharmacenter.app fronts
+  // /meetings — a visitor at meeting.<domain>/ gets rewritten to
+  // /meetings, and any sub-path is prefixed the same way. Loop guard,
+  // signed-in heuristic, and cookie forwarding all mirror above.
+  if (isMeetingHost(host)) {
+    const { pathname, search, searchParams } = request.nextUrl;
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
+    if (
+      shouldRewriteToMeetings(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname =
+        pathname === "/" ? "/meetings" : `/meetings${pathname}`;
+      rewriteUrl.search = search;
+      const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       authResponse.cookies.getAll().forEach((cookie) => {
         rewriteResponse.cookies.set(cookie);
       });
