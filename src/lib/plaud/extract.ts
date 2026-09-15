@@ -63,7 +63,22 @@ export type SoMention = {
 };
 
 // Fishbowl fields we care about for snapshotting. Mirrors the read side of
-// /api/sales-orders minus items/sync bookkeeping.
+// /api/sales-orders. Includes the memo (`note`) and sale-line item
+// descriptions so product-name mismatches ("Vitamin C" said in the
+// meeting vs. Vitamin E on the order) can be caught alongside customer
+// mismatches.
+type FishbowlItem = {
+  line?: number | null;
+  type_id?: number | null;
+  product_num?: string | null;
+  description?: string | null;
+  qty_ordered?: number | null;
+  qty_fulfilled?: number | null;
+  qty_picked?: number | null;
+  unit_price?: number | null;
+  total_price?: number | null;
+};
+
 type FishbowlSnapshotShape = {
   so_number: string;
   status_id: number | null;
@@ -72,9 +87,11 @@ type FishbowlSnapshotShape = {
   customer_name: string | null;
   customer_po: string | null;
   salesman: string | null;
+  note: string | null;
   date_first_ship: string | null;
   subtotal: number | null;
   total_price: number | null;
+  items: FishbowlItem[] | null;
 };
 
 // ---- SO number regex ----------------------------------------------------
@@ -145,7 +162,7 @@ export async function resolveSoAgainstFishbowl(
   const { data, error } = await supabase
     .from("fishbowl_sales_orders")
     .select(
-      "so_number, status_id, status_name, is_open, customer_name, customer_po, salesman, date_first_ship, subtotal, total_price",
+      "so_number, status_id, status_name, is_open, customer_name, customer_po, salesman, note, date_first_ship, subtotal, total_price, items",
     )
     .in("so_number", list)
     .limit(list.length);
@@ -219,6 +236,78 @@ export function detectCustomerMismatch(
   // No overlap and no known-mangling hit → likely a mismatch, but we don't
   // have a good hint to offer.
   return { mismatch: true, hint: null };
+}
+
+// ---- Product cross-reference --------------------------------------------
+
+// Product-name keywords the sales team says often enough for Plaud to
+// mangle. Each entry is a family: variants Plaud might transcribe map to
+// the canonical family name. If a note mentions a family variant AND
+// none of the SO's sale-line item descriptions contain any variant of
+// the same family, we flag it — the Plaud transcript is probably wrong
+// about what the SO is for. Extend the map when new product families
+// show up.
+const PRODUCT_FAMILIES: Array<{ name: string; variants: string[] }> = [
+  { name: "Vitamin C", variants: ["vitamin c", "vit c", "vit. c", "ascorbic"] },
+  { name: "Vitamin E", variants: ["vitamin e", "vit e", "vit. e", "tocopherol"] },
+  { name: "Vitamin D", variants: ["vitamin d", "vit d", "vit. d", "cholecalciferol"] },
+  { name: "Vitamin B", variants: ["vitamin b", "vit b", "vit. b", "b-complex", "b complex"] },
+  { name: "Omega 3-6-9", variants: ["omega 3-6-9", "omega 369", "omega-3-6-9", "omega 3 6 9"] },
+  { name: "Omega 3", variants: ["omega 3", "omega-3", "omega3", "fish oil"] },
+  { name: "Cod liver", variants: ["cod liver"] },
+  { name: "Flaxseed", variants: ["flaxseed", "flax seed", "linseed"] },
+  { name: "Creatine", variants: ["creatine"] },
+  { name: "Melatonin", variants: ["melatonin"] },
+  { name: "Collagen", variants: ["collagen"] },
+  { name: "Magnesium", variants: ["magnesium"] },
+  { name: "Cardio", variants: ["cardio", "unicardio"] },
+  { name: "Gummies", variants: ["gummies", "gummy"] },
+];
+
+/**
+ * Check whether the Plaud note text mentions a product family that
+ * doesn't appear in any of the SO's sale-line item descriptions. When
+ * a mismatch is found, returns the family that disagrees and the
+ * canonical product names from the SO that were actually on it.
+ *
+ * Only compares against SALE lines (type_id 10) and drop-ship lines
+ * (type_id 30). Shipping / tax / discount lines (40/50/70) are skipped
+ * because their descriptions are boilerplate ("Shipping", "Sales Tax").
+ */
+export function detectProductMismatch(
+  noteText: string,
+  items: FishbowlItem[] | null,
+): { mismatch: boolean; noteSaid: string | null; soHas: string[] } {
+  if (!items || items.length === 0)
+    return { mismatch: false, noteSaid: null, soHas: [] };
+  const saleDescs = items
+    .filter((it) => it.type_id === 10 || it.type_id === 30)
+    .map((it) => (it.description ?? "").toLowerCase())
+    .filter((d) => d.length > 0);
+  if (saleDescs.length === 0)
+    return { mismatch: false, noteSaid: null, soHas: [] };
+  const noteL = noteText.toLowerCase();
+
+  // Which families does the note mention? Which does the SO have?
+  const noteFamilies: string[] = [];
+  const soFamilies = new Set<string>();
+  for (const fam of PRODUCT_FAMILIES) {
+    const hitInNote = fam.variants.some((v) => noteL.includes(v));
+    if (hitInNote) noteFamilies.push(fam.name);
+    const hitInSo = fam.variants.some((v) =>
+      saleDescs.some((d) => d.includes(v)),
+    );
+    if (hitInSo) soFamilies.add(fam.name);
+  }
+  // Mismatch when the note calls out a family the SO does NOT contain.
+  const disagreements = noteFamilies.filter((f) => !soFamilies.has(f));
+  if (disagreements.length === 0)
+    return { mismatch: false, noteSaid: null, soHas: [] };
+  return {
+    mismatch: true,
+    noteSaid: disagreements[0],
+    soHas: Array.from(soFamilies),
+  };
 }
 
 // ---- Paragraph carving ---------------------------------------------------
@@ -315,6 +404,18 @@ export async function extractMentionsFromSummary(
         : `\n\n⚠ Plaud text mentions a customer that doesn't match Fishbowl (${fishbowl?.customer_name ?? "no Fishbowl row"}). Verify.`;
       note_md += line;
       status_flag = "at_risk";
+    }
+
+    // Product cross-check: does the Plaud note mention a product family
+    // (Vitamin C, Omega, etc.) that isn't on any sale line of this SO?
+    const productCheck = detectProductMismatch(carved, fishbowl?.items ?? null);
+    if (productCheck.mismatch) {
+      const hasList =
+        productCheck.soHas.length > 0
+          ? productCheck.soHas.join(", ")
+          : "no matching product on file";
+      note_md += `\n\n⚠ Plaud text mentions "${productCheck.noteSaid}" but this SO's line items are ${hasList}. Verify.`;
+      if (!status_flag) status_flag = "at_risk";
     }
 
     out.push({

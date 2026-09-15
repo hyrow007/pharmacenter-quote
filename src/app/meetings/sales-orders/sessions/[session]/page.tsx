@@ -95,6 +95,17 @@ export default async function SessionDetailPage({
   // Live Fishbowl state for every SO mentioned — one query, joined
   // client-side, so we can render "at meeting vs. now" deltas.
   const soNumbers = notes.map((n) => n.so_number);
+  type LiveItem = {
+    line?: number | null;
+    type_id?: number | null;
+    product_num?: string | null;
+    description?: string | null;
+    qty_ordered?: number | null;
+    qty_picked?: number | null;
+    qty_fulfilled?: number | null;
+    unit_price?: number | null;
+    total_price?: number | null;
+  };
   const liveById = new Map<
     string,
     {
@@ -103,13 +114,15 @@ export default async function SessionDetailPage({
       date_first_ship: string | null;
       total_price: number | null;
       customer_name: string | null;
+      note: string | null;
+      items: LiveItem[];
     }
   >();
   if (soNumbers.length > 0) {
     const { data: liveRowsRaw } = await supabase
       .from("fishbowl_sales_orders")
       .select(
-        "so_number, status_name, is_open, date_first_ship, total_price, customer_name",
+        "so_number, status_name, is_open, date_first_ship, total_price, customer_name, note, items",
       )
       .in("so_number", soNumbers);
     const liveRows = (liveRowsRaw ?? []) as unknown as Array<{
@@ -119,6 +132,8 @@ export default async function SessionDetailPage({
       date_first_ship: string | null;
       total_price: number | null;
       customer_name: string | null;
+      note: string | null;
+      items: LiveItem[] | null;
     }>;
     liveRows.forEach((r) => {
       liveById.set(r.so_number, {
@@ -127,6 +142,8 @@ export default async function SessionDetailPage({
         date_first_ship: r.date_first_ship,
         total_price: r.total_price,
         customer_name: r.customer_name,
+        note: r.note,
+        items: Array.isArray(r.items) ? r.items : [],
       });
     });
   }
@@ -383,6 +400,109 @@ export default async function SessionDetailPage({
                         ))}
                       </ul>
                     ) : null}
+                    {/* Fishbowl memo — the free-text note attached to
+                        this SO inside Fishbowl. Meeting reviewers see
+                        what Fishbowl already knows alongside what was
+                        said in the meeting. */}
+                    {live?.note ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: "8px 10px",
+                          background: "var(--cream-soft, #fbf6ec)",
+                          border: "1px solid var(--stone, #e3dcc9)",
+                          borderRadius: 6,
+                          fontSize: 12,
+                          color: "var(--ink-2, #415056)",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: "0.14em",
+                            textTransform: "uppercase",
+                            color: "var(--teal-700, #1d6c7b)",
+                            marginRight: 6,
+                          }}
+                        >
+                          Fishbowl memo
+                        </span>
+                        {live.note}
+                      </div>
+                    ) : null}
+                    {/* Compact line items — sale + drop-ship rows only,
+                        with product #, description, qty ordered, unit $,
+                        ext $. Meeting reviewers see what's actually on
+                        the SO. Type 40/50/70 (shipping/tax/discount) are
+                        excluded. */}
+                    {(() => {
+                      const saleItems = (live?.items ?? []).filter(
+                        (it) =>
+                          it.type_id === 10 || it.type_id === 30,
+                      );
+                      if (saleItems.length === 0) return null;
+                      return (
+                        <div style={{ marginTop: 10, overflowX: "auto" }}>
+                          <table
+                            style={{
+                              width: "100%",
+                              fontSize: 11.5,
+                              borderCollapse: "collapse",
+                              border: "1px solid var(--stone, #e3dcc9)",
+                              borderRadius: 6,
+                              overflow: "hidden",
+                            }}
+                          >
+                            <thead>
+                              <tr
+                                style={{
+                                  background: "var(--cream, #f6efe3)",
+                                }}
+                              >
+                                <MiniTh>Product #</MiniTh>
+                                <MiniTh>Description</MiniTh>
+                                <MiniTh align="right">Qty</MiniTh>
+                                <MiniTh align="right">Unit $</MiniTh>
+                                <MiniTh align="right">Ext $</MiniTh>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {saleItems.map((it, i) => (
+                                <tr
+                                  key={i}
+                                  style={{
+                                    borderTop:
+                                      "1px solid var(--stone-2, #efe9da)",
+                                  }}
+                                >
+                                  <MiniTd
+                                    style={{
+                                      fontFamily:
+                                        "'IBM Plex Mono', ui-monospace, monospace",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {it.product_num ?? "—"}
+                                  </MiniTd>
+                                  <MiniTd>{it.description ?? "—"}</MiniTd>
+                                  <MiniTd align="right">
+                                    {Number(it.qty_ordered ?? 0).toLocaleString()}
+                                  </MiniTd>
+                                  <MiniTd align="right">
+                                    {formatMoney(it.unit_price)}
+                                  </MiniTd>
+                                  <MiniTd align="right">
+                                    {formatMoney(it.total_price)}
+                                  </MiniTd>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -526,6 +646,65 @@ function formatDate(iso: string | null | undefined): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatMoney(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  return `$${Number(n).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// Compact table cells used inside the per-SO line-items block on the
+// session view. Kept small — the parent SO card is already dense.
+function MiniTh({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <th
+      style={{
+        textAlign: align ?? "left",
+        padding: "5px 8px",
+        fontSize: 9.5,
+        fontWeight: 700,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        color: "var(--ink-3, #8a9498)",
+        borderBottom: "1px solid var(--stone, #e3dcc9)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+function MiniTd({
+  children,
+  align,
+  style,
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  style?: React.CSSProperties;
+}) {
+  return (
+    <td
+      style={{
+        textAlign: align ?? "left",
+        padding: "5px 8px",
+        fontSize: 11.5,
+        verticalAlign: "middle",
+        ...style,
+      }}
+    >
+      {children}
+    </td>
+  );
 }
 
 // Group the session's SO notes by customer, matching the 8/25 curated

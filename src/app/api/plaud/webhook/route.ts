@@ -5,6 +5,7 @@ import {
   extractOtherBusinessFromSummary,
   resolveSoAgainstFishbowl,
   detectCustomerMismatch,
+  detectProductMismatch,
   type SoMention,
 } from "@/lib/plaud/extract";
 
@@ -314,6 +315,16 @@ async function hydrateSuppliedMentions(
         ? `\n\n⚠ Note mentions a customer that doesn't match Fishbowl — likely "${hint}" per Fishbowl. Verify before acting.`
         : `\n\n⚠ Note mentions a customer that doesn't match Fishbowl (${fishbowl?.customer_name ?? "no Fishbowl row"}). Verify.`;
       note_md += line;
+      if (!status_flag) status_flag = "at_risk";
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const productCheck = detectProductMismatch(noteText, (fishbowl as any)?.items ?? null);
+    if (productCheck.mismatch) {
+      const hasList =
+        productCheck.soHas.length > 0
+          ? productCheck.soHas.join(", ")
+          : "no matching product on file";
+      note_md += `\n\n⚠ Note mentions "${productCheck.noteSaid}" but this SO's line items are ${hasList}. Verify.`;
       if (!status_flag) status_flag = "at_risk";
     }
     out.push({
