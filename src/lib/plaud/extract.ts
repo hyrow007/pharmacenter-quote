@@ -185,15 +185,21 @@ export function detectCustomerMismatch(
   const firstWord = custL.split(/\s+/).find((w) => w.length >= 4);
   if (firstWord && noteL.includes(firstWord))
     return { mismatch: false, hint: null };
-  // Check known mangling patterns — if one hits, we know the specific
-  // Fishbowl name to expect and can compare.
+  // Check known mangling patterns — if one hits, the Plaud text IS wrong
+  // by definition (that's what "known mangling" means). Always flag as a
+  // mismatch and surface a hint: prefer the pattern's hint when it agrees
+  // with Fishbowl (so the "did you mean" is trustworthy), otherwise show
+  // the actual Fishbowl customer name.
   for (const { plaud, fishbowl_hint } of KNOWN_PLAUD_MISMATCHES) {
     if (plaud.test(noteText)) {
       const hintL = fishbowl_hint.toLowerCase();
-      const overlaps =
+      const hintAgreesWithFishbowl =
         custL.includes(hintL.split(/\s+/)[0]) ||
         hintL.includes(custL.split(/\s+/)[0]);
-      return { mismatch: !overlaps, hint: overlaps ? null : fishbowl_hint };
+      return {
+        mismatch: true,
+        hint: hintAgreesWithFishbowl ? fishbowl_hint : fishbowlCustomer,
+      };
     }
   }
   // No overlap and no known-mangling hit → likely a mismatch, but we don't
