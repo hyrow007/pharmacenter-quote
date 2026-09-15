@@ -271,8 +271,9 @@ export async function POST(request: Request) {
  * enforces the "Fishbowl is truth" rule regardless of who authored the
  * notes.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function hydrateSuppliedMentions(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   supplied: NonNullable<Body["so_mentions"]>,
 ): Promise<SoMention[]> {
   const out: SoMention[] = [];

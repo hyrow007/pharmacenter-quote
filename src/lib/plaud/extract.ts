@@ -14,7 +14,22 @@
 // catches transcription errors (b/v swaps, homophones, dropped M-
 // prefixes) automatically without a curator having to notice.
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+// The supabase client is passed in — we accept any variant (service-role
+// or ssr-wrapped) since we only need `.from().select().in().maybeSingle()`
+// off it. Typing as unknown-shaped avoids fighting the client's generic
+// parameters across call sites.
+type AnySupabase = {
+  from: (table: string) => {
+    select: (cols: string) => {
+      in: (col: string, values: string[]) => {
+        limit: (n: number) => Promise<{ data: unknown; error: unknown }>;
+      };
+      eq: (col: string, val: string) => {
+        maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+      };
+    };
+  };
+};
 
 // ---- Types ---------------------------------------------------------------
 
@@ -109,7 +124,7 @@ export function findSoMentions(
  * matching Fishbowl row or null.
  */
 export async function resolveSoAgainstFishbowl(
-  supabase: SupabaseClient,
+  supabase: AnySupabase,
   raw: string,
 ): Promise<FishbowlSnapshotShape | null> {
   const candidates = new Set<string>([raw]);
@@ -131,13 +146,12 @@ export async function resolveSoAgainstFishbowl(
     .in("so_number", list)
     .limit(list.length);
 
-  if (error || !data || data.length === 0) return null;
+  const rows = (data ?? []) as unknown as FishbowlSnapshotShape[];
+  if (error || rows.length === 0) return null;
 
   // Prefer an exact match over a fallback.
-  const exact = (data as unknown as FishbowlSnapshotShape[]).find(
-    (r) => r.so_number === raw,
-  );
-  return exact ?? (data[0] as unknown as FishbowlSnapshotShape);
+  const exact = rows.find((r) => r.so_number === raw);
+  return exact ?? rows[0];
 }
 
 // ---- Customer cross-reference -------------------------------------------
@@ -258,7 +272,7 @@ export function carveNote(text: string, mentionIndex: number): string {
  * status_flag is bumped to at_risk (if not already stronger).
  */
 export async function extractMentionsFromSummary(
-  supabase: SupabaseClient,
+  supabase: AnySupabase,
   summary_md: string,
 ): Promise<SoMention[]> {
   const raw = findSoMentions(summary_md);
