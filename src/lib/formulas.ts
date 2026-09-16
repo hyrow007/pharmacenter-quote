@@ -96,6 +96,11 @@ export type LabelClaim = {
   // claim. Undefined on legacy rows written before this field landed;
   // read as 0 in that case.
   overagePct?: number;                   // 0..100+ (percent)
+  // v83: which blend the active is weighed into. Undefined/null =
+  // "cooked" (the Secondary Blend — the long-standing default). Some
+  // heat-stable actives go in with the Pre-cook blend instead; the
+  // operator picks that per claim and the linked ingredient row follows.
+  blendPhase?: "pre-cook" | "cooked" | null;
 };
 
 export function newLabelClaimId(): string {

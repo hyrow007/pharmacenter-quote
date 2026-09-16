@@ -2068,6 +2068,10 @@ export default function FormulaEditor({
     setIngredients((prev) => {
       const claimById = new Map<string, LabelClaim>();
       for (const c of labelClaims) claimById.set(c.id, c);
+      // v83: each claim declares which blend its active is weighed into
+      // — "cooked" (Secondary, the default) or "pre-cook".
+      const phaseFor = (c: LabelClaim): BlendPhase =>
+        c.blendPhase === "pre-cook" ? "pre-cook" : "cooked";
       // Walk once, transforming existing rows with sourceLabelClaimId in
       // place (removing when the claim is gone) and tracking which claim
       // ids already have a row so we can append missing ones after the
@@ -2083,7 +2087,7 @@ export default function FormulaEditor({
           rawMaterialId: claim.rawMaterialId,
           rawMaterialFpCode: claim.rawMaterialFpCode ?? null,
           customName: claim.customName ?? null,
-          blendPhase: "cooked",
+          blendPhase: phaseFor(claim),
           // grams intentionally NOT overwritten — operator owns it.
           // overagePct intentionally NOT overwritten — no longer read.
         };
@@ -2101,13 +2105,11 @@ export default function FormulaEditor({
       if (missingClaims.length === 0) {
         next = kept;
       } else {
-        // Insert new rows at the end of the cooked-phase run. If no
-        // cooked rows exist yet, append at the end of the whole list.
-        let lastCookedIdx = -1;
-        for (let i = 0; i < kept.length; i++) {
-          if (kept[i].blendPhase === "cooked") lastCookedIdx = i;
-        }
-        const newRows: GummyFormulaIngredient[] = missingClaims.map((c) => ({
+        // Insert new rows at the end of THEIR phase's run ("cooked" for
+        // secondary-blend actives, "pre-cook" for pre-cook ones). If a
+        // phase has no rows yet, its newcomers append at the end of the
+        // whole list.
+        const makeRow = (c: LabelClaim): GummyFormulaIngredient => ({
           id: `ing_${Math.random().toString(36).slice(2, 10)}`,
           rawMaterialId: c.rawMaterialId,
           rawMaterialFpCode: c.rawMaterialFpCode ?? null,
@@ -2131,20 +2133,31 @@ export default function FormulaEditor({
               gummyPieceWeightG,
             ) *
             (1 + (Number.isFinite(c.overagePct) ? (c.overagePct as number) : 0) / 100),
-          blendPhase: "cooked" as BlendPhase,
+          blendPhase: phaseFor(c),
           costPerKgOverride: null,
           solidsOverride: null,
           notes: null,
           sourceLabelClaimId: c.id,
-        }));
-        if (lastCookedIdx === -1) {
-          next = [...kept, ...newRows];
-        } else {
-          next = [
-            ...kept.slice(0, lastCookedIdx + 1),
-            ...newRows,
-            ...kept.slice(lastCookedIdx + 1),
-          ];
+        });
+        next = kept;
+        for (const phase of ["pre-cook", "cooked"] as BlendPhase[]) {
+          const claimsForPhase = missingClaims.filter(
+            (c) => phaseFor(c) === phase,
+          );
+          if (claimsForPhase.length === 0) continue;
+          let lastIdx = -1;
+          for (let i = 0; i < next.length; i++) {
+            if (next[i].blendPhase === phase) lastIdx = i;
+          }
+          const newRows = claimsForPhase.map(makeRow);
+          next =
+            lastIdx === -1
+              ? [...next, ...newRows]
+              : [
+                  ...next.slice(0, lastIdx + 1),
+                  ...newRows,
+                  ...next.slice(lastIdx + 1),
+                ];
         }
       }
       // v71: mirror the CLAIM ORDER onto the claim-sourced cooked rows —
@@ -2154,24 +2167,33 @@ export default function FormulaEditor({
       // rearranged), so hand-authored rows never move.
       const claimOrder = new Map<string, number>();
       labelClaims.forEach((c, i) => claimOrder.set(c.id, i));
-      const slotIdxs: number[] = [];
-      next.forEach((r, i) => {
-        if (r.sourceLabelClaimId && claimOrder.has(r.sourceLabelClaimId))
-          slotIdxs.push(i);
-      });
-      if (slotIdxs.length > 1) {
-        const sortedRows = slotIdxs
-          .map((i) => next[i])
-          .sort(
-            (a, b) =>
-              (claimOrder.get(a.sourceLabelClaimId as string) ?? 0) -
-              (claimOrder.get(b.sourceLabelClaimId as string) ?? 0),
-          );
-        const rearranged = [...next];
-        slotIdxs.forEach((slot, k) => {
-          rearranged[slot] = sortedRows[k];
+      // v83: mirror order WITHIN each phase separately — swapping rows
+      // across phase runs would drag a pre-cook active's slot into the
+      // secondary run (and vice versa).
+      for (const phase of ["pre-cook", "cooked"] as BlendPhase[]) {
+        const slotIdxs: number[] = [];
+        next.forEach((r, i) => {
+          if (
+            r.sourceLabelClaimId &&
+            claimOrder.has(r.sourceLabelClaimId) &&
+            r.blendPhase === phase
+          )
+            slotIdxs.push(i);
         });
-        next = rearranged;
+        if (slotIdxs.length > 1) {
+          const sortedRows = slotIdxs
+            .map((i) => next[i])
+            .sort(
+              (a, b) =>
+                (claimOrder.get(a.sourceLabelClaimId as string) ?? 0) -
+                (claimOrder.get(b.sourceLabelClaimId as string) ?? 0),
+            );
+          const rearranged = [...next];
+          slotIdxs.forEach((slot, k) => {
+            rearranged[slot] = sortedRows[k];
+          });
+          next = rearranged;
+        }
       }
       // Compare-then-set — bail out with `prev` if the effect produced
       // an identical array so React doesn't re-render / re-fire this
@@ -12479,17 +12501,19 @@ function BlendSectionCard({
                                 (row.rawMaterialFpCode ?? "").toUpperCase(),
                             ) ?? null
                           : null);
-                      // Claim-sourced row detection — only meaningful in
-                      // the Secondary Blend subsection (Overage column
-                      // exists). When true, the picker locks to a
-                      // read-only pill, Grams becomes read-only, delete
-                      // is hidden, and the Overage input drives grams.
-                      const claimForRow =
-                        showOverageColumn && row.sourceLabelClaimId
-                          ? (labelClaims ?? []).find(
-                              (c) => c.id === row.sourceLabelClaimId,
-                            ) ?? null
-                          : null;
+                      // Claim-sourced row detection. When true, the
+                      // picker locks to a read-only pill, delete is
+                      // hidden, and (in the Secondary Blend, where the
+                      // Overage column exists) the Overage input drives
+                      // grams. v83: also applies in the Pre-cook blend —
+                      // actives placed there via the claim's Blend
+                      // selector lock the same way, with overage dialed
+                      // from the Label Claims section.
+                      const claimForRow = row.sourceLabelClaimId
+                        ? (labelClaims ?? []).find(
+                            (c) => c.id === row.sourceLabelClaimId,
+                          ) ?? null
+                        : null;
                       const isClaimSourced = claimForRow != null;
                       // Display name for a claim-sourced row's read-only
                       // picker cell. Prefer the resolved raw-material
@@ -14058,6 +14082,7 @@ function LabelClaimsSection({
             <div>{tr("Ingredient")}</div>
             <div style={{ textAlign: "right" }}>{tr("Claim")}</div>
             <div style={{ textAlign: "left" }}>{tr("Unit")}</div>
+            <div style={{ textAlign: "left" }}>{tr("Blend")}</div>
             <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
               {tr("Overage %")}
             </div>
@@ -14179,6 +14204,24 @@ function LabelClaimsSection({
                     </option>
                   ))}
                 </select>
+                {/* v83: which blend this active is weighed into. The
+                    linked ingredient row follows the pick (grams and
+                    the dialed overage travel with it); Secondary stays
+                    the default. */}
+                <select
+                  value={c.blendPhase === "pre-cook" ? "pre-cook" : "cooked"}
+                  onChange={(e) =>
+                    onUpdate(c.id, {
+                      blendPhase:
+                        e.target.value === "pre-cook" ? "pre-cook" : undefined,
+                    })
+                  }
+                  className="pricing__input"
+                  title="Which blend this active is weighed into (Secondary is the default)"
+                >
+                  <option value="cooked">{tr("Secondary")}</option>
+                  <option value="pre-cook">{tr("Pre-cook")}</option>
+                </select>
                 {/* Overage % — editable percentage applied to the claim
                     to yield the actual per-piece formulation input. */}
                 <input
@@ -14291,6 +14334,8 @@ function LabelClaimsSection({
                 <div style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
                   mg
                 </div>
+                {/* v83: empty slot under the Blend column. */}
+                <div aria-hidden="true" />
                 <div aria-hidden="true" />
                 <div
                   style={{
@@ -15573,7 +15618,7 @@ function SolutionComponentRow({
 // Ingredient column flexes; numeric columns are fixed so the digits
 // column-align across every row. Kept in one constant so the header
 // and row can't drift out of sync when we tweak widths.
-const LABEL_CLAIM_GRID_TEMPLATE = "1fr 90px 70px 90px 100px 32px";
+const LABEL_CLAIM_GRID_TEMPLATE = "1fr 90px 70px 110px 90px 100px 32px";
 
 function LabelClaimRow({
   onRemove,
