@@ -12401,7 +12401,14 @@ function BlendSectionCard({
                         <BTh
                           style={{
                             textAlign: "right",
-                            width: 90,
+                            // v83.4: 90 → 160 — the cell's real content
+                            // (chevrons + input + "%" plus the "Claim
+                            // Baseline: NNN.NN g" caption) needs ~150px;
+                            // at 90 the fixed table layout let it spill
+                            // into the Grams column (visible crowding on
+                            // the Primary Blend card). The Ingredient
+                            // column absorbs the difference.
+                            width: 160,
                             whiteSpace: "nowrap",
                           }}
                         >
