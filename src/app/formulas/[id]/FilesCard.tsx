@@ -6,42 +6,31 @@
 //
 // Files attach at the FORMULA level, not per-version: documents
 // shouldn't fork on every save. Binary lives in the public-read
-// `formula-files` Supabase Storage bucket (uuid-prefixed paths, same
-// tradeoff as quote-attachments); the gummy_formula_files table is the
-// domain-gated listing layer (see sql/gummy_formula_files.sql).
+// `formula-files` Supabase Storage bucket; gummy_formula_files is the
+// metadata layer (see sql/gummy_formula_files.sql).
 //
-// All I/O runs client-side through the shared supabase client — RLS is
-// the enforcement, mirroring how src/lib/storage.ts handles workflow
-// attachments. Delete is domain-wide (pruning someone else's stale CoA
-// is routine ops work) but the UI double-confirms per row.
+// All I/O goes through /api/formulas/[id]/files — the browser supabase
+// client is anonymous (auth lives in httpOnly cookies), so like notes
+// and audit, only server routes can act as the signed-in user. Uploads
+// use the sign → PUT → commit dance: the route signs a storage URL
+// (RLS-checked against the real user), the browser PUTs the raw file
+// straight to storage (dodging Vercel's ~4.5 MB body cap), then the
+// route records the metadata row. Delete is domain-wide, not
+// author-only — pruning someone else's stale CoA is routine ops work —
+// so the UI double-confirms per row instead.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
-
-const FILES_BUCKET = "formula-files";
 
 type FormulaFile = {
   id: string;
   filename: string;
   storagePath: string;
+  publicUrl: string;
   sizeBytes: number;
   mimeType: string | null;
   uploadedByEmail: string;
   uploadedAt: string;
 };
-
-function uid(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-// Storage keys disallow most non-ASCII characters — keep letters,
-// numbers, .-_ and collapse the rest (same rule as storage.ts).
-function safeFilename(name: string): string {
-  return name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
-}
 
 function fmtSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -50,18 +39,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function publicUrl(path: string): string {
-  if (!supabase) return "#";
-  return supabase.storage.from(FILES_BUCKET).getPublicUrl(path).data.publicUrl;
-}
-
-export default function FilesCard({
-  formulaId,
-  currentUserEmail,
-}: {
-  formulaId: string;
-  currentUserEmail: string;
-}) {
+export default function FilesCard({ formulaId }: { formulaId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [files, setFiles] = useState<FormulaFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,31 +50,20 @@ export default function FilesCard({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-    const { data, error: err } = await supabase
-      .from("gummy_formula_files")
-      .select(
-        "id, filename, storage_path, size_bytes, mime_type, uploaded_by_email, uploaded_at",
-      )
-      .eq("formula_id", formulaId)
-      .order("uploaded_at", { ascending: false });
-    if (err) {
-      setError(err.message);
-    } else {
-      setFiles(
-        (data ?? []).map((r) => ({
-          id: r.id as string,
-          filename: r.filename as string,
-          storagePath: r.storage_path as string,
-          sizeBytes: Number(r.size_bytes) || 0,
-          mimeType: (r.mime_type as string | null) ?? null,
-          uploadedByEmail: r.uploaded_by_email as string,
-          uploadedAt: r.uploaded_at as string,
-        })),
-      );
+    try {
+      const res = await fetch(`/api/formulas/${formulaId}/files`);
+      const json = (await res.json()) as {
+        ok: boolean;
+        files?: FormulaFile[];
+        error?: string;
+      };
+      if (json.ok && json.files) {
+        setFiles(json.files);
+      } else {
+        setError(json.error ?? "Couldn't load files.");
+      }
+    } catch {
+      setError("Couldn't load files.");
     }
     setLoading(false);
   }, [formulaId]);
@@ -105,41 +72,71 @@ export default function FilesCard({
     void refresh();
   }, [refresh]);
 
-  async function uploadFiles(list: FileList | File[]) {
-    if (!supabase) {
-      setError("Storage client not configured.");
-      return;
+  async function uploadOne(file: File): Promise<string | null> {
+    // 1. Ask the server to sign a storage path for this file.
+    const signRes = await fetch(`/api/formulas/${formulaId}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "sign",
+        filename: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type || null,
+      }),
+    });
+    const sign = (await signRes.json()) as {
+      ok: boolean;
+      path?: string;
+      signedUrl?: string;
+      error?: string;
+    };
+    if (!sign.ok || !sign.signedUrl || !sign.path) {
+      return sign.error ?? "sign failed";
     }
+
+    // 2. PUT the raw bytes straight to storage (browser → Supabase).
+    const putRes = await fetch(sign.signedUrl, {
+      method: "PUT",
+      headers: {
+        "content-type": file.type || "application/octet-stream",
+        "x-upsert": "false",
+      },
+      body: file,
+    });
+    if (!putRes.ok) {
+      return `storage upload failed (${putRes.status})`;
+    }
+
+    // 3. Record the metadata row.
+    const commitRes = await fetch(`/api/formulas/${formulaId}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "commit",
+        path: sign.path,
+        filename: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type || null,
+      }),
+    });
+    const commit = (await commitRes.json()) as { ok: boolean; error?: string };
+    if (!commit.ok) {
+      return commit.error ?? "commit failed";
+    }
+    return null;
+  }
+
+  async function uploadFiles(list: FileList | File[]) {
     const picked = Array.from(list);
     if (picked.length === 0) return;
     setError(null);
     setUploadingCount((c) => c + picked.length);
     for (const file of picked) {
-      const path = `formulas/${formulaId}/${uid()}-${safeFilename(file.name)}`;
-      const { error: upErr } = await supabase.storage
-        .from(FILES_BUCKET)
-        .upload(path, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type || "application/octet-stream",
-        });
-      if (upErr) {
-        setError(`Upload failed for ${file.name}: ${upErr.message}`);
-        setUploadingCount((c) => c - 1);
-        continue;
-      }
-      const { error: rowErr } = await supabase.from("gummy_formula_files").insert({
-        formula_id: formulaId,
-        filename: file.name,
-        storage_path: path,
-        size_bytes: file.size,
-        mime_type: file.type || null,
-        uploaded_by_email: currentUserEmail,
-      });
-      if (rowErr) {
-        // Orphaned binary is worse than a failed upload — clean it up.
-        await supabase.storage.from(FILES_BUCKET).remove([path]);
-        setError(`Couldn't record ${file.name}: ${rowErr.message}`);
+      try {
+        const err = await uploadOne(file);
+        if (err) setError(`Upload failed for ${file.name}: ${err}`);
+      } catch {
+        setError(`Upload failed for ${file.name}.`);
       }
       setUploadingCount((c) => c - 1);
     }
@@ -147,19 +144,20 @@ export default function FilesCard({
   }
 
   async function deleteFile(f: FormulaFile) {
-    if (!supabase) return;
     setError(null);
-    // Row first (RLS is the gate), then the binary — a leftover object
-    // with no row is invisible; a row with no object is a broken link.
-    const { error: rowErr } = await supabase
-      .from("gummy_formula_files")
-      .delete()
-      .eq("id", f.id);
-    if (rowErr) {
-      setError(`Couldn't delete ${f.filename}: ${rowErr.message}`);
+    try {
+      const res = await fetch(`/api/formulas/${formulaId}/files/${f.id}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as { ok: boolean; error?: string };
+      if (!json.ok) {
+        setError(`Couldn't delete ${f.filename}: ${json.error ?? "unknown error"}`);
+        return;
+      }
+    } catch {
+      setError(`Couldn't delete ${f.filename}.`);
       return;
     }
-    await supabase.storage.from(FILES_BUCKET).remove([f.storagePath]);
     setConfirmDeleteId(null);
     await refresh();
   }
@@ -172,7 +170,6 @@ export default function FilesCard({
 
   return (
     <section
-      className="fe-print-hide"
       style={{
         marginTop: 24,
         border: "1px solid var(--line, #e3dcc9)",
@@ -342,7 +339,7 @@ export default function FilesCard({
               }}
             >
               <a
-                href={publicUrl(f.storagePath)}
+                href={f.publicUrl}
                 target="_blank"
                 rel="noreferrer"
                 style={{

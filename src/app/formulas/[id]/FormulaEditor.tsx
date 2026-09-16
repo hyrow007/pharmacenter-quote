@@ -6733,10 +6733,7 @@ export default function FormulaEditor({
           specs, label artwork, lab reports). Screen-only: attachments
           aren't part of the printed spec sheet. */}
       {!printing && (
-        <FilesCard
-          formulaId={initialFormula.id}
-          currentUserEmail={currentUserEmail}
-        />
+        <FilesCard formulaId={initialFormula.id} />
       )}
 
       {/* Activity timeline (audit log) below Notes — historical/auxiliary,
