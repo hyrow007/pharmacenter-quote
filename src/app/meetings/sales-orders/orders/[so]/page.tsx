@@ -92,7 +92,7 @@ export default async function SalesOrderDetailPage({
   const { data: noteRowsRaw } = await supabase
     .from("meeting_so_notes")
     .select(
-      "id, session_id, note_md, action_items, status_flag, fishbowl_snapshot, created_at, " +
+      "id, session_id, note_md, note_md_es, action_items, action_items_es, status_flag, fishbowl_snapshot, customer_mismatch, customer_hint, product_mismatch, product_hint, created_at, " +
         "meeting_sessions(session_date, source, meeting_type_id)",
     )
     .eq("so_number", so)
@@ -101,11 +101,18 @@ export default async function SalesOrderDetailPage({
 
   // Same cast-through-unknown escape hatch as the row fetch above —
   // supabase-js can't type a runtime-composed .select() string.
-  const noteRows = (noteRowsRaw ?? []) as unknown as Array<{
+  const noteRowsUntyped = (noteRowsRaw ?? []) as unknown as Array<{
     id: string;
     session_id: string;
     note_md: string | null;
+    note_md_es: string | null;
     action_items: Array<{
+      text?: string;
+      owner?: string;
+      due_date?: string;
+      done?: boolean;
+    }> | null;
+    action_items_es: Array<{
       text?: string;
       owner?: string;
       due_date?: string;
@@ -113,6 +120,10 @@ export default async function SalesOrderDetailPage({
     }> | null;
     status_flag: string | null;
     fishbowl_snapshot: Record<string, unknown> | null;
+    customer_mismatch: boolean | null;
+    customer_hint: string | null;
+    product_mismatch: boolean | null;
+    product_hint: string | null;
     created_at: string;
     meeting_sessions: {
       session_date: string | null;
@@ -120,6 +131,17 @@ export default async function SalesOrderDetailPage({
       meeting_type_id: string | null;
     } | null;
   }>;
+  // Pick the Spanish variant when the visitor is on ES.
+  const noteRows = noteRowsUntyped.map((n) => ({
+    ...n,
+    note_md: lang === "es" && n.note_md_es ? n.note_md_es : n.note_md,
+    action_items:
+      lang === "es" &&
+      Array.isArray(n.action_items_es) &&
+      n.action_items_es.length > 0
+        ? n.action_items_es
+        : n.action_items,
+  }));
 
   const items = (row.items ?? []).filter((it) =>
     it.type_id ? SALE_TYPE_IDS.has(it.type_id) : false,
@@ -596,6 +618,56 @@ export default async function SalesOrderDetailPage({
                         {n.note_md as string}
                       </div>
                     ) : null}
+                    {(() => {
+                      const warnings: string[] = [];
+                      if (n.customer_mismatch) {
+                        warnings.push(
+                          n.customer_hint
+                            ? t("warnCustomerHint", { hint: n.customer_hint })
+                            : t("warnCustomerNoHint", {
+                                customer:
+                                  ((n.fishbowl_snapshot as Record<
+                                    string,
+                                    unknown
+                                  > | null)?.customer_name as
+                                    | string
+                                    | undefined) ?? "—",
+                              }),
+                        );
+                      }
+                      if (n.product_mismatch && n.product_hint) {
+                        const [said, has] = String(n.product_hint).split("|");
+                        warnings.push(
+                          t("warnProduct", {
+                            said: said ?? "",
+                            has:
+                              has && has.length > 0
+                                ? has
+                                : t("noMatchingProduct"),
+                          }),
+                        );
+                      }
+                      if (warnings.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: "8px 10px",
+                            background: "#fbf1e8",
+                            border: "1px solid #e7c19a",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            color: "#7a4b1a",
+                            display: "grid",
+                            gap: 4,
+                          }}
+                        >
+                          {warnings.map((w, i) => (
+                            <div key={i}>{w}</div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {actionItems.length > 0 ? (
                       <ul
                         style={{

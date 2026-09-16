@@ -41,13 +41,23 @@ export default async function SessionDetailPage({
   const { data: sessionRaw } = await supabase
     .from("meeting_sessions")
     .select(
-      "id, session_date, source, summary_md, attendees, other_business, created_at, meeting_type_id",
+      "id, session_date, source, summary_md, summary_md_es, attendees, other_business, other_business_es, created_at, meeting_type_id",
     )
     .eq("id", sessionId)
     .maybeSingle();
 
   if (!sessionRaw) notFound();
 
+  type OtherBusinessItem = {
+    title: string;
+    note_md?: string | null;
+    action_items?: Array<{
+      text?: string;
+      owner?: string;
+      due_date?: string;
+      done?: boolean;
+    }>;
+  };
   // Cast through unknown — supabase-js is inconsistent about typing
   // runtime `.select(string)` calls, so we lock the shape ourselves.
   const session = sessionRaw as unknown as {
@@ -55,37 +65,45 @@ export default async function SessionDetailPage({
     session_date: string;
     source: string;
     summary_md: string | null;
+    summary_md_es: string | null;
     attendees: string[] | null;
-    other_business:
-      | Array<{
-          title: string;
-          note_md?: string | null;
-          action_items?: Array<{
-            text?: string;
-            owner?: string;
-            due_date?: string;
-            done?: boolean;
-          }>;
-        }>
-      | null;
+    other_business: OtherBusinessItem[] | null;
+    other_business_es: OtherBusinessItem[] | null;
     created_at: string;
     meeting_type_id: string;
   };
-  const otherBusiness = session.other_business ?? [];
+  // Prefer Spanish variants when the visitor's language is ES; fall
+  // back to the canonical English so nothing goes blank if a translation
+  // hasn't been produced yet.
+  const summaryDisplay =
+    lang === "es" && session.summary_md_es
+      ? session.summary_md_es
+      : session.summary_md;
+  const otherBusiness =
+    lang === "es" && Array.isArray(session.other_business_es) && session.other_business_es.length > 0
+      ? session.other_business_es
+      : (session.other_business ?? []);
 
   const { data: notesRaw } = await supabase
     .from("meeting_so_notes")
     .select(
-      "id, so_number, note_md, action_items, status_flag, fishbowl_snapshot, created_at",
+      "id, so_number, note_md, note_md_es, action_items, action_items_es, status_flag, fishbowl_snapshot, customer_mismatch, customer_hint, product_mismatch, product_hint, created_at",
     )
     .eq("session_id", sessionId)
     .order("so_number", { ascending: true });
 
-  const notes = (notesRaw ?? []) as unknown as Array<{
+  const notesUntyped = (notesRaw ?? []) as unknown as Array<{
     id: string;
     so_number: string;
     note_md: string | null;
+    note_md_es: string | null;
     action_items: Array<{
+      text?: string;
+      owner?: string;
+      due_date?: string;
+      done?: boolean;
+    }> | null;
+    action_items_es: Array<{
       text?: string;
       owner?: string;
       due_date?: string;
@@ -93,8 +111,27 @@ export default async function SessionDetailPage({
     }> | null;
     status_flag: string | null;
     fishbowl_snapshot: Record<string, unknown> | null;
+    customer_mismatch: boolean | null;
+    customer_hint: string | null;
+    product_mismatch: boolean | null;
+    product_hint: string | null;
     created_at: string;
   }>;
+  // Bake the language choice into the note shape once here so the
+  // rendering path stays simple. `note_md` is what the UI reads —
+  // it's the Spanish variant when available and the visitor is on ES,
+  // otherwise the canonical English.
+  const notes = notesUntyped.map((n) => ({
+    ...n,
+    note_md:
+      lang === "es" && n.note_md_es ? n.note_md_es : n.note_md,
+    action_items:
+      lang === "es" &&
+      Array.isArray(n.action_items_es) &&
+      n.action_items_es.length > 0
+        ? n.action_items_es
+        : n.action_items,
+  }));
 
   // Live Fishbowl state for every SO mentioned — one query, joined
   // client-side, so we can render "at meeting vs. now" deltas.
@@ -276,7 +313,7 @@ export default async function SessionDetailPage({
             </p>
           </div>
 
-          {session.summary_md ? (
+          {summaryDisplay ? (
             <div
               style={{
                 fontSize: 13,
@@ -289,7 +326,7 @@ export default async function SessionDetailPage({
                 whiteSpace: "pre-wrap",
               }}
             >
-              {session.summary_md as string}
+              {summaryDisplay as string}
             </div>
           ) : null}
 
@@ -518,6 +555,56 @@ export default async function SessionDetailPage({
                         {n.note_md as string}
                       </div>
                     ) : null}
+                    {(() => {
+                      // Localized mismatch warnings — emitted from
+                      // structured flags rather than stitched into the
+                      // note text so they translate cleanly.
+                      const warnings: string[] = [];
+                      if (n.customer_mismatch) {
+                        warnings.push(
+                          n.customer_hint
+                            ? t("warnCustomerHint", { hint: n.customer_hint })
+                            : t("warnCustomerNoHint", {
+                                customer:
+                                  ((n.fishbowl_snapshot as Record<
+                                    string,
+                                    unknown
+                                  > | null)?.customer_name as
+                                    | string
+                                    | undefined) ?? "—",
+                              }),
+                        );
+                      }
+                      if (n.product_mismatch && n.product_hint) {
+                        const [said, has] = String(n.product_hint).split("|");
+                        warnings.push(
+                          t("warnProduct", {
+                            said: said ?? "",
+                            has: has && has.length > 0 ? has : t("noMatchingProduct"),
+                          }),
+                        );
+                      }
+                      if (warnings.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: "8px 10px",
+                            background: "#fbf1e8",
+                            border: "1px solid #e7c19a",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            color: "#7a4b1a",
+                            display: "grid",
+                            gap: 4,
+                          }}
+                        >
+                          {warnings.map((w, i) => (
+                            <div key={i}>{w}</div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {actionItems.length > 0 ? (
                       <ul
                         style={{

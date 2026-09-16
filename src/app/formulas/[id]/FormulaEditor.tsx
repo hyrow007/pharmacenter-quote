@@ -1679,7 +1679,7 @@ export default function FormulaEditor({
         : tab === "cost"
           ? "Costing"
           : tab === "label"
-            ? "Panel"
+            ? "Supplement Facts"
             : "Bench Top";
     document.title = [
       initialFormula.pcBkCode ?? "TBD",
@@ -4140,7 +4140,7 @@ export default function FormulaEditor({
           Costing
         </TabButton>
         <TabButton active={tab === "label"} onClick={() => setTab("label")}>
-          Panel
+          Supplement Facts
         </TabButton>
       </div>
 

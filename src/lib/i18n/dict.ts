@@ -168,6 +168,15 @@ const en = {
   noMeetingsForSo:
     "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
   dueLabel: "due",
+
+  // ---- Mismatch warnings — code-emitted, localized in the UI ----
+  warnCustomerHint:
+    '⚠ Plaud text and Fishbowl customer disagree — likely "{hint}" per Fishbowl. Verify before acting.',
+  warnCustomerNoHint:
+    "⚠ Plaud text mentions a customer that doesn't match Fishbowl ({customer}). Verify.",
+  warnProduct:
+    '⚠ Plaud text mentions "{said}" but this SO\'s line items are {has}. Verify.',
+  noMatchingProduct: "no matching product on file",
 };
 
 const es: typeof en = {
@@ -323,6 +332,15 @@ const es: typeof en = {
   noMeetingsForSo:
     "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
   dueLabel: "vence",
+
+  // ---- Mismatch warnings ----
+  warnCustomerHint:
+    '⚠ El texto de Plaud y el cliente en Fishbowl no coinciden — probablemente "{hint}" según Fishbowl. Verifique antes de actuar.',
+  warnCustomerNoHint:
+    "⚠ El texto de Plaud menciona un cliente que no coincide con Fishbowl ({customer}). Verifique.",
+  warnProduct:
+    '⚠ El texto de Plaud menciona "{said}" pero los ítems de línea de esta SO son {has}. Verifique.',
+  noMatchingProduct: "sin producto coincidente en el sistema",
 };
 
 export type DictKey = keyof typeof en;

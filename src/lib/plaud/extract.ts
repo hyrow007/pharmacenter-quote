@@ -40,7 +40,9 @@ export type OtherBusinessItem = {
 export type SoMention = {
   /** Canonical so_number as it exists in Fishbowl (e.g. "14693", "M-14221"). */
   so_number: string;
-  /** Markdown note body — the speaker's words about this SO from the summary. */
+  /** Markdown note body — the speaker's words about this SO from the summary.
+   *  Clean of ⚠ warnings — those live in the structured flags below and are
+   *  rendered by the UI via the dict so they translate. */
   note_md: string;
   /** Structured follow-ups. */
   action_items: Array<{
@@ -53,13 +55,14 @@ export type SoMention = {
   status_flag?: "on_track" | "at_risk" | "blocked" | null;
   /** Snapshot of the Fishbowl row at ingest time, minus noisy fields. */
   fishbowl_snapshot: Record<string, unknown> | null;
-  /**
-   * True when the Plaud text mentions a customer name that doesn't fuzzy-match
-   * the Fishbowl customer_name for this SO. When true, the note_md carries an
-   * inline warning ("⚠ Plaud said X, Fishbowl says Y") and status_flag is
-   * bumped to at_risk if not already set.
-   */
+  /** True when Plaud text mentions a customer that doesn't match Fishbowl. */
   customer_mismatch: boolean;
+  /** Best-guess canonical customer name for the "did you mean" hint. */
+  customer_hint: string | null;
+  /** True when Plaud text mentions a product family not on this SO's items. */
+  product_mismatch: boolean;
+  /** Best-guess hint about what the SO's items actually are. */
+  product_hint: string | null;
 };
 
 // Fishbowl fields we care about for snapshotting. Mirrors the read side of
@@ -396,25 +399,24 @@ export async function extractMentionsFromSummary(
       fishbowl?.customer_name ?? null,
     );
 
-    let note_md = carved;
+    const note_md = carved;
     let status_flag: SoMention["status_flag"] = null;
+    let customer_hint: string | null = null;
     if (mismatch) {
-      const line = hint
-        ? `\n\n⚠ Plaud text and Fishbowl customer disagree — likely "${hint}" per Fishbowl. Verify before acting.`
-        : `\n\n⚠ Plaud text mentions a customer that doesn't match Fishbowl (${fishbowl?.customer_name ?? "no Fishbowl row"}). Verify.`;
-      note_md += line;
+      // The hint the UI will render depends on whether we could pin
+      // down a canonical customer name. Store both; the UI decides.
+      customer_hint = hint ?? fishbowl?.customer_name ?? null;
       status_flag = "at_risk";
     }
 
     // Product cross-check: does the Plaud note mention a product family
     // (Vitamin C, Omega, etc.) that isn't on any sale line of this SO?
     const productCheck = detectProductMismatch(carved, fishbowl?.items ?? null);
+    let product_hint: string | null = null;
     if (productCheck.mismatch) {
-      const hasList =
-        productCheck.soHas.length > 0
-          ? productCheck.soHas.join(", ")
-          : "no matching product on file";
-      note_md += `\n\n⚠ Plaud text mentions "${productCheck.noteSaid}" but this SO's line items are ${hasList}. Verify.`;
+      // We stash the diagnostic string as JSON so the UI can present a
+      // localized version. Format: "<noteSaid>|<hasCsv>".
+      product_hint = `${productCheck.noteSaid ?? ""}|${productCheck.soHas.join(", ")}`;
       if (!status_flag) status_flag = "at_risk";
     }
 
@@ -427,6 +429,9 @@ export async function extractMentionsFromSummary(
         ? (fishbowl as unknown as Record<string, unknown>)
         : null,
       customer_mismatch: mismatch,
+      customer_hint,
+      product_mismatch: productCheck.mismatch,
+      product_hint,
     });
   }
   return out;

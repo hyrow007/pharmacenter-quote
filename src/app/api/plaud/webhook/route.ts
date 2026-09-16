@@ -241,6 +241,10 @@ export async function POST(request: Request) {
           action_items: m.action_items,
           status_flag: m.status_flag,
           fishbowl_snapshot: m.fishbowl_snapshot,
+          customer_mismatch: m.customer_mismatch,
+          customer_hint: m.customer_hint,
+          product_mismatch: m.product_mismatch,
+          product_hint: m.product_hint,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "session_id,so_number" },
@@ -308,23 +312,18 @@ async function hydrateSuppliedMentions(
       noteText,
       fishbowl?.customer_name ?? null,
     );
-    let note_md = noteText;
+    const note_md = noteText;
     let status_flag = s.status_flag ?? null;
+    let customer_hint: string | null = null;
     if (mismatch) {
-      const line = hint
-        ? `\n\n⚠ Note mentions a customer that doesn't match Fishbowl — likely "${hint}" per Fishbowl. Verify before acting.`
-        : `\n\n⚠ Note mentions a customer that doesn't match Fishbowl (${fishbowl?.customer_name ?? "no Fishbowl row"}). Verify.`;
-      note_md += line;
+      customer_hint = hint ?? fishbowl?.customer_name ?? null;
       if (!status_flag) status_flag = "at_risk";
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const productCheck = detectProductMismatch(noteText, (fishbowl as any)?.items ?? null);
+    let product_hint: string | null = null;
     if (productCheck.mismatch) {
-      const hasList =
-        productCheck.soHas.length > 0
-          ? productCheck.soHas.join(", ")
-          : "no matching product on file";
-      note_md += `\n\n⚠ Note mentions "${productCheck.noteSaid}" but this SO's line items are ${hasList}. Verify.`;
+      product_hint = `${productCheck.noteSaid ?? ""}|${productCheck.soHas.join(", ")}`;
       if (!status_flag) status_flag = "at_risk";
     }
     out.push({
@@ -336,6 +335,9 @@ async function hydrateSuppliedMentions(
         ? (fishbowl as unknown as Record<string, unknown>)
         : null,
       customer_mismatch: mismatch,
+      customer_hint,
+      product_mismatch: productCheck.mismatch,
+      product_hint,
     });
   }
   return out;
