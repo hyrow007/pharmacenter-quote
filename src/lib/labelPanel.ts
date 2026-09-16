@@ -39,7 +39,21 @@ export type LabelPanelState = {
   /** "Other ingredients" line; null = auto-seed from the blend
    *  (non-active ingredients, descending weight). */
   otherIngredients?: string | null;
+  /** Per-gummy nutrition facts (v81.2) shown above the actives, FDA
+   *  style: Calories / Total Carbohydrate / Total Sugars / Added
+   *  Sugars. Null field = omit that row. Values scale with the
+   *  serving-size variants. */
+  nutrition?: {
+    calories?: number | null;
+    carbsG?: number | null;
+    sugarsG?: number | null;
+    addedSugarsG?: number | null;
+  } | null;
 };
+
+/** FDA Daily Values used by the nutrition rows (adults ≥4). */
+export const CARB_DV_G = 275;
+export const ADDED_SUGAR_DV_G = 50;
 
 // ---------------------------------------------------------------------------
 // FDA Daily Values

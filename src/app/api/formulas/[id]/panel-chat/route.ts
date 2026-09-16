@@ -34,6 +34,7 @@ Available ops:
 - {"op":"deleteVariant","variantId":"<variant id>"}
 - {"op":"setOtherIngredients","text":"<full replacement line>"}
 - {"op":"resetOtherIngredients"}  — back to auto-generated from the blend
+- {"op":"setNutrition","field":"calories|carbsG|sugarsG|addedSugarsG","value":<number PER SINGLE GUMMY, or null to remove the row>}  — the Calories / Total Carbohydrate / Total Sugars / Added Sugars rows
 
 Rules: use rowId/variantId values exactly as given in the state JSON. When the request is ambiguous, ask instead of guessing (ops may be empty). Keep replies plain text, no markdown. Answer in the language the user wrote in.`;
 

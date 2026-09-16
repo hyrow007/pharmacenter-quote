@@ -84,6 +84,8 @@ import {
   percentDailyValue,
   formatPercentDv,
   formatAmount,
+  CARB_DV_G,
+  ADDED_SUGAR_DV_G,
 } from "@/lib/labelPanel";
 
 // -----------------------------------------------------------------------------
@@ -892,6 +894,20 @@ export default function FormulaEditor({
   const [labelOtherIngredients, setLabelOtherIngredients] = useState<
     string | null
   >(() => seedVersion.costing?.labelPanel?.otherIngredients ?? null);
+  // v81.2: per-gummy nutrition facts (Calories / Total Carbohydrate /
+  // Total Sugars / Added Sugars). Null field = omit that row.
+  const [labelNutrition, setLabelNutrition] = useState<{
+    calories: number | null;
+    carbsG: number | null;
+    sugarsG: number | null;
+    addedSugarsG: number | null;
+  }>(() => ({
+    calories: seedVersion.costing?.labelPanel?.nutrition?.calories ?? null,
+    carbsG: seedVersion.costing?.labelPanel?.nutrition?.carbsG ?? null,
+    sugarsG: seedVersion.costing?.labelPanel?.nutrition?.sugarsG ?? null,
+    addedSugarsG:
+      seedVersion.costing?.labelPanel?.nutrition?.addedSugarsG ?? null,
+  }));
   const [activeLabelVariantId, setActiveLabelVariantId] = useState<
     string | null
   >(null);
@@ -1032,7 +1048,11 @@ export default function FormulaEditor({
       labelServingsPerContainer == null &&
       Object.keys(labelDvOverrides).length === 0 &&
       Object.keys(labelNameOverrides).length === 0 &&
-      labelOtherIngredients == null;
+      labelOtherIngredients == null &&
+      labelNutrition.calories == null &&
+      labelNutrition.carbsG == null &&
+      labelNutrition.sugarsG == null &&
+      labelNutrition.addedSugarsG == null;
     if (isDefault) return null;
     return {
       servingsPerContainer: labelServingsPerContainer,
@@ -1041,6 +1061,12 @@ export default function FormulaEditor({
       dvOverrides: labelDvOverrides,
       nameOverrides: labelNameOverrides,
       otherIngredients: labelOtherIngredients,
+      nutrition: {
+        calories: labelNutrition.calories,
+        carbsG: labelNutrition.carbsG,
+        sugarsG: labelNutrition.sugarsG,
+        addedSugarsG: labelNutrition.addedSugarsG,
+      },
     };
   }, [
     labelVariants,
@@ -1049,6 +1075,7 @@ export default function FormulaEditor({
     labelDvOverrides,
     labelNameOverrides,
     labelOtherIngredients,
+    labelNutrition,
   ]);
 
   const costingPayload = useMemo(() => {
@@ -1258,7 +1285,30 @@ export default function FormulaEditor({
               labDec: seed.costing.labDec ?? 2,
               scenarios: seed.costing.scenarios ?? [],
               baseName: seed.costing.baseName ?? "Base",
-              labelPanel: seed.costing.labelPanel ?? null,
+              // Rebuilt in labelPanelPayload's literal key order, with
+              // nutrition hydrated, so panels saved before v81.2 don't
+              // mount dirty just because the new key exists.
+              labelPanel: seed.costing.labelPanel
+                ? {
+                    servingsPerContainer:
+                      seed.costing.labelPanel.servingsPerContainer ?? null,
+                    baseName: seed.costing.labelPanel.baseName ?? "1 Gummy",
+                    variants: seed.costing.labelPanel.variants ?? [],
+                    dvOverrides: seed.costing.labelPanel.dvOverrides ?? {},
+                    nameOverrides: seed.costing.labelPanel.nameOverrides ?? {},
+                    otherIngredients:
+                      seed.costing.labelPanel.otherIngredients ?? null,
+                    nutrition: {
+                      calories:
+                        seed.costing.labelPanel.nutrition?.calories ?? null,
+                      carbsG: seed.costing.labelPanel.nutrition?.carbsG ?? null,
+                      sugarsG:
+                        seed.costing.labelPanel.nutrition?.sugarsG ?? null,
+                      addedSugarsG:
+                        seed.costing.labelPanel.nutrition?.addedSugarsG ?? null,
+                    },
+                  }
+                : null,
             }
           : {
               dec: 3,
@@ -3403,7 +3453,10 @@ export default function FormulaEditor({
             page-break-inside: avoid !important;
           }
           /* v81: Supplement Facts panel prints as one unbreakable block;
-             its in-place editors print as plain text. */
+             its in-place editors print as plain text. v81.2: the printed
+             sheet is the customer-facing panel document — the FDA box
+             stretches to a centered 620px column and the generic formula
+             print header is replaced by the tab's own logo header. */
           .fe-label-panel {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -3413,6 +3466,12 @@ export default function FormulaEditor({
             background: transparent !important;
             color: #000 !important;
           }
+          .fe-label-wrap {
+            width: 100% !important;
+            max-width: 620px;
+            margin: 0 auto;
+          }
+          ${tab === "label" ? ".fe-print-header { display: none !important; }" : ""}
           .fe-cost-card > div:first-child,
           .fe-cost-sub > div:first-child {
             break-after: avoid !important;
@@ -4935,9 +4994,34 @@ export default function FormulaEditor({
             const servingLabel = activeVariant
               ? activeVariant.name
               : labelBaseName || "1 Gummy";
-            const servingGrams = gummyPieceWeightG
-              ? gummyPieceWeightG * perServing
-              : null;
+
+            // Nutrition rows (per serving = per-gummy value × serving
+            // count). FDA-style display: grams to the nearest whole
+            // ("<1 g" under half), %DV to the nearest whole with the *
+            // footnote marker.
+            const fmtG = (x: number): string =>
+              x > 0 && x < 0.5 ? "<1 g" : `${Math.round(x)} g`;
+            const nCalories =
+              labelNutrition.calories != null
+                ? Math.round(labelNutrition.calories * perServing)
+                : null;
+            const nCarbs =
+              labelNutrition.carbsG != null
+                ? labelNutrition.carbsG * perServing
+                : null;
+            const nSugars =
+              labelNutrition.sugarsG != null
+                ? labelNutrition.sugarsG * perServing
+                : null;
+            const nAddedSugars =
+              labelNutrition.addedSugarsG != null
+                ? labelNutrition.addedSugarsG * perServing
+                : null;
+            const anyNutrition =
+              nCalories != null ||
+              nCarbs != null ||
+              nSugars != null ||
+              nAddedSugars != null;
 
             // Full display-name resolution: custom → curated by id →
             // curated by fp_code → bare fp_code. The earlier version
@@ -4997,8 +5081,12 @@ export default function FormulaEditor({
                 hasOverride: override !== undefined,
               };
             });
-            const anyDv = rows.some((r) => r.pct != null);
-            const anyDagger = rows.some((r) => r.pct == null);
+            const anyDv =
+              rows.some((r) => r.pct != null) ||
+              nCarbs != null ||
+              nAddedSugars != null;
+            const anyDagger =
+              rows.some((r) => r.pct == null) || nSugars != null;
 
             // "Other ingredients": non-claim-sourced blend rows,
             // deduped by name, descending by grams. Editable override
@@ -5122,6 +5210,21 @@ export default function FormulaEditor({
                   );
                   if (activeLabelVariantId === variantId)
                     setActiveLabelVariantId(null);
+                } else if (op === "setNutrition") {
+                  const field = String(o.field ?? "");
+                  if (
+                    field === "calories" ||
+                    field === "carbsG" ||
+                    field === "sugarsG" ||
+                    field === "addedSugarsG"
+                  ) {
+                    const v = o.value == null ? null : Number(o.value);
+                    setLabelNutrition((prev) => ({
+                      ...prev,
+                      [field]:
+                        v != null && Number.isFinite(v) && v >= 0 ? v : null,
+                    }));
+                  }
                 } else if (op === "setOtherIngredients") {
                   if (typeof o.text === "string")
                     setLabelOtherIngredients(o.text);
@@ -5168,6 +5271,7 @@ export default function FormulaEditor({
                   })),
                   otherIngredients: otherText,
                   otherIngredientsIsCustom: labelOtherIngredients != null,
+                  nutritionPerGummy: labelNutrition,
                 };
                 const res = await fetch(
                   `/api/formulas/${initialFormula.id}/panel-chat`,
@@ -5221,6 +5325,99 @@ export default function FormulaEditor({
 
             const hair = "1px solid #000";
             return (
+              <>
+              {/* Customer-facing print header (v81.2): centered logo,
+                  sage eyebrow, serif product name, then a bordered
+                  5-column meta card (Formula / Version / Product Code /
+                  Shape / Flavor). No customer, no updated-on — this is
+                  a product spec, not an order document. The generic
+                  formula print header is suppressed on this tab via the
+                  print CSS below. */}
+              <div className="fe-print-only" style={{ marginBottom: 22 }}>
+                <div style={{ textAlign: "center" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/logo.png"
+                    alt="PharmaCenter"
+                    style={{ height: 52, margin: "0 auto 14px" }}
+                  />
+                  <div
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.26em",
+                      textTransform: "uppercase",
+                      color: "#7fb04f",
+                    }}
+                  >
+                    Supplement Fact Panel
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'Cormorant Garamond', Georgia, serif",
+                      fontSize: 34,
+                      fontWeight: 600,
+                      color: "#0f4a56",
+                      marginTop: 8,
+                      lineHeight: 1.15,
+                    }}
+                  >
+                    {(name || "Formula").trim()}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    marginTop: 20,
+                    border: "1px solid #e3dcc9",
+                    borderRadius: 10,
+                    background: "#fbf8f0",
+                    padding: "14px 20px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gap: 10,
+                  }}
+                >
+                  {(
+                    [
+                      [
+                        "Formula",
+                        `F${String(initialFormula.formulaNumber ?? 0).padStart(4, "0")}`,
+                      ],
+                      [
+                        "Version",
+                        `v${seedVersion.versionNum}${isDraft ? " (draft)" : ""}`,
+                      ],
+                      ["Product Code", initialFormula.pcBkCode ?? "TBD"],
+                      ["Shape", shape || "—"],
+                      ["Flavor", flavor.trim() || "—"],
+                    ] as Array<[string, string]>
+                  ).map(([labelText, value]) => (
+                    <div key={labelText}>
+                      <div
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          color: "#7fb04f",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {labelText}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#0f4a56",
+                        }}
+                      >
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -5229,12 +5426,11 @@ export default function FormulaEditor({
                   flexWrap: "wrap",
                 }}
               >
-                {/* ---- The panel ---- */}
+                {/* ---- The panel (+ other-ingredients line below it) ---- */}
+                <div className="fe-label-wrap" style={{ width: 360, flexShrink: 0 }}>
                 <div
                   className="fe-label-panel"
                   style={{
-                    width: 360,
-                    flexShrink: 0,
                     border: "2.5px solid #000",
                     background: "#fff",
                     color: "#000",
@@ -5261,14 +5457,11 @@ export default function FormulaEditor({
                       paddingTop: 3,
                     }}
                   >
-                    Serving Size: {servingLabel}
-                    {servingGrams
-                      ? ` (${(Math.round(servingGrams * 100) / 100).toLocaleString("en-US")} g)`
-                      : ""}
+                    Serving Size {servingLabel}
                   </div>
                   {servingsCount ? (
                     <div style={{ fontSize: 12.5, paddingBottom: 2 }}>
-                      Servings Per Container: {servingsCount}
+                      Servings Per Container {servingsCount}
                     </div>
                   ) : null}
                   <div
@@ -5281,7 +5474,8 @@ export default function FormulaEditor({
                   <div
                     style={{
                       display: "flex",
-                      justifyContent: "space-between",
+                      justifyContent: "flex-end",
+                      gap: 18,
                       fontSize: 10.5,
                       fontWeight: 700,
                       padding: "2px 0",
@@ -5291,6 +5485,95 @@ export default function FormulaEditor({
                     <span>Amount Per Serving</span>
                     <span>% Daily Value</span>
                   </div>
+                  {nCalories != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        padding: "2.5px 0",
+                        borderBottom: "3px solid #000",
+                      }}
+                    >
+                      <span>Calories</span>
+                      <span>{nCalories}</span>
+                    </div>
+                  ) : null}
+                  {nCarbs != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        fontSize: 12.5,
+                        padding: "2.5px 0",
+                        borderBottom: hair,
+                      }}
+                    >
+                      <span style={{ flex: 1, fontWeight: 700 }}>
+                        Total Carbohydrate
+                      </span>
+                      <span style={{ fontWeight: 400 }}>{fmtG(nCarbs)}</span>
+                      <span
+                        style={{
+                          width: 44,
+                          textAlign: "right",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {Math.round((nCarbs / CARB_DV_G) * 100) || "<1"}%*
+                      </span>
+                    </div>
+                  ) : null}
+                  {nSugars != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        fontSize: 12.5,
+                        padding: "2.5px 0 2.5px 14px",
+                        borderBottom: hair,
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Total Sugars</span>
+                      <span>{fmtG(nSugars)}</span>
+                      <span style={{ width: 44, textAlign: "right" }}>†</span>
+                    </div>
+                  ) : null}
+                  {nAddedSugars != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        fontSize: 12.5,
+                        padding: "2.5px 0 2.5px 28px",
+                        borderBottom: hair,
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>
+                        Includes {fmtG(nAddedSugars)} Added Sugars
+                      </span>
+                      <span
+                        style={{
+                          width: 44,
+                          textAlign: "right",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {Math.round((nAddedSugars / ADDED_SUGAR_DV_G) * 100) ||
+                          "<1"}
+                        %*
+                      </span>
+                    </div>
+                  ) : null}
+                  {anyNutrition ? (
+                    <div
+                      style={{ height: 4, background: "#000", margin: "1px 0" }}
+                    />
+                  ) : null}
                   {rows.length === 0 ? (
                     <div
                       style={{
@@ -5390,7 +5673,7 @@ export default function FormulaEditor({
                   <div style={{ fontSize: 9, lineHeight: 1.35 }}>
                     {anyDv ? (
                       <div>
-                        Percent Daily Values are based on a 2,000 calorie
+                        * Percent Daily Values are based on a 2,000 calorie
                         diet.
                       </div>
                     ) : null}
@@ -5398,18 +5681,40 @@ export default function FormulaEditor({
                       <div>† Daily Value not established.</div>
                     ) : null}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 10.5,
-                      lineHeight: 1.4,
-                      borderTop: hair,
-                      marginTop: 4,
-                      paddingTop: 3,
-                    }}
-                  >
-                    <strong>Other Ingredients:</strong>{" "}
-                    {otherText || "—"}
-                  </div>
+                </div>
+
+                {/* Other Ingredients — outside the FDA box, brand teal,
+                    matching the customer-facing panel document. */}
+                <div
+                  style={{
+                    marginTop: 12,
+                    fontSize: 12.5,
+                    lineHeight: 1.55,
+                    color: "var(--teal-900, #0f4a56)",
+                  }}
+                >
+                  <strong style={{ color: "var(--teal-700, #1d6c7b)" }}>
+                    Other Ingredients:
+                  </strong>{" "}
+                  {otherText || "—"}
+                </div>
+
+                {/* Print-only footer — company line, hairline rule. */}
+                <div
+                  className="fe-print-only"
+                  style={{
+                    marginTop: 46,
+                    borderTop: "1px solid #d8d2c2",
+                    paddingTop: 8,
+                    fontSize: 9.5,
+                    fontWeight: 600,
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "#8a9498",
+                  }}
+                >
+                  PharmaCenter LLC · Davie, FL
+                </div>
                 </div>
 
                 {/* ---- Panel settings + assistant (screen only) ---- */}
@@ -5537,6 +5842,69 @@ export default function FormulaEditor({
                           {tr("blank = omit the line (varies by SKU)")}
                         </span>
                       </label>
+                      <div>
+                        <div style={{ fontSize: 12.5, marginBottom: 6 }}>
+                          {tr("Nutrition per gummy")}{" "}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--ink-3, #8a9498)",
+                            }}
+                          >
+                            {tr("(blank rows are left off the panel)")}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: 8,
+                          }}
+                        >
+                          {(
+                            [
+                              ["calories", "Calories"],
+                              ["carbsG", "Total Carbohydrate (g)"],
+                              ["sugarsG", "Total Sugars (g)"],
+                              ["addedSugarsG", "Added Sugars (g)"],
+                            ] as Array<
+                              [keyof typeof labelNutrition, string]
+                            >
+                          ).map(([field, labelText]) => (
+                            <label
+                              key={field}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                fontSize: 11.5,
+                              }}
+                            >
+                              <span style={{ flex: 1 }}>{tr(labelText)}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={labelNutrition[field] ?? ""}
+                                placeholder="—"
+                                onChange={(e) => {
+                                  const raw = e.target.value.trim();
+                                  const n = raw ? Number(raw) : NaN;
+                                  setLabelNutrition((prev) => ({
+                                    ...prev,
+                                    [field]:
+                                      raw && Number.isFinite(n) && n >= 0
+                                        ? n
+                                        : null,
+                                  }));
+                                }}
+                                className="pricing__input"
+                                style={{ width: 74, textAlign: "right" }}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                       <div>
                         <div
                           style={{
@@ -5741,6 +6109,7 @@ export default function FormulaEditor({
                   </div>
                 ) : null}
               </div>
+              </>
             );
           })()
         : null}
