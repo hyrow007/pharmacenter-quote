@@ -4,6 +4,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../../_components/AppHeader";
 import OpenOrdersBoard, { type SalesOrderRow } from "./OpenOrdersBoard";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /meetings/sales-orders/all
 //
@@ -20,6 +22,8 @@ const COLS =
   "date_last_modified, subtotal, total_price, items, synced_at";
 
 export default async function OpenSalesOrdersPage() {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -78,25 +82,25 @@ export default async function OpenSalesOrdersPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> Sales Orders
+            <span aria-hidden="true">&larr;</span> {t("salesOrdersTitle")}
           </Link>
 
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
-              PharmaCenter · Meetings · Sales Orders
+              {t("salesOrdersBreadcrumb")}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Open orders
+              {t("openOrdersTitle")}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
-              Every open Fishbowl SO. History begins Sep 15, 2026 —
-              closed-order rows fill in nightly from that date forward.
+              {t("openOrdersLede")}
             </p>
           </div>
 
           <OpenOrdersBoard
             initialRows={rows}
             initialSyncedAt={syncedAt}
+            lang={lang}
           />
         </div>
       </main>

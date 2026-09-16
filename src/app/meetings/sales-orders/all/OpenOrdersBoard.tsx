@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { makeT, type Lang } from "@/lib/i18n/dict";
 
 // Client-side board for /meetings/sales-orders/all.
 //
@@ -72,10 +73,13 @@ const SALE_TYPE_IDS = new Set([10, 30]); // 10 sale, 30 drop ship
 export default function OpenOrdersBoard({
   initialRows,
   initialSyncedAt,
+  lang = "en",
 }: {
   initialRows: SalesOrderRow[];
   initialSyncedAt: string | null;
+  lang?: Lang;
 }) {
+  const t = makeT(lang);
   const router = useRouter();
   const [rows, setRows] = useState<SalesOrderRow[]>(initialRows);
   const [syncedAt, setSyncedAt] = useState<string | null>(initialSyncedAt);
@@ -279,8 +283,7 @@ export default function OpenOrdersBoard({
             fontWeight: 600,
           }}
         >
-          Last night&rsquo;s Fishbowl sync did not run — this data is{" "}
-          {freshness.relative}. Check the sync job.
+          {t("syncStale", { rel: freshness.relative })}
         </div>
       ) : null}
 
@@ -299,7 +302,7 @@ export default function OpenOrdersBoard({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search SO #, customer, PO, salesman, or status…"
+          placeholder={t("searchOrders")}
           className="pricing__input"
           style={{ flex: "1 1 260px", minWidth: 240 }}
           autoComplete="off"
@@ -326,7 +329,7 @@ export default function OpenOrdersBoard({
             onChange={(e) => toggleIncludeClosed(e.target.checked)}
             disabled={loading}
           />
-          Include closed &amp; estimates
+          {t("includeClosed")}
         </label>
         <button
           type="button"
@@ -343,7 +346,7 @@ export default function OpenOrdersBoard({
             whiteSpace: "nowrap",
           }}
         >
-          Print / Save PDF
+          {t("printSavePdf")}
         </button>
       </div>
 
@@ -355,10 +358,10 @@ export default function OpenOrdersBoard({
           marginBottom: 10,
         }}
       >
-        {includeClosed ? "Showing all orders · " : "Open orders · "}
-        {totalRows.toLocaleString()} row{totalRows === 1 ? "" : "s"} ·{" "}
-        Synced {freshness.relative}
-        {loading ? " · loading…" : null}
+        {(includeClosed ? t("showingAllOrders") : t("showingOpenOnly")) + " · "}
+        {totalRows.toLocaleString()} {totalRows === 1 ? t("rowWord") : t("rowsWord")} ·{" "}
+        {t("syncedLabel")} {freshness.relative}
+        {loading ? " · " + t("loadingSuffix") : null}
       </div>
 
       {/* Table ----------------------------------------------------- */}
@@ -375,8 +378,8 @@ export default function OpenOrdersBoard({
           }}
         >
           {includeClosed
-            ? "No orders match those filters. History begins Sep 15, 2026 — closed-order rows fill in nightly from that date forward."
-            : "No open orders match those filters."}
+            ? t("noOrdersMatchWithClosed")
+            : t("noOpenOrdersMatch")}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -406,56 +409,56 @@ export default function OpenOrdersBoard({
             <thead>
               <tr style={{ background: "var(--cream, #f6efe3)" }}>
                 <SortableTh
-                  label="SO #"
+                  label={t("colSo")}
                   colKey="so_number"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Customer"
+                  label={t("colCustomer2")}
                   colKey="customer_name"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="PO"
+                  label={t("colPo")}
                   colKey="customer_po"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Status"
+                  label={t("colStatus")}
                   colKey="status_name"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Salesman"
+                  label={t("colSalesman")}
                   colKey="salesman"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Issued"
+                  label={t("colIssued")}
                   colKey="date_issued"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Scheduled ship"
+                  label={t("colScheduledShip")}
                   colKey="date_first_ship"
                   activeKey={sortKey}
                   activeDir={sortDir}
                   onSort={handleHeaderClick}
                 />
                 <SortableTh
-                  label="Total"
+                  label={t("colTotal")}
                   colKey="total_price"
                   activeKey={sortKey}
                   activeDir={sortDir}
@@ -463,7 +466,7 @@ export default function OpenOrdersBoard({
                   align="right"
                 />
                 <SortableTh
-                  label="Items"
+                  label={t("colItems")}
                   colKey="sale_items_count"
                   activeKey={sortKey}
                   activeDir={sortDir}
@@ -574,6 +577,7 @@ export default function OpenOrdersBoard({
                           <ExpandedRow
                             row={r}
                             saleItems={saleItems}
+                            lang={lang}
                             onOpen={() =>
                               router.push(
                                 `/meetings/sales-orders/orders/${r.so_number}`,
@@ -613,7 +617,7 @@ export default function OpenOrdersBoard({
               gap: 8,
             }}
           >
-            <span>Per page:</span>
+            <span>{t("perPage")}</span>
             <select
               value={pageSize}
               onChange={(e) =>
@@ -635,7 +639,7 @@ export default function OpenOrdersBoard({
             disabled={page <= 1}
             style={pagerButton(page <= 1)}
           >
-            &larr; Previous
+            {t("previous")}
           </button>
           <span
             style={{
@@ -643,7 +647,7 @@ export default function OpenOrdersBoard({
               whiteSpace: "nowrap",
             }}
           >
-            Page {page} of {totalPages}
+            {t("pageXofY", { x: page, y: totalPages })}
           </span>
           <button
             type="button"
@@ -653,7 +657,7 @@ export default function OpenOrdersBoard({
             disabled={page >= totalPages}
             style={pagerButton(page >= totalPages)}
           >
-            Next &rarr;
+            {t("next")}
           </button>
         </div>
       ) : null}
@@ -667,11 +671,14 @@ function ExpandedRow({
   row,
   saleItems,
   onOpen,
+  lang = "en",
 }: {
   row: SalesOrderRow;
   saleItems: SoItem[];
   onOpen: () => void;
+  lang?: Lang;
 }) {
+  const t = makeT(lang);
   return (
     <div style={{ padding: "14px 18px" }}>
       <div
@@ -708,7 +715,7 @@ function ExpandedRow({
             cursor: "pointer",
           }}
         >
-          Open detail &rarr;
+          {t("openDetail")}
         </button>
       </div>
       {row.note ? (
@@ -725,14 +732,14 @@ function ExpandedRow({
           }}
         >
           <strong style={{ fontSize: 10.5, letterSpacing: "0.14em" }}>
-            NOTE
+            {t("noteLabel")}
           </strong>
           <div style={{ marginTop: 4 }}>{row.note}</div>
         </div>
       ) : null}
       {saleItems.length === 0 ? (
         <div style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
-          No sale/drop-ship line items.
+          {t("noSaleItems")}
         </div>
       ) : (
         <table
@@ -747,14 +754,14 @@ function ExpandedRow({
         >
           <thead>
             <tr style={{ background: "var(--cream, #f6efe3)" }}>
-              <ItemsTh>Product #</ItemsTh>
-              <ItemsTh>Description</ItemsTh>
-              <ItemsTh align="right">Ordered</ItemsTh>
-              <ItemsTh align="right">Picked</ItemsTh>
-              <ItemsTh align="right">Fulfilled</ItemsTh>
-              <ItemsTh align="right">Unit $</ItemsTh>
-              <ItemsTh align="right">Ext $</ItemsTh>
-              <ItemsTh>Scheduled</ItemsTh>
+              <ItemsTh>{t("colProductNum")}</ItemsTh>
+              <ItemsTh>{t("colDescription")}</ItemsTh>
+              <ItemsTh align="right">{t("colOrdered")}</ItemsTh>
+              <ItemsTh align="right">{t("colPicked")}</ItemsTh>
+              <ItemsTh align="right">{t("colFulfilled")}</ItemsTh>
+              <ItemsTh align="right">{t("colUnitDollar")}</ItemsTh>
+              <ItemsTh align="right">{t("colExtDollar")}</ItemsTh>
+              <ItemsTh>{t("colScheduled")}</ItemsTh>
             </tr>
           </thead>
           <tbody>

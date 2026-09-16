@@ -75,7 +75,7 @@ export default function NavLinks({
           href={onMeetingHost ? "/meetings" : "https://meeting.pharmacenter.app/meetings"}
           className={`app-nav__link${isMeetings ? " app-nav__link--active" : ""}`}
         >
-          Meetings
+          {t("navMeetings")}
         </Link>
       ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and

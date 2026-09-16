@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../../../_components/AppHeader";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /meetings/sales-orders/sessions/[session]
 //
@@ -22,6 +24,8 @@ export default async function SessionDetailPage({
 }: {
   params: Promise<{ session: string }>;
 }) {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -250,12 +254,12 @@ export default async function SessionDetailPage({
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> Sales Orders
+            <span aria-hidden="true">&larr;</span> {t("salesOrdersTitle")}
           </Link>
 
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
-              PharmaCenter · Meetings · Sales Orders
+              {t("salesOrdersBreadcrumb")}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
               {formatDate(session.session_date as string)}
@@ -265,10 +269,10 @@ export default async function SessionDetailPage({
               style={{ marginTop: 4, marginBottom: 0, fontSize: 14 }}
             >
               {attendees.length > 0
-                ? `Attendees: ${attendees.join(", ")}`
+                ? `${t("attendeesLabel")}: ${attendees.join(", ")}`
                 : (session.source as string) === "plaud"
-                  ? "Plaud recording"
-                  : "Manual entry"}
+                  ? t("plaudRecording")
+                  : t("manualEntry")}
             </p>
           </div>
 
@@ -298,7 +302,7 @@ export default async function SessionDetailPage({
               margin: "0 0 10px",
             }}
           >
-            Sales orders discussed
+            {t("salesOrdersDiscussed")}
           </h2>
 
           {(notes ?? []).length === 0 ? (
@@ -313,7 +317,7 @@ export default async function SessionDetailPage({
                 background: "var(--cream-soft, #fbf6ec)",
               }}
             >
-              No SO notes on this session yet.
+              {t("noSoNotesYet")}
             </div>
           ) : (
             <div style={{ display: "grid", gap: 24 }}>
@@ -357,7 +361,9 @@ export default async function SessionDetailPage({
                         }}
                       >
                         {customerNotes.length}{" "}
-                        {customerNotes.length === 1 ? "SO" : "SOs"}
+                        {customerNotes.length === 1
+                          ? t("soCountSingle")
+                          : t("soCountPlural")}
                       </span>
                     </div>
                     <div style={{ display: "grid", gap: 10 }}>
@@ -414,8 +420,8 @@ export default async function SessionDetailPage({
                             color: "var(--ink-2, #415056)",
                           }}
                         >
-                          Now: {live.status_name ?? "—"} ·{" "}
-                          ship {formatDate(live.date_first_ship)}
+                          {t("nowLabel")} {live.status_name ?? "—"} ·{" "}
+                          {t("shipLabel")} {formatDate(live.date_first_ship)}
                         </span>
                       ) : (
                         <span
@@ -425,7 +431,7 @@ export default async function SessionDetailPage({
                             fontStyle: "italic",
                           }}
                         >
-                          (not in current Fishbowl mirror)
+                          {t("notInFishbowl")}
                         </span>
                       )}
                     </div>
@@ -456,7 +462,7 @@ export default async function SessionDetailPage({
                               marginBottom: 6,
                             }}
                           >
-                            Key points
+                            {t("keyPointsLabel")}
                           </div>
                           {syn.headline ? (
                             <div
@@ -526,7 +532,7 @@ export default async function SessionDetailPage({
                             {ai.text}
                             {ai.owner ? ` — ${ai.owner}` : ""}
                             {ai.due_date
-                              ? ` (due ${formatDate(ai.due_date)})`
+                              ? ` (${t("dueLabel")} ${formatDate(ai.due_date)})`
                               : ""}
                             {ai.done ? " ✓" : ""}
                           </li>
@@ -560,7 +566,7 @@ export default async function SessionDetailPage({
                             marginRight: 6,
                           }}
                         >
-                          Fishbowl memo
+                          {t("fishbowlMemoLabel")}
                         </span>
                         {live.note}
                       </div>
@@ -594,11 +600,11 @@ export default async function SessionDetailPage({
                                   background: "var(--cream, #f6efe3)",
                                 }}
                               >
-                                <MiniTh>Product #</MiniTh>
-                                <MiniTh>Description</MiniTh>
-                                <MiniTh align="right">Qty</MiniTh>
-                                <MiniTh align="right">Unit $</MiniTh>
-                                <MiniTh align="right">Ext $</MiniTh>
+                                <MiniTh>{t("colProductNum")}</MiniTh>
+                                <MiniTh>{t("colDescription")}</MiniTh>
+                                <MiniTh align="right">{t("colQty")}</MiniTh>
+                                <MiniTh align="right">{t("colUnitDollar")}</MiniTh>
+                                <MiniTh align="right">{t("colExtDollar")}</MiniTh>
                               </tr>
                             </thead>
                             <tbody>
@@ -673,7 +679,7 @@ export default async function SessionDetailPage({
                                 color: "var(--teal-700, #1d6c7b)",
                               }}
                             >
-                              Monday activity
+                              {t("mondayActivityLabel")}
                               {monday.status ? ` · ${monday.status}` : ""}
                             </span>
                             {monday.monday_url ? (
@@ -687,7 +693,7 @@ export default async function SessionDetailPage({
                                   textDecoration: "none",
                                 }}
                               >
-                                Open in Monday &rarr;
+                                {t("openInMonday")}
                               </a>
                             ) : null}
                           </div>
@@ -753,7 +759,7 @@ export default async function SessionDetailPage({
                   margin: "0 0 12px",
                 }}
               >
-                Other business
+                {t("otherBusiness")}
               </h2>
               <div style={{ display: "grid", gap: 10 }}>
                 {otherBusiness.map((item, i) => {
@@ -807,7 +813,7 @@ export default async function SessionDetailPage({
                               {a.text}
                               {a.owner ? ` — ${a.owner}` : ""}
                               {a.due_date
-                                ? ` (due ${formatDate(a.due_date)})`
+                                ? ` (${t("dueLabel")} ${formatDate(a.due_date)})`
                                 : ""}
                               {a.done ? " ✓" : ""}
                             </li>

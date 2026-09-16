@@ -132,10 +132,10 @@ export default async function MeetingsHubPage() {
                 gap: 16,
               }}
             >
-              {types.map((t) => (
+              {types.map((mt) => (
                 <Link
-                  key={t.id}
-                  href={`/meetings/${t.slug}`}
+                  key={mt.id}
+                  href={`/meetings/${mt.slug}`}
                   style={{
                     display: "block",
                     padding: "20px 22px",
@@ -167,9 +167,9 @@ export default async function MeetingsHubPage() {
                         margin: 0,
                       }}
                     >
-                      {t.name}
+                      {mt.name}
                     </h2>
-                    {t.cadence ? (
+                    {mt.cadence ? (
                       <span
                         style={{
                           display: "inline-block",
@@ -185,11 +185,11 @@ export default async function MeetingsHubPage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {t.cadence}
+                        {mt.cadence}
                       </span>
                     ) : null}
                   </div>
-                  {t.tagline ? (
+                  {mt.tagline ? (
                     <p
                       style={{
                         fontSize: 13,
@@ -199,7 +199,7 @@ export default async function MeetingsHubPage() {
                         marginBottom: 0,
                       }}
                     >
-                      {t.tagline}
+                      {mt.tagline}
                     </p>
                   ) : null}
                   <div

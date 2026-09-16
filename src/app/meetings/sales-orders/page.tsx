@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../_components/AppHeader";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /meetings/sales-orders — landing page for the weekly Sales Orders
 // meeting.
@@ -18,6 +20,8 @@ import AppHeader from "../../_components/AppHeader";
 export const metadata = { title: "Meetings · Sales Orders" };
 
 export default async function SalesOrdersMeetingPage() {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -88,19 +92,19 @@ export default async function SalesOrdersMeetingPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> Meetings
+            <span aria-hidden="true">&larr;</span> {t("navMeetings")}
           </Link>
 
           <div style={{ marginBottom: 22 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
-              PharmaCenter · Meetings
+              {t("meetingsBreadcrumb")}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              {typeRow ? (typeRow.name as string) : "Sales Orders"}
+              {typeRow ? (typeRow.name as string) : t("salesOrdersTitle")}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
               {(typeRow?.tagline as string | undefined) ??
-                "Weekly review of open Fishbowl sales orders."}
+                t("salesOrdersLede")}
             </p>
           </div>
 
@@ -118,21 +122,14 @@ export default async function SalesOrdersMeetingPage() {
               href="/meetings/sales-orders/all"
               style={cardStyle()}
             >
-              <div style={cardEyebrow()}>Working document</div>
-              <div style={cardTitle()}>Open orders</div>
-              <div style={cardBody()}>
-                Every open Fishbowl SO right now — search, sort, expand
-                for line items. This is what you drive the meeting from.
-              </div>
+              <div style={cardEyebrow()}>{t("workingDocument")}</div>
+              <div style={cardTitle()}>{t("cardOpenOrders")}</div>
+              <div style={cardBody()}>{t("cardOpenOrdersBody")}</div>
             </Link>
             <div style={{ ...cardStyle(), cursor: "default" }}>
-              <div style={cardEyebrow()}>Coming with Plaud</div>
-              <div style={cardTitle()}>Weekly sessions</div>
-              <div style={cardBody()}>
-                Each Plaud recording of the meeting becomes a session
-                below. Notes are extracted per SO and cross-referenced
-                against current Fishbowl state.
-              </div>
+              <div style={cardEyebrow()}>{t("cardComingWithPlaud")}</div>
+              <div style={cardTitle()}>{t("cardWeeklySessions")}</div>
+              <div style={cardBody()}>{t("cardWeeklySessionsBody")}</div>
             </div>
           </div>
 
@@ -146,20 +143,13 @@ export default async function SalesOrdersMeetingPage() {
               margin: "0 0 12px",
             }}
           >
-            Session history
+            {t("sessionHistory")}
           </h2>
 
           {!typeRow ? (
-            <div style={emptyStyle()}>
-              Meeting type <code>sales-orders</code> isn&rsquo;t seeded
-              yet. Run <code>sql/meetings.sql</code> against the shared
-              Supabase project.
-            </div>
+            <div style={emptyStyle()}>{t("seedNeeded")}</div>
           ) : (sessionRows ?? []).length === 0 ? (
-            <div style={emptyStyle()}>
-              No sessions yet. Once Plaud is wired up, each weekly
-              recording will appear here automatically.
-            </div>
+            <div style={emptyStyle()}>{t("noSessionsPlaud")}</div>
           ) : (
             <div
               style={{
@@ -214,8 +204,8 @@ export default async function SalesOrdersMeetingPage() {
                       {attendees.length > 0
                         ? attendees.join(", ")
                         : (s.source as string) === "plaud"
-                          ? "Plaud recording"
-                          : "Manual entry"}
+                          ? t("plaudRecording")
+                          : t("manualEntry")}
                     </span>
                     <span
                       style={{
@@ -227,7 +217,7 @@ export default async function SalesOrdersMeetingPage() {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {noteCount} SO{noteCount === 1 ? "" : "s"}
+                      {noteCount} {noteCount === 1 ? t("soCountSingle") : t("soCountPlural")}
                     </span>
                   </Link>
                 );

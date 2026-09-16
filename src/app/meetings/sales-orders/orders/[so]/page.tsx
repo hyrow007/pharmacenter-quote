@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../../../_components/AppHeader";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /meetings/sales-orders/orders/[so]
 //
@@ -41,6 +43,8 @@ export default async function SalesOrderDetailPage({
 }: {
   params: Promise<{ so: string }>;
 }) {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -169,12 +173,12 @@ export default async function SalesOrderDetailPage({
             className="meetings-noprint"
             style={backPill()}
           >
-            <span aria-hidden="true">&larr;</span> Open orders
+            <span aria-hidden="true">&larr;</span> {t("openOrdersTitle")}
           </Link>
 
           <div style={{ marginBottom: 6 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
-              PharmaCenter · Meetings · Sales Orders
+              {t("salesOrdersBreadcrumb")}
             </p>
             <div
               style={{
@@ -189,7 +193,7 @@ export default async function SalesOrderDetailPage({
                 className="page-header__title"
                 style={{ margin: 0 }}
               >
-                SO {row.so_number as string}
+                {t("soPrefix")} {row.so_number as string}
               </h1>
               <span style={{ color: "var(--ink-2, #415056)", fontSize: 16 }}>
                 {(row.customer_name as string | null) ?? "—"}
@@ -202,9 +206,9 @@ export default async function SalesOrderDetailPage({
                 marginBottom: 18,
               }}
             >
-              Synced {freshness.relative}
+              {t("syncedAgo", { rel: freshness.relative })}
               {freshness.stale
-                ? " · last night's sync did not run"
+                ? ` · ${t("syncedStaleShort")}`
                 : ""}
             </div>
           </div>
@@ -233,7 +237,7 @@ export default async function SalesOrderDetailPage({
                   marginBottom: 6,
                 }}
               >
-                Key points
+                {t("keyPointsLabel")}
               </div>
               {synthesis.headline ? (
                 <div
@@ -267,7 +271,7 @@ export default async function SalesOrderDetailPage({
                   color: "var(--ink-3, #8a9498)",
                 }}
               >
-                Generated {formatDate(synthesis.generated_at)}
+                {t("generatedRelative", { date: formatDate(synthesis.generated_at) })}
               </div>
             </div>
           ) : null}
@@ -286,22 +290,22 @@ export default async function SalesOrderDetailPage({
               marginBottom: 18,
             }}
           >
-            <Fact label="Status" value={row.status_name as string | null} />
-            <Fact label="PO" value={row.customer_po as string | null} />
+            <Fact label={t("factStatus")} value={row.status_name as string | null} />
+            <Fact label={t("factPo")} value={row.customer_po as string | null} />
             <Fact
-              label="Salesman"
+              label={t("factSalesman")}
               value={row.salesman as string | null}
             />
             <Fact
-              label="Issued"
+              label={t("factIssued")}
               value={formatDate(row.date_issued as string | null)}
             />
             <Fact
-              label="Scheduled ship"
+              label={t("factScheduledShip")}
               value={formatDate(row.date_first_ship as string | null)}
             />
             <Fact
-              label="Total"
+              label={t("factTotal")}
               value={formatMoney(row.total_price as number | null)}
               mono
             />
@@ -330,30 +334,30 @@ export default async function SalesOrderDetailPage({
                   marginBottom: 4,
                 }}
               >
-                Order note (Fishbowl)
+                {t("orderNoteLabel")}
               </div>
               {row.note as string}
             </div>
           ) : null}
 
           {/* Line items --------------------------------------------- */}
-          <h2 style={sectionTitle()}>Line items</h2>
+          <h2 style={sectionTitle()}>{t("lineItemsTitle")}</h2>
           {items.length === 0 ? (
             <div style={emptyStyle()}>
-              No sale or drop-ship line items on this SO.
+              {t("noLineItemsForSo")}
             </div>
           ) : (
             <table style={itemsTable()}>
               <thead>
                 <tr style={{ background: "var(--cream, #f6efe3)" }}>
-                  <SmallTh>Product #</SmallTh>
-                  <SmallTh>Description</SmallTh>
-                  <SmallTh align="right">Ordered</SmallTh>
-                  <SmallTh align="right">Picked</SmallTh>
-                  <SmallTh align="right">Fulfilled</SmallTh>
-                  <SmallTh align="right">Unit $</SmallTh>
-                  <SmallTh align="right">Ext $</SmallTh>
-                  <SmallTh>Scheduled</SmallTh>
+                  <SmallTh>{t("colProductNum")}</SmallTh>
+                  <SmallTh>{t("colDescription")}</SmallTh>
+                  <SmallTh align="right">{t("colOrdered")}</SmallTh>
+                  <SmallTh align="right">{t("colPicked")}</SmallTh>
+                  <SmallTh align="right">{t("colFulfilled")}</SmallTh>
+                  <SmallTh align="right">{t("colUnitDollar")}</SmallTh>
+                  <SmallTh align="right">{t("colExtDollar")}</SmallTh>
+                  <SmallTh>{t("colScheduled")}</SmallTh>
                 </tr>
               </thead>
               <tbody>
@@ -443,7 +447,7 @@ export default async function SalesOrderDetailPage({
           {monday && (monday.updates?.length ?? 0) > 0 ? (
             <>
               <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
-                Monday activity
+                {t("mondayActivityTitle")}
                 {monday.status ? (
                   <span
                     style={{
@@ -474,7 +478,7 @@ export default async function SalesOrderDetailPage({
                       fontFamily: "inherit",
                     }}
                   >
-                    Open in Monday &rarr;
+                    {t("openInMonday")}
                   </a>
                 ) : null}
               </h2>
@@ -518,13 +522,11 @@ export default async function SalesOrderDetailPage({
 
           {/* Meeting timeline --------------------------------------- */}
           <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
-            Meeting history
+            {t("meetingHistoryTitle")}
           </h2>
           {(noteRows ?? []).length === 0 ? (
             <div style={emptyStyle()}>
-              This SO hasn&rsquo;t been discussed in a recorded meeting
-              yet. Once Plaud ingestion is live, weekly mentions will
-              appear here alongside the Fishbowl state at that time.
+              {t("noMeetingsForSo")}
             </div>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
@@ -608,7 +610,7 @@ export default async function SalesOrderDetailPage({
                             {ai.text}
                             {ai.owner ? ` — ${ai.owner}` : ""}
                             {ai.due_date
-                              ? ` (due ${formatDate(ai.due_date)})`
+                              ? ` (${t("dueLabel")} ${formatDate(ai.due_date)})`
                               : ""}
                             {ai.done ? " ✓" : ""}
                           </li>
