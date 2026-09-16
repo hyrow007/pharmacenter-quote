@@ -29,20 +29,29 @@
 create table if not exists public.meeting_types (
   id           uuid primary key default gen_random_uuid(),
   slug         text not null unique,         -- URL segment, e.g. "sales-orders"
-  name         text not null,                -- "Sales Orders"
+  name         text not null,                -- "Sales Orders" (English canonical)
+  name_es      text,                         -- optional Spanish override for ES visitors
   tagline      text,                         -- one-liner on the hub card
+  tagline_es   text,                         -- optional Spanish tagline
   cadence      text,                         -- "Weekly", "Bi-weekly", …
   active       boolean not null default true,
   sort_order   int not null default 100,
   created_at   timestamptz not null default now()
 );
+-- Add name_es / tagline_es to existing installs.
+alter table public.meeting_types
+  add column if not exists name_es    text,
+  add column if not exists tagline_es text;
 
 -- Seed the first meeting type. Idempotent.
-insert into public.meeting_types (slug, name, tagline, cadence, sort_order)
+insert into public.meeting_types
+  (slug, name, name_es, tagline, tagline_es, cadence, sort_order)
 values (
   'sales-orders',
   'Sales Orders',
+  'Órdenes de venta',
   'Weekly review of open Fishbowl sales orders — status, ship dates, and action items captured from the Plaud recording.',
+  'Revisión semanal de órdenes de venta abiertas en Fishbowl — estado, fechas de envío, y acciones capturadas de la grabación de Plaud.',
   'Weekly',
   10
 )

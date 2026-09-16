@@ -49,22 +49,35 @@ export default async function MeetingsHubPage() {
     redirect(isMeetingHost ? "/?showSignIn=1" : "/");
   }
 
-  // Active meeting types, hub order.
+  // Active meeting types, hub order. name_es / tagline_es are shown to
+  // ES visitors; English fields remain canonical.
   const { data: typeRows } = await supabase
     .from("meeting_types")
-    .select("id, slug, name, tagline, cadence, active, sort_order")
+    .select(
+      "id, slug, name, name_es, tagline, tagline_es, cadence, active, sort_order",
+    )
     .eq("active", true)
     .order("sort_order", { ascending: true });
 
-  const types: MeetingType[] = (typeRows ?? []).map((r) => ({
-    id: r.id as string,
-    slug: r.slug as string,
-    name: r.name as string,
-    tagline: (r.tagline as string | null) ?? null,
-    cadence: (r.cadence as string | null) ?? null,
-    active: r.active as boolean,
-    sort_order: r.sort_order as number,
-  }));
+  const types: MeetingType[] = (typeRows ?? []).map((r) => {
+    const name_es = r.name_es as string | null | undefined;
+    const tagline_es = r.tagline_es as string | null | undefined;
+    return {
+      id: r.id as string,
+      slug: r.slug as string,
+      name:
+        lang === "es" && typeof name_es === "string" && name_es
+          ? name_es
+          : (r.name as string),
+      tagline:
+        lang === "es" && typeof tagline_es === "string" && tagline_es
+          ? tagline_es
+          : ((r.tagline as string | null) ?? null),
+      cadence: (r.cadence as string | null) ?? null,
+      active: r.active as boolean,
+      sort_order: r.sort_order as number,
+    };
+  });
 
   // Sidecar: latest session date + session count per meeting type. Small
   // extra query on purpose — the count and "last held" line show on the

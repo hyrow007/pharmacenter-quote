@@ -901,6 +901,13 @@ export default function FormulaEditor({
   const [hoveredLabelVariantId, setHoveredLabelVariantId] = useState<
     string | null
   >(null);
+  // v81.1: Panel assistant chat — screen-local, never persisted. Edits
+  // it makes land in the ordinary label* state, so Save picks them up.
+  const [labelChatMessages, setLabelChatMessages] = useState<
+    Array<{ role: "user" | "assistant"; content: string }>
+  >([]);
+  const [labelChatInput, setLabelChatInput] = useState("");
+  const [labelChatBusy, setLabelChatBusy] = useState(false);
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
@@ -1672,7 +1679,7 @@ export default function FormulaEditor({
         : tab === "cost"
           ? "Costing"
           : tab === "label"
-            ? "Label"
+            ? "Panel"
             : "Bench Top";
     document.title = [
       initialFormula.pcBkCode ?? "TBD",
@@ -4133,7 +4140,7 @@ export default function FormulaEditor({
           Costing
         </TabButton>
         <TabButton active={tab === "label"} onClick={() => setTab("label")}>
-          Label
+          Panel
         </TabButton>
       </div>
 
@@ -4932,18 +4939,35 @@ export default function FormulaEditor({
               ? gummyPieceWeightG * perServing
               : null;
 
+            // Full display-name resolution: custom → curated by id →
+            // curated by fp_code → bare fp_code. The earlier version
+            // skipped the fp_code paths, which silently DROPPED every
+            // Fishbowl-picked row (flavors, colors, citric acid…) from
+            // the panel.
+            const panelName = (r: {
+              customName?: string | null;
+              rawMaterialId?: string | null;
+              rawMaterialFpCode?: string | null;
+            }): string => {
+              const custom = (r.customName ?? "").trim();
+              if (custom) return custom;
+              const hit =
+                (r.rawMaterialId && rmById.get(r.rawMaterialId)) ||
+                (r.rawMaterialFpCode
+                  ? rawMaterials.find(
+                      (x) =>
+                        (x.fpCode ?? "").toUpperCase() ===
+                        (r.rawMaterialFpCode ?? "").toUpperCase(),
+                    ) ?? null
+                  : null);
+              if (hit) return (hit.name ?? "").trim();
+              return (r.rawMaterialFpCode ?? "").trim();
+            };
+
             // Panel rows straight from the Label Claim section, in its
             // (drag-and-drop) order.
             const rows = (labelClaims ?? []).map((c) => {
-              const resolvedName = (() => {
-                const custom = (c.customName ?? "").trim();
-                if (custom) return custom;
-                if (c.rawMaterialId) {
-                  const hit = rmById.get(c.rawMaterialId);
-                  if (hit) return (hit.name ?? "").trim();
-                }
-                return c.rawMaterialFpCode ?? "";
-              })();
+              const resolvedName = panelName(c);
               const displayName =
                 labelNameOverrides[c.id] !== undefined
                   ? labelNameOverrides[c.id]
@@ -4983,7 +5007,7 @@ export default function FormulaEditor({
               const byName = new Map<string, { name: string; g: number }>();
               for (const r of ingredients) {
                 if (r.sourceLabelClaimId) continue;
-                const nm = resolveRowName(r, rmById);
+                const nm = panelName(r);
                 if (!nm) continue;
                 const key = nm.toLowerCase();
                 const prev = byName.get(key);
@@ -4997,6 +5021,203 @@ export default function FormulaEditor({
                 .join(", ");
             })();
             const otherText = labelOtherIngredients ?? autoOther;
+
+            // ---- Panel assistant plumbing ----------------------------------
+            // Ops arrive from /api/formulas/[id]/panel-chat and are applied
+            // to the ordinary label* state, so the user reviews the result
+            // live and persists it with the normal Save.
+            const applyPanelOps = (ops: unknown[]) => {
+              for (const raw of ops) {
+                if (!raw || typeof raw !== "object") continue;
+                const o = raw as Record<string, unknown>;
+                const op = String(o.op ?? "");
+                const rowId = String(o.rowId ?? "");
+                const variantId = String(o.variantId ?? "");
+                if (op === "renameRow" && rowId) {
+                  const row = rows.find((r) => r.id === rowId);
+                  if (!row) continue;
+                  const val = typeof o.name === "string" ? o.name.trim() : "";
+                  setLabelNameOverrides((prev) => {
+                    const next = { ...prev };
+                    if (!val || val === row.resolvedName) delete next[rowId];
+                    else next[rowId] = val;
+                    return next;
+                  });
+                } else if (op === "setDv" && rowId) {
+                  const n = Number(o.pct);
+                  if (Number.isFinite(n))
+                    setLabelDvOverrides((prev) => ({
+                      ...prev,
+                      [rowId]: n / perServing,
+                    }));
+                } else if (op === "clearDv" && rowId) {
+                  setLabelDvOverrides((prev) => {
+                    const next = { ...prev };
+                    delete next[rowId];
+                    return next;
+                  });
+                } else if (op === "setServingsPerContainer") {
+                  const v =
+                    o.value == null
+                      ? null
+                      : Math.max(1, Math.round(Number(o.value) || 1));
+                  if (!variantId || variantId === "base")
+                    setLabelServingsPerContainer(v);
+                  else
+                    setLabelVariants((prev) =>
+                      prev.map((x) =>
+                        x.id === variantId
+                          ? { ...x, servingsPerContainer: v }
+                          : x,
+                      ),
+                    );
+                } else if (op === "addVariant") {
+                  const id = "sv_" + Math.random().toString(36).slice(2, 9);
+                  const g = Math.max(
+                    1,
+                    Math.round(Number(o.gummiesPerServing) || 2),
+                  );
+                  setLabelVariants((prev) => [
+                    ...prev,
+                    {
+                      id,
+                      name:
+                        typeof o.name === "string" && o.name.trim()
+                          ? o.name.trim()
+                          : `${g} Gummies`,
+                      gummiesPerServing: g,
+                      servingsPerContainer:
+                        o.servingsPerContainer == null
+                          ? null
+                          : Math.max(
+                              1,
+                              Math.round(Number(o.servingsPerContainer) || 1),
+                            ),
+                    },
+                  ]);
+                  setActiveLabelVariantId(id);
+                } else if (op === "renameVariant") {
+                  const nm = typeof o.name === "string" ? o.name.trim() : "";
+                  if (!nm) continue;
+                  if (variantId === "base") setLabelBaseName(nm);
+                  else
+                    setLabelVariants((prev) =>
+                      prev.map((x) =>
+                        x.id === variantId ? { ...x, name: nm } : x,
+                      ),
+                    );
+                } else if (op === "setVariantServing" && variantId) {
+                  const g = Math.max(
+                    1,
+                    Math.round(Number(o.gummiesPerServing) || 1),
+                  );
+                  setLabelVariants((prev) =>
+                    prev.map((x) =>
+                      x.id === variantId ? { ...x, gummiesPerServing: g } : x,
+                    ),
+                  );
+                } else if (op === "deleteVariant" && variantId) {
+                  setLabelVariants((prev) =>
+                    prev.filter((x) => x.id !== variantId),
+                  );
+                  if (activeLabelVariantId === variantId)
+                    setActiveLabelVariantId(null);
+                } else if (op === "setOtherIngredients") {
+                  if (typeof o.text === "string")
+                    setLabelOtherIngredients(o.text);
+                } else if (op === "resetOtherIngredients") {
+                  setLabelOtherIngredients(null);
+                }
+              }
+            };
+
+            const sendPanelChat = async () => {
+              const text = labelChatInput.trim();
+              if (!text || labelChatBusy) return;
+              const nextMsgs = [
+                ...labelChatMessages,
+                { role: "user" as const, content: text },
+              ];
+              setLabelChatMessages(nextMsgs);
+              setLabelChatInput("");
+              setLabelChatBusy(true);
+              try {
+                const snapshot = {
+                  activeVariantId: activeVariant?.id ?? "base",
+                  servingLabel,
+                  gummiesPerServing: perServing,
+                  servingsPerContainer: servingsCount,
+                  variants: [
+                    {
+                      id: "base",
+                      name: labelBaseName || "1 Gummy",
+                      gummiesPerServing: 1,
+                      servingsPerContainer: labelServingsPerContainer,
+                    },
+                    ...labelVariants,
+                  ],
+                  rows: rows.map((r) => ({
+                    id: r.id,
+                    name: r.displayName,
+                    amountPerServing: formatAmount(r.amountPerServing, r.unit),
+                    percentDv:
+                      r.pct == null
+                        ? "† (not established)"
+                        : formatPercentDv(r.pct),
+                    dvOverridden: r.hasOverride,
+                  })),
+                  otherIngredients: otherText,
+                  otherIngredientsIsCustom: labelOtherIngredients != null,
+                };
+                const res = await fetch(
+                  `/api/formulas/${initialFormula.id}/panel-chat`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      messages: nextMsgs,
+                      panel: snapshot,
+                    }),
+                  },
+                );
+                const json = (await res.json()) as {
+                  ok: boolean;
+                  reply?: string;
+                  ops?: unknown[];
+                  error?: string;
+                };
+                if (json.ok) {
+                  applyPanelOps(Array.isArray(json.ops) ? json.ops : []);
+                  setLabelChatMessages((m) => [
+                    ...m,
+                    { role: "assistant", content: json.reply || "Done." },
+                  ]);
+                } else if (json.error === "no_api_key") {
+                  setLabelChatMessages((m) => [
+                    ...m,
+                    {
+                      role: "assistant",
+                      content:
+                        "The assistant isn't enabled yet — add an ANTHROPIC_API_KEY environment variable to the Vercel project (Settings → Environment Variables) and redeploy.",
+                    },
+                  ]);
+                } else {
+                  setLabelChatMessages((m) => [
+                    ...m,
+                    {
+                      role: "assistant",
+                      content: `Something went wrong (${json.error ?? res.status}). Try again.`,
+                    },
+                  ]);
+                }
+              } catch {
+                setLabelChatMessages((m) => [
+                  ...m,
+                  { role: "assistant", content: "Network error — try again." },
+                ]);
+              }
+              setLabelChatBusy(false);
+            };
 
             const hair = "1px solid #000";
             return (

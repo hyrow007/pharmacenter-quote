@@ -34,12 +34,26 @@ export default async function SalesOrdersMeetingPage() {
 
   // Resolve the meeting_type row so we know it's configured; if the
   // seed row didn't land yet, render an inline heads-up rather than a
-  // blank page.
+  // blank page. name_es / tagline_es are optional overrides shown when
+  // the visitor's language is Spanish; English fields remain canonical.
   const { data: typeRow } = await supabase
     .from("meeting_types")
-    .select("id, name, tagline, cadence")
+    .select("id, name, name_es, tagline, tagline_es, cadence")
     .eq("slug", "sales-orders")
     .maybeSingle();
+
+  const typeName =
+    lang === "es" && typeof typeRow?.name_es === "string" && typeRow.name_es
+      ? (typeRow.name_es as string)
+      : typeRow
+        ? (typeRow.name as string)
+        : null;
+  const typeTagline =
+    lang === "es" &&
+    typeof typeRow?.tagline_es === "string" &&
+    typeRow.tagline_es
+      ? (typeRow.tagline_es as string)
+      : (typeRow?.tagline as string | undefined) ?? null;
 
   // Session history for this meeting type — newest first.
   const { data: sessionRows } = typeRow
@@ -100,11 +114,10 @@ export default async function SalesOrdersMeetingPage() {
               {t("meetingsBreadcrumb")}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              {typeRow ? (typeRow.name as string) : t("salesOrdersTitle")}
+              {typeName ?? t("salesOrdersTitle")}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
-              {(typeRow?.tagline as string | undefined) ??
-                t("salesOrdersLede")}
+              {typeTagline ?? t("salesOrdersLede")}
             </p>
           </div>
 
