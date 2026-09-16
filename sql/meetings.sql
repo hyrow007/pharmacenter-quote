@@ -80,6 +80,12 @@ create table if not exists public.meeting_sessions (
 -- Add for existing installations.
 alter table public.meeting_sessions
   add column if not exists other_business jsonb not null default '[]'::jsonb;
+-- Bilingual companions (Spanish). UI picks these when lang=es and falls
+-- back to the canonical English column if null. Populated by ingest and
+-- by the periodic note-translations task.
+alter table public.meeting_sessions
+  add column if not exists summary_md_es     text,
+  add column if not exists other_business_es jsonb;
 
 create index if not exists meeting_sessions_type_date_idx
   on public.meeting_sessions (meeting_type_id, session_date desc);
@@ -121,6 +127,21 @@ create index if not exists meeting_so_notes_so_number_idx
 -- into note_md; ingest UPSERTs on this key.
 create unique index if not exists meeting_so_notes_session_so_unique
   on public.meeting_so_notes (session_id, so_number);
+
+-- Bilingual companions + structured mismatch flags.
+--   *_es          — Spanish variants; UI picks these when lang=es.
+--   customer_mismatch / customer_hint — set by extractor when Plaud text's
+--       customer disagrees with Fishbowl (e.g. Peter Chu vs Purechews); the
+--       UI renders a localized ⚠ warning from these flags.
+--   product_mismatch / product_hint — same idea for product line items;
+--       hint is `<noteSaid>|<hasCsv>`.
+alter table public.meeting_so_notes
+  add column if not exists note_md_es        text,
+  add column if not exists action_items_es   jsonb,
+  add column if not exists customer_mismatch boolean not null default false,
+  add column if not exists customer_hint     text,
+  add column if not exists product_mismatch  boolean not null default false,
+  add column if not exists product_hint      text;
 
 -- ============================================================
 -- 4. RLS — authenticated read, service-role write
