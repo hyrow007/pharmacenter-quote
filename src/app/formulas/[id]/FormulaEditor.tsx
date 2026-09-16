@@ -5449,6 +5449,46 @@ export default function FormulaEditor({
                   },
                   allergens: labelAllergens.trim() || null,
                 };
+                // v83.6: read-only view of the whole formula so the
+                // assistant can answer recipe questions (fiber from the
+                // actual goFOS grams, batch math…) — its EDIT scope
+                // stays panel-only.
+                const formulaSnapshot = {
+                  name: (name || "").trim(),
+                  batchSetup: {
+                    benchBatchG,
+                    batchKg,
+                    cfaBatchKg,
+                    gummyPieceWeightG,
+                    wetCastPieceWeightG,
+                    targetYieldUnits,
+                    gummiesPerBenchBatch:
+                      wetCastPieceWeightG > 0
+                        ? Math.round((benchBatchG / wetCastPieceWeightG) * 100) /
+                          100
+                        : null,
+                  },
+                  ingredients: ingredients.map((r) => ({
+                    name: panelName(r) || "unnamed",
+                    grams: Number(r.grams) || 0,
+                    blendPhase: r.blendPhase ?? null,
+                    isSolution: isSolutionRow(r),
+                    fromLabelClaim: !!r.sourceLabelClaimId,
+                    moistureLossPct: (() => {
+                      const raw = Number(r.moistureLossPct);
+                      return Number.isFinite(raw)
+                        ? raw
+                        : carryOverDefaultMoisturePct(r);
+                    })(),
+                  })),
+                  labelClaims: (labelClaims ?? []).map((c) => ({
+                    name: panelName(c),
+                    claimPerGummy: c.amount,
+                    unit: c.unit,
+                    blend:
+                      c.blendPhase === "pre-cook" ? "pre-cook" : "secondary",
+                  })),
+                };
                 const res = await fetch(
                   `/api/formulas/${initialFormula.id}/panel-chat`,
                   {
@@ -5457,6 +5497,7 @@ export default function FormulaEditor({
                     body: JSON.stringify({
                       messages: nextMsgs,
                       panel: snapshot,
+                      formula: formulaSnapshot,
                     }),
                   },
                 );

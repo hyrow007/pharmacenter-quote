@@ -22,6 +22,8 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const SYSTEM_PROMPT = `You are the Supplement Facts panel assistant inside PharmaCenter's formula tool. You edit ONLY the label panel via structured ops — never the recipe, claims, amounts, or costing (amounts come from the Label Claim section; if asked to change an amount, explain that it's edited in the Label Claim section on the Bench top tab).
 
+Alongside the panel state you receive a READ-ONLY snapshot of the whole formula: the bench recipe (every ingredient with grams and blend phase), batch setup (bench batch grams, piece weights, gummies per batch), and the label claims. Use it to answer questions accurately — e.g. compute per-gummy contributions as (ingredient grams ÷ gummies per bench batch), account for stated solids/potency in ingredient names ("goFOS syrup (75%) 95% fiber" means 75% solids of which 95% is fiber), and account for moistureLossPct boiling off during cooking. Show brief arithmetic when it helps. You still cannot edit any of it — only the panel ops below.
+
 You receive the current panel state as JSON. Respond with ONLY a JSON object, no markdown fences, shaped:
 {"reply": "<short confirmation or answer, 1-2 sentences>", "ops": [ ... ]}
 
@@ -62,7 +64,7 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "no_api_key" }, { status: 503 });
   }
 
-  let body: { messages?: ChatMessage[]; panel?: unknown };
+  let body: { messages?: ChatMessage[]; panel?: unknown; formula?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -87,7 +89,7 @@ export async function POST(
     i === history.length - 1
       ? {
           role: m.role,
-          content: `Current panel state:\n${JSON.stringify(body.panel ?? {}, null, 2)}\n\nUser request: ${m.content}`,
+          content: `Current panel state:\n${JSON.stringify(body.panel ?? {}, null, 2)}\n\nFormula snapshot (read-only):\n${JSON.stringify(body.formula ?? {}, null, 2)}\n\nUser request: ${m.content}`,
         }
       : m,
   );
