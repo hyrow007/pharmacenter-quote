@@ -77,6 +77,7 @@ import {
   type IndirectBreakdownRow,
   type OtherBreakdownRow,
 } from "@/app/components/overheadBreakdown";
+import FilesCard from "./FilesCard";
 
 // -----------------------------------------------------------------------------
 // v72: the default overhead rows moved to lib/overheadCosting.ts so the bottle
@@ -6725,6 +6726,16 @@ export default function FormulaEditor({
           onDelete={deleteNote}
           forceExpanded={printing}
           hideComposer={printing}
+        />
+      )}
+
+      {/* Files below Notes — per-formula document folder (CoAs, customer
+          specs, label artwork, lab reports). Screen-only: attachments
+          aren't part of the printed spec sheet. */}
+      {!printing && (
+        <FilesCard
+          formulaId={initialFormula.id}
+          currentUserEmail={currentUserEmail}
         />
       )}
 
