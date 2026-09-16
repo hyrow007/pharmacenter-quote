@@ -258,6 +258,28 @@ Session upserts are idempotent on `(meeting_type_id,
 plaud_recording_id)` — the same recording ingested twice refreshes
 notes instead of duplicating.
 
+**Monday cross-reference — `so_monday_activity` + `POST /api/sync/monday`:**
+
+Monday.com's "Open Sales Orders" board (id 18389208010, workspace
+13384272) is the day-to-day activity log — item name is the SO number,
+each item's Updates tab holds free-text posts/comments (FedEx tracking,
+@-mentions, port dates, "8/25 weekly review" posts). The meetings hub
+brings this in as a third source alongside Fishbowl and Plaud.
+
+- **Table:** `so_monday_activity` (so_number PK, monday_item_id,
+  monday_url, status, updates jsonb, last_synced_at). Populated by
+  service-role writes only; authenticated read via RLS.
+- **Sync route:** `POST /api/sync/monday` (bearer auth via the shared
+  `PLAUD_SYNC_SECRET`; env var `MONDAY_API_TOKEN` for the GraphQL call).
+  Pages the whole Open Sales Orders board, upserts one row per SO with
+  the last 5 updates. Idempotent on `so_number`.
+- **Schedule:** Cowork scheduled task hits it every couple hours (or on
+  demand via curl); Fishbowl doesn't need to know about it.
+- **UI:** Session detail page shows a compact "Monday activity" strip
+  per SO card under the line-items table; SO detail page (`/orders/[so]`)
+  renders full-width "Monday activity" cards between the line items and
+  the meeting history.
+
 **Wiring the ingest.** Plaud's own webhook (with `Plaud-Signature`
 verification) can post directly here, or route via Zapier ("New Plaud
 file" → HTTP POST to `https://meeting.pharmacenter.app/api/plaud/webhook`

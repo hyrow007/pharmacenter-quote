@@ -148,6 +148,50 @@ export default async function SessionDetailPage({
     });
   }
 
+  // Monday activity per SO — cached in so_monday_activity by the
+  // /api/sync/monday route. Read-only join at render time.
+  type MondayUpdate = {
+    id: string;
+    text_body: string;
+    created_at: string;
+    creator_name: string | null;
+  };
+  const mondayById = new Map<
+    string,
+    {
+      monday_url: string | null;
+      status: string | null;
+      item_updated_at: string | null;
+      updates: MondayUpdate[];
+      last_synced_at: string;
+    }
+  >();
+  if (soNumbers.length > 0) {
+    const { data: mondayRowsRaw } = await supabase
+      .from("so_monday_activity")
+      .select(
+        "so_number, monday_url, status, item_updated_at, updates, last_synced_at",
+      )
+      .in("so_number", soNumbers);
+    const mondayRows = (mondayRowsRaw ?? []) as unknown as Array<{
+      so_number: string;
+      monday_url: string | null;
+      status: string | null;
+      item_updated_at: string | null;
+      updates: MondayUpdate[] | null;
+      last_synced_at: string;
+    }>;
+    mondayRows.forEach((r) => {
+      mondayById.set(r.so_number, {
+        monday_url: r.monday_url,
+        status: r.status,
+        item_updated_at: r.item_updated_at,
+        updates: Array.isArray(r.updates) ? r.updates : [],
+        last_synced_at: r.last_synced_at,
+      });
+    });
+  }
+
   const attendees = session.attendees ?? [];
 
   return (
@@ -500,6 +544,98 @@ export default async function SessionDetailPage({
                               ))}
                             </tbody>
                           </table>
+                        </div>
+                      );
+                    })()}
+                    {/* Recent Monday activity — the item's Updates
+                        (comments/posts) from the Monday "Open Sales
+                        Orders" board, cached in so_monday_activity by
+                        /api/sync/monday. Meeting reviewers see the
+                        latest day-to-day chatter on the SO alongside
+                        the weekly Plaud notes. */}
+                    {(() => {
+                      const monday = mondayById.get(so);
+                      if (!monday || monday.updates.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: "8px 10px",
+                            background: "var(--paper, #fffdf8)",
+                            border: "1px solid var(--stone, #e3dcc9)",
+                            borderRadius: 6,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "baseline",
+                              justifyContent: "space-between",
+                              gap: 10,
+                              marginBottom: 6,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: "0.14em",
+                                textTransform: "uppercase",
+                                color: "var(--teal-700, #1d6c7b)",
+                              }}
+                            >
+                              Monday activity
+                              {monday.status ? ` · ${monday.status}` : ""}
+                            </span>
+                            {monday.monday_url ? (
+                              <a
+                                href={monday.monday_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  fontSize: 11,
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  textDecoration: "none",
+                                }}
+                              >
+                                Open in Monday &rarr;
+                              </a>
+                            ) : null}
+                          </div>
+                          <ul
+                            style={{
+                              listStyle: "none",
+                              margin: 0,
+                              padding: 0,
+                              display: "grid",
+                              gap: 6,
+                            }}
+                          >
+                            {monday.updates.slice(0, 3).map((u) => (
+                              <li
+                                key={u.id}
+                                style={{
+                                  fontSize: 12,
+                                  lineHeight: 1.5,
+                                  color: "var(--ink-1, #1f2a2d)",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    color: "var(--ink-3, #8a9498)",
+                                    fontVariantNumeric: "tabular-nums",
+                                    marginRight: 6,
+                                  }}
+                                >
+                                  [{formatDate(u.created_at)}]
+                                </span>
+                                {u.creator_name ? (
+                                  <strong>{u.creator_name}: </strong>
+                                ) : null}
+                                {u.text_body}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       );
                     })()}

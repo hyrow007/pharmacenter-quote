@@ -122,6 +122,29 @@ export default async function SalesOrderDetailPage({
   );
   const freshness = describeFreshness(row.synced_at);
 
+  // Monday activity for this SO — cached in so_monday_activity.
+  const { data: mondayRaw } = await supabase
+    .from("so_monday_activity")
+    .select(
+      "monday_url, status, item_updated_at, updates, last_synced_at",
+    )
+    .eq("so_number", row.so_number)
+    .maybeSingle();
+  const monday = mondayRaw as unknown as {
+    monday_url: string | null;
+    status: string | null;
+    item_updated_at: string | null;
+    updates:
+      | Array<{
+          id: string;
+          text_body: string;
+          created_at: string;
+          creator_name: string | null;
+        }>
+      | null;
+    last_synced_at: string | null;
+  } | null;
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} appContext="meetings" />
@@ -335,6 +358,86 @@ export default async function SalesOrderDetailPage({
               </tbody>
             </table>
           )}
+
+          {/* Recent Monday activity — the Updates feed on this SO's
+              Monday item, cached in so_monday_activity by
+              /api/sync/monday. Shows the day-to-day chatter (FedEx
+              tracking, @-mentions, port updates). */}
+          {monday && (monday.updates?.length ?? 0) > 0 ? (
+            <>
+              <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
+                Monday activity
+                {monday.status ? (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      marginLeft: 12,
+                      padding: "2px 10px",
+                      background: "var(--cream, #f6efe3)",
+                      border: "1px solid var(--stone, #e3dcc9)",
+                      borderRadius: 999,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontWeight: 700,
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {monday.status}
+                  </span>
+                ) : null}
+                {monday.monday_url ? (
+                  <a
+                    href={monday.monday_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: 12,
+                      marginLeft: 12,
+                      color: "var(--teal-700, #1d6c7b)",
+                      textDecoration: "none",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Open in Monday &rarr;
+                  </a>
+                ) : null}
+              </h2>
+              <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                {(monday.updates ?? []).map((u) => (
+                  <div
+                    key={u.id}
+                    style={{
+                      padding: "10px 12px",
+                      background: "var(--paper, #fffdf8)",
+                      border: "1px solid var(--stone, #e3dcc9)",
+                      borderRadius: 6,
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      color: "var(--ink-1, #1f2a2d)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--ink-3, #8a9498)",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {u.creator_name ? (
+                        <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
+                          {u.creator_name}
+                        </strong>
+                      ) : (
+                        "(unknown)"
+                      )}
+                      {" · "}
+                      {formatDate(u.created_at)}
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{u.text_body}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {/* Meeting timeline --------------------------------------- */}
           <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
