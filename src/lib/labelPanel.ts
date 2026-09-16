@@ -48,12 +48,20 @@ export type LabelPanelState = {
     carbsG?: number | null;
     sugarsG?: number | null;
     addedSugarsG?: number | null;
+    /** v81.4: Dietary Fiber (g) and Sodium (mg) per gummy. Null = auto. */
+    fiberG?: number | null;
+    sodiumMg?: number | null;
   } | null;
+  /** v81.4: FALCPA allergen line ("Contains: Tree Nuts (Coconut)…").
+   *  Null/empty = no line printed. */
+  allergens?: string | null;
 };
 
 /** FDA Daily Values used by the nutrition rows (adults ≥4). */
 export const CARB_DV_G = 275;
 export const ADDED_SUGAR_DV_G = 50;
+export const FIBER_DV_G = 28;
+export const SODIUM_DV_MG = 2300;
 
 // ---------------------------------------------------------------------------
 // FDA Daily Values

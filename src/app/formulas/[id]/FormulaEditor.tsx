@@ -86,6 +86,8 @@ import {
   formatAmount,
   CARB_DV_G,
   ADDED_SUGAR_DV_G,
+  FIBER_DV_G,
+  SODIUM_DV_MG,
 } from "@/lib/labelPanel";
 
 // -----------------------------------------------------------------------------
@@ -901,13 +903,21 @@ export default function FormulaEditor({
     carbsG: number | null;
     sugarsG: number | null;
     addedSugarsG: number | null;
+    fiberG: number | null;
+    sodiumMg: number | null;
   }>(() => ({
     calories: seedVersion.costing?.labelPanel?.nutrition?.calories ?? null,
     carbsG: seedVersion.costing?.labelPanel?.nutrition?.carbsG ?? null,
     sugarsG: seedVersion.costing?.labelPanel?.nutrition?.sugarsG ?? null,
     addedSugarsG:
       seedVersion.costing?.labelPanel?.nutrition?.addedSugarsG ?? null,
+    fiberG: seedVersion.costing?.labelPanel?.nutrition?.fiberG ?? null,
+    sodiumMg: seedVersion.costing?.labelPanel?.nutrition?.sodiumMg ?? null,
   }));
+  // v81.4: FALCPA allergen "Contains" line. Empty = no line.
+  const [labelAllergens, setLabelAllergens] = useState<string>(
+    () => seedVersion.costing?.labelPanel?.allergens ?? "",
+  );
   const [activeLabelVariantId, setActiveLabelVariantId] = useState<
     string | null
   >(null);
@@ -1052,7 +1062,10 @@ export default function FormulaEditor({
       labelNutrition.calories == null &&
       labelNutrition.carbsG == null &&
       labelNutrition.sugarsG == null &&
-      labelNutrition.addedSugarsG == null;
+      labelNutrition.addedSugarsG == null &&
+      labelNutrition.fiberG == null &&
+      labelNutrition.sodiumMg == null &&
+      labelAllergens.trim() === "";
     if (isDefault) return null;
     return {
       servingsPerContainer: labelServingsPerContainer,
@@ -1066,7 +1079,10 @@ export default function FormulaEditor({
         carbsG: labelNutrition.carbsG,
         sugarsG: labelNutrition.sugarsG,
         addedSugarsG: labelNutrition.addedSugarsG,
+        fiberG: labelNutrition.fiberG,
+        sodiumMg: labelNutrition.sodiumMg,
       },
+      allergens: labelAllergens.trim() || null,
     };
   }, [
     labelVariants,
@@ -1076,6 +1092,7 @@ export default function FormulaEditor({
     labelNameOverrides,
     labelOtherIngredients,
     labelNutrition,
+    labelAllergens,
   ]);
 
   const costingPayload = useMemo(() => {
@@ -1306,7 +1323,11 @@ export default function FormulaEditor({
                         seed.costing.labelPanel.nutrition?.sugarsG ?? null,
                       addedSugarsG:
                         seed.costing.labelPanel.nutrition?.addedSugarsG ?? null,
+                      fiberG: seed.costing.labelPanel.nutrition?.fiberG ?? null,
+                      sodiumMg:
+                        seed.costing.labelPanel.nutrition?.sodiumMg ?? null,
                     },
+                    allergens: seed.costing.labelPanel.allergens ?? null,
                   }
                 : null,
             }
@@ -5076,6 +5097,8 @@ export default function FormulaEditor({
               let totalNet = 0;
               let sugarNet = 0;
               let carbExtraNet = 0;
+              let fiberNet = 0;
+              let sodiumNetMg = 0;
               for (const r of ingredients) {
                 if (r.sourceLabelClaimId) continue;
                 if (isWaterRow(r)) continue;
@@ -5100,6 +5123,17 @@ export default function FormulaEditor({
                   );
                 if (isSugarish) sugarNet += net;
                 else if (isCarbExtra) carbExtraNet += net;
+                // Fiber subset of the carb extras (pectin is an
+                // FDA-recognized dietary fiber).
+                if (/pectin|inulin|fiber|fibre|polydextrose/.test(nm)) {
+                  fiberNet += net;
+                }
+                // Sodium contributors: trisodium citrate ≈ 23.4% Na by
+                // weight (solids), salt ≈ 39.3%, sodium benzoate ≈ 16%.
+                if (/sodium citrate/.test(nm)) sodiumNetMg += net * 0.234 * 1000;
+                else if (/\bsalt\b/.test(nm)) sodiumNetMg += net * 0.393 * 1000;
+                else if (/sodium benzoate/.test(nm))
+                  sodiumNetMg += net * 0.16 * 1000;
               }
               const piece = gummyPieceWeightG || 0;
               if (totalNet <= 0 || piece <= 0)
@@ -5108,6 +5142,8 @@ export default function FormulaEditor({
                   carbsG: null as number | null,
                   sugarsG: null as number | null,
                   addedSugarsG: null as number | null,
+                  fiberG: null as number | null,
+                  sodiumMg: null as number | null,
                 };
               const scale = piece / totalNet;
               const sugars = sugarNet * scale;
@@ -5122,6 +5158,8 @@ export default function FormulaEditor({
                 carbsG: carbs,
                 sugarsG: sugars,
                 addedSugarsG: sugars,
+                fiberG: fiberNet * scale,
+                sodiumMg: sodiumNetMg * scale,
               };
             })();
 
@@ -5132,6 +5170,27 @@ export default function FormulaEditor({
             const effSugars = labelNutrition.sugarsG ?? nutritionAuto.sugarsG;
             const effAddedSugars =
               labelNutrition.addedSugarsG ?? nutritionAuto.addedSugarsG;
+            const effFiber = labelNutrition.fiberG ?? nutritionAuto.fiberG;
+            const effSodium =
+              labelNutrition.sodiumMg ?? nutritionAuto.sodiumMg;
+            // Declaration thresholds: fiber shows from 0.5 g/serving
+            // (rounds to ≥1 g), sodium from 5 mg/serving — below those
+            // FDA treats them as not significant and the row is omitted.
+            const nFiber =
+              effFiber != null && effFiber * perServing >= 0.5
+                ? effFiber * perServing
+                : labelNutrition.fiberG != null
+                  ? effFiber! * perServing
+                  : null;
+            const nSodiumRaw =
+              effSodium != null ? effSodium * perServing : null;
+            const nSodium =
+              nSodiumRaw != null &&
+              (nSodiumRaw >= 5 || labelNutrition.sodiumMg != null)
+                ? nSodiumRaw <= 140
+                  ? Math.round(nSodiumRaw / 5) * 5
+                  : Math.round(nSodiumRaw / 10) * 10
+                : null;
             const nCalories =
               effCalories != null
                 ? Math.round(effCalories * perServing)
@@ -5144,12 +5203,16 @@ export default function FormulaEditor({
               nCalories != null ||
               nCarbs != null ||
               nSugars != null ||
-              nAddedSugars != null;
+              nAddedSugars != null ||
+              nFiber != null ||
+              nSodium != null;
 
             const anyDv =
               rows.some((r) => r.pct != null) ||
               nCarbs != null ||
-              nAddedSugars != null;
+              nAddedSugars != null ||
+              nFiber != null ||
+              nSodium != null;
             const anyDagger =
               rows.some((r) => r.pct == null) || nSugars != null;
 
@@ -5281,7 +5344,9 @@ export default function FormulaEditor({
                     field === "calories" ||
                     field === "carbsG" ||
                     field === "sugarsG" ||
-                    field === "addedSugarsG"
+                    field === "addedSugarsG" ||
+                    field === "fiberG" ||
+                    field === "sodiumMg"
                   ) {
                     const v = o.value == null ? null : Number(o.value);
                     setLabelNutrition((prev) => ({
@@ -5295,6 +5360,9 @@ export default function FormulaEditor({
                     setLabelOtherIngredients(o.text);
                 } else if (op === "resetOtherIngredients") {
                   setLabelOtherIngredients(null);
+                } else if (op === "setAllergens") {
+                  if (typeof o.text === "string")
+                    setLabelAllergens(o.text);
                 }
               }
             };
@@ -5341,9 +5409,12 @@ export default function FormulaEditor({
                     carbsG: effCarbs,
                     sugarsG: effSugars,
                     addedSugarsG: effAddedSugars,
+                    fiberG: effFiber,
+                    sodiumMg: effSodium,
                     overrides: labelNutrition,
                     note: "values are per single gummy; null override = auto-estimated from the blend",
                   },
+                  allergens: labelAllergens.trim() || null,
                 };
                 const res = await fetch(
                   `/api/formulas/${initialFormula.id}/panel-chat`,
@@ -5572,6 +5643,30 @@ export default function FormulaEditor({
                       <span>{nCalories}</span>
                     </div>
                   ) : null}
+                  {nSodium != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        fontSize: 12.5,
+                        padding: "2.5px 0",
+                        borderBottom: hair,
+                      }}
+                    >
+                      <span style={{ flex: 1, fontWeight: 700 }}>Sodium</span>
+                      <span style={{ fontWeight: 400 }}>{nSodium} mg</span>
+                      <span
+                        style={{
+                          width: 44,
+                          textAlign: "right",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {Math.round((nSodium / SODIUM_DV_MG) * 100) || "<1"}%*
+                      </span>
+                    </div>
+                  ) : null}
                   {nCarbs != null ? (
                     <div
                       style={{
@@ -5595,6 +5690,30 @@ export default function FormulaEditor({
                         }}
                       >
                         {Math.round((nCarbs / CARB_DV_G) * 100) || "<1"}%*
+                      </span>
+                    </div>
+                  ) : null}
+                  {nFiber != null ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        fontSize: 12.5,
+                        padding: "2.5px 0 2.5px 14px",
+                        borderBottom: hair,
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Dietary Fiber</span>
+                      <span>{fmtG(nFiber)}</span>
+                      <span
+                        style={{
+                          width: 44,
+                          textAlign: "right",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {Math.round((nFiber / FIBER_DV_G) * 100) || "<1"}%*
                       </span>
                     </div>
                   ) : null}
@@ -5771,6 +5890,20 @@ export default function FormulaEditor({
                   {otherText || "—"}
                 </div>
 
+                {labelAllergens.trim() ? (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 12.5,
+                      lineHeight: 1.55,
+                      color: "var(--teal-900, #0f4a56)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Contains: {labelAllergens.trim()}
+                  </div>
+                ) : null}
+
                 {/* Print-only footer — company line, hairline rule. */}
                 <div
                   className="fe-print-only"
@@ -5938,7 +6071,9 @@ export default function FormulaEditor({
                           {(
                             [
                               ["calories", "Calories"],
+                              ["sodiumMg", "Sodium (mg)"],
                               ["carbsG", "Total Carbohydrate (g)"],
+                              ["fiberG", "Dietary Fiber (g)"],
                               ["sugarsG", "Total Sugars (g)"],
                               ["addedSugarsG", "Added Sugars (g)"],
                             ] as Array<
@@ -5983,6 +6118,26 @@ export default function FormulaEditor({
                           ))}
                         </div>
                       </div>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          fontSize: 12.5,
+                        }}
+                      >
+                        <span style={{ width: 190 }}>
+                          {tr("Allergens (Contains)")}
+                        </span>
+                        <input
+                          type="text"
+                          value={labelAllergens}
+                          placeholder={tr("e.g. Tree Nuts (Coconut), Soy")}
+                          onChange={(e) => setLabelAllergens(e.target.value)}
+                          className="pricing__input"
+                          style={{ flex: 1, fontSize: 12.5 }}
+                        />
+                      </label>
                       <div>
                         <div
                           style={{
