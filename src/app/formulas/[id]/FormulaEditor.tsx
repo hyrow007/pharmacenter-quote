@@ -917,6 +917,11 @@ export default function FormulaEditor({
   const [labelAllergens, setLabelAllergens] = useState<string>(
     () => seedVersion.costing?.labelPanel?.allergens ?? "",
   );
+  // v83.7: claim rows hidden from the panel display (claim + recipe
+  // row untouched).
+  const [labelHiddenRows, setLabelHiddenRows] = useState<string[]>(
+    () => seedVersion.costing?.labelPanel?.hiddenRows ?? [],
+  );
   const [activeLabelVariantId, setActiveLabelVariantId] = useState<
     string | null
   >(null);
@@ -1064,7 +1069,8 @@ export default function FormulaEditor({
       labelNutrition.addedSugarsG == null &&
       labelNutrition.fiberG == null &&
       labelNutrition.sodiumMg == null &&
-      labelAllergens.trim() === "";
+      labelAllergens.trim() === "" &&
+      labelHiddenRows.length === 0;
     if (isDefault) return null;
     return {
       servingsPerContainer: labelServingsPerContainer,
@@ -1082,6 +1088,7 @@ export default function FormulaEditor({
         sodiumMg: labelNutrition.sodiumMg,
       },
       allergens: labelAllergens.trim() || null,
+      hiddenRows: labelHiddenRows,
     };
   }, [
     labelVariants,
@@ -1092,6 +1099,7 @@ export default function FormulaEditor({
     labelOtherIngredients,
     labelNutrition,
     labelAllergens,
+    labelHiddenRows,
   ]);
 
   const costingPayload = useMemo(() => {
@@ -1327,6 +1335,7 @@ export default function FormulaEditor({
                         seed.costing.labelPanel.nutrition?.sodiumMg ?? null,
                     },
                     allergens: seed.costing.labelPanel.allergens ?? null,
+                    hiddenRows: seed.costing.labelPanel.hiddenRows ?? [],
                   }
                 : null,
             }
@@ -5240,14 +5249,24 @@ export default function FormulaEditor({
               nFiber != null ||
               nSodium != null;
 
+            // v83.7: rows suppressed from the panel display (claim +
+            // recipe stay intact — e.g. fiber sources represented by
+            // the Dietary Fiber line instead of active rows).
+            const visibleRows = rows.filter(
+              (r) => !labelHiddenRows.includes(r.id),
+            );
+            const hiddenRowInfos = rows.filter((r) =>
+              labelHiddenRows.includes(r.id),
+            );
+
             const anyDv =
-              rows.some((r) => r.pct != null) ||
+              visibleRows.some((r) => r.pct != null) ||
               nCarbs != null ||
               nAddedSugars != null ||
               nFiber != null ||
               nSodium != null;
             const anyDagger =
-              rows.some((r) => r.pct == null) || nSugars != null;
+              visibleRows.some((r) => r.pct == null) || nSugars != null;
 
             // "Other ingredients": non-claim-sourced blend rows,
             // deduped by name, descending by grams. Editable override
@@ -5839,7 +5858,7 @@ export default function FormulaEditor({
                       style={{ height: 4, background: "#000", margin: "1px 0" }}
                     />
                   ) : null}
-                  {rows.length === 0 ? (
+                  {visibleRows.length === 0 ? (
                     <div
                       style={{
                         fontSize: 12,
@@ -5851,7 +5870,7 @@ export default function FormulaEditor({
                       section on the Bench top tab.
                     </div>
                   ) : (
-                    rows.map((r, i) => (
+                    visibleRows.map((r, i) => (
                       <div
                         key={r.id}
                         style={{
@@ -5861,7 +5880,7 @@ export default function FormulaEditor({
                           fontSize: 12.5,
                           padding: "2.5px 0",
                           borderBottom:
-                            i === rows.length - 1 ? undefined : hair,
+                            i === visibleRows.length - 1 ? undefined : hair,
                         }}
                       >
                         <input

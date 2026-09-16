@@ -55,6 +55,11 @@ export type LabelPanelState = {
   /** v81.4: FALCPA allergen line ("Contains: Tree Nuts (Coconut)…").
    *  Null/empty = no line printed. */
   allergens?: string | null;
+  /** v83.7: label-claim row ids suppressed from the PANEL display (the
+   *  claim and its formulation row live on untouched — e.g. fiber
+   *  sources folded into the Dietary Fiber nutrition line instead of
+   *  listed as actives). */
+  hiddenRows?: string[] | null;
 };
 
 /** FDA Daily Values used by the nutrition rows (adults ≥4). */
