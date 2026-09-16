@@ -21,6 +21,15 @@ export default function LangToggle({ lang }: { lang: Lang }) {
     if (next === lang) return;
     const onProdDomain = window.location.hostname.endsWith(".pharmacenter.app");
     const domain = onProdDomain ? "; domain=.pharmacenter.app" : "";
+    // Kill any stale host-only cookie from an earlier version of this
+    // toggle — the browser will happily hold both a host-only cookie
+    // and an apex-domain cookie for the same name, and cookies().get()
+    // returns whichever the request header lists first. Deleting the
+    // host-only variant before writing the new one guarantees the new
+    // value wins.
+    if (onProdDomain) {
+      document.cookie = `${LANG_COOKIE_NAME}=; path=/; max-age=0`;
+    }
     document.cookie = `${LANG_COOKIE_NAME}=${next}; path=/${domain}; max-age=${
       60 * 60 * 24 * 365
     }; samesite=lax`;
