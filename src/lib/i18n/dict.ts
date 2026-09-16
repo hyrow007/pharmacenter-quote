@@ -57,6 +57,117 @@ const en = {
   addIngredient: "+ Add ingredient",
   addSolution: "+ Add solution",
   change: "Change",
+
+  // ---- Meetings hub ----
+  navMeetings: "Meetings",
+  meetingsBreadcrumb: "PharmaCenter · Meetings",
+  meetingsTitle: "Meetings",
+  meetingsHubLede:
+    "A hub for PharmaCenter's recurring meetings. Pick a meeting type to see its weekly sessions and cross-referenced Fishbowl state.",
+  meetingsNoTypes:
+    "No meeting types configured yet. Add one to public.meeting_types to see it here.",
+  meetingsSessionsCount: "sessions",
+  meetingsSessionCountOne: "session",
+  meetingsLastHeld: "Last held {date}",
+  meetingsNoSessionsYet: "No sessions yet",
+
+  // ---- Sales-orders landing ----
+  backMeetings: "← Meetings",
+  salesOrdersBreadcrumb: "PharmaCenter · Meetings · Sales Orders",
+  salesOrdersTitle: "Sales Orders",
+  salesOrdersLede: "Weekly review of open Fishbowl sales orders.",
+  workingDocument: "WORKING DOCUMENT",
+  cardOpenOrders: "Open orders",
+  cardOpenOrdersBody:
+    "Every open Fishbowl SO right now — search, sort, expand for line items. This is what you drive the meeting from.",
+  cardComingWithPlaud: "COMING WITH PLAUD",
+  cardWeeklySessions: "Weekly sessions",
+  cardWeeklySessionsBody:
+    "Each Plaud recording of the meeting becomes a session below. Notes are extracted per SO and cross-referenced against current Fishbowl state.",
+  sessionHistory: "Session history",
+  noSessionsPlaud:
+    "No sessions yet. Once Plaud is wired up, each weekly recording will appear here automatically.",
+  soCountPlural: "SOs",
+  soCountSingle: "SO",
+  plaudRecording: "Plaud recording",
+  manualEntry: "Manual entry",
+  seedNeeded:
+    "Meeting type sales-orders isn't seeded yet. Run sql/meetings.sql against the shared Supabase project.",
+
+  // ---- Open orders (table) ----
+  backSalesOrders: "← Sales Orders",
+  openOrdersTitle: "Open orders",
+  openOrdersLede:
+    "Every open Fishbowl SO. History begins Sep 15, 2026 — closed-order rows fill in nightly from that date forward.",
+  colSo: "SO #",
+  colCustomer2: "Customer",
+  colPo: "PO",
+  colStatus: "Status",
+  colSalesman: "Salesman",
+  colIssued: "Issued",
+  colScheduledShip: "Scheduled ship",
+  colTotal: "Total",
+  colItems: "Items",
+  colDescription: "Description",
+  colOrdered: "Ordered",
+  colPicked: "Picked",
+  colFulfilled: "Fulfilled",
+  colUnitDollar: "Unit $",
+  colExtDollar: "Ext $",
+  colScheduled: "Scheduled",
+  colProductNum: "Product #",
+  colQty: "Qty",
+  searchOrders: "Search SO #, customer, PO, salesman, or status…",
+  includeClosed: "Include closed & estimates",
+  printSavePdf: "Print / Save PDF",
+  showingAllOrders: "Showing all orders",
+  showingOpenOnly: "Open orders",
+  rowsWord: "rows",
+  rowWord: "row",
+  syncedLabel: "Synced",
+  loadingSuffix: "loading…",
+  syncStale:
+    "Last night's Fishbowl sync did not run — this data is {rel}. Check the sync job.",
+  noOpenOrdersMatch: "No open orders match those filters.",
+  noOrdersMatchWithClosed:
+    "No orders match those filters. History begins Sep 15, 2026 — closed-order rows fill in nightly from that date forward.",
+  openDetail: "Open detail →",
+  noteLabel: "NOTE",
+  noSaleItems: "No sale/drop-ship line items.",
+
+  // ---- Session detail ----
+  attendeesLabel: "Attendees",
+  salesOrdersDiscussed: "Sales orders discussed",
+  otherBusiness: "Other business",
+  noSoNotesYet: "No SO notes on this session yet.",
+  notInFishbowl: "(not in current Fishbowl mirror)",
+  nowLabel: "Now:",
+  shipLabel: "ship",
+  keyPointsLabel: "KEY POINTS",
+  fishbowlMemoLabel: "FISHBOWL MEMO",
+  mondayActivityLabel: "MONDAY ACTIVITY",
+  openInMonday: "Open in Monday →",
+  generatedRelative: "Generated {date}",
+
+  // ---- SO detail ----
+  backOpenOrders: "← Open orders",
+  soPrefix: "SO",
+  syncedAgo: "Synced {rel}",
+  syncedStaleShort: "last night's sync did not run",
+  factStatus: "Status",
+  factPo: "PO",
+  factSalesman: "Salesman",
+  factIssued: "Issued",
+  factScheduledShip: "Scheduled ship",
+  factTotal: "Total",
+  orderNoteLabel: "Order note (Fishbowl)",
+  lineItemsTitle: "Line items",
+  noLineItemsForSo: "No sale or drop-ship line items on this SO.",
+  meetingHistoryTitle: "Meeting history",
+  mondayActivityTitle: "Monday activity",
+  noMeetingsForSo:
+    "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
+  dueLabel: "due",
 };
 
 const es: typeof en = {
@@ -100,6 +211,118 @@ const es: typeof en = {
   addIngredient: "+ Agregar ingrediente",
   addSolution: "+ Agregar solución",
   change: "Cambiar",
+
+  // ---- Meetings hub ----
+  navMeetings: "Reuniones",
+  meetingsBreadcrumb: "PharmaCenter · Reuniones",
+  meetingsTitle: "Reuniones",
+  meetingsHubLede:
+    "Centro para las reuniones recurrentes de PharmaCenter. Elija un tipo de reunión para ver sus sesiones semanales y el estado de Fishbowl cruzado.",
+  meetingsNoTypes:
+    "Aún no hay tipos de reunión configurados. Agregue uno a public.meeting_types para verlo aquí.",
+  meetingsSessionsCount: "sesiones",
+  meetingsSessionCountOne: "sesión",
+  meetingsLastHeld: "Última {date}",
+  meetingsNoSessionsYet: "Sin sesiones aún",
+
+  // ---- Sales-orders landing ----
+  backMeetings: "← Reuniones",
+  salesOrdersBreadcrumb: "PharmaCenter · Reuniones · Órdenes de venta",
+  salesOrdersTitle: "Órdenes de venta",
+  salesOrdersLede:
+    "Revisión semanal de órdenes de venta abiertas en Fishbowl.",
+  workingDocument: "DOCUMENTO DE TRABAJO",
+  cardOpenOrders: "Órdenes abiertas",
+  cardOpenOrdersBody:
+    "Todas las SO abiertas en Fishbowl ahora mismo — búsqueda, ordenamiento, expandir para ver ítems de línea. Este es el documento que se usa en la reunión.",
+  cardComingWithPlaud: "PRÓXIMAMENTE CON PLAUD",
+  cardWeeklySessions: "Sesiones semanales",
+  cardWeeklySessionsBody:
+    "Cada grabación de Plaud se convierte en una sesión abajo. Las notas se extraen por SO y se cruzan con el estado actual de Fishbowl.",
+  sessionHistory: "Historial de sesiones",
+  noSessionsPlaud:
+    "Aún no hay sesiones. Cuando Plaud esté conectado, cada grabación semanal aparecerá aquí automáticamente.",
+  soCountPlural: "SO",
+  soCountSingle: "SO",
+  plaudRecording: "Grabación de Plaud",
+  manualEntry: "Entrada manual",
+  seedNeeded:
+    "El tipo de reunión sales-orders aún no está sembrado. Ejecute sql/meetings.sql en el proyecto Supabase compartido.",
+
+  // ---- Open orders (table) ----
+  backSalesOrders: "← Órdenes de venta",
+  openOrdersTitle: "Órdenes abiertas",
+  openOrdersLede:
+    "Todas las SO abiertas en Fishbowl. El historial comienza el 15 de sep de 2026 — las filas de órdenes cerradas se llenan cada noche a partir de esa fecha.",
+  colSo: "SO #",
+  colCustomer2: "Cliente",
+  colPo: "PO",
+  colStatus: "Estado",
+  colSalesman: "Vendedor",
+  colIssued: "Emitida",
+  colScheduledShip: "Envío programado",
+  colTotal: "Total",
+  colItems: "Ítems",
+  colDescription: "Descripción",
+  colOrdered: "Pedido",
+  colPicked: "Recogido",
+  colFulfilled: "Cumplido",
+  colUnitDollar: "$ Unitario",
+  colExtDollar: "$ Ext",
+  colScheduled: "Programado",
+  colProductNum: "Producto #",
+  colQty: "Cant",
+  searchOrders: "Buscar SO #, cliente, PO, vendedor o estado…",
+  includeClosed: "Incluir cerradas y estimados",
+  printSavePdf: "Imprimir / Guardar PDF",
+  showingAllOrders: "Mostrando todas las órdenes",
+  showingOpenOnly: "Órdenes abiertas",
+  rowsWord: "filas",
+  rowWord: "fila",
+  syncedLabel: "Sincronizado",
+  loadingSuffix: "cargando…",
+  syncStale:
+    "La sincronización nocturna de Fishbowl no se ejecutó — estos datos son de hace {rel}. Revise el proceso.",
+  noOpenOrdersMatch: "Ninguna orden abierta coincide con esos filtros.",
+  noOrdersMatchWithClosed:
+    "Ninguna orden coincide con esos filtros. El historial comienza el 15 de sep de 2026 — las filas de órdenes cerradas se llenan cada noche a partir de esa fecha.",
+  openDetail: "Abrir detalle →",
+  noteLabel: "NOTA",
+  noSaleItems: "Sin ítems de venta o drop-ship.",
+
+  // ---- Session detail ----
+  attendeesLabel: "Participantes",
+  salesOrdersDiscussed: "Órdenes de venta discutidas",
+  otherBusiness: "Otros temas",
+  noSoNotesYet: "Aún no hay notas de SO en esta sesión.",
+  notInFishbowl: "(no está en el espejo actual de Fishbowl)",
+  nowLabel: "Ahora:",
+  shipLabel: "envío",
+  keyPointsLabel: "PUNTOS CLAVE",
+  fishbowlMemoLabel: "MEMO DE FISHBOWL",
+  mondayActivityLabel: "ACTIVIDAD DE MONDAY",
+  openInMonday: "Abrir en Monday →",
+  generatedRelative: "Generado {date}",
+
+  // ---- SO detail ----
+  backOpenOrders: "← Órdenes abiertas",
+  soPrefix: "SO",
+  syncedAgo: "Sincronizado hace {rel}",
+  syncedStaleShort: "la sincronización nocturna no se ejecutó",
+  factStatus: "Estado",
+  factPo: "PO",
+  factSalesman: "Vendedor",
+  factIssued: "Emitida",
+  factScheduledShip: "Envío programado",
+  factTotal: "Total",
+  orderNoteLabel: "Nota de la orden (Fishbowl)",
+  lineItemsTitle: "Ítems de línea",
+  noLineItemsForSo: "Esta SO no tiene ítems de venta o drop-ship.",
+  meetingHistoryTitle: "Historial de reuniones",
+  mondayActivityTitle: "Actividad de Monday",
+  noMeetingsForSo:
+    "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
+  dueLabel: "vence",
 };
 
 export type DictKey = keyof typeof en;

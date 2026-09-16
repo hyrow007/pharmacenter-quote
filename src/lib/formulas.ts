@@ -1,3 +1,7 @@
+import type { LabelPanelState } from "./labelPanel";
+
+export type { LabelPanelState, LabelServingVariant } from "./labelPanel";
+
 // Gummy-formula catalog types + helpers.
 //
 // The formula tool is decoupled from the pricing calculator — a formula
@@ -485,6 +489,12 @@ export type GummyFormulaCosting = {
   /** v80: display name for the Base pill (right-click to rename, same as
    *  scenario pills). Null/absent renders as "Base". */
   baseName?: string | null;
+  /** v81: Supplement Facts panel state for the Label tab (serving
+   *  variants, %DV / name overrides, other-ingredients line). Rides in
+   *  the costing jsonb so it versions with the formula without a schema
+   *  migration. Null/absent = all defaults (1-gummy serving, auto
+   *  everything). */
+  labelPanel?: LabelPanelState | null;
 };
 
 /** One costing scenario (v69). */

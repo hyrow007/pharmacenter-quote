@@ -58,6 +58,8 @@ import {
   type OverheadItem,
   type LabTestItem,
   type CostScenario,
+  type LabelPanelState,
+  type LabelServingVariant,
   type SavedSolution,
   type SolutionComponent,
   type VersionDiff,
@@ -78,6 +80,11 @@ import {
   type OtherBreakdownRow,
 } from "@/app/components/overheadBreakdown";
 import FilesCard from "./FilesCard";
+import {
+  percentDailyValue,
+  formatPercentDv,
+  formatAmount,
+} from "@/lib/labelPanel";
 
 // -----------------------------------------------------------------------------
 // v72: the default overhead rows moved to lib/overheadCosting.ts so the bottle
@@ -490,7 +497,7 @@ type Props = {
   laborRateDefaults?: { leader: number | null; operator: number | null };
 };
 
-type Tab = "bench" | "scale" | "cost";
+type Tab = "bench" | "scale" | "cost" | "label";
 
 const usd = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -864,6 +871,36 @@ export default function FormulaEditor({
   const [hoveredScenarioId, setHoveredScenarioId] = useState<string | null>(
     null,
   );
+  // v81: Supplement Facts panel (Label tab). Serving VARIANTS persist
+  // like cost scenarios; which one is showing is screen-local. The base
+  // panel is always 1 gummy/serving.
+  const [labelVariants, setLabelVariants] = useState<LabelServingVariant[]>(
+    () => seedVersion.costing?.labelPanel?.variants ?? [],
+  );
+  const [labelBaseName, setLabelBaseName] = useState<string>(
+    () => seedVersion.costing?.labelPanel?.baseName ?? "1 Gummy",
+  );
+  const [labelServingsPerContainer, setLabelServingsPerContainer] = useState<
+    number | null
+  >(() => seedVersion.costing?.labelPanel?.servingsPerContainer ?? null);
+  const [labelDvOverrides, setLabelDvOverrides] = useState<
+    Record<string, number | null>
+  >(() => seedVersion.costing?.labelPanel?.dvOverrides ?? {});
+  const [labelNameOverrides, setLabelNameOverrides] = useState<
+    Record<string, string>
+  >(() => seedVersion.costing?.labelPanel?.nameOverrides ?? {});
+  const [labelOtherIngredients, setLabelOtherIngredients] = useState<
+    string | null
+  >(() => seedVersion.costing?.labelPanel?.otherIngredients ?? null);
+  const [activeLabelVariantId, setActiveLabelVariantId] = useState<
+    string | null
+  >(null);
+  const [renamingLabelVariantId, setRenamingLabelVariantId] = useState<
+    string | null
+  >(null);
+  const [hoveredLabelVariantId, setHoveredLabelVariantId] = useState<
+    string | null
+  >(null);
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
@@ -978,6 +1015,35 @@ export default function FormulaEditor({
   // v57.4: normalized costing blob — what Save writes and what the dirty
   // check compares. Default-source entries are dropped so an untouched
   // table stays clean.
+  // v81: Supplement Facts panel state. Collapses to null when every
+  // field is at its default so formulas saved before the Label tab
+  // existed don't mount dirty (their seedCore reads labelPanel: null).
+  const labelPanelPayload = useMemo<LabelPanelState | null>(() => {
+    const isDefault =
+      labelVariants.length === 0 &&
+      labelBaseName === "1 Gummy" &&
+      labelServingsPerContainer == null &&
+      Object.keys(labelDvOverrides).length === 0 &&
+      Object.keys(labelNameOverrides).length === 0 &&
+      labelOtherIngredients == null;
+    if (isDefault) return null;
+    return {
+      servingsPerContainer: labelServingsPerContainer,
+      baseName: labelBaseName,
+      variants: labelVariants,
+      dvOverrides: labelDvOverrides,
+      nameOverrides: labelNameOverrides,
+      otherIngredients: labelOtherIngredients,
+    };
+  }, [
+    labelVariants,
+    labelBaseName,
+    labelServingsPerContainer,
+    labelDvOverrides,
+    labelNameOverrides,
+    labelOtherIngredients,
+  ]);
+
   const costingPayload = useMemo(() => {
     const sources: Record<string, string> = {};
     for (const [k, v] of Object.entries(costSourceByKey)) {
@@ -1021,6 +1087,7 @@ export default function FormulaEditor({
       labDec,
       scenarios: costScenarios,
       baseName: costBaseName,
+      labelPanel: labelPanelPayload,
     };
   }, [
     costingDec,
@@ -1060,6 +1127,7 @@ export default function FormulaEditor({
     labDec,
     costScenarios,
     costBaseName,
+    labelPanelPayload,
   ]);
 
   // Loaded snapshot — used to compute whether version fields actually
@@ -1183,6 +1251,7 @@ export default function FormulaEditor({
               labDec: seed.costing.labDec ?? 2,
               scenarios: seed.costing.scenarios ?? [],
               baseName: seed.costing.baseName ?? "Base",
+              labelPanel: seed.costing.labelPanel ?? null,
             }
           : {
               dec: 3,
@@ -1222,6 +1291,7 @@ export default function FormulaEditor({
               labDec: 2,
               scenarios: [],
               baseName: "Base",
+              labelPanel: null,
             },
       };
       return JSON.stringify(current) !== JSON.stringify(seedCore);
@@ -1597,7 +1667,13 @@ export default function FormulaEditor({
     // print so saved sheets are self-identifying; restore after.
     const prevTitle = document.title;
     const tabName =
-      tab === "scale" ? "Scale Up" : tab === "cost" ? "Costing" : "Bench Top";
+      tab === "scale"
+        ? "Scale Up"
+        : tab === "cost"
+          ? "Costing"
+          : tab === "label"
+            ? "Label"
+            : "Bench Top";
     document.title = [
       initialFormula.pcBkCode ?? "TBD",
       (name || "Formula").trim(),
@@ -3319,6 +3395,17 @@ export default function FormulaEditor({
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+          /* v81: Supplement Facts panel prints as one unbreakable block;
+             its in-place editors print as plain text. */
+          .fe-label-panel {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .fe-label-panel input {
+            border: none !important;
+            background: transparent !important;
+            color: #000 !important;
+          }
           .fe-cost-card > div:first-child,
           .fe-cost-sub > div:first-child {
             break-after: avoid !important;
@@ -3430,7 +3517,9 @@ export default function FormulaEditor({
               ? tr("Scaled Up Batch")
               : tab === "cost"
                 ? tr("Costing")
-                : tr("Bench top batch")}
+                : tab === "label"
+                  ? tr("Supplement Facts")
+                  : tr("Bench top batch")}
           </div>
         </div>
 
@@ -4043,6 +4132,9 @@ export default function FormulaEditor({
         <TabButton active={tab === "cost"} onClick={() => setTab("cost")}>
           Costing
         </TabButton>
+        <TabButton active={tab === "label"} onClick={() => setTab("label")}>
+          Label
+        </TabButton>
       </div>
 
       {/* ============ Tab content ============
@@ -4051,7 +4143,8 @@ export default function FormulaEditor({
       {/* v55: printing from the Scale up tab prints the SCALE-UP sheet;
           v66: printing from the Costing tab prints the COSTING sheet;
           every other tab prints the bench sheet as before. */}
-      {(tab === "bench" || (printing && tab !== "scale" && tab !== "cost")) && (
+      {(tab === "bench" ||
+        (printing && tab !== "scale" && tab !== "cost" && tab !== "label")) && (
         <>
           <BenchTopTab
             benchBatchG={benchBatchG}
@@ -4631,6 +4724,664 @@ export default function FormulaEditor({
           wetCastPieceWeightG={wetCastPieceWeightG}
         />
       ) : null}
+
+      {/* ============ Label tab — Supplement Facts panel (v81) ============
+          FDA 101.36-style panel generated from the Label Claim section.
+          Serving-size sub-tabs work like Costing scenarios: base = 1
+          gummy; each variant re-renders the panel at its own serving
+          count (amounts and %DV scale). %DV auto-fills from the FDA
+          Daily Value table; both the row name and the %DV are editable
+          in place (overrides persist with the formula). */}
+      {tab === "label" && !printing ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3, #8a9498)",
+            }}
+          >
+            {tr("Serving Size")}
+          </span>
+          {(() => {
+            const pillStyle = (active: boolean): React.CSSProperties => ({
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: `1px solid ${active ? "var(--teal-700, #1d6c7b)" : "var(--line, #e3dcc9)"}`,
+              background: active
+                ? "var(--teal-700, #1d6c7b)"
+                : "var(--paper, #fffdf8)",
+              color: active ? "#fff" : "var(--teal-900, #0f4a56)",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            });
+            return (
+              <>
+                {renamingLabelVariantId === "__base__" ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    defaultValue={labelBaseName || "1 Gummy"}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape")
+                        (e.target as HTMLInputElement).blur();
+                    }}
+                    onBlur={(e) => {
+                      const nm = e.target.value.trim();
+                      if (nm) setLabelBaseName(nm);
+                      setRenamingLabelVariantId(null);
+                    }}
+                    className="pricing__input"
+                    style={{
+                      width: 140,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      padding: "6px 14px",
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveLabelVariantId(null)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setRenamingLabelVariantId("__base__");
+                    }}
+                    title="Right-click to rename"
+                    style={pillStyle(activeLabelVariantId === null)}
+                  >
+                    {labelBaseName || "1 Gummy"}
+                  </button>
+                )}
+                {labelVariants.map((v) => {
+                  const active = activeLabelVariantId === v.id;
+                  if (renamingLabelVariantId === v.id) {
+                    return (
+                      <input
+                        key={v.id}
+                        autoFocus
+                        type="text"
+                        defaultValue={v.name}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape")
+                            (e.target as HTMLInputElement).blur();
+                        }}
+                        onBlur={(e) => {
+                          const nm = e.target.value.trim();
+                          if (nm)
+                            setLabelVariants((prev) =>
+                              prev.map((x) =>
+                                x.id === v.id ? { ...x, name: nm } : x,
+                              ),
+                            );
+                          setRenamingLabelVariantId(null);
+                        }}
+                        className="pricing__input"
+                        style={{
+                          width: 140,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          borderRadius: 999,
+                          padding: "6px 14px",
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setActiveLabelVariantId(v.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setRenamingLabelVariantId(v.id);
+                      }}
+                      onMouseEnter={() => setHoveredLabelVariantId(v.id)}
+                      onMouseLeave={() => setHoveredLabelVariantId(null)}
+                      title="Right-click to rename"
+                      style={pillStyle(active)}
+                    >
+                      {v.name || tr("Serving")}
+                      {hoveredLabelVariantId === v.id ? (
+                        <span
+                          role="button"
+                          aria-label="Delete serving size"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLabelVariants((prev) =>
+                              prev.filter((x) => x.id !== v.id),
+                            );
+                            if (activeLabelVariantId === v.id)
+                              setActiveLabelVariantId(null);
+                            setHoveredLabelVariantId(null);
+                          }}
+                          style={{
+                            marginLeft: 8,
+                            fontWeight: 700,
+                            opacity: 0.75,
+                          }}
+                        >
+                          ×
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = "sv_" + Math.random().toString(36).slice(2, 9);
+                    const count = labelVariants.length + 2;
+                    setLabelVariants((prev) => [
+                      ...prev,
+                      {
+                        id,
+                        name: `${count} Gummies`,
+                        gummiesPerServing: count,
+                        servingsPerContainer: null,
+                      },
+                    ]);
+                    setActiveLabelVariantId(id);
+                  }}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    border: "1px dashed var(--line, #e3dcc9)",
+                    background: "transparent",
+                    color: "var(--teal-700, #1d6c7b)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  + {tr("Serving Size")}
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      ) : null}
+
+      {tab === "label"
+        ? (() => {
+            const activeVariant =
+              labelVariants.find((v) => v.id === activeLabelVariantId) ?? null;
+            const perServing = Math.max(
+              1,
+              activeVariant?.gummiesPerServing ?? 1,
+            );
+            const servingsCount = activeVariant
+              ? activeVariant.servingsPerContainer
+              : labelServingsPerContainer;
+            const servingLabel = activeVariant
+              ? activeVariant.name
+              : labelBaseName || "1 Gummy";
+            const servingGrams = gummyPieceWeightG
+              ? gummyPieceWeightG * perServing
+              : null;
+
+            // Panel rows straight from the Label Claim section, in its
+            // (drag-and-drop) order.
+            const rows = (labelClaims ?? []).map((c) => {
+              const resolvedName = (() => {
+                const custom = (c.customName ?? "").trim();
+                if (custom) return custom;
+                if (c.rawMaterialId) {
+                  const hit = rmById.get(c.rawMaterialId);
+                  if (hit) return (hit.name ?? "").trim();
+                }
+                return c.rawMaterialFpCode ?? "";
+              })();
+              const displayName =
+                labelNameOverrides[c.id] !== undefined
+                  ? labelNameOverrides[c.id]
+                  : resolvedName;
+              const amountPerServing = (c.amount || 0) * perServing;
+              const override = labelDvOverrides[c.id];
+              // Overrides are stored per single gummy so every serving
+              // variant scales them consistently.
+              const autoPct = percentDailyValue(
+                displayName,
+                amountPerServing,
+                c.unit,
+              );
+              const pct =
+                override !== undefined
+                  ? override === null
+                    ? null
+                    : override * perServing
+                  : autoPct;
+              return {
+                id: c.id,
+                displayName,
+                resolvedName,
+                amountPerServing,
+                unit: c.unit,
+                pct,
+                hasOverride: override !== undefined,
+              };
+            });
+            const anyDv = rows.some((r) => r.pct != null);
+            const anyDagger = rows.some((r) => r.pct == null);
+
+            // "Other ingredients": non-claim-sourced blend rows,
+            // deduped by name, descending by grams. Editable override
+            // persists; null = keep tracking the formula.
+            const autoOther = (() => {
+              const byName = new Map<string, { name: string; g: number }>();
+              for (const r of ingredients) {
+                if (r.sourceLabelClaimId) continue;
+                const nm = resolveRowName(r, rmById);
+                if (!nm) continue;
+                const key = nm.toLowerCase();
+                const prev = byName.get(key);
+                const g = r.grams ?? 0;
+                if (prev) prev.g += g;
+                else byName.set(key, { name: nm, g });
+              }
+              return [...byName.values()]
+                .sort((a, b) => b.g - a.g)
+                .map((x) => x.name)
+                .join(", ");
+            })();
+            const otherText = labelOtherIngredients ?? autoOther;
+
+            const hair = "1px solid #000";
+            return (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 20,
+                  alignItems: "flex-start",
+                  flexWrap: "wrap",
+                }}
+              >
+                {/* ---- The panel ---- */}
+                <div
+                  className="fe-label-panel"
+                  style={{
+                    width: 360,
+                    flexShrink: 0,
+                    border: "2.5px solid #000",
+                    background: "#fff",
+                    color: "#000",
+                    padding: "6px 10px 8px",
+                    fontFamily:
+                      "'Helvetica Neue', Helvetica, Arial, sans-serif",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 27,
+                      fontWeight: 900,
+                      letterSpacing: "-0.01em",
+                      lineHeight: 1.1,
+                      paddingBottom: 4,
+                    }}
+                  >
+                    Supplement Facts
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      borderTop: hair,
+                      paddingTop: 3,
+                    }}
+                  >
+                    Serving Size: {servingLabel}
+                    {servingGrams
+                      ? ` (${(Math.round(servingGrams * 100) / 100).toLocaleString("en-US")} g)`
+                      : ""}
+                  </div>
+                  {servingsCount ? (
+                    <div style={{ fontSize: 12.5, paddingBottom: 2 }}>
+                      Servings Per Container: {servingsCount}
+                    </div>
+                  ) : null}
+                  <div
+                    style={{
+                      height: 7,
+                      background: "#000",
+                      margin: "3px 0 0",
+                    }}
+                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: "2px 0",
+                      borderBottom: hair,
+                    }}
+                  >
+                    <span>Amount Per Serving</span>
+                    <span>% Daily Value</span>
+                  </div>
+                  {rows.length === 0 ? (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        padding: "10px 0",
+                        color: "#555",
+                      }}
+                    >
+                      No label claims yet — add actives in the Label Claim
+                      section on the Bench top tab.
+                    </div>
+                  ) : (
+                    rows.map((r, i) => (
+                      <div
+                        key={r.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 6,
+                          fontSize: 12.5,
+                          padding: "2.5px 0",
+                          borderBottom:
+                            i === rows.length - 1 ? undefined : hair,
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={r.displayName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLabelNameOverrides((prev) => {
+                              const next = { ...prev };
+                              if (val === r.resolvedName) delete next[r.id];
+                              else next[r.id] = val;
+                              return next;
+                            });
+                          }}
+                          title="Panel display name — edit freely; the formula keeps its internal name"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            border: "none",
+                            outline: "none",
+                            background: "transparent",
+                            font: "inherit",
+                            padding: 0,
+                          }}
+                        />
+                        <span
+                          style={{ fontWeight: 700, whiteSpace: "nowrap" }}
+                        >
+                          {formatAmount(r.amountPerServing, r.unit)}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={
+                            r.pct == null ? "†" : formatPercentDv(r.pct)
+                          }
+                          onChange={(e) => {
+                            const raw = e.target.value
+                              .replace(/[%†]/g, "")
+                              .trim();
+                            setLabelDvOverrides((prev) => {
+                              const next = { ...prev };
+                              if (!raw) {
+                                delete next[r.id];
+                                return next;
+                              }
+                              const n = Number(raw);
+                              if (Number.isFinite(n)) {
+                                // Normalize to per-gummy so variants scale.
+                                next[r.id] = n / perServing;
+                              }
+                              return next;
+                            });
+                          }}
+                          title="%DV — auto from FDA Daily Values; type to override, clear to reset"
+                          style={{
+                            width: 44,
+                            border: "none",
+                            outline: "none",
+                            background: "transparent",
+                            font: "inherit",
+                            fontWeight: 700,
+                            textAlign: "right",
+                            padding: 0,
+                            color: r.hasOverride ? "#1d6c7b" : "#000",
+                          }}
+                        />
+                      </div>
+                    ))
+                  )}
+                  <div
+                    style={{ height: 4, background: "#000", margin: "2px 0" }}
+                  />
+                  <div style={{ fontSize: 9, lineHeight: 1.35 }}>
+                    {anyDv ? (
+                      <div>
+                        Percent Daily Values are based on a 2,000 calorie
+                        diet.
+                      </div>
+                    ) : null}
+                    {anyDagger ? (
+                      <div>† Daily Value not established.</div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      lineHeight: 1.4,
+                      borderTop: hair,
+                      marginTop: 4,
+                      paddingTop: 3,
+                    }}
+                  >
+                    <strong>Other Ingredients:</strong>{" "}
+                    {otherText || "—"}
+                  </div>
+                </div>
+
+                {/* ---- Panel settings (screen only) ---- */}
+                {!printing ? (
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 300,
+                      border: "1px solid var(--teal-700, #1d6c7b)",
+                      borderRadius: 8,
+                      background: "var(--paper, #fffdf8)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "8px 14px",
+                        background: "var(--cream, #f6efe3)",
+                        borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: "0.14em",
+                        textTransform: "uppercase",
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                    >
+                      {tr("Panel Settings")} — {servingLabel}
+                    </div>
+                    <div
+                      style={{
+                        padding: 14,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 12,
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          fontSize: 12.5,
+                        }}
+                      >
+                        <span style={{ width: 190 }}>
+                          {tr("Gummies per serving")}
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={perServing}
+                          disabled={!activeVariant}
+                          title={
+                            activeVariant
+                              ? undefined
+                              : "The base panel is always 1 gummy — add a Serving Size tab for multi-gummy servings"
+                          }
+                          onChange={(e) => {
+                            const n = Math.max(
+                              1,
+                              Math.round(Number(e.target.value) || 1),
+                            );
+                            setLabelVariants((prev) =>
+                              prev.map((x) =>
+                                x.id === activeVariant?.id
+                                  ? { ...x, gummiesPerServing: n }
+                                  : x,
+                              ),
+                            );
+                          }}
+                          className="pricing__input"
+                          style={{ width: 90, textAlign: "right" }}
+                        />
+                      </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          fontSize: 12.5,
+                        }}
+                      >
+                        <span style={{ width: 190 }}>
+                          {tr("Servings per container")}
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={servingsCount ?? ""}
+                          placeholder="—"
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            const n = raw
+                              ? Math.max(1, Math.round(Number(raw) || 0)) ||
+                                null
+                              : null;
+                            if (activeVariant) {
+                              setLabelVariants((prev) =>
+                                prev.map((x) =>
+                                  x.id === activeVariant.id
+                                    ? { ...x, servingsPerContainer: n }
+                                    : x,
+                                ),
+                              );
+                            } else {
+                              setLabelServingsPerContainer(n);
+                            }
+                          }}
+                          className="pricing__input"
+                          style={{ width: 90, textAlign: "right" }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "var(--ink-3, #8a9498)",
+                          }}
+                        >
+                          {tr("blank = omit the line (varies by SKU)")}
+                        </span>
+                      </label>
+                      <div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span style={{ fontSize: 12.5 }}>
+                            {tr("Other ingredients")}
+                          </span>
+                          {labelOtherIngredients != null ? (
+                            <button
+                              type="button"
+                              onClick={() => setLabelOtherIngredients(null)}
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                color: "var(--teal-700, #1d6c7b)",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                padding: 0,
+                                textDecoration: "underline",
+                              }}
+                            >
+                              {tr("Reset to formula")}
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              {tr("auto from the blend, heaviest first")}
+                            </span>
+                          )}
+                        </div>
+                        <textarea
+                          value={otherText}
+                          onChange={(e) =>
+                            setLabelOtherIngredients(e.target.value)
+                          }
+                          rows={3}
+                          className="pricing__input"
+                          style={{
+                            width: "100%",
+                            resize: "vertical",
+                            fontSize: 12.5,
+                            lineHeight: 1.4,
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: "var(--ink-3, #8a9498)",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {tr(
+                          "Names and %DV on the panel are editable in place — %DV auto-fills from FDA Daily Values (teal = your override; clear the box to go back to auto). Amounts come from the Label Claim section. Right-click a serving pill to rename it; hover for ×.",
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()
+        : null}
       {/* v56: Costing ingredient list — every unique ingredient used
           across the blends, each listed exactly once (Water appearing in
           pre-cook AND secondary collapses to one line). Quantities and

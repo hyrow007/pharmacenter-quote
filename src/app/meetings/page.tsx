@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import AppHeader from "../_components/AppHeader";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /meetings — the hub.
 //
@@ -30,6 +32,8 @@ type MeetingType = {
 };
 
 export default async function MeetingsHubPage() {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -95,15 +99,13 @@ export default async function MeetingsHubPage() {
         <div className="page__inner--narrow">
           <div style={{ marginBottom: 22 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
-              PharmaCenter · Meetings
+              {t("meetingsBreadcrumb")}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Meetings
+              {t("meetingsTitle")}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
-              A hub for PharmaCenter&rsquo;s recurring meetings. Pick a
-              meeting type to see its weekly sessions and cross-referenced
-              Fishbowl state.
+              {t("meetingsHubLede")}
             </p>
           </div>
 
@@ -119,8 +121,7 @@ export default async function MeetingsHubPage() {
                 background: "var(--cream-soft, #fbf6ec)",
               }}
             >
-              No meeting types configured yet. Add one to{" "}
-              <code>public.meeting_types</code> to see it here.
+              {t("meetingsNoTypes")}
             </div>
           ) : (
             <div
@@ -214,17 +215,19 @@ export default async function MeetingsHubPage() {
                     }}
                   >
                     <span>
-                      {t.session_count ?? 0}{" "}
-                      {(t.session_count ?? 0) === 1
-                        ? "session"
-                        : "sessions"}
+                      {mt.session_count ?? 0}{" "}
+                      {(mt.session_count ?? 0) === 1
+                        ? t("meetingsSessionCountOne")
+                        : t("meetingsSessionsCount")}
                     </span>
-                    {t.latest_session_date ? (
+                    {mt.latest_session_date ? (
                       <span>
-                        Last held {formatDate(t.latest_session_date)}
+                        {t("meetingsLastHeld", {
+                          date: formatDate(mt.latest_session_date),
+                        })}
                       </span>
                     ) : (
-                      <span>No sessions yet</span>
+                      <span>{t("meetingsNoSessionsYet")}</span>
                     )}
                   </div>
                 </Link>
