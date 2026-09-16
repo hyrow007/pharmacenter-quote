@@ -4323,6 +4323,14 @@ export default function FormulaEditor({
             onProcessNoteChange={(text) => setPhaseProcessNote("pre-cook", text)}
             sectionUnitValue={preCookUnit}
             onSectionUnitChange={setPreCookUnit}
+            // v83.2: claim context — without these the Primary Blend
+            // can't recognize claim-sourced rows, so an active placed
+            // here rendered as a plain row and its Overage column
+            // couldn't compute (baseG needs the claim + piece weights).
+            benchBatchG={benchBatchG}
+            labelClaims={labelClaims}
+            gummyPieceWeightG={gummyPieceWeightG}
+            wetCastPieceWeightG={wetCastPieceWeightG}
             printing={printing}
           />
           <BlendSectionCard
