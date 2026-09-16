@@ -9936,9 +9936,40 @@ function ScaleUpBlendCards({
         section(
           "Primary Blend",
           groups["pre-cook"] ?? [],
-          ["Kilograms"],
+          // v83.1: the Overage column joins the Primary Blend when an
+          // active was placed here via the claim's Blend selector —
+          // same derivation as the Secondary Blend's column. An
+          // actives-free Primary Blend keeps its classic single column.
+          [
+            ...((groups["pre-cook"] ?? []).some((r) => r.sourceLabelClaimId)
+              ? ["Overage %"]
+              : []),
+            "Kilograms",
+          ],
           "Total primary blend",
-          (c, r) => (c === "Kilograms" ? fmtKg(preCookKg(Number(r.grams) || 0), primaryDec) : null),
+          (c, r) => {
+            if (c === "Overage %") {
+              if (!r.sourceLabelClaimId) return null;
+              const claim = labelClaims.find(
+                (lc) => lc.id === r.sourceLabelClaimId,
+              );
+              const baseG = claim
+                ? claimBaseGramsForBench(
+                    claim,
+                    benchBatchG ?? 0,
+                    wetCastPieceWeightG ?? 0,
+                    gummyPieceWeightG ?? 0,
+                  )
+                : 0;
+              if (baseG <= 0) return null;
+              const actualG = Number(r.grams) || 0;
+              const effectiveG = actualG > 0 ? actualG : baseG;
+              const pct =
+                Math.round((effectiveG / baseG - 1) * 100 * 100) / 100;
+              return `${Format.pctSigned(pct)}%`;
+            }
+            return c === "Kilograms" ? fmtKg(preCookKg(Number(r.grams) || 0), primaryDec) : null;
+          },
           (c) =>
             c === "Kilograms"
               ? fmtKg(preCookRows.reduce((sum, r) => sum + preCookKg(Number(r.grams) || 0), 0), primaryDec)
@@ -13211,12 +13242,16 @@ function BlendSectionCard({
               // skipped and pre-cook rendering stays unchanged.
               pctBaseG:
                 phase === "cooked" ? grandTotalCookedBlendG : undefined,
-              // Secondary-Blend-only: render the "Overage %" column
-              // (claim-sourced rows only). Every other subsection —
-              // Primary Blend on the pre-cook card, Primary Blend Carry
-              // Over + Final Blend on the cooked card — keeps its
-              // existing layout unchanged.
-              showOverageColumn: phase === "cooked",
+              // Render the "Overage %" column (claim-sourced rows
+              // only). Always on for the Secondary Blend; v83.1: also
+              // on for the pre-cook Primary Blend WHEN it actually
+              // holds an active placed there via the claim's Blend
+              // selector — an actives-free Primary Blend keeps its
+              // classic layout. Carry Over + Final Blend unchanged.
+              showOverageColumn:
+                phase === "cooked" ||
+                (phase === "pre-cook" &&
+                  rows.some((r) => r.sourceLabelClaimId)),
             })}
             {/* Cooked-only Final Blend subsection — same structure as
                 Secondary but wired to phase="final" state on the parent.
