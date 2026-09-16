@@ -165,6 +165,11 @@ const en = {
   noLineItemsForSo: "No sale or drop-ship line items on this SO.",
   meetingHistoryTitle: "Meeting history",
   mondayActivityTitle: "Monday activity",
+  purchaseOrdersTitle: "Purchase orders",
+  poPrefix: "PO",
+  poPlacedOn: "Placed {date}",
+  colReceived: "Received",
+  colEta: "ETA",
   noMeetingsForSo:
     "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
   dueLabel: "due",
@@ -329,6 +334,11 @@ const es: typeof en = {
   noLineItemsForSo: "Esta SO no tiene ítems de venta o drop-ship.",
   meetingHistoryTitle: "Historial de reuniones",
   mondayActivityTitle: "Actividad de Monday",
+  purchaseOrdersTitle: "Órdenes de compra",
+  poPrefix: "PO",
+  poPlacedOn: "Colocada {date}",
+  colReceived: "Recibida",
+  colEta: "ETA",
   noMeetingsForSo:
     "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
   dueLabel: "vence",

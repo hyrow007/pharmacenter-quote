@@ -13,6 +13,8 @@ import { createClient } from "@/lib/auth/server";
 //
 // Needs ANTHROPIC_API_KEY in the Vercel env. Without it the route
 // answers no_api_key and the chat card explains how to enable it.
+// (v83.5: key added to the Vercel project — this comment bump exists
+// to force the deployment that picks it up.)
 
 export const maxDuration = 30;
 

@@ -162,6 +162,50 @@ export default async function SalesOrderDetailPage({
     generated_at: string;
   } | null;
 
+  // Purchase orders placed against this SO — Fishbowl links a poitem
+  // back to a soitem via poitem.soItemId; the sync side rolls the
+  // distinct SO numbers up into fishbowl_purchase_orders.so_numbers[]
+  // so we can find POs for one SO with an indexed contains query.
+  const { data: purchaseOrdersRaw } = await supabase
+    .from("fishbowl_purchase_orders")
+    .select(
+      "fb_po_id, po_number, status_name, is_open, vendor_name, buyer, " +
+        "date_issued, date_created, total_price, items",
+    )
+    .contains("so_numbers", [row.so_number])
+    .order("date_issued", { ascending: false });
+  const purchaseOrders = (purchaseOrdersRaw ?? []) as unknown as Array<{
+    fb_po_id: number;
+    po_number: string;
+    status_name: string | null;
+    is_open: boolean;
+    vendor_name: string | null;
+    buyer: string | null;
+    date_issued: string | null;
+    date_created: string | null;
+    total_price: number | null;
+    items: Array<{
+      line: number | null;
+      product_num: string | null;
+      description: string | null;
+      qty_ordered: number | null;
+      qty_fulfilled: number | null;
+      unit_cost: number | null;
+      total_cost: number | null;
+      date_scheduled: string | null;
+      so_number: string | null;
+      so_item_line: number | null;
+      so_item_product_num: string | null;
+    }> | null;
+  }>;
+  // Only show items on each PO that actually belong to THIS SO — a PO
+  // can pool lines across multiple SOs, but a reviewer looking at one
+  // SO only cares about the pieces of the PO that were purchased for it.
+  const purchaseOrdersForSo = purchaseOrders.map((po) => ({
+    ...po,
+    items: (po.items ?? []).filter((it) => it.so_number === row.so_number),
+  }));
+
   // Monday activity for this SO — cached in so_monday_activity.
   const { data: mondayRaw } = await supabase
     .from("so_monday_activity")
@@ -461,6 +505,143 @@ export default async function SalesOrderDetailPage({
               </tbody>
             </table>
           )}
+
+          {/* Purchase orders placed for this SO — one card per PO,
+              showing the vendor we bought from, when we placed the
+              order, and the lines that were purchased against this
+              SO. Only shows up when at least one PO in the mirror
+              references this SO number. */}
+          {purchaseOrdersForSo.length > 0 ? (
+            <>
+              <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
+                {t("purchaseOrdersTitle")}
+              </h2>
+              <div style={{ display: "grid", gap: 12, marginBottom: 4 }}>
+                {purchaseOrdersForSo.map((po) => (
+                  <div
+                    key={po.fb_po_id}
+                    style={{
+                      background: "var(--paper, #fffdf8)",
+                      border: "1px solid var(--stone, #e3dcc9)",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 14,
+                        flexWrap: "wrap",
+                        padding: "12px 16px",
+                        borderBottom: "1px solid var(--stone-2, #efe9da)",
+                        background: "var(--cream-soft, #fbf6ec)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily:
+                            "'IBM Plex Mono', ui-monospace, monospace",
+                          fontWeight: 700,
+                          color: "var(--teal-900, #0f4a56)",
+                        }}
+                      >
+                        {t("poPrefix")} {po.po_number}
+                      </span>
+                      <span
+                        style={{ fontSize: 13, color: "var(--ink-2, #415056)" }}
+                      >
+                        {po.vendor_name ?? "—"}
+                      </span>
+                      {po.status_name ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            padding: "2px 10px",
+                            background: po.is_open
+                              ? "var(--sage-100, #e7f0d8)"
+                              : "var(--stone-2, #efe9da)",
+                            border: "1px solid var(--stone, #e3dcc9)",
+                            borderRadius: 999,
+                            color: "var(--teal-900, #0f4a56)",
+                          }}
+                        >
+                          {po.status_name}
+                        </span>
+                      ) : null}
+                      <span
+                        style={{
+                          marginLeft: "auto",
+                          fontSize: 12,
+                          color: "var(--ink-3, #8a9498)",
+                        }}
+                      >
+                        {t("poPlacedOn", {
+                          date:
+                            formatDate(po.date_issued) ??
+                            formatDate(po.date_created) ??
+                            "—",
+                        })}
+                        {po.buyer ? ` · ${po.buyer}` : ""}
+                      </span>
+                    </div>
+                    <table style={itemsTable()}>
+                      <thead>
+                        <tr style={{ background: "var(--cream, #f6efe3)" }}>
+                          <SmallTh>{t("colProductNum")}</SmallTh>
+                          <SmallTh>{t("colDescription")}</SmallTh>
+                          <SmallTh align="right">{t("colOrdered")}</SmallTh>
+                          <SmallTh align="right">{t("colReceived")}</SmallTh>
+                          <SmallTh align="right">{t("colUnitDollar")}</SmallTh>
+                          <SmallTh align="right">{t("colExtDollar")}</SmallTh>
+                          <SmallTh>{t("colEta")}</SmallTh>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {po.items.map((it, i) => (
+                          <tr
+                            key={i}
+                            style={{
+                              borderTop:
+                                i === 0
+                                  ? "none"
+                                  : "1px solid var(--stone-2, #efe9da)",
+                            }}
+                          >
+                            <SmallTd
+                              style={{
+                                fontFamily:
+                                  "'IBM Plex Mono', ui-monospace, monospace",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {it.product_num}
+                            </SmallTd>
+                            <SmallTd>{it.description}</SmallTd>
+                            <SmallTd align="right">
+                              {(Number(it.qty_ordered) || 0).toLocaleString()}
+                            </SmallTd>
+                            <SmallTd align="right">
+                              {(Number(it.qty_fulfilled) || 0).toLocaleString()}
+                            </SmallTd>
+                            <SmallTd align="right">
+                              {formatMoney(it.unit_cost)}
+                            </SmallTd>
+                            <SmallTd align="right">
+                              {formatMoney(it.total_cost)}
+                            </SmallTd>
+                            <SmallTd>{formatDate(it.date_scheduled)}</SmallTd>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {/* Recent Monday activity — the Updates feed on this SO's
               Monday item, cached in so_monday_activity by
