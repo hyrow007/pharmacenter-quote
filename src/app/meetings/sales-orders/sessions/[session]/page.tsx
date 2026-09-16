@@ -148,6 +148,38 @@ export default async function SessionDetailPage({
     });
   }
 
+  // AI-synthesized key points per SO — cached in so_synthesis by the
+  // Cowork scheduled task that pulls Fishbowl + Monday + meeting notes
+  // and generates 3-5 bullets via Claude.
+  type SynthesisPoint = { text: string; source?: string };
+  const synthesisBy = new Map<
+    string,
+    {
+      headline: string | null;
+      points: SynthesisPoint[];
+      generated_at: string;
+    }
+  >();
+  if (soNumbers.length > 0) {
+    const { data: synRaw } = await supabase
+      .from("so_synthesis")
+      .select("so_number, headline, points, generated_at")
+      .in("so_number", soNumbers);
+    const synRows = (synRaw ?? []) as unknown as Array<{
+      so_number: string;
+      headline: string | null;
+      points: SynthesisPoint[] | null;
+      generated_at: string;
+    }>;
+    synRows.forEach((r) => {
+      synthesisBy.set(r.so_number, {
+        headline: r.headline,
+        points: Array.isArray(r.points) ? r.points : [],
+        generated_at: r.generated_at,
+      });
+    });
+  }
+
   // Monday activity per SO — cached in so_monday_activity by the
   // /api/sync/monday route. Read-only join at render time.
   type MondayUpdate = {
@@ -397,6 +429,63 @@ export default async function SessionDetailPage({
                         </span>
                       )}
                     </div>
+                    {(() => {
+                      // AI key points — Claude-generated synthesis of
+                      // Fishbowl + Monday + meeting notes. Rendered as
+                      // a green-tinted "Key points" callout so it
+                      // stands apart from raw data.
+                      const syn = synthesisBy.get(so);
+                      if (!syn || syn.points.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            marginBottom: 10,
+                            padding: "10px 12px",
+                            background: "#f0f6ea",
+                            border: "1px solid var(--sage-300, #bcd596)",
+                            borderRadius: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: "0.14em",
+                              textTransform: "uppercase",
+                              color: "var(--sage-700, #5f8e3a)",
+                              marginBottom: 6,
+                            }}
+                          >
+                            Key points
+                          </div>
+                          {syn.headline ? (
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: "var(--teal-900, #0f4a56)",
+                                marginBottom: 6,
+                              }}
+                            >
+                              {syn.headline}
+                            </div>
+                          ) : null}
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: 18,
+                              fontSize: 12.5,
+                              lineHeight: 1.5,
+                              color: "var(--ink-1, #1f2a2d)",
+                            }}
+                          >
+                            {syn.points.map((p, i) => (
+                              <li key={i}>{p.text}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })()}
                     {deltas.length > 0 ? (
                       <ul
                         style={{

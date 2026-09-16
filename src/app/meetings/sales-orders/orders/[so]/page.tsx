@@ -122,6 +122,20 @@ export default async function SalesOrderDetailPage({
   );
   const freshness = describeFreshness(row.synced_at);
 
+  // AI-synthesized key points — Claude-generated from Fishbowl +
+  // Monday + meeting notes by a Cowork scheduled task, stored in
+  // public.so_synthesis. Rendered at the top of the page.
+  const { data: synRaw } = await supabase
+    .from("so_synthesis")
+    .select("headline, points, generated_at")
+    .eq("so_number", row.so_number)
+    .maybeSingle();
+  const synthesis = synRaw as unknown as {
+    headline: string | null;
+    points: Array<{ text: string; source?: string }> | null;
+    generated_at: string;
+  } | null;
+
   // Monday activity for this SO — cached in so_monday_activity.
   const { data: mondayRaw } = await supabase
     .from("so_monday_activity")
@@ -194,6 +208,69 @@ export default async function SalesOrderDetailPage({
                 : ""}
             </div>
           </div>
+
+          {/* AI key points — synthesized from Fishbowl + Monday +
+              meeting notes. Rendered as a green-tinted callout right
+              above the order-summary card so a reviewer sees the "3-5
+              things that matter" first, before the raw data. */}
+          {synthesis && (synthesis.points?.length ?? 0) > 0 ? (
+            <div
+              style={{
+                marginBottom: 18,
+                padding: "14px 18px",
+                background: "#f0f6ea",
+                border: "1px solid var(--sage-300, #bcd596)",
+                borderRadius: 10,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--sage-700, #5f8e3a)",
+                  marginBottom: 6,
+                }}
+              >
+                Key points
+              </div>
+              {synthesis.headline ? (
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: "var(--teal-900, #0f4a56)",
+                    marginBottom: 8,
+                  }}
+                >
+                  {synthesis.headline}
+                </div>
+              ) : null}
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 20,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "var(--ink-1, #1f2a2d)",
+                }}
+              >
+                {(synthesis.points ?? []).map((p, i) => (
+                  <li key={i}>{p.text}</li>
+                ))}
+              </ul>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 10.5,
+                  color: "var(--ink-3, #8a9498)",
+                }}
+              >
+                Generated {formatDate(synthesis.generated_at)}
+              </div>
+            </div>
+          ) : null}
 
           {/* Order summary card ----------------------------------- */}
           <div

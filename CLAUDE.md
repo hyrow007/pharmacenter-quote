@@ -258,6 +258,29 @@ Session upserts are idempotent on `(meeting_type_id,
 plaud_recording_id)` — the same recording ingested twice refreshes
 notes instead of duplicating.
 
+**AI key-points synthesis — `so_synthesis` + `POST /api/sync/so-synthesis`:**
+
+Every SO gets a Claude-generated 3-5 bullet summary that combines
+Fishbowl live state + Monday activity + Plaud meeting notes. Rendered
+as a green-tinted "Key points" callout at the top of each SO card in
+the session view and above the order-summary on `/orders/[so]`.
+
+- **Table:** `so_synthesis` (so_number PK, headline text, points jsonb,
+  based_on jsonb, generated_at). Authenticated read via RLS.
+- **Read endpoint:** `GET /api/sync/so-synthesis/inputs` (bearer auth
+  via `PLAUD_SYNC_SECRET`) returns a pre-joined blob per SO: Fishbowl
+  fields + sale items, Monday status + last 5 updates, all meeting
+  notes across sessions, and the existing synthesis stamp so the
+  generator can skip fresh ones. Only SOs with meeting notes OR Monday
+  activity are returned.
+- **Write endpoint:** `POST /api/sync/so-synthesis` (same bearer)
+  accepts a batch `{ items: [{ so_number, headline, points, based_on }] }`
+  and upserts on so_number.
+- **Generator:** a Cowork scheduled task pulls inputs, sends each SO
+  to Claude with a "give me 3-5 bullets a meeting reviewer needs"
+  prompt, and POSTs the batch back. No LLM key needed in the Vercel
+  app — the LLM cost lives inside Cowork's own model access.
+
 **Monday cross-reference — `so_monday_activity` + `POST /api/sync/monday`:**
 
 Monday.com's "Open Sales Orders" board (id 18389208010, workspace
