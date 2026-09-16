@@ -17,16 +17,20 @@ function isFormulaHost(host: string | null): boolean {
   if (!host) return false;
   // Match "formula.<anything>" so preview URLs and localhost overrides
   // (e.g. formula.localhost:3000) work the same as production.
-  return host.startsWith("formula.");
+  // v82: "formulas.<anything>" is an alias — both singular and plural
+  // subdomains serve the catalog identically.
+  return host.startsWith("formula.") || host.startsWith("formulas.");
 }
 
 // meeting.pharmacenter.app is the meetings hub — a sibling of the
 // formula subdomain that fronts /meetings. Same substring rule so
 // preview URLs (meeting-<hash>.vercel.app doesn't match, but
 // meeting.localhost:3000 does) behave consistently.
+// Singular and plural subdomains are aliased (mirrors formula/formulas
+// in v82) so either one serves the hub identically.
 function isMeetingHost(host: string | null): boolean {
   if (!host) return false;
-  return host.startsWith("meeting.");
+  return host.startsWith("meeting.") || host.startsWith("meetings.");
 }
 
 // v48.6: formulas are only reachable on the formula subdomain. A
