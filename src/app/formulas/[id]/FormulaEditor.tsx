@@ -5412,12 +5412,19 @@ export default function FormulaEditor({
                   </div>
                 </div>
 
-                {/* ---- Panel settings (screen only) ---- */}
+                {/* ---- Panel settings + assistant (screen only) ---- */}
                 {!printing ? (
                   <div
                     style={{
                       flex: 1,
                       minWidth: 300,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 16,
+                    }}
+                  >
+                  <div
+                    style={{
                       border: "1px solid var(--teal-700, #1d6c7b)",
                       borderRadius: 8,
                       background: "var(--paper, #fffdf8)",
@@ -5597,6 +5604,140 @@ export default function FormulaEditor({
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* ---- Panel assistant chat ---- */}
+                  <div
+                    style={{
+                      border: "1px solid var(--teal-700, #1d6c7b)",
+                      borderRadius: 8,
+                      background: "var(--paper, #fffdf8)",
+                      overflow: "hidden",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "8px 14px",
+                        background: "var(--cream, #f6efe3)",
+                        borderBottom: "1.5px solid var(--teal-700, #1d6c7b)",
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: "0.14em",
+                        textTransform: "uppercase",
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                    >
+                      {tr("Panel Assistant")}
+                    </div>
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        maxHeight: 260,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {labelChatMessages.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: "var(--ink-3, #8a9498)",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {tr(
+                            'Ask for panel edits in plain language — "rename SageXtra to Sage Extract", "add a 2-gummy serving with 30 servings per container", "clean up the other ingredients line". Changes apply instantly; Save keeps them.',
+                          )}
+                        </div>
+                      ) : (
+                        labelChatMessages.map((m, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              alignSelf:
+                                m.role === "user" ? "flex-end" : "flex-start",
+                              maxWidth: "88%",
+                              padding: "7px 11px",
+                              borderRadius: 10,
+                              fontSize: 12.5,
+                              lineHeight: 1.45,
+                              whiteSpace: "pre-wrap",
+                              background:
+                                m.role === "user"
+                                  ? "var(--teal-700, #1d6c7b)"
+                                  : "var(--cream, #f6efe3)",
+                              color:
+                                m.role === "user"
+                                  ? "#fff"
+                                  : "var(--ink-1, #22333a)",
+                            }}
+                          >
+                            {m.content}
+                          </div>
+                        ))
+                      )}
+                      {labelChatBusy ? (
+                        <div
+                          style={{
+                            alignSelf: "flex-start",
+                            fontSize: 12,
+                            color: "var(--ink-3, #8a9498)",
+                          }}
+                        >
+                          {tr("Thinking…")}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        padding: "10px 14px",
+                        borderTop: "1px solid var(--line, #e3dcc9)",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={labelChatInput}
+                        onChange={(e) => setLabelChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void sendPanelChat();
+                        }}
+                        placeholder={tr("Describe a panel edit…")}
+                        className="pricing__input"
+                        style={{ flex: 1, fontSize: 12.5 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void sendPanelChat()}
+                        disabled={labelChatBusy || !labelChatInput.trim()}
+                        style={{
+                          padding: "7px 16px",
+                          background:
+                            labelChatBusy || !labelChatInput.trim()
+                              ? "var(--line, #e3dcc9)"
+                              : "var(--teal-700, #1d6c7b)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          cursor:
+                            labelChatBusy || !labelChatInput.trim()
+                              ? "default"
+                              : "pointer",
+                        }}
+                      >
+                        {tr("Send")}
+                      </button>
+                    </div>
+                  </div>
                   </div>
                 ) : null}
               </div>
