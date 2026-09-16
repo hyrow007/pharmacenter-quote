@@ -4995,33 +4995,11 @@ export default function FormulaEditor({
               ? activeVariant.name
               : labelBaseName || "1 Gummy";
 
-            // Nutrition rows (per serving = per-gummy value × serving
-            // count). FDA-style display: grams to the nearest whole
+            // FDA-style display helpers: grams to the nearest whole
             // ("<1 g" under half), %DV to the nearest whole with the *
             // footnote marker.
             const fmtG = (x: number): string =>
               x > 0 && x < 0.5 ? "<1 g" : `${Math.round(x)} g`;
-            const nCalories =
-              labelNutrition.calories != null
-                ? Math.round(labelNutrition.calories * perServing)
-                : null;
-            const nCarbs =
-              labelNutrition.carbsG != null
-                ? labelNutrition.carbsG * perServing
-                : null;
-            const nSugars =
-              labelNutrition.sugarsG != null
-                ? labelNutrition.sugarsG * perServing
-                : null;
-            const nAddedSugars =
-              labelNutrition.addedSugarsG != null
-                ? labelNutrition.addedSugarsG * perServing
-                : null;
-            const anyNutrition =
-              nCalories != null ||
-              nCarbs != null ||
-              nSugars != null ||
-              nAddedSugars != null;
 
             // Full display-name resolution: custom → curated by id →
             // curated by fp_code → bare fp_code. The earlier version
@@ -5081,6 +5059,93 @@ export default function FormulaEditor({
                 hasOverride: override !== undefined,
               };
             });
+            // Auto nutrition estimate (v81.3) — so Calories / Carbs /
+            // Sugars appear on EVERY panel without manual entry. Built
+            // from the blend: each non-active, non-water row's grams net
+            // of its default cook-off moisture, classified by name into
+            // sugars (sugar/syrup/tapioca/glucose…) and other carbs
+            // (pectin/starch/maltodextrin/sugar alcohols…), then scaled
+            // so the finished gummy's piece weight is allocated across
+            // the net solids. All added sugars in a manufactured gummy
+            // count as Added Sugars. Calories = 4 kcal/g of carbs with
+            // FDA rounding. These are ESTIMATES — the Panel Settings
+            // fields override them per gummy, and FDA whole-gram
+            // rounding absorbs most of the model's slack (it ignores
+            // residual moisture retained in the finished piece).
+            const nutritionAuto = (() => {
+              let totalNet = 0;
+              let sugarNet = 0;
+              let carbExtraNet = 0;
+              for (const r of ingredients) {
+                if (r.sourceLabelClaimId) continue;
+                if (isWaterRow(r)) continue;
+                const g = Number(r.grams) || 0;
+                if (g <= 0) continue;
+                const rawLoss = Number(r.moistureLossPct);
+                const lossPct = Number.isFinite(rawLoss)
+                  ? rawLoss
+                  : carryOverDefaultMoisturePct(r);
+                const net =
+                  g * (1 - Math.min(100, Math.max(0, lossPct)) / 100);
+                if (net <= 0) continue;
+                totalNet += net;
+                const nm = panelName(r).toLowerCase();
+                const isSugarish =
+                  /sugar|syrup|tapioca|glucose|fructose|dextrose|sucrose|honey|agave|juice concentrate/.test(
+                    nm,
+                  ) && !/sugar[- ]?free/.test(nm);
+                const isCarbExtra =
+                  /pectin|starch|maltodextrin|inulin|fiber|fibre|polydextrose|sorbitol|maltitol|xylitol|erythritol|allulose/.test(
+                    nm,
+                  );
+                if (isSugarish) sugarNet += net;
+                else if (isCarbExtra) carbExtraNet += net;
+              }
+              const piece = gummyPieceWeightG || 0;
+              if (totalNet <= 0 || piece <= 0)
+                return {
+                  calories: null as number | null,
+                  carbsG: null as number | null,
+                  sugarsG: null as number | null,
+                  addedSugarsG: null as number | null,
+                };
+              const scale = piece / totalNet;
+              const sugars = sugarNet * scale;
+              const carbs = (sugarNet + carbExtraNet) * scale;
+              const calRaw = carbs * 4;
+              const calories =
+                calRaw < 50
+                  ? Math.round(calRaw / 5) * 5
+                  : Math.round(calRaw / 10) * 10;
+              return {
+                calories,
+                carbsG: carbs,
+                sugarsG: sugars,
+                addedSugarsG: sugars,
+              };
+            })();
+
+            // Effective per-gummy values: operator override ?? estimate.
+            const effCalories =
+              labelNutrition.calories ?? nutritionAuto.calories;
+            const effCarbs = labelNutrition.carbsG ?? nutritionAuto.carbsG;
+            const effSugars = labelNutrition.sugarsG ?? nutritionAuto.sugarsG;
+            const effAddedSugars =
+              labelNutrition.addedSugarsG ?? nutritionAuto.addedSugarsG;
+            const nCalories =
+              effCalories != null
+                ? Math.round(effCalories * perServing)
+                : null;
+            const nCarbs = effCarbs != null ? effCarbs * perServing : null;
+            const nSugars = effSugars != null ? effSugars * perServing : null;
+            const nAddedSugars =
+              effAddedSugars != null ? effAddedSugars * perServing : null;
+            const anyNutrition =
+              nCalories != null ||
+              nCarbs != null ||
+              nSugars != null ||
+              nAddedSugars != null;
+
             const anyDv =
               rows.some((r) => r.pct != null) ||
               nCarbs != null ||
@@ -5271,7 +5336,14 @@ export default function FormulaEditor({
                   })),
                   otherIngredients: otherText,
                   otherIngredientsIsCustom: labelOtherIngredients != null,
-                  nutritionPerGummy: labelNutrition,
+                  nutritionPerGummy: {
+                    calories: effCalories,
+                    carbsG: effCarbs,
+                    sugarsG: effSugars,
+                    addedSugarsG: effAddedSugars,
+                    overrides: labelNutrition,
+                    note: "values are per single gummy; null override = auto-estimated from the blend",
+                  },
                 };
                 const res = await fetch(
                   `/api/formulas/${initialFormula.id}/panel-chat`,
@@ -5851,7 +5923,9 @@ export default function FormulaEditor({
                               color: "var(--ink-3, #8a9498)",
                             }}
                           >
-                            {tr("(blank rows are left off the panel)")}
+                            {tr(
+                              "(blank = estimated from the blend; type to override)",
+                            )}
                           </span>
                         </div>
                         <div
@@ -5886,7 +5960,11 @@ export default function FormulaEditor({
                                 min={0}
                                 step="any"
                                 value={labelNutrition[field] ?? ""}
-                                placeholder="—"
+                                placeholder={
+                                  nutritionAuto[field] != null
+                                    ? `${Math.round((nutritionAuto[field] as number) * 100) / 100}`
+                                    : "—"
+                                }
                                 onChange={(e) => {
                                   const raw = e.target.value.trim();
                                   const n = raw ? Number(raw) : NaN;
