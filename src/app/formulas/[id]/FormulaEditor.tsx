@@ -934,10 +934,93 @@ export default function FormulaEditor({
   // v81.1: Panel assistant chat — screen-local, never persisted. Edits
   // it makes land in the ordinary label* state, so Save picks them up.
   const [labelChatMessages, setLabelChatMessages] = useState<
-    Array<{ role: "user" | "assistant"; content: string }>
+    Array<{
+      role: "user" | "assistant";
+      content: string;
+      attachmentNames?: string[];
+    }>
   >([]);
   const [labelChatInput, setLabelChatInput] = useState("");
   const [labelChatBusy, setLabelChatBusy] = useState(false);
+  // v83.8: pending uploads (images/PDFs) attached to the NEXT message.
+  // Images are downscaled client-side; base64 goes with one request
+  // only (history keeps just the filename).
+  const [labelChatAttachments, setLabelChatAttachments] = useState<
+    Array<{ name: string; mediaType: string; dataBase64: string }>
+  >([]);
+  const labelChatFileRef = useRef<HTMLInputElement | null>(null);
+  async function addChatFiles(list: FileList | File[]) {
+    for (const file of Array.from(list)) {
+      try {
+        if (file.type.startsWith("image/")) {
+          // Downscale via canvas → JPEG so even phone photos stay well
+          // under the serverless body limit.
+          const dataUrl: string = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = dataUrl;
+          });
+          const maxDim = 1400;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const jpeg = canvas.toDataURL("image/jpeg", 0.85);
+          setLabelChatAttachments((prev) => [
+            ...prev.slice(-3),
+            {
+              name: file.name,
+              mediaType: "image/jpeg",
+              dataBase64: jpeg.split(",")[1] ?? "",
+            },
+          ]);
+        } else if (file.type === "application/pdf") {
+          if (file.size > 3 * 1024 * 1024) {
+            setLabelChatMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                content: `${file.name} is too large — PDFs up to 3 MB only.`,
+              },
+            ]);
+            continue;
+          }
+          const dataUrl: string = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          setLabelChatAttachments((prev) => [
+            ...prev.slice(-3),
+            {
+              name: file.name,
+              mediaType: "application/pdf",
+              dataBase64: dataUrl.split(",")[1] ?? "",
+            },
+          ]);
+        } else {
+          setLabelChatMessages((m) => [
+            ...m,
+            {
+              role: "assistant",
+              content: `${file.name}: only images and PDFs can be attached here — other files belong in the formula's Files card.`,
+            },
+          ]);
+        }
+      } catch {
+        /* unreadable file — skip */
+      }
+    }
+  }
   // v60.1: itemized overhead sub-cards.
   const [overheadRent, setOverheadRent] = useState<OverheadItem[]>(
     () => seedVersion.costing?.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
@@ -5415,16 +5498,31 @@ export default function FormulaEditor({
                 } else if (op === "setAllergens") {
                   if (typeof o.text === "string")
                     setLabelAllergens(o.text);
+                } else if (op === "hideRow" && rowId) {
+                  setLabelHiddenRows((prev) =>
+                    prev.includes(rowId) ? prev : [...prev, rowId],
+                  );
+                } else if (op === "showRow" && rowId) {
+                  setLabelHiddenRows((prev) =>
+                    prev.filter((id) => id !== rowId),
+                  );
                 }
               }
             };
 
             const sendPanelChat = async () => {
               const text = labelChatInput.trim();
-              if (!text || labelChatBusy) return;
+              if ((!text && labelChatAttachments.length === 0) || labelChatBusy)
+                return;
+              const outgoingAttachments = labelChatAttachments;
+              setLabelChatAttachments([]);
               const nextMsgs = [
                 ...labelChatMessages,
-                { role: "user" as const, content: text },
+                {
+                  role: "user" as const,
+                  content: text || "(see attachment)",
+                  attachmentNames: outgoingAttachments.map((a) => a.name),
+                },
               ];
               setLabelChatMessages(nextMsgs);
               setLabelChatInput("");
@@ -5453,6 +5551,7 @@ export default function FormulaEditor({
                         ? "† (not established)"
                         : formatPercentDv(r.pct),
                     dvOverridden: r.hasOverride,
+                    hiddenFromPanel: labelHiddenRows.includes(r.id),
                   })),
                   otherIngredients: otherText,
                   otherIngredientsIsCustom: labelOtherIngredients != null,
@@ -5514,9 +5613,13 @@ export default function FormulaEditor({
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      messages: nextMsgs,
+                      messages: nextMsgs.map((m) => ({
+                        role: m.role,
+                        content: m.content,
+                      })),
                       panel: snapshot,
                       formula: formulaSnapshot,
+                      attachments: outgoingAttachments,
                     }),
                   },
                 );
@@ -6231,6 +6334,50 @@ export default function FormulaEditor({
                           style={{ flex: 1, fontSize: 12.5 }}
                         />
                       </label>
+                      {hiddenRowInfos.length > 0 ? (
+                        <div style={{ fontSize: 12 }}>
+                          <span style={{ color: "var(--ink-3, #8a9498)" }}>
+                            {tr("Hidden panel rows:")}
+                          </span>{" "}
+                          {hiddenRowInfos.map((r) => (
+                            <span
+                              key={r.id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                margin: "0 6px 4px 0",
+                                padding: "2px 8px",
+                                border: "1px solid var(--line, #e3dcc9)",
+                                borderRadius: 999,
+                                background: "var(--cream-soft, #fbf6ec)",
+                              }}
+                            >
+                              {r.displayName || "unnamed"}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLabelHiddenRows((prev) =>
+                                    prev.filter((id) => id !== r.id),
+                                  )
+                                }
+                                title="Show this row on the panel again"
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                {tr("show")}
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       <div>
                         <div
                           style={{
@@ -6370,6 +6517,17 @@ export default function FormulaEditor({
                                   : "var(--ink-1, #22333a)",
                             }}
                           >
+                            {m.attachmentNames?.length ? (
+                              <div
+                                style={{
+                                  fontSize: 10.5,
+                                  opacity: 0.85,
+                                  marginBottom: 3,
+                                }}
+                              >
+                                📎 {m.attachmentNames.join(", ")}
+                              </div>
+                            ) : null}
                             {m.content}
                           </div>
                         ))
@@ -6386,6 +6544,52 @@ export default function FormulaEditor({
                         </div>
                       ) : null}
                     </div>
+                    {labelChatAttachments.length > 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          padding: "6px 14px 0",
+                        }}
+                      >
+                        {labelChatAttachments.map((a, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              fontSize: 11,
+                              padding: "2px 8px",
+                              border: "1px solid var(--line, #e3dcc9)",
+                              borderRadius: 999,
+                              background: "var(--cream-soft, #fbf6ec)",
+                            }}
+                          >
+                            📎 {a.name}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLabelChatAttachments((prev) =>
+                                  prev.filter((_, j) => j !== i),
+                                )
+                              }
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                cursor: "pointer",
+                                padding: 0,
+                                fontWeight: 700,
+                                color: "var(--ink-3, #8a9498)",
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div
                       style={{
                         display: "flex",
@@ -6394,6 +6598,32 @@ export default function FormulaEditor({
                         borderTop: "1px solid var(--line, #e3dcc9)",
                       }}
                     >
+                      <input
+                        ref={labelChatFileRef}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        multiple
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          if (e.target.files) void addChatFiles(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => labelChatFileRef.current?.click()}
+                        title="Attach an image or PDF (label artwork, CoA…)"
+                        style={{
+                          padding: "7px 10px",
+                          background: "transparent",
+                          border: "1px solid var(--line, #e3dcc9)",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}
+                      >
+                        📎
+                      </button>
                       <input
                         type="text"
                         value={labelChatInput}
@@ -6408,11 +6638,11 @@ export default function FormulaEditor({
                       <button
                         type="button"
                         onClick={() => void sendPanelChat()}
-                        disabled={labelChatBusy || !labelChatInput.trim()}
+                        disabled={labelChatBusy || (!labelChatInput.trim() && labelChatAttachments.length === 0)}
                         style={{
                           padding: "7px 16px",
                           background:
-                            labelChatBusy || !labelChatInput.trim()
+                            labelChatBusy || (!labelChatInput.trim() && labelChatAttachments.length === 0)
                               ? "var(--line, #e3dcc9)"
                               : "var(--teal-700, #1d6c7b)",
                           color: "#fff",
@@ -6423,7 +6653,7 @@ export default function FormulaEditor({
                           letterSpacing: "0.06em",
                           textTransform: "uppercase",
                           cursor:
-                            labelChatBusy || !labelChatInput.trim()
+                            labelChatBusy || (!labelChatInput.trim() && labelChatAttachments.length === 0)
                               ? "default"
                               : "pointer",
                         }}

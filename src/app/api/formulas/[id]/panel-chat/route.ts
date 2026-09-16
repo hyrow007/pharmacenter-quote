@@ -40,6 +40,15 @@ Available ops:
 - {"op":"resetOtherIngredients"}  — back to auto-generated from the blend
 - {"op":"setNutrition","field":"calories|carbsG|sugarsG|addedSugarsG|fiberG|sodiumMg","value":<number PER SINGLE GUMMY, or null to return to the auto-estimate>}  — the Calories / Sodium / Total Carbohydrate / Dietary Fiber / Total Sugars / Added Sugars rows
 - {"op":"setAllergens","text":"<FALCPA Contains line, e.g. 'Tree Nuts (Coconut), Soy'; empty string removes it>"}
+- {"op":"hideRow","rowId":"<id>"}  — suppress a claim row from the PANEL display only (claim + recipe stay intact; e.g. fiber sources represented by the Dietary Fiber line instead of listed as actives)
+- {"op":"showRow","rowId":"<id>"}  — bring a hidden row back
+
+HARD LIMITS — be honest about them:
+- A claim row's AMOUNT (the mg value) comes from the Label Claim section and CANNOT be changed here. renameRow changes only its display text. If the user wants a different amount, say it must be edited in the Label Claims section on the Bench top tab — and offer hideRow when the row shouldn't appear at all.
+- Never state that you changed something unless you emitted the exact op for it in THIS reply. If no op exists for a request, say so plainly instead of pretending.
+- Watch for contradictions you create: e.g. a Dietary Fiber nutrition line AND visible fiber-source claim rows double-represent the same fiber — when the user asks for a fiber-only label, set the fiber value and hideRow the fiber-source claim rows.
+
+The user may attach images or PDFs (label artwork, competitor panels, CoAs, lab reports). Read them as reference material for answering and for panel edits (e.g. matching wording), and say what you see when relevant.
 
 Rules: use rowId/variantId values exactly as given in the state JSON. When the request is ambiguous, ask instead of guessing (ops may be empty). Keep replies plain text, no markdown. Answer in the language the user wrote in.`;
 
@@ -64,7 +73,16 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "no_api_key" }, { status: 503 });
   }
 
-  let body: { messages?: ChatMessage[]; panel?: unknown; formula?: unknown };
+  let body: {
+    messages?: ChatMessage[];
+    panel?: unknown;
+    formula?: unknown;
+    attachments?: Array<{
+      name?: string;
+      mediaType?: string;
+      dataBase64?: string;
+    }>;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -83,13 +101,53 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "no_user_message" }, { status: 400 });
   }
 
+  // v83.8: attachments (images/PDFs) ride the final user turn as real
+  // content blocks. Only vetted media types pass through; 4 max.
+  const ALLOWED_IMAGE = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const attachmentBlocks = (body.attachments ?? [])
+    .filter(
+      (a) =>
+        a &&
+        typeof a.dataBase64 === "string" &&
+        a.dataBase64.length > 0 &&
+        typeof a.mediaType === "string" &&
+        (ALLOWED_IMAGE.includes(a.mediaType) ||
+          a.mediaType === "application/pdf"),
+    )
+    .slice(0, 4)
+    .map((a) =>
+      a.mediaType === "application/pdf"
+        ? {
+            type: "document" as const,
+            source: {
+              type: "base64" as const,
+              media_type: "application/pdf",
+              data: a.dataBase64 as string,
+            },
+          }
+        : {
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: a.mediaType as string,
+              data: a.dataBase64 as string,
+            },
+          },
+    );
+
   // Fold the panel snapshot into the latest user turn so the model
   // always reasons against the state the user is looking at.
   const messages = history.map((m, i) =>
     i === history.length - 1
       ? {
           role: m.role,
-          content: `Current panel state:\n${JSON.stringify(body.panel ?? {}, null, 2)}\n\nFormula snapshot (read-only):\n${JSON.stringify(body.formula ?? {}, null, 2)}\n\nUser request: ${m.content}`,
+          content: [
+            ...attachmentBlocks,
+            {
+              type: "text" as const,
+              text: `Current panel state:\n${JSON.stringify(body.panel ?? {}, null, 2)}\n\nFormula snapshot (read-only):\n${JSON.stringify(body.formula ?? {}, null, 2)}\n\nUser request: ${m.content}`,
+            },
+          ],
         }
       : m,
   );
