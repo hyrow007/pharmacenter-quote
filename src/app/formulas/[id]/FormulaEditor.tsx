@@ -45,7 +45,6 @@ import {
   ingredientGramsForBench,
   ingredientKgForScaleUp,
   isSolutionRow,
-  labelClaimInputAmount,
   type BlendPhase,
   type GummyFormulaAuditRecord,
   type GummyFormulaNote,
@@ -4197,6 +4196,10 @@ export default function FormulaEditor({
           onAdd={addLabelClaim}
           onUpdate={updateLabelClaim}
           onRemove={removeLabelClaim}
+          ingredients={ingredients}
+          benchBatchG={benchBatchG}
+          wetCastPieceWeightG={wetCastPieceWeightG}
+          gummyPieceWeightG={gummyPieceWeightG}
           onReorder={(fromId, toId) =>
             setLabelClaims((prev) => {
               const fromIdx = prev.findIndex((c) => c.id === fromId);
@@ -13976,6 +13979,10 @@ function LabelClaimsSection({
   onUpdate,
   onRemove,
   onReorder,
+  ingredients,
+  benchBatchG,
+  wetCastPieceWeightG,
+  gummyPieceWeightG,
 }: {
   claims: LabelClaim[];
   rawMaterials: RawMaterialOption[];
@@ -13985,8 +13992,38 @@ function LabelClaimsSection({
   /** v71: drop `fromId` onto `toId` — reorders the actives; the parent
    *  sync mirrors the new order onto the Secondary Blend rows. */
   onReorder: (fromId: string, toId: string) => void;
+  /** v83.3: the ingredient list + batch geometry, so Overage % and
+   *  Input derive from the linked row's GRAMS — the same single source
+   *  of truth the blend cards use. The stored overagePct went stale
+   *  whenever the claim amount/unit or batch setup changed after grams
+   *  were set, leaving this section contradicting the blend card. */
+  ingredients: GummyFormulaIngredient[];
+  benchBatchG: number;
+  wetCastPieceWeightG: number;
+  gummyPieceWeightG: number;
 }) {
   const tr = makeTr(useLang());
+  // Grams-derived overage: identical math to the blend cards'
+  // OverageInput. Falls back to the stored overagePct only while no
+  // linked row exists yet (freshly typed claim, sync not landed).
+  const derivedOverage = (c: LabelClaim): number => {
+    const row = ingredients.find((r) => r.sourceLabelClaimId === c.id);
+    const baseG = claimBaseGramsForBench(
+      c,
+      benchBatchG ?? 0,
+      wetCastPieceWeightG ?? 0,
+      gummyPieceWeightG ?? 0,
+    );
+    if (row && baseG > 0) {
+      const g = Number(row.grams) || 0;
+      const effectiveG = g > 0 ? g : baseG;
+      return Math.round((effectiveG / baseG - 1) * 100 * 1000) / 1000;
+    }
+    return Number.isFinite(c.overagePct) ? (c.overagePct as number) : 0;
+  };
+  const derivedInput = (c: LabelClaim): number =>
+    (Number.isFinite(c.amount) ? c.amount : 0) *
+    (1 + derivedOverage(c) / 100);
   // v71: drag-to-reorder state for the claim rows.
   const [dragClaimId, setDragClaimId] = useState<string | null>(null);
   const [dropClaimId, setDropClaimId] = useState<string | null>(null);
@@ -14136,10 +14173,10 @@ function LabelClaimsSection({
           </div>
           {claims.map((c) => {
             const resolved = resolveClaim(c);
-            const overage = Number.isFinite(c.overagePct)
-              ? (c.overagePct as number)
-              : 0;
-            const inputAmt = labelClaimInputAmount(c);
+            // v83.3: both figures derive from the linked row's grams so
+            // this section can never disagree with the blend card.
+            const overage = derivedOverage(c);
+            const inputAmt = derivedInput(c);
             return (
               <LabelClaimRow
                 key={c.id}
@@ -14333,7 +14370,7 @@ function LabelClaimsSection({
               0,
             );
             const inputTotal = claims.reduce(
-              (s, c) => s + toMg(labelClaimInputAmount(c), c.unit),
+              (s, c) => s + toMg(derivedInput(c), c.unit),
               0,
             );
             const fmtMg = (v: number) =>
