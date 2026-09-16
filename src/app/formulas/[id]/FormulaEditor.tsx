@@ -4216,11 +4216,11 @@ export default function FormulaEditor({
         <TabButton active={tab === "scale"} onClick={() => setTab("scale")}>
           Scale up
         </TabButton>
-        <TabButton active={tab === "cost"} onClick={() => setTab("cost")}>
-          Costing
-        </TabButton>
         <TabButton active={tab === "label"} onClick={() => setTab("label")}>
           Supplement Facts
+        </TabButton>
+        <TabButton active={tab === "cost"} onClick={() => setTab("cost")}>
+          Costing
         </TabButton>
       </div>
 
