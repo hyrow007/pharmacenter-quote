@@ -79,11 +79,10 @@ export default async function OrdersLandingPage() {
     redirect(isBrandedHost ? "/?showSignIn=1" : "/");
   }
 
-  // Fan out three reads in parallel — main SO list, key-points cache,
-  // and per-SO Monday activity. Meeting notes need a per-SO latest so
-  // we roll that up in Node after the fetch (Postgres group-by-max
-  // would need a view; overkill for < 100 SOs).
-  const [soRes, synRes, mondayRes, notesRes] = await Promise.all([
+  // Fan out reads in parallel — main SO list, key-points cache, Monday
+  // activity, meeting notes, and linked purchase orders. Meeting notes
+  // need a per-SO latest so we roll that up in Node after the fetch.
+  const [soRes, synRes, mondayRes, notesRes, poRes] = await Promise.all([
     supabase
       .from("fishbowl_sales_orders")
       .select(SO_COLS)
@@ -104,6 +103,19 @@ export default async function OrdersLandingPage() {
           "meeting_sessions(session_date)",
       )
       .order("created_at", { ascending: false })
+      .limit(500),
+    // POs linked to any open SO via so_numbers[] (populated by the sync
+    // from so.vendorPO). Fetching all rows with a non-empty so_numbers
+    // is bounded and simpler than an `overlaps` predicate against the
+    // dynamic open-SO list.
+    supabase
+      .from("fishbowl_purchase_orders")
+      .select(
+        "po_number, vendor_name, buyer, status_name, is_open, " +
+          "date_issued, date_created, so_numbers",
+      )
+      .not("so_numbers", "eq", "{}")
+      .order("date_issued", { ascending: false })
       .limit(500),
   ]);
 
@@ -213,6 +225,49 @@ export default async function OrdersLandingPage() {
     notesBy.set(n.so_number, cur);
   }
 
+  // POs indexed by every SO number they reference — one PO can list
+  // multiple SOs in its so_numbers[] rollup (e.g. one paper order that
+  // covered a run of SOs), so it shows on every one of them.
+  const posBySo = new Map<
+    string,
+    Array<{
+      po_number: string;
+      vendor_name: string | null;
+      buyer: string | null;
+      status_name: string | null;
+      is_open: boolean;
+      date_issued: string | null;
+      date_created: string | null;
+    }>
+  >();
+  for (const raw of (poRes.data ?? []) as unknown[]) {
+    const p = raw as {
+      po_number: string;
+      vendor_name: string | null;
+      buyer: string | null;
+      status_name: string | null;
+      is_open: boolean;
+      date_issued: string | null;
+      date_created: string | null;
+      so_numbers: string[] | null;
+    };
+    if (!Array.isArray(p.so_numbers)) continue;
+    for (const soNum of p.so_numbers) {
+      if (!soNum) continue;
+      const arr = posBySo.get(soNum) ?? [];
+      arr.push({
+        po_number: p.po_number,
+        vendor_name: p.vendor_name,
+        buyer: p.buyer,
+        status_name: p.status_name,
+        is_open: p.is_open,
+        date_issued: p.date_issued,
+        date_created: p.date_created,
+      });
+      posBySo.set(soNum, arr);
+    }
+  }
+
   // Group SOs by customer_name, preserving alphabetical order.
   const byCustomer = new Map<string, SoRow[]>();
   for (const r of rows) {
@@ -223,11 +278,17 @@ export default async function OrdersLandingPage() {
   const customerGroups = Array.from(byCustomer.entries())
     .map(([customer, sos]) => ({
       customer,
+      // Sort by SO number sequentially. Numbers can carry a prefix
+      // ("M-14221") or a suffix ("14740-1"); extract the leading digit
+      // group for the numeric compare so 14740, 14740-1, 14740-2 land
+      // in order, and fall back to a string compare for tiebreaks.
       sos: sos.sort((a, b) => {
-        // ship-date soonest first; SOs without a ship date sink to the bottom
-        const av = a.date_first_ship || "9999-99-99";
-        const bv = b.date_first_ship || "9999-99-99";
-        return av.localeCompare(bv);
+        const aNum = parseInt(String(a.so_number).replace(/\D+/, ""), 10);
+        const bNum = parseInt(String(b.so_number).replace(/\D+/, ""), 10);
+        if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) {
+          return aNum - bNum;
+        }
+        return String(a.so_number).localeCompare(String(b.so_number));
       }),
     }))
     .sort((a, b) => a.customer.localeCompare(b.customer));
@@ -379,6 +440,7 @@ export default async function OrdersLandingPage() {
                         );
 
                       const topPoints = (syn?.points ?? []).slice(0, 2);
+                      const linkedPos = posBySo.get(key) ?? [];
 
                       return (
                         <Link
@@ -587,6 +649,89 @@ export default async function OrdersLandingPage() {
                                 {t("touchFishbowl")}
                               </span>
                               {truncate(so.note.trim(), 320)}
+                            </div>
+                          ) : null}
+
+                          {/* Linked purchase orders — the components /
+                              raw materials PharmaCenter placed on
+                              vendors for this SO (matched via the SO's
+                              Vendor PO field). Shows vendor, status,
+                              and placed date so the reviewer knows
+                              what's on order and whether it landed. */}
+                          {linkedPos.length > 0 ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 6,
+                                marginBottom: 6,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  alignSelf: "center",
+                                }}
+                              >
+                                {t("purchaseOrdersTitle")}
+                              </span>
+                              {linkedPos.map((po) => (
+                                <span
+                                  key={po.po_number}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    background: po.is_open
+                                      ? "#e7f0d8"
+                                      : "var(--stone-2, #efe9da)",
+                                    border: "1px solid var(--stone, #e3dcc9)",
+                                    color: "var(--ink-1, #1f2a2d)",
+                                    display: "inline-flex",
+                                    gap: 6,
+                                    alignItems: "baseline",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontFamily:
+                                        "'IBM Plex Mono', ui-monospace, monospace",
+                                      fontWeight: 700,
+                                      color: "var(--teal-900, #0f4a56)",
+                                    }}
+                                  >
+                                    {t("poPrefix")} {po.po_number}
+                                  </span>
+                                  {po.vendor_name ? (
+                                    <span>{po.vendor_name}</span>
+                                  ) : null}
+                                  {po.status_name ? (
+                                    <span
+                                      style={{
+                                        color: "var(--ink-3, #8a9498)",
+                                      }}
+                                    >
+                                      · {po.status_name}
+                                    </span>
+                                  ) : null}
+                                  {po.date_issued || po.date_created ? (
+                                    <span
+                                      style={{
+                                        color: "var(--ink-3, #8a9498)",
+                                      }}
+                                    >
+                                      ·{" "}
+                                      {formatShort(
+                                        po.date_issued ?? po.date_created,
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ))}
                             </div>
                           ) : null}
 
