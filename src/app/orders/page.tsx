@@ -39,6 +39,7 @@ type SoRow = {
   customer_name: string | null;
   customer_po: string | null;
   salesman: string | null;
+  note: string | null;
   date_issued: string | null;
   date_first_ship: string | null;
   subtotal: number | null;
@@ -58,7 +59,8 @@ const SALE_TYPE_IDS = new Set([10, 30]);
 
 const SO_COLS =
   "so_number, status_id, status_name, is_open, customer_name, customer_po, " +
-  "salesman, date_issued, date_first_ship, subtotal, total_price, items, synced_at";
+  "salesman, note, date_issued, date_first_ship, subtotal, total_price, " +
+  "items, synced_at";
 
 export default async function OrdersLandingPage() {
   const lang = await getLangFromCookie();
@@ -133,6 +135,8 @@ export default async function OrdersLandingPage() {
       last_synced_at: string | null;
       update_count: number;
       latest_update_at: string | null;
+      latest_update_text: string | null;
+      latest_update_creator: string | null;
     }
   >();
   for (const raw of (mondayRes.data ?? []) as unknown[]) {
@@ -151,16 +155,19 @@ export default async function OrdersLandingPage() {
         | null;
     };
     const updates = Array.isArray(m.updates) ? m.updates : [];
-    const latest = updates.reduce<string | null>(
-      (a, u) => (a && a > u.created_at ? a : u.created_at ?? a),
-      null,
-    );
+    // Newest first, then keep the top one for the preview.
+    const sorted = updates
+      .slice()
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    const latest = sorted[0] ?? null;
     mondayBy.set(m.so_number, {
       status: m.status,
       item_updated_at: m.item_updated_at,
       last_synced_at: m.last_synced_at,
       update_count: updates.length,
-      latest_update_at: latest,
+      latest_update_at: latest?.created_at ?? null,
+      latest_update_text: latest?.text_body ?? null,
+      latest_update_creator: latest?.creator_name ?? null,
     });
   }
 
@@ -518,7 +525,7 @@ export default async function OrdersLandingPage() {
                                 border: "1px solid var(--sage-200, #d5e5b7)",
                                 borderRadius: 8,
                                 padding: "8px 12px",
-                                marginBottom: warnings.length ? 6 : 0,
+                                marginBottom: 6,
                               }}
                             >
                               {syn.headline ? (
@@ -546,6 +553,80 @@ export default async function OrdersLandingPage() {
                                   <li key={i}>{p.text}</li>
                                 ))}
                               </ul>
+                            </div>
+                          ) : null}
+
+                          {/* Fishbowl memo — the SO's own note field.
+                              Small italic block so it reads as "context
+                              from the source of truth" without competing
+                              with the key points above. */}
+                          {so.note && so.note.trim() ? (
+                            <div
+                              style={{
+                                background: "var(--cream-soft, #fbf6ec)",
+                                border: "1px solid var(--stone-2, #efe9da)",
+                                borderRadius: 8,
+                                padding: "6px 10px",
+                                marginBottom: 6,
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                color: "var(--ink-2, #415056)",
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  marginRight: 6,
+                                }}
+                              >
+                                {t("touchFishbowl")}
+                              </span>
+                              {truncate(so.note.trim(), 320)}
+                            </div>
+                          ) : null}
+
+                          {/* Latest Monday update — a preview of the
+                              most recent chat/note on this SO's Monday
+                              item, so you don't have to open Monday to
+                              know what was said last. */}
+                          {monday?.latest_update_text ? (
+                            <div
+                              style={{
+                                background: "#eff5ff",
+                                border: "1px solid #cddffb",
+                                borderRadius: 8,
+                                padding: "6px 10px",
+                                marginBottom: 6,
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                color: "var(--ink-1, #1f2a2d)",
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "#2c4d8f",
+                                  marginRight: 6,
+                                }}
+                              >
+                                {t("touchMonday")}
+                                {monday.latest_update_creator
+                                  ? ` · ${monday.latest_update_creator}`
+                                  : ""}
+                                {monday.latest_update_at
+                                  ? ` · ${describeFreshness(monday.latest_update_at).relative}`
+                                  : ""}
+                              </span>
+                              {truncate(monday.latest_update_text.trim(), 320)}
                             </div>
                           ) : null}
 
@@ -657,6 +738,11 @@ function describeFreshness(iso: string | null): { relative: string } {
   const days = Math.round(hrs / 24);
   if (days < 30) return { relative: `${days}d ago` };
   return { relative: new Date(iso).toLocaleDateString() };
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).trimEnd() + "…";
 }
 
 function formatShort(iso: string | null): string {
