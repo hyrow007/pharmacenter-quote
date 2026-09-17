@@ -848,10 +848,65 @@ async function main() {
       };
     })
     .filter((p) => p.po_number);
+
+  // Second-pass linkage via so.vendorPO — PharmaCenter doesn't use
+  // Fishbowl's built-in "PO from SO backorder" (which would set
+  // poitem.soItemId), they instead type the PO number(s) into the SO's
+  // Vendor PO field, comma-separated ("5915,5916"). Parse that string,
+  // then for every PO number that matches, stamp the SO number into
+  // items[].so_number and into the PO's so_numbers[] rollup so the
+  // meetings hub can find POs for one SO with a single indexed query.
+  const poByNumber = new Map(purchaseOrders.map((p) => [p.po_number, p]));
+  let vendorPoLinked = 0;
+  for (const s of soRows) {
+    if (!s.vendorPO || !s.num) continue;
+    const soNumber = String(s.num);
+    const poNums = String(s.vendorPO)
+      .split(/[,;\s]+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    for (const num of poNums) {
+      const po = poByNumber.get(num);
+      if (!po) continue;
+      if (!po.so_numbers.includes(soNumber)) po.so_numbers.push(soNumber);
+      // Best-effort item-level attribution:
+      //   - if a poitem's product_num appears in the SO's items, tag it
+      //     with this SO number (multi-SO POs get split cleanly).
+      //   - if no items on the PO overlap ANY SO's products (or the SO
+      //     has no items at all), fall back to attributing every item on
+      //     the PO to this SO — better one weak signal than none.
+      const soProductNums = new Set(
+        (itemsBySoId.get(s.id) || [])
+          .map((it) => it.product_num)
+          .filter(Boolean),
+      );
+      let stampedAny = false;
+      for (const it of po.items) {
+        if (
+          it.product_num &&
+          soProductNums.has(it.product_num) &&
+          it.so_number !== soNumber
+        ) {
+          it.so_number = soNumber;
+          it.so_item_product_num = it.product_num;
+          stampedAny = true;
+        }
+      }
+      if (!stampedAny) {
+        // Nothing overlapped — attribute the whole PO to this SO.
+        for (const it of po.items) {
+          if (!it.so_number) it.so_number = soNumber;
+        }
+      }
+      vendorPoLinked += 1;
+    }
+  }
+
   log(
     `  ${purchaseOrders.length} purchase orders in statuses ${PO_SYNCED_STATUSES.join("/")} ` +
       `(${purchaseOrders.filter((p) => p.is_open).length} open, ` +
-      `${purchaseOrders.filter((p) => p.so_numbers.length > 0).length} SO-linked)`,
+      `${purchaseOrders.filter((p) => p.so_numbers.length > 0).length} SO-linked, ` +
+      `${vendorPoLinked} vendor-PO links resolved)`,
   );
 
   // ----- POSTs -------------------------------------------------------
