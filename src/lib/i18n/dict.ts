@@ -170,6 +170,29 @@ const en = {
   poPlacedOn: "Placed {date}",
   colReceived: "Received",
   colEta: "ETA",
+
+  // ---- Orders landing (sales-order status tracker) ----
+  ordersEyebrow: "PHARMACENTER · SALES ORDERS",
+  ordersTitle: "Sales Order Tracker",
+  ordersLede:
+    "Every open sales order across Fishbowl, grouped by customer, with the latest meeting mention, Monday chatter, and AI key points at a glance.",
+  ordersOpenCount: "open",
+  ordersEstimateCount: "estimates",
+  ordersCustomerCount: "{n} customers",
+  ordersMeetingsLink: "Weekly meeting sessions",
+  ordersNoOpen:
+    "No open sales orders in Fishbowl right now (statuses Estimate / Issued / In Progress).",
+  touchPlaud: "Plaud",
+  touchMonday: "Monday",
+  touchFishbowl: "Fishbowl",
+  warnShipOverdue: "ship date passed",
+  warnShipImminent: "ships in {days}d",
+  warnCustomerMismatchShort: "customer mismatch",
+  warnProductMismatchShort: "product mismatch",
+  warnStale: "no touch in {days}d",
+  shipPrefix: "Ship",
+  shipOverdueLabel: "overdue",
+  shipInDaysLabel: "in {days}d",
   noMeetingsForSo:
     "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
   dueLabel: "due",
@@ -339,6 +362,29 @@ const es: typeof en = {
   poPlacedOn: "Colocada {date}",
   colReceived: "Recibida",
   colEta: "ETA",
+
+  // ---- Landing de órdenes ----
+  ordersEyebrow: "PHARMACENTER · ÓRDENES DE VENTA",
+  ordersTitle: "Rastreador de órdenes de venta",
+  ordersLede:
+    "Todas las órdenes de venta abiertas en Fishbowl, agrupadas por cliente, con la mención más reciente de reunión, chatter de Monday y puntos clave de IA a la vista.",
+  ordersOpenCount: "abiertas",
+  ordersEstimateCount: "estimaciones",
+  ordersCustomerCount: "{n} clientes",
+  ordersMeetingsLink: "Sesiones semanales de reunión",
+  ordersNoOpen:
+    "No hay órdenes de venta abiertas en Fishbowl ahora mismo (estados Estimación / Emitida / En Progreso).",
+  touchPlaud: "Plaud",
+  touchMonday: "Monday",
+  touchFishbowl: "Fishbowl",
+  warnShipOverdue: "fecha de envío vencida",
+  warnShipImminent: "envía en {days}d",
+  warnCustomerMismatchShort: "cliente no coincide",
+  warnProductMismatchShort: "producto no coincide",
+  warnStale: "sin actividad en {days}d",
+  shipPrefix: "Envío",
+  shipOverdueLabel: "vencido",
+  shipInDaysLabel: "en {days}d",
   noMeetingsForSo:
     "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
   dueLabel: "vence",

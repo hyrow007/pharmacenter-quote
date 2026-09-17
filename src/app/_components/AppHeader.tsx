@@ -20,7 +20,12 @@ import { getLangFromCookie } from "@/lib/i18n/server";
 // We also resolve `isAdmin` here so the AdminToggle can be rendered for
 // admins on every page without each page having to pass the flag in.
 
-export type AppContext = "quote" | "formulas" | "packing-list" | "meetings";
+export type AppContext =
+  | "quote"
+  | "formulas"
+  | "packing-list"
+  | "meetings"
+  | "orders";
 
 type Props = {
   user: { email: string };
@@ -40,15 +45,21 @@ export default async function AppHeader({ user, appContext }: Props) {
   // /formulas hits on the quote host). Host is read server-side and
   // passed down so the client nav renders the right set on first paint.
   const host = (await headers()).get("host") ?? "";
-  const onFormulaHost = host.startsWith("formula.");
-  const onMeetingHost = host.startsWith("meeting.");
+  const onFormulaHost = host.startsWith("formula.") || host.startsWith("formulas.");
+  const onMeetingHost = host.startsWith("meeting.") || host.startsWith("meetings.");
+  const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
   const lang = await getLangFromCookie();
 
-  // Effective identity: explicit context from the page wins (used by the
-  // shared feedback page), otherwise derived from the host.
-  const ctx: AppContext =
-    appContext ??
-    (onFormulaHost ? "formulas" : onMeetingHost ? "meetings" : "quote");
+  // Effective identity: explicit context from the page wins, otherwise
+  // derived from the host. Orders host wins over meetings when both a
+  // page passes appContext="meetings" and the visitor is on order.*
+  // — that shows up on the shared SO detail page, which lives under
+  // /meetings/... but should wear the orders identity when visited via
+  // the orders subdomain.
+  const ctx: AppContext = onOrderHost
+    ? "orders"
+    : (appContext ??
+      (onFormulaHost ? "formulas" : onMeetingHost ? "meetings" : "quote"));
   const brandHref =
     ctx === "formulas"
       ? onFormulaHost
@@ -58,25 +69,33 @@ export default async function AppHeader({ user, appContext }: Props) {
         ? onMeetingHost
           ? "/"
           : "https://meeting.pharmacenter.app/"
-        : ctx === "packing-list"
-          ? "https://packing.pharmacenter.app/lists"
-          : "/workflows";
+        : ctx === "orders"
+          ? onOrderHost
+            ? "/"
+            : "https://orders.pharmacenter.app/"
+          : ctx === "packing-list"
+            ? "https://packing.pharmacenter.app/lists"
+            : "/workflows";
   const productMain =
     ctx === "formulas"
       ? "Formulas"
       : ctx === "meetings"
         ? "Meeting"
-        : ctx === "packing-list"
-          ? "Packing List"
-          : "Quote";
+        : ctx === "orders"
+          ? "Sales Order"
+          : ctx === "packing-list"
+            ? "Packing List"
+            : "Quote";
   const productSub =
     ctx === "formulas"
       ? "Catalog"
       : ctx === "meetings"
         ? "Hub"
-        : ctx === "packing-list"
-          ? "Generator"
-          : "Work Flows";
+        : ctx === "orders"
+          ? "Tracker"
+          : ctx === "packing-list"
+            ? "Generator"
+            : "Work Flows";
 
   return (
     <header className="app-nav">

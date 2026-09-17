@@ -33,6 +33,15 @@ function isMeetingHost(host: string | null): boolean {
   return host.startsWith("meeting.") || host.startsWith("meetings.");
 }
 
+// order.pharmacenter.app / orders.pharmacenter.app are the sales-order
+// status tracker — the pivot from "meeting hub" to "everything about
+// every open SO". Same substring pattern; both singular and plural
+// serve the tracker identically. Fronts /orders.
+function isOrderHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("order.") || host.startsWith("orders.");
+}
+
 // v48.6: formulas are only reachable on the formula subdomain. A
 // /formulas page request arriving on the quote host gets a permanent
 // redirect to the same path on formula.<domain>. Scoped to hosts that
@@ -58,6 +67,14 @@ function shouldRewriteToMeetings(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
   if (pathname.startsWith("/meetings")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  return true;
+}
+
+function shouldRewriteToOrders(pathname: string): boolean {
+  if (pathname.startsWith("/api")) return false;
+  if (pathname.startsWith("/auth")) return false;
+  if (pathname.startsWith("/orders")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }
@@ -162,6 +179,28 @@ export async function middleware(request: NextRequest) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/meetings" : `/meetings${pathname}`;
+      rewriteUrl.search = search;
+      const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
+      authResponse.cookies.getAll().forEach((cookie) => {
+        rewriteResponse.cookies.set(cookie);
+      });
+      return rewriteResponse;
+    }
+  }
+
+  // orders host — same rewrite pattern; fronts /orders (the sales-order
+  // status tracker landing).
+  if (isOrderHost(host)) {
+    const { pathname, search, searchParams } = request.nextUrl;
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
+    if (
+      shouldRewriteToOrders(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname =
+        pathname === "/" ? "/orders" : `/orders${pathname}`;
       rewriteUrl.search = search;
       const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       authResponse.cookies.getAll().forEach((cookie) => {

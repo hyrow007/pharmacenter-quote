@@ -19,11 +19,16 @@ export default async function Home({
   // meetings hub; quote.pharmacenter.app (and everything else) still
   // lands on the quoting workflow inbox.
   const hostHeader = (await headers()).get("host") ?? "";
-  const isFormulaHost = hostHeader.startsWith("formula.");
-  const isMeetingHost = hostHeader.startsWith("meeting.");
+  const isFormulaHost =
+    hostHeader.startsWith("formula.") || hostHeader.startsWith("formulas.");
+  const isMeetingHost =
+    hostHeader.startsWith("meeting.") || hostHeader.startsWith("meetings.");
+  const isOrderHost =
+    hostHeader.startsWith("order.") || hostHeader.startsWith("orders.");
 
   if (user) {
     if (isFormulaHost) redirect("/formulas");
+    if (isOrderHost) redirect("/orders");
     if (isMeetingHost) redirect("/meetings");
     redirect("/workflows");
   }
@@ -32,14 +37,19 @@ export default async function Home({
   const showError = params?.auth_error === "1";
 
   // Sign-in copy — swapped per subdomain so operators landing on
-  // formula.pharmacenter.app see "Formula / Catalog" and those on
-  // meeting.pharmacenter.app see "Meeting / Hub" instead of the
-  // generic quoting-tool language.
+  // formula.pharmacenter.app see "Formula / Catalog", those on
+  // orders.pharmacenter.app see "Sales Order / Tracker", etc.
   const copy = isFormulaHost
     ? {
         titleTop: "Formula",
         titleSub: "Catalog",
         lede: "Internal catalog of PharmaCenter's gummy formulas — bench recipes, scale-up parameters, label claims, and material costing. Sign in with your PharmaCenter Google account to continue.",
+      }
+    : isOrderHost
+    ? {
+        titleTop: "Sales Order",
+        titleSub: "Tracker",
+        lede: "Every open sales order across Fishbowl, with vendor purchase orders, meeting mentions, Monday chatter, and AI key points at a glance. Sign in with your PharmaCenter Google account to continue.",
       }
     : isMeetingHost
     ? {
