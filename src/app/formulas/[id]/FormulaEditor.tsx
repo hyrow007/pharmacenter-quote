@@ -5962,16 +5962,22 @@ export default function FormulaEditor({
                     />
                   ) : null}
                   {visibleRows.length === 0 ? (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        padding: "10px 0",
-                        color: "#555",
-                      }}
-                    >
-                      No label claims yet — add actives in the Label Claim
-                      section on the Bench top tab.
-                    </div>
+                    // Empty-state only when the formula truly has no
+                    // claims — when rows exist but are all HIDDEN, a
+                    // fiber-only (or nutrition-only) panel is the
+                    // intended result and needs no message.
+                    rows.length === 0 ? (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          padding: "10px 0",
+                          color: "#555",
+                        }}
+                      >
+                        No label claims yet — add actives in the Label Claim
+                        section on the Bench top tab.
+                      </div>
+                    ) : null
                   ) : (
                     visibleRows.map((r, i) => (
                       <div
