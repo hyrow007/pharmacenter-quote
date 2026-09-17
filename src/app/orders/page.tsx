@@ -6,6 +6,8 @@ import AppHeader from "../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 
+type TFn = ReturnType<typeof makeT>;
+
 // /orders
 //
 // Sales-order status tracker landing. Every OPEN SO (Fishbowl statusId
@@ -672,7 +674,7 @@ function ShipDatePill({
 }: {
   date: string;
   classification: ShipClassification;
-  t: (k: string, vars?: Record<string, string>) => string;
+  t: TFn;
 }) {
   const bg = classification.overdue
     ? "#f7dfda"
