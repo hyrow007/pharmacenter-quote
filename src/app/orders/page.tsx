@@ -52,6 +52,10 @@ type SoRow = {
   synced_at: string | null;
 };
 
+// Line items shown on each card are filtered to real product lines —
+// sale + drop-ship (type_id 10 / 30) — same rule as the SO detail page.
+const SALE_TYPE_IDS = new Set([10, 30]);
+
 const SO_COLS =
   "so_number, status_id, status_name, is_open, customer_name, customer_po, " +
   "salesman, date_issued, date_first_ship, subtotal, total_price, items, synced_at";
@@ -430,6 +434,82 @@ export default async function OrdersLandingPage() {
                               </span>
                             ) : null}
                           </div>
+
+                          {/* What was ordered — product lines up top,
+                              before the meeting context, so the card
+                              answers "which product is this?" at a
+                              glance (v84: restored per operator request;
+                              used to live at the bottom of the card). */}
+                          {(() => {
+                            const saleItems = (so.items ?? []).filter(
+                              (it) =>
+                                it.type_id != null &&
+                                SALE_TYPE_IDS.has(it.type_id),
+                            );
+                            if (saleItems.length === 0) return null;
+                            return (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 2,
+                                  margin: "2px 0 8px",
+                                  fontSize: 12.5,
+                                  lineHeight: 1.45,
+                                  color: "var(--ink-1, #1f2a2d)",
+                                }}
+                              >
+                                {saleItems.map((it, i) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      display: "flex",
+                                      gap: 8,
+                                      alignItems: "baseline",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontFamily:
+                                          "'IBM Plex Mono', ui-monospace, monospace",
+                                        fontSize: 11.5,
+                                        fontWeight: 600,
+                                        color: "var(--teal-700, #1d6c7b)",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {it.product_num ?? "—"}
+                                    </span>
+                                    <span
+                                      style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {it.description ?? ""}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontFamily:
+                                          "'IBM Plex Mono', ui-monospace, monospace",
+                                        fontSize: 12,
+                                        color: "var(--ink-2, #415056)",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      ×{" "}
+                                      {(
+                                        Number(it.qty_ordered) || 0
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
 
                           {syn && topPoints.length > 0 ? (
                             <div
