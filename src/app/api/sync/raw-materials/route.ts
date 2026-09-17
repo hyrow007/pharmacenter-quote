@@ -180,7 +180,21 @@ export async function POST(request: Request) {
   });
 
   const now = new Date().toISOString();
-  const records = rows.map((r) => ({
+
+  // v84.1: a degraded agent payload must not wipe costs the table
+  // already holds. On 9/17 the office-side agent sent name-only records
+  // (no cost fields) and this upsert nulled every stored cost. Records
+  // carrying at least one numeric cost upsert in full; cost-less
+  // records upsert IDENTITY FIELDS ONLY (name / unit / active /
+  // synced_at), leaving the existing cost columns untouched — a stale
+  // cost beats no cost on the Costing tab, and the next healthy sync
+  // overwrites it anyway.
+  const hasAnyCost = (r: Required<RawMaterialPayload>) =>
+    r.default_cost_per_kg !== null ||
+    r.inventory_cost_per_kg !== null ||
+    r.last_order_cost_per_kg !== null;
+
+  const records = rows.filter(hasAnyCost).map((r) => ({
     fp_code: r.fp_code,
     name: r.name,
     default_unit: r.default_unit,
@@ -193,6 +207,47 @@ export async function POST(request: Request) {
     source: "fishbowl",
     synced_at: now,
   }));
+  const identityRecords = rows
+    .filter((r) => !hasAnyCost(r))
+    .map((r) => ({
+      fp_code: r.fp_code,
+      name: r.name,
+      default_unit: r.default_unit,
+      active: r.active,
+      source: "fishbowl",
+      synced_at: now,
+    }));
+
+  let identityCount = 0;
+  if (identityRecords.length > 0) {
+    const idRes = await supabase
+      .from("raw_materials")
+      .upsert(identityRecords, {
+        onConflict: "fp_code",
+        ignoreDuplicates: false,
+        count: "exact",
+      });
+    if (idRes.error) {
+      console.error(
+        "raw_materials identity upsert failed:",
+        idRes.error.message,
+      );
+      return NextResponse.json(
+        { ok: false, error: idRes.error.message },
+        { status: 500 },
+      );
+    }
+    identityCount = idRes.count ?? identityRecords.length;
+  }
+
+  if (records.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      received: rows.length,
+      upserted: identityCount,
+      costless: identityRecords.length,
+    });
+  }
 
   let { error, count } = await supabase
     .from("raw_materials")
@@ -238,6 +293,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     received: rows.length,
-    upserted: count ?? rows.length,
+    upserted: (count ?? records.length) + identityCount,
+    costless: identityRecords.length,
   });
 }
