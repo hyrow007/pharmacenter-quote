@@ -630,22 +630,68 @@ async function main() {
     }
   }
 
+  // 2b. (v84.2, formula chat) Cost fields the Costing tab actually
+  //     reads. The v84 rewrite sent only default_cost_per_kg (raw
+  //     avgCost in the part's native UOM); the receiving route stores
+  //     inventory_cost_per_kg / last_order_cost_per_kg, so the 9/17
+  //     morning run nulled every material cost and Costing showed "—".
+  //
+  //       inventory_cost_per_kg  = latest partcost.avgCost → $/kg
+  //       last_order_cost_per_kg = newest poitem.unitCost   → $/kg
+  //
+  //     Mass UOMs convert exactly; anything non-mass (ea, L, …) keeps
+  //     the raw number on default_cost_per_kg but leaves the per-kg
+  //     fields null rather than mislabeling units.
+  const KG_PER_UOM = {
+    kg: 1, kgs: 1, kilogram: 1, kilograms: 1,
+    g: 0.001, gram: 0.001, grams: 0.001,
+    lb: 0.45359237, lbs: 0.45359237, pound: 0.45359237, pounds: 0.45359237,
+    oz: 0.028349523125, ounce: 0.028349523125, ounces: 0.028349523125,
+  };
+  const perKg = (cost, uomLabel) => {
+    const f = KG_PER_UOM[String(uomLabel || "").toLowerCase()];
+    if (typeof cost !== "number" || !f) return null;
+    return cost / f; // ($/uom) ÷ (kg/uom) = $/kg
+  };
+  const poItemRowsForCosts = parsed.poitem || [];
+  const newestPoCostByPartId = new Map();
+  for (const it of poItemRowsForCosts) {
+    if (it.partId == null || typeof it.unitCost !== "number") continue;
+    const cur = newestPoCostByPartId.get(it.partId);
+    if (!cur || (it.dateLastModified || "") > (cur.dateLastModified || "")) {
+      newestPoCostByPartId.set(it.partId, it);
+    }
+  }
+
   // 3. Filter to active parts whose num contains "-RW-".
   const rawMaterials = partRows
     .filter((p) => p.activeFlag && typeof p.num === "string" && p.num.includes("-RW-"))
     .map((p) => {
       const cost = latestCostByPartId.get(p.id);
       const uomLabel = uomById.get(p.uomId) || "kg";
+      const avg = cost && typeof cost.avgCost === "number" ? cost.avgCost : null;
+      const po = newestPoCostByPartId.get(p.id);
+      const poUom = po ? uomById.get(po.uomId) || uomLabel : null;
       return {
         fp_code: p.num,
         name: p.description || p.num,
         default_unit: uomLabel,
-        default_cost_per_kg:
-          cost && typeof cost.avgCost === "number" ? cost.avgCost : null,
+        default_cost_per_kg: avg,
+        inventory_cost_per_kg: perKg(avg, uomLabel),
+        inventory_cost_uom: uomLabel,
+        last_order_cost_per_kg: po ? perKg(po.unitCost, poUom) : null,
+        last_order_cost_uom: poUom,
         active: !!p.activeFlag,
       };
     });
-  log(`  ${rawMaterials.length} raw materials with -RW- in num`);
+  {
+    const withInv = rawMaterials.filter((r) => r.inventory_cost_per_kg != null).length;
+    const withPo = rawMaterials.filter((r) => r.last_order_cost_per_kg != null).length;
+    log(
+      `  ${rawMaterials.length} raw materials with -RW- in num ` +
+        `(${withInv} with inventory $/kg, ${withPo} with last-order $/kg)`,
+    );
+  }
 
   // ----- Packaging components ----------------------------------------
   // Bottle-costing calculator inputs. Three infixes, two owner prefixes:
