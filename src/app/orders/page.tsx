@@ -109,7 +109,7 @@ export default async function OrdersLandingPage() {
       generated_at: string;
     }
   >();
-  for (const raw of synRes.data ?? []) {
+  for (const raw of (synRes.data ?? []) as unknown[]) {
     const s = raw as {
       so_number: string;
       headline: string | null;
@@ -129,7 +129,7 @@ export default async function OrdersLandingPage() {
       latest_update_at: string | null;
     }
   >();
-  for (const raw of mondayRes.data ?? []) {
+  for (const raw of (mondayRes.data ?? []) as unknown[]) {
     const m = raw as {
       so_number: string;
       status: string | null;
@@ -169,7 +169,7 @@ export default async function OrdersLandingPage() {
       status_flag: string | null;
     }
   >();
-  for (const raw of notesRes.data ?? []) {
+  for (const raw of (notesRes.data ?? []) as unknown[]) {
     const n = raw as {
       so_number: string;
       customer_mismatch: boolean | null;
