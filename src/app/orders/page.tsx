@@ -5,8 +5,23 @@ import { createClient } from "@/lib/auth/server";
 import AppHeader from "../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
+import {
+  loadFishbowlLexicon,
+  correctPlaudText,
+} from "@/lib/plaud/fishbowlLexicon";
 
 type TFn = ReturnType<typeof makeT>;
+
+// How many recent Monday updates to preview on each SO card. Showing
+// more than the newest lets the reader spot bursts of chatter and
+// context that the AI key points might have missed.
+const MONDAY_PREVIEW_COUNT = 3;
+
+// Only keep Monday updates newer than this many days when picking the
+// preview — anything older is likely stale housekeeping and clogs the
+// card without adding signal. The full history stays on the SO detail
+// page for anyone who wants the trail.
+const MONDAY_PREVIEW_MAX_AGE_DAYS = 120;
 
 // /orders
 //
@@ -139,6 +154,11 @@ export default async function OrdersLandingPage() {
     synBy.set(s.so_number, s);
   }
 
+  type MondayPreview = {
+    text_body: string;
+    created_at: string;
+    creator_name: string | null;
+  };
   const mondayBy = new Map<
     string,
     {
@@ -147,10 +167,11 @@ export default async function OrdersLandingPage() {
       last_synced_at: string | null;
       update_count: number;
       latest_update_at: string | null;
-      latest_update_text: string | null;
-      latest_update_creator: string | null;
+      previews: MondayPreview[];
     }
   >();
+  const mondayCutoffMs =
+    Date.now() - MONDAY_PREVIEW_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
   for (const raw of (mondayRes.data ?? []) as unknown[]) {
     const m = raw as {
       so_number: string;
@@ -167,21 +188,36 @@ export default async function OrdersLandingPage() {
         | null;
     };
     const updates = Array.isArray(m.updates) ? m.updates : [];
-    // Newest first, then keep the top one for the preview.
+    // Newest first, then keep the top few for the card preview. Filter
+    // out anything too old — long-tail history stays on the detail page.
     const sorted = updates
       .slice()
-      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
-    const latest = sorted[0] ?? null;
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+      .filter((u) => {
+        const ts = new Date(u.created_at ?? "").getTime();
+        return Number.isFinite(ts) && ts >= mondayCutoffMs;
+      });
+    const previews = sorted.slice(0, MONDAY_PREVIEW_COUNT).map((u) => ({
+      text_body: u.text_body ?? "",
+      created_at: u.created_at ?? "",
+      creator_name: u.creator_name ?? null,
+    }));
     mondayBy.set(m.so_number, {
       status: m.status,
       item_updated_at: m.item_updated_at,
       last_synced_at: m.last_synced_at,
       update_count: updates.length,
-      latest_update_at: latest?.created_at ?? null,
-      latest_update_text: latest?.text_body ?? null,
-      latest_update_creator: latest?.creator_name ?? null,
+      latest_update_at: previews[0]?.created_at ?? null,
+      previews,
     });
   }
+
+  // Fishbowl name lexicon — load once per render pass so we can correct
+  // Plaud transcripts (Kunza → Cunsa, Peter Chu → Purechews, …) in every
+  // free-text section of the card.
+  const lexicon = await loadFishbowlLexicon(supabase);
+  const applyCorrections = (text: string | null | undefined): string =>
+    text ? correctPlaudText(text, lexicon).corrected : text ?? "";
 
   const notesBy = new Map<
     string,
@@ -611,7 +647,7 @@ export default async function OrdersLandingPage() {
                                     marginBottom: 4,
                                   }}
                                 >
-                                  {syn.headline}
+                                  {applyCorrections(syn.headline)}
                                 </div>
                               ) : null}
                               <ul
@@ -624,7 +660,7 @@ export default async function OrdersLandingPage() {
                                 }}
                               >
                                 {topPoints.map((p, i) => (
-                                  <li key={i}>{p.text}</li>
+                                  <li key={i}>{applyCorrections(p.text)}</li>
                                 ))}
                               </ul>
                             </div>
@@ -663,6 +699,11 @@ export default async function OrdersLandingPage() {
                               {truncate(so.note.trim(), 320)}
                             </div>
                           ) : null}
+
+                          {/* NOTE: below-here render swaps to the
+                              corrector-wrapped Monday preview list — see
+                              the sibling block that used to show the
+                              single latest update. */}
 
                           {/* Linked purchase orders — the components /
                               raw materials PharmaCenter placed on
@@ -747,11 +788,12 @@ export default async function OrdersLandingPage() {
                             </div>
                           ) : null}
 
-                          {/* Latest Monday update — a preview of the
-                              most recent chat/note on this SO's Monday
-                              item, so you don't have to open Monday to
-                              know what was said last. */}
-                          {monday?.latest_update_text ? (
+                          {/* Recent Monday chatter — top N updates from
+                              the last few months, not just the newest.
+                              Long-tail history stays on the SO detail
+                              page. Each entry runs through the Fishbowl
+                              corrector so "Kunza" reads as "Cunsa". */}
+                          {monday && monday.previews.length > 0 ? (
                             <div
                               style={{
                                 background: "#eff5ff",
@@ -759,31 +801,59 @@ export default async function OrdersLandingPage() {
                                 borderRadius: 8,
                                 padding: "6px 10px",
                                 marginBottom: 6,
-                                fontSize: 12,
-                                lineHeight: 1.5,
-                                color: "var(--ink-1, #1f2a2d)",
-                                whiteSpace: "pre-wrap",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 6,
                               }}
                             >
-                              <span
+                              <div
                                 style={{
                                   fontSize: 9.5,
                                   fontWeight: 700,
                                   letterSpacing: "0.14em",
                                   textTransform: "uppercase",
                                   color: "#2c4d8f",
-                                  marginRight: 6,
                                 }}
                               >
                                 {t("touchMonday")}
-                                {monday.latest_update_creator
-                                  ? ` · ${monday.latest_update_creator}`
+                                {monday.update_count > monday.previews.length
+                                  ? ` · ${monday.previews.length} of ${monday.update_count}`
                                   : ""}
-                                {monday.latest_update_at
-                                  ? ` · ${describeFreshness(monday.latest_update_at).relative}`
-                                  : ""}
-                              </span>
-                              {truncate(monday.latest_update_text.trim(), 320)}
+                              </div>
+                              {monday.previews.map((u, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    fontSize: 12,
+                                    lineHeight: 1.5,
+                                    color: "var(--ink-1, #1f2a2d)",
+                                    whiteSpace: "pre-wrap",
+                                    borderTop:
+                                      i === 0
+                                        ? "none"
+                                        : "1px dashed #cddffb",
+                                    paddingTop: i === 0 ? 0 : 6,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: 10,
+                                      color: "#5b6b8a",
+                                      marginBottom: 2,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {u.creator_name ?? "—"}
+                                    {u.created_at
+                                      ? ` · ${describeFreshness(u.created_at).relative}`
+                                      : ""}
+                                  </div>
+                                  {truncate(
+                                    applyCorrections(u.text_body).trim(),
+                                    280,
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           ) : null}
 
