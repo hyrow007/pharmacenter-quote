@@ -123,6 +123,7 @@ export default async function AppHeader({ user, appContext }: Props) {
         <NavLinks
           onFormulaHost={onFormulaHost}
           onMeetingHost={onMeetingHost}
+          onOrderHost={onOrderHost}
           appContext={ctx}
           lang={lang}
         />

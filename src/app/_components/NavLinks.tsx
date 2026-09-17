@@ -25,12 +25,19 @@ import { makeT, type Lang } from "@/lib/i18n/dict";
 export default function NavLinks({
   onFormulaHost,
   onMeetingHost,
+  onOrderHost,
   appContext,
   lang,
 }: {
   onFormulaHost: boolean;
   onMeetingHost: boolean;
-  appContext: "quote" | "formulas" | "packing-list" | "meetings";
+  onOrderHost?: boolean;
+  appContext:
+    | "quote"
+    | "formulas"
+    | "packing-list"
+    | "meetings"
+    | "orders";
   lang: Lang;
 }) {
   const pathname = usePathname() || "";
@@ -76,6 +83,14 @@ export default function NavLinks({
           className={`app-nav__link${isMeetings ? " app-nav__link--active" : ""}`}
         >
           {t("navMeetings")}
+        </Link>
+      ) : null}
+      {appContext === "orders" ? (
+        <Link
+          href={onOrderHost ? "/" : "https://orders.pharmacenter.app/"}
+          className={`app-nav__link${pathname === "/orders" || pathname.startsWith("/orders/") ? " app-nav__link--active" : ""}`}
+        >
+          {t("navOrders")}
         </Link>
       ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and

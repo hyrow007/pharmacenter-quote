@@ -60,6 +60,7 @@ const en = {
 
   // ---- Meetings hub ----
   navMeetings: "Meetings",
+  navOrders: "Sales Orders",
   meetingsBreadcrumb: "PharmaCenter · Meetings",
   meetingsTitle: "Meetings",
   meetingsHubLede:
@@ -251,6 +252,7 @@ const es: typeof en = {
 
   // ---- Meetings hub ----
   navMeetings: "Reuniones",
+  navOrders: "Órdenes de venta",
   meetingsBreadcrumb: "PharmaCenter · Reuniones",
   meetingsTitle: "Reuniones",
   meetingsHubLede:
