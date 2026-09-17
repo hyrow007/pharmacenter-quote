@@ -818,8 +818,29 @@ async function main() {
     });
   }
 
+  // Also keep any PO whose po_number is referenced by an OPEN SO's
+  // vendorPO field, regardless of status. Rationale: for an open SO the
+  // components have often already been received (PO status = 60
+  // Fulfilled), and the meeting still needs to see "PO 5915 to VitaJoy,
+  // 8000 caps, received on Aug 15" alongside the SO. Without this pass,
+  // the PO section on the SO detail page would render empty for every
+  // SO whose materials already landed.
+  const openSoVendorPoNums = new Set();
+  for (const s of soRows) {
+    if (!SO_OPEN_STATUSES.includes(s.statusId)) continue;
+    if (!s.vendorPO) continue;
+    for (const raw of String(s.vendorPO).split(/[,;\s]+/)) {
+      const num = raw.trim();
+      if (num) openSoVendorPoNums.add(num);
+    }
+  }
+
   const purchaseOrders = poRows
-    .filter((p) => PO_SYNCED_STATUSES.includes(p.statusId))
+    .filter(
+      (p) =>
+        PO_SYNCED_STATUSES.includes(p.statusId) ||
+        openSoVendorPoNums.has(String(p.num ?? "")),
+    )
     .map((p) => {
       const items = (poItemsByPoId.get(p.id) || []).sort(
         (a, b) => (a.line ?? 0) - (b.line ?? 0),
