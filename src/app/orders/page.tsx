@@ -279,16 +279,28 @@ export default async function OrdersLandingPage() {
     .map(([customer, sos]) => ({
       customer,
       // Sort by SO number sequentially. Numbers can carry a prefix
-      // ("M-14221") or a suffix ("14740-1"); extract the leading digit
-      // group for the numeric compare so 14740, 14740-1, 14740-2 land
-      // in order, and fall back to a string compare for tiebreaks.
+      // ("M-14221" — no leading digits) or a suffix ("14740-1"). Grab
+      // ONLY the leading digit run so 14746-1 stays 14746 (not 147461,
+      // which would sort after 14870); tiebreak on the raw string so
+      // 14746, 14746-1, 14746-2 land in order.
       sos: sos.sort((a, b) => {
-        const aNum = parseInt(String(a.so_number).replace(/\D+/, ""), 10);
-        const bNum = parseInt(String(b.so_number).replace(/\D+/, ""), 10);
-        if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) {
+        const aStr = String(a.so_number);
+        const bStr = String(b.so_number);
+        const aLead = aStr.match(/^\d+/);
+        const bLead = bStr.match(/^\d+/);
+        const aNum = aLead ? parseInt(aLead[0], 10) : NaN;
+        const bNum = bLead ? parseInt(bLead[0], 10) : NaN;
+        // Purely-numeric SOs group first, alpha-prefixed ("M-*") after.
+        if (Number.isFinite(aNum) && !Number.isFinite(bNum)) return -1;
+        if (!Number.isFinite(aNum) && Number.isFinite(bNum)) return 1;
+        if (
+          Number.isFinite(aNum) &&
+          Number.isFinite(bNum) &&
+          aNum !== bNum
+        ) {
           return aNum - bNum;
         }
-        return String(a.so_number).localeCompare(String(b.so_number));
+        return aStr.localeCompare(bStr);
       }),
     }))
     .sort((a, b) => a.customer.localeCompare(b.customer));
