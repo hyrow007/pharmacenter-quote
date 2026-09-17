@@ -942,6 +942,36 @@ export default function FormulaEditor({
   >([]);
   const [labelChatInput, setLabelChatInput] = useState("");
   const [labelChatBusy, setLabelChatBusy] = useState(false);
+  // v83.9: the thread persists per formula (gummy_formula_panel_chat_messages)
+  // — load it once on mount so a reload doesn't lose the conversation.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/formulas/${initialFormula.id}/panel-chat`,
+        );
+        const json = (await res.json()) as {
+          ok: boolean;
+          messages?: Array<{
+            role: "user" | "assistant";
+            content: string;
+            attachmentNames?: string[];
+          }>;
+        };
+        if (!cancelled && json.ok && json.messages?.length) {
+          setLabelChatMessages(json.messages);
+        }
+      } catch {
+        /* history is a nicety — the chat still works without it */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Load once per formula mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // v83.8: pending uploads (images/PDFs) attached to the NEXT message.
   // Images are downscaled client-side; base64 goes with one request
   // only (history keeps just the filename).
@@ -6476,7 +6506,43 @@ export default function FormulaEditor({
                         color: "var(--teal-900, #0f4a56)",
                       }}
                     >
-                      {tr("Panel Assistant")}
+                      <span>{tr("Panel Assistant")}</span>
+                      {labelChatMessages.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Clear this formula's assistant chat history for everyone?",
+                              )
+                            )
+                              return;
+                            try {
+                              await fetch(
+                                `/api/formulas/${initialFormula.id}/panel-chat`,
+                                { method: "DELETE" },
+                              );
+                            } catch {
+                              /* clear locally regardless */
+                            }
+                            setLabelChatMessages([]);
+                          }}
+                          style={{
+                            float: "right",
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--teal-700, #1d6c7b)",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          {tr("Clear")}
+                        </button>
+                      ) : null}
                     </div>
                     <div
                       style={{

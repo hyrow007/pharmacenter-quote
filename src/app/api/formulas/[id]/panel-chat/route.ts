@@ -20,6 +20,74 @@ export const maxDuration = 30;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+async function gate() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      error: NextResponse.json({ ok: false, error: "not_signed_in" }, { status: 401 }),
+      supabase: null,
+      email: null,
+    };
+  }
+  if (!user.email?.endsWith("@pharmacenterusa.com")) {
+    return {
+      error: NextResponse.json({ ok: false, error: "wrong_domain" }, { status: 403 }),
+      supabase: null,
+      email: null,
+    };
+  }
+  return { error: null, supabase, email: user.email };
+}
+
+// GET /api/formulas/[id]/panel-chat — persisted chat history (v83.9),
+// oldest first, capped at the last 80 turns.
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const g = await gate();
+  if (g.error) return g.error;
+  const { id } = await params;
+  const { data, error } = await g.supabase!
+    .from("gummy_formula_panel_chat_messages")
+    .select("role, content, attachment_names, created_at")
+    .eq("formula_id", id)
+    .order("created_at", { ascending: true })
+    .limit(80);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({
+    ok: true,
+    messages: (data ?? []).map((r) => ({
+      role: r.role as "user" | "assistant",
+      content: r.content as string,
+      attachmentNames: (r.attachment_names as string[] | null) ?? undefined,
+    })),
+  });
+}
+
+// DELETE /api/formulas/[id]/panel-chat — clear the thread.
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const g = await gate();
+  if (g.error) return g.error;
+  const { id } = await params;
+  const { error } = await g.supabase!
+    .from("gummy_formula_panel_chat_messages")
+    .delete()
+    .eq("formula_id", id);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
+}
+
 const SYSTEM_PROMPT = `You are the Supplement Facts panel assistant inside PharmaCenter's formula tool. You edit ONLY the label panel via structured ops — never the recipe, claims, amounts, or costing (amounts come from the Label Claim section; if asked to change an amount, explain that it's edited in the Label Claim section on the Bench top tab).
 
 Alongside the panel state you receive a READ-ONLY snapshot of the whole formula: the bench recipe (every ingredient with grams and blend phase), batch setup (bench batch grams, piece weights, gummies per batch), and the label claims. Use it to answer questions accurately — e.g. compute per-gummy contributions as (ingredient grams ÷ gummies per bench batch), account for stated solids/potency in ingredient names ("goFOS syrup (75%) 95% fiber" means 75% solids of which 95% is fiber), and account for moistureLossPct boiling off during cooking. Show brief arithmetic when it helps. You still cannot edit any of it — only the panel ops below.
@@ -56,17 +124,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "not_signed_in" }, { status: 401 });
-  }
-  if (!user.email?.endsWith("@pharmacenterusa.com")) {
-    return NextResponse.json({ ok: false, error: "wrong_domain" }, { status: 403 });
-  }
-  await params; // formula id is context only; edits stay client-side
+  const g = await gate();
+  if (g.error) return g.error;
+  const { id: formulaId } = await params;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -202,6 +262,32 @@ export async function POST(
   } catch {
     reply = resText.trim().slice(0, 600) || "Sorry — I couldn't process that.";
     ops = [];
+  }
+
+  // v83.9: persist both turns so the thread survives reloads. Chat
+  // history is best-effort — a failed insert must not eat the reply.
+  try {
+    const lastUser = history[history.length - 1];
+    const attachmentNames = (body.attachments ?? [])
+      .map((a) => a?.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0);
+    await g.supabase!.from("gummy_formula_panel_chat_messages").insert([
+      {
+        formula_id: formulaId,
+        role: "user",
+        content: lastUser.content,
+        attachment_names: attachmentNames.length ? attachmentNames : null,
+        author_email: g.email,
+      },
+      {
+        formula_id: formulaId,
+        role: "assistant",
+        content: reply,
+        author_email: g.email,
+      },
+    ]);
+  } catch {
+    /* best-effort */
   }
 
   return NextResponse.json({ ok: true, reply, ops });
