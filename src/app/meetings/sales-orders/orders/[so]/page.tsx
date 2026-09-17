@@ -198,12 +198,19 @@ export default async function SalesOrderDetailPage({
       so_item_product_num: string | null;
     }> | null;
   }>;
-  // Only show items on each PO that actually belong to THIS SO — a PO
-  // can pool lines across multiple SOs, but a reviewer looking at one
-  // SO only cares about the pieces of the PO that were purchased for it.
+  // Show every line on each linked PO. In principle we could filter by
+  // it.so_number === row.so_number for multi-SO POs, but the sync's
+  // per-item attribution is only reliable when Fishbowl links via
+  // poitem.soItemId or when product numbers overlap — otherwise the
+  // sync falls back to stamping every item with the FIRST SO that
+  // matched via vendorPO, so filtering here would hide legitimate lines
+  // (e.g. PO 5915's paper items got attributed to SO 14740 even though
+  // SO 14769 also lists PO 5915 in its Vendor PO field). Better to show
+  // the whole PO — the reader already knows it's linked because it's in
+  // this SO's Vendor PO — than to hide it.
   const purchaseOrdersForSo = purchaseOrders.map((po) => ({
     ...po,
-    items: (po.items ?? []).filter((it) => it.so_number === row.so_number),
+    items: po.items ?? [],
   }));
 
   // Monday activity for this SO — cached in so_monday_activity.
