@@ -27,12 +27,103 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type LexiconKind = "customer" | "vendor" | "product";
+export type LexiconKind = "customer" | "vendor" | "product" | "person";
 
 export type Lexicon = {
   customers: string[];
   vendors: string[];
   products: string[]; // descriptions (what a reader would say aloud)
+  people: string[]; // PharmaCenter staff — full names + common first-name-only forms
+};
+
+// PharmaCenter staff, canonical spellings. Plaud commonly mangles these
+// (Jesica ↔ Jessica, Louisa ↔ Luisa, Hairo ↔ Jairo, Gutierez ↔ Gutierrez,
+// Olivia Cloud ↔ Olivia Clawd, etc.) and the phonetic + edit-distance
+// matcher auto-corrects to the canonical form. Extend when new staff
+// join or common manglings are noticed.
+//
+// Sources: HR list + org chart (V2026.06). Includes both full names and
+// bare first names so a lone "Rosie" or "Jairo" also gets normalized —
+// the matcher prefers longer canonicals on ties, so "Rosie Gutierrez"
+// wins over "Rosie" when the source text has "Rosie Gutieres".
+export const STAFF_NAMES: string[] = [
+  // ── Full names ─────────────────────────────────────────────────
+  // Leadership
+  "Jairo Osorno", // President
+  "Wilmer Torres", // QA Manager & Sanitation Supervisor
+  "Melissa Medri", // HR Manager (also spelled "Melissa Medi" on some sheets)
+  "Glendy Acosta", // Bookkeeping / Office Admin
+  "Andrea Acurero", // Operations Coordinator
+  "Rosie Gutierrez", // Purchasing / Logistics Coordinator
+  "Jessica Medri", // Sales Manager
+  "Jesus Salerno", // Warehouse Manager
+  // Under Sales
+  "Carlos Rojas", // Sales Rep
+  // Under QA
+  "Elvira Odoardi", // QC Assistant
+  "Maria Williams", // QC Floor Inspector
+  // Under Operations
+  "Gabriela Nuñez", // Bottling Line Leader — Line 1
+  "Yaneisy Rodriguez", // Bottling Line Leader — Line 2
+  "Rosa Urias", // BlisterLines Leader
+  "Yamilee Reinoso", // Sachet Line Leader
+  "Andreina Duarte", // Secondary Packaging Area Leader
+  "Leonardo Lacruz", // Manufacturing Coordinator
+  "Dionel Davila", // Plant Mechanic
+  // Under Warehouse
+  "Luisa Sosa", // Warehouse Assistant
+  // Also on HR list (may be a shift/rotation worker not on chart)
+  "Mario Medri",
+  "Andreina Nunez", // note: distinct from Andreina Duarte
+  "Olivia Clawd",
+  // ── Bare first names — Plaud usually says only one part ──────
+  "Andrea",
+  "Andreina",
+  "Carlos",
+  "Dionel",
+  "Elvira",
+  "Gabriela",
+  "Glendy",
+  "Jairo",
+  "Jessica",
+  "Jesus",
+  "Leonardo",
+  "Luisa",
+  "Maria",
+  "Mario",
+  "Melissa",
+  "Olivia",
+  "Rosa",
+  "Rosie",
+  "Wilmer",
+  "Yamilee",
+  "Yaneisy",
+];
+
+// Canonical PharmaCenter roles, keyed by role → primary person(s).
+// The AI synthesis can use this to say "Rosie (Purchasing) confirmed…"
+// or "the Sales Manager pushed the date". Kept alongside STAFF_NAMES so
+// the whole employee/org lexicon lives in one file.
+export const STAFF_ROLES: Record<string, string[]> = {
+  President: ["Jairo Osorno"],
+  "QA Manager & Sanitation Supervisor": ["Wilmer Torres"],
+  "HR Manager": ["Melissa Medri"],
+  "Bookkeeping / Office Admin": ["Glendy Acosta"],
+  "Operations Coordinator": ["Andrea Acurero"],
+  "Purchasing / Logistics Coordinator": ["Rosie Gutierrez"],
+  "Sales Manager": ["Jessica Medri"],
+  "Warehouse Manager": ["Jesus Salerno"],
+  "Sales Rep": ["Melissa Medri", "Carlos Rojas"],
+  "QC Assistant": ["Elvira Odoardi"],
+  "QC Floor Inspector": ["Maria Williams"],
+  "Bottling Line Leader (Line 1)": ["Gabriela Nuñez"],
+  "Bottling Line Leader (Line 2)": ["Yaneisy Rodriguez"],
+  "BlisterLines Leader": ["Rosa Urias"],
+  "Sachet Line Leader": ["Yamilee Reinoso"],
+  "Secondary Packaging Area Leader": ["Andreina Duarte"],
+  "Manufacturing Coordinator": ["Leonardo Lacruz"],
+  "Plant Mechanic": ["Dionel Davila"],
+  "Warehouse Assistant": ["Luisa Sosa"],
 };
 
 export type Correction = {
@@ -99,6 +190,7 @@ export async function loadFishbowlLexicon(
     customers: Array.from(customers),
     vendors: Array.from(vendors),
     products: Array.from(products),
+    people: STAFF_NAMES,
   };
 }
 
@@ -212,6 +304,7 @@ export function findClosestName(
   const all: Array<{ name: string; kind: LexiconKind }> = [
     ...lexicon.customers.map((n) => ({ name: n, kind: "customer" as const })),
     ...lexicon.vendors.map((n) => ({ name: n, kind: "vendor" as const })),
+    ...lexicon.people.map((n) => ({ name: n, kind: "person" as const })),
     // Products are rarely mentioned by full description in Plaud text;
     // skip them from the fuzzy corrector unless the caller explicitly
     // opts in later — false positives would be too noisy.

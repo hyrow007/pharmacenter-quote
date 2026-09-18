@@ -1161,9 +1161,15 @@ export default function FormulaEditor({
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
-    // v84.4: round UP only at .80+ of a shift (was >.24 — too eager);
-    // anything under .80 rounds down.
-    x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) >= 0.8 ? 1 : 0);
+    // v84.5: keep the FRACTION when it's real work — a computed 4.37
+    // shifts shows as 4.37 — and only snap UP to the next whole shift
+    // when the fraction reaches .80 (4.85 → 5). Was whole-shifts-only
+    // with >.24 rounding up.
+    x <= 0
+      ? 0
+      : x - Math.floor(x) >= 0.8
+        ? Math.ceil(x)
+        : Math.round(x * 100) / 100;
   // v57.4: normalized costing blob — what Save writes and what the dirty
   // check compares. Default-source entries are dropped so an untouched
   // table stays clean.
@@ -7179,7 +7185,7 @@ export default function FormulaEditor({
               Production / Cleaning), Shifts / Hours per Shift / Total
               Hours down the side. Shifts follow the day rules (Setup =
               1; Production = Target Yield ÷ Daily Yield; Cleaning =
-              Production ÷ 4; whole numbers, .80+ rounds up) and stay
+              Production ÷ 4; fractions kept, .80+ rounds up) and stay
               editable — a typed value overrides and saves. Hours per
               shift default to 8. */}
           {(() => {
@@ -7195,10 +7201,9 @@ export default function FormulaEditor({
               setShifts: (n: number | null) => void;
               hours: number;
               setHours: (n: number | null) => void;
-              /** v84.3: Setup + Cleaning accept fractional shifts (a
-               *  half-shift changeover is real); Production keeps the
-               *  whole-shift rounding rule (.80+ rounds up) from the
-               *  original operator spec. */
+              /** v84.3/v84.5: Setup + Cleaning accept any fraction;
+               *  Production shows fractions too but snaps up to a whole
+               *  shift once the fraction hits .80 (roundDays). */
               fractional?: boolean;
             }> = [
               {
@@ -7385,7 +7390,7 @@ export default function FormulaEditor({
                                 : roundDays(n),
                             )
                           }
-                          step={c.fractional ? "0.25" : "1"}
+                          step="0.25"
                           min={0}
                         />
                       </td>

@@ -431,7 +431,8 @@ export type GummyFormulaCosting = {
    *  (field names kept from the original "days" iteration for backward
    *  compat). Null/absent = default rule (Setup = 1; Production = scale-up
    *  model; Cleaning = Production ÷ 4, Friday teardown); a number is an
-   *  operator override. Whole shifts only (.80+ rounds up, v84.4). */
+   *  operator override. Fractional shifts kept as-is; a fraction of
+   *  .80+ snaps up to the next whole shift (v84.5). */
   setupDays?: number | null;
   productionDays?: number | null;
   cleaningDays?: number | null;
