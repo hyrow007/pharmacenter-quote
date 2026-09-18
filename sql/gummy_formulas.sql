@@ -113,7 +113,7 @@ create table if not exists public.gummy_formula_versions (
   -- Scale-up realism knobs (mirrors the old inline board's DEFAULTS).
   batch_kg                 numeric not null default 100
     check (batch_kg > 0),
-  batches_per_day          numeric not null default 6
+  batches_per_day          numeric not null default 3  -- v85: was 6
     check (batches_per_day > 0),
   fixed_loss_kg_per_day    numeric not null default 20
     check (fixed_loss_kg_per_day >= 0),

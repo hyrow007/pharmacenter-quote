@@ -573,7 +573,10 @@ export type GummyFormulaReference = {
 export const FORMULA_VERSION_DEFAULTS = {
   benchBatchG: 250,
   batchKg: 100,
-  batchesPerDay: 6,
+  // v85: 6 → 3 — operators run three primary-blend batches a day as the
+  // standard cadence (operator request 9/18/26). Saved formulas keep
+  // whatever they stored; this only seeds new formulas / legacy nulls.
+  batchesPerDay: 3,
   fixedLossKgPerDay: 20,
   // Piece weights default to 0 so a brand-new formula starts with the
   // operator staring at empty Finished / Cast cells they explicitly
