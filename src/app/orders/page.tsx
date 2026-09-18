@@ -55,6 +55,7 @@ type SoRow = {
   customer_po: string | null;
   salesman: string | null;
   note: string | null;
+  note_es: string | null;
   date_issued: string | null;
   date_first_ship: string | null;
   subtotal: number | null;
@@ -74,7 +75,7 @@ const SALE_TYPE_IDS = new Set([10, 30]);
 
 const SO_COLS =
   "so_number, status_id, status_name, is_open, customer_name, customer_po, " +
-  "salesman, note, date_issued, date_first_ship, subtotal, total_price, " +
+  "salesman, note, note_es, date_issued, date_first_ship, subtotal, total_price, " +
   "items, synced_at";
 
 export default async function OrdersLandingPage() {
@@ -112,7 +113,9 @@ export default async function OrdersLandingPage() {
       ),
     supabase
       .from("so_monday_activity")
-      .select("so_number, status, item_updated_at, last_synced_at, updates"),
+      .select(
+        "so_number, status, item_updated_at, last_synced_at, updates, updates_es",
+      ),
     supabase
       .from("meeting_so_notes")
       .select(
@@ -208,8 +211,28 @@ export default async function OrdersLandingPage() {
             creator_name: string | null;
           }>
         | null;
+      updates_es:
+        | Array<{
+            id?: string;
+            text_body?: string;
+            created_at?: string;
+          }>
+        | null;
     };
     const updates = Array.isArray(m.updates) ? m.updates : [];
+    // Build a lookup of translated bodies keyed by update id (falling
+    // back to created_at when id is absent — Monday exposes stable ids
+    // but older synced rows may not have them). When lang=es we swap
+    // the text_body for its ES counterpart at preview time.
+    const esByKey = new Map<string, string>();
+    if (Array.isArray(m.updates_es)) {
+      for (const u of m.updates_es) {
+        const key = (u.id ?? u.created_at ?? "").trim();
+        const body = (u.text_body ?? "").trim();
+        if (key && body) esByKey.set(key, body);
+      }
+    }
+    const useEsUpdates = lang === "es" && esByKey.size > 0;
     // Newest first, then keep the top few for the card preview. Filter
     // out anything too old — long-tail history stays on the detail page.
     const sorted = updates
@@ -219,11 +242,15 @@ export default async function OrdersLandingPage() {
         const ts = new Date(u.created_at ?? "").getTime();
         return Number.isFinite(ts) && ts >= mondayCutoffMs;
       });
-    const previews = sorted.slice(0, MONDAY_PREVIEW_COUNT).map((u) => ({
-      text_body: u.text_body ?? "",
-      created_at: u.created_at ?? "",
-      creator_name: u.creator_name ?? null,
-    }));
+    const previews = sorted.slice(0, MONDAY_PREVIEW_COUNT).map((u) => {
+      const key = (u.id ?? u.created_at ?? "").trim();
+      const es = useEsUpdates ? esByKey.get(key) : undefined;
+      return {
+        text_body: es || u.text_body || "",
+        created_at: u.created_at ?? "",
+        creator_name: u.creator_name ?? null,
+      };
+    });
     mondayBy.set(m.so_number, {
       status: m.status,
       item_updated_at: m.item_updated_at,
@@ -696,35 +723,47 @@ export default async function OrdersLandingPage() {
                               Small italic block so it reads as "context
                               from the source of truth" without competing
                               with the key points above. */}
-                          {so.note && so.note.trim() ? (
-                            <div
-                              style={{
-                                background: "var(--cream-soft, #fbf6ec)",
-                                border: "1px solid var(--stone-2, #efe9da)",
-                                borderRadius: 8,
-                                padding: "6px 10px",
-                                marginBottom: 6,
-                                fontSize: 12,
-                                lineHeight: 1.5,
-                                color: "var(--ink-2, #415056)",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              <span
+                          {(() => {
+                            // Prefer the Spanish memo when the toggle is ES
+                            // and the translation task has populated it.
+                            const noteToShow =
+                              lang === "es" &&
+                              so.note_es &&
+                              so.note_es.trim()
+                                ? so.note_es
+                                : so.note;
+                            if (!noteToShow || !noteToShow.trim()) return null;
+                            return (
+                              <div
                                 style={{
-                                  fontSize: 9.5,
-                                  fontWeight: 700,
-                                  letterSpacing: "0.14em",
-                                  textTransform: "uppercase",
-                                  color: "var(--teal-700, #1d6c7b)",
-                                  marginRight: 6,
+                                  background: "var(--cream-soft, #fbf6ec)",
+                                  border:
+                                    "1px solid var(--stone-2, #efe9da)",
+                                  borderRadius: 8,
+                                  padding: "6px 10px",
+                                  marginBottom: 6,
+                                  fontSize: 12,
+                                  lineHeight: 1.5,
+                                  color: "var(--ink-2, #415056)",
+                                  whiteSpace: "pre-wrap",
                                 }}
                               >
-                                {t("touchFishbowl")}
-                              </span>
-                              {truncate(so.note.trim(), 320)}
-                            </div>
-                          ) : null}
+                                <span
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 700,
+                                    letterSpacing: "0.14em",
+                                    textTransform: "uppercase",
+                                    color: "var(--teal-700, #1d6c7b)",
+                                    marginRight: 6,
+                                  }}
+                                >
+                                  {t("touchFishbowl")}
+                                </span>
+                                {truncate(noteToShow.trim(), 320)}
+                              </div>
+                            );
+                          })()}
 
                           {/* NOTE: below-here render swaps to the
                               corrector-wrapped Monday preview list — see
