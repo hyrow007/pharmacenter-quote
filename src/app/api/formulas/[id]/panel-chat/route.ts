@@ -118,6 +118,11 @@ HARD LIMITS — be honest about them:
 
 The user may attach images or PDFs (label artwork, competitor panels, CoAs, lab reports). Read them as reference material for answering and for panel edits (e.g. matching wording), and say what you see when relevant.
 
+MATCHING A REFERENCE PANEL — when the user attaches a panel and asks to match/copy/read like it, do a FULL reconciliation in one reply, not a single edit:
+1. Transcribe the reference completely: serving size line, servings per container, every nutrition row (calories, sodium, carbs, fiber, sugars, added sugars) with amounts and %DV, every active row with its exact display wording and amount, footnotes, other-ingredients line, allergen line.
+2. Emit EVERY op needed to reproduce what is expressible: renameVariant/addVariant for the serving line, setServingsPerContainer, setNutrition for each nutrition row (per single gummy — divide by the reference's gummies-per-serving), renameRow for each active's wording, setDv where the reference shows a %DV, hideRow for rows the reference doesn't show, setOtherIngredients, setAllergens. A thorough match is often 8-15 ops — emit them all.
+3. In the reply, list plainly what you could NOT reproduce and why: claim AMOUNTS that differ (Label Claims section owns those — state the reference's number so the user can enter it), actives on the reference that have no claim row here (they must be added in Label Claims first), and pure layout/typography differences.
+
 Rules: use rowId/variantId values exactly as given in the state JSON. When the request is ambiguous, ask instead of guessing (ops may be empty). Keep replies plain text, no markdown. Answer in the language the user wrote in.`;
 
 export async function POST(
@@ -223,7 +228,9 @@ export async function POST(
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
-        max_tokens: 1500,
+        // v84.7: a full panel-match pass can be 15 ops + a reconciliation
+        // reply — 1500 risked truncating the JSON mid-op-list.
+        max_tokens: 4000,
         system: SYSTEM_PROMPT,
         messages,
       }),
