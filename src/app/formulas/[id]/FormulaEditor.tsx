@@ -2581,7 +2581,7 @@ export default function FormulaEditor({
         wc: leaderWcPct ?? 4,
       },
       {
-        crew: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
+        crew: [setupOperators ?? 4, productionOperators ?? 5, cleaningOperators ?? 5],
         base: operatorRate ?? laborRateDefaults?.operator ?? 0,
         tax: operatorTaxPct ?? 8.5,
         wc: operatorWcPct ?? 4,
@@ -4942,7 +4942,7 @@ export default function FormulaEditor({
           }
           batchSizeKg={batchKg}
           cfaBatchSizeKg={cfaBatchKg}
-          lineCrewQty={(productionLeaders ?? 1) + (productionOperators ?? 6)}
+          lineCrewQty={(productionLeaders ?? 1) + (productionOperators ?? 5)}
           onScenarioQtyChange={
             activeScenarioId
               ? (n: number) =>
@@ -7415,7 +7415,7 @@ export default function FormulaEditor({
               },
               {
                 label: "Line Operators",
-                crew: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
+                crew: [setupOperators ?? 4, productionOperators ?? 5, cleaningOperators ?? 5],
                 base: operatorRate ?? laborRateDefaults?.operator ?? 0,
                 setBase: setOperatorRate,
                 tax: operatorTaxPct ?? 8.5,
@@ -7437,7 +7437,7 @@ export default function FormulaEditor({
               },
               {
                 label: "QTY of Line Operators",
-                vals: [setupOperators ?? 6, productionOperators ?? 6, cleaningOperators ?? 6],
+                vals: [setupOperators ?? 4, productionOperators ?? 5, cleaningOperators ?? 5],
                 sets: [setSetupOperators, setProductionOperators, setCleaningOperators],
               },
             ];
