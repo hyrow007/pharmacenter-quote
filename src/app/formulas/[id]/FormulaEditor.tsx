@@ -7193,6 +7193,11 @@ export default function FormulaEditor({
               setShifts: (n: number | null) => void;
               hours: number;
               setHours: (n: number | null) => void;
+              /** v84.3: Setup + Cleaning accept fractional shifts (a
+               *  half-shift changeover is real); Production keeps the
+               *  whole-shift rounding rule (>.24 rounds up) from the
+               *  original operator spec. */
+              fractional?: boolean;
             }> = [
               {
                 label: "Setup",
@@ -7200,6 +7205,7 @@ export default function FormulaEditor({
                 setShifts: setSetupDays,
                 hours: setupHours ?? 8,
                 setHours: setSetupHours,
+                fractional: true,
               },
               {
                 label: "Production",
@@ -7214,6 +7220,7 @@ export default function FormulaEditor({
                 setShifts: setCleaningDays,
                 hours: cleaningHours ?? 8,
                 setHours: setCleaningHours,
+                fractional: true,
               },
             ];
             const lth: React.CSSProperties = {
@@ -7369,8 +7376,14 @@ export default function FormulaEditor({
                       <td key={c.label} style={ltd}>
                         <NumberInput
                           value={c.shifts}
-                          onChange={(n) => c.setShifts(roundDays(n))}
-                          step="1"
+                          onChange={(n) =>
+                            c.setShifts(
+                              c.fractional
+                                ? Math.round(n * 100) / 100
+                                : roundDays(n),
+                            )
+                          }
+                          step={c.fractional ? "0.25" : "1"}
                           min={0}
                         />
                       </td>
