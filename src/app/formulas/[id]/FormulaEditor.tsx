@@ -4789,6 +4789,7 @@ export default function FormulaEditor({
                     }}
                     className="pricing__input"
                     style={{
+                      flex: "0 0 auto",
                       width: 140,
                       fontSize: 12,
                       fontWeight: 700,
@@ -5036,6 +5037,7 @@ export default function FormulaEditor({
                     }}
                     className="pricing__input"
                     style={{
+                      flex: "0 0 auto",
                       width: 140,
                       fontSize: 12,
                       fontWeight: 700,
@@ -5175,6 +5177,10 @@ export default function FormulaEditor({
                     // box stays as compact as the pills beside it.
                     className="pricing__input fe-overage-input"
                     style={{
+                      // flex 0 0 auto defeats .pricing__input's flex: 1,
+                      // which otherwise stretches the box across the
+                      // whole strip.
+                      flex: "0 0 auto",
                       width: 48,
                       fontSize: 12,
                       fontWeight: 700,
