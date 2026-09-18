@@ -1161,7 +1161,9 @@ export default function FormulaEditor({
   // Whole-shift rounding rule: fractions of .25 and up round up to an
   // additional shift; .24 and below round down.
   const roundDays = (x: number) =>
-    x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) > 0.24 ? 1 : 0);
+    // v84.4: round UP only at .80+ of a shift (was >.24 — too eager);
+    // anything under .80 rounds down.
+    x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) >= 0.8 ? 1 : 0);
   // v57.4: normalized costing blob — what Save writes and what the dirty
   // check compares. Default-source entries are dropped so an untouched
   // table stays clean.
@@ -7177,7 +7179,7 @@ export default function FormulaEditor({
               Production / Cleaning), Shifts / Hours per Shift / Total
               Hours down the side. Shifts follow the day rules (Setup =
               1; Production = Target Yield ÷ Daily Yield; Cleaning =
-              Production ÷ 4; whole numbers, >.24 rounds up) and stay
+              Production ÷ 4; whole numbers, .80+ rounds up) and stay
               editable — a typed value overrides and saves. Hours per
               shift default to 8. */}
           {(() => {
@@ -7195,7 +7197,7 @@ export default function FormulaEditor({
               setHours: (n: number | null) => void;
               /** v84.3: Setup + Cleaning accept fractional shifts (a
                *  half-shift changeover is real); Production keeps the
-               *  whole-shift rounding rule (>.24 rounds up) from the
+               *  whole-shift rounding rule (.80+ rounds up) from the
                *  original operator spec. */
               fractional?: boolean;
             }> = [
