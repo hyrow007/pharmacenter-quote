@@ -194,6 +194,23 @@ const en = {
   shipPrefix: "Ship",
   shipOverdueLabel: "overdue",
   shipInDaysLabel: "in {days}d",
+  // Fishbowl SO/PO status labels — Fishbowl only sends English, we map
+  // to Spanish at render time.
+  statusEstimate: "Estimate",
+  statusIssued: "Issued",
+  statusInProgress: "In Progress",
+  statusFulfilled: "Fulfilled",
+  statusInProcess: "In Process",
+  statusUnfulfilled: "Unfulfilled",
+  statusPartial: "Partial",
+  statusClosedShort: "Closed Short",
+  statusVoid: "Void",
+  statusCancelled: "Cancelled",
+  // Relative time — used by describeFreshness()
+  timeJustNow: "just now",
+  timeMinAgo: "{n} min ago",
+  timeHrAgo: "{n}h ago",
+  timeDayAgo: "{n}d ago",
   noMeetingsForSo:
     "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
   dueLabel: "due",
@@ -387,6 +404,22 @@ const es: typeof en = {
   shipPrefix: "Envío",
   shipOverdueLabel: "vencido",
   shipInDaysLabel: "en {days}d",
+  // Status labels — English source strings from Fishbowl, mapped here.
+  statusEstimate: "Estimación",
+  statusIssued: "Emitida",
+  statusInProgress: "En Progreso",
+  statusFulfilled: "Cumplida",
+  statusInProcess: "En Proceso",
+  statusUnfulfilled: "Sin Cumplir",
+  statusPartial: "Parcial",
+  statusClosedShort: "Cerrada Corta",
+  statusVoid: "Anulada",
+  statusCancelled: "Cancelada",
+  // Relative time
+  timeJustNow: "ahora mismo",
+  timeMinAgo: "hace {n} min",
+  timeHrAgo: "hace {n}h",
+  timeDayAgo: "hace {n}d",
   noMeetingsForSo:
     "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
   dueLabel: "vence",

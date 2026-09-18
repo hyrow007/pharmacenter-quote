@@ -160,7 +160,8 @@ export default async function OrdersLandingPage() {
     // used for meeting notes elsewhere in the app).
     const useEs = lang === "es";
     synBy.set(s.so_number, {
-      so_number: s.so_number,
+      // (fix: so_number is the map KEY — the value type doesn't carry it;
+      // passing it broke the build on three straight deploys.)
       headline:
         useEs && s.headline_es && s.headline_es.trim()
           ? s.headline_es
@@ -372,6 +373,8 @@ export default async function OrdersLandingPage() {
           : m,
       null,
     ),
+    t,
+    lang,
   );
 
   return (
@@ -477,15 +480,15 @@ export default async function OrdersLandingPage() {
                       const lastTouches: string[] = [];
                       if (notes?.last_session_date)
                         lastTouches.push(
-                          `${t("touchPlaud")} ${formatShort(notes.last_session_date)}`,
+                          `${t("touchPlaud")} ${formatShort(notes.last_session_date, lang)}`,
                         );
                       if (monday?.latest_update_at)
                         lastTouches.push(
-                          `${t("touchMonday")} ${describeFreshness(monday.latest_update_at).relative}`,
+                          `${t("touchMonday")} ${describeFreshness(monday.latest_update_at, t, lang).relative}`,
                         );
                       if (so.synced_at)
                         lastTouches.push(
-                          `${t("touchFishbowl")} ${describeFreshness(so.synced_at).relative}`,
+                          `${t("touchFishbowl")} ${describeFreshness(so.synced_at, t, lang).relative}`,
                         );
 
                       const warnings: string[] = [];
@@ -540,12 +543,14 @@ export default async function OrdersLandingPage() {
                             <StatusPill
                               status={so.status_name}
                               statusId={so.status_id}
+                              t={t}
                             />
                             {so.date_first_ship ? (
                               <ShipDatePill
                                 date={so.date_first_ship}
                                 classification={ship}
                                 t={t}
+                                lang={lang}
                               />
                             ) : null}
                             {so.salesman ? (
@@ -789,7 +794,7 @@ export default async function OrdersLandingPage() {
                                         color: "var(--ink-3, #8a9498)",
                                       }}
                                     >
-                                      · {po.status_name}
+                                      · {translateStatus(po.status_name, t)}
                                     </span>
                                   ) : null}
                                   {po.date_issued || po.date_created ? (
@@ -801,6 +806,7 @@ export default async function OrdersLandingPage() {
                                       ·{" "}
                                       {formatShort(
                                         po.date_issued ?? po.date_created,
+                                        lang,
                                       )}
                                     </span>
                                   ) : null}
@@ -866,7 +872,7 @@ export default async function OrdersLandingPage() {
                                   >
                                     {u.creator_name ?? "—"}
                                     {u.created_at
-                                      ? ` · ${describeFreshness(u.created_at).relative}`
+                                      ? ` · ${describeFreshness(u.created_at, t, lang).relative}`
                                       : ""}
                                   </div>
                                   {truncate(
@@ -973,19 +979,39 @@ function isStale(
   return now - newest > threshold;
 }
 
-function describeFreshness(iso: string | null): { relative: string } {
+function describeFreshness(
+  iso: string | null,
+  t?: TFn,
+  lang?: "en" | "es",
+): { relative: string } {
   if (!iso) return { relative: "—" };
   const d = new Date(iso).getTime();
   if (!Number.isFinite(d)) return { relative: iso };
   const diff = Date.now() - d;
   const mins = Math.round(diff / 60000);
-  if (mins < 1) return { relative: "just now" };
-  if (mins < 60) return { relative: `${mins} min ago` };
+  const tr = (k: string, n?: number): string => {
+    if (t)
+      return t(
+        k as unknown as Parameters<TFn>[0],
+        n !== undefined ? { n: String(n) } : undefined,
+      );
+    if (k === "timeJustNow") return "just now";
+    if (k === "timeMinAgo") return `${n} min ago`;
+    if (k === "timeHrAgo") return `${n}h ago`;
+    if (k === "timeDayAgo") return `${n}d ago`;
+    return "";
+  };
+  if (mins < 1) return { relative: tr("timeJustNow") };
+  if (mins < 60) return { relative: tr("timeMinAgo", mins) };
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return { relative: `${hrs}h ago` };
+  if (hrs < 24) return { relative: tr("timeHrAgo", hrs) };
   const days = Math.round(hrs / 24);
-  if (days < 30) return { relative: `${days}d ago` };
-  return { relative: new Date(iso).toLocaleDateString() };
+  if (days < 30) return { relative: tr("timeDayAgo", days) };
+  return {
+    relative: new Date(iso).toLocaleDateString(
+      lang === "es" ? "es" : "en-US",
+    ),
+  };
 }
 
 function truncate(s: string, max: number): string {
@@ -993,14 +1019,39 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 1).trimEnd() + "…";
 }
 
-function formatShort(iso: string | null): string {
+function formatShort(iso: string | null, lang?: "en" | "es"): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(lang === "es" ? "es" : "en-US", {
     month: "short",
     day: "numeric",
   });
+}
+
+// Fishbowl only sends English status strings ("Issued", "Fulfilled",
+// …). Map to the current locale for display. Falls back to the raw
+// string when unknown.
+function translateStatus(
+  status: string | null | undefined,
+  t: TFn,
+): string {
+  if (!status) return "";
+  const key = status.trim().toLowerCase();
+  const map: Record<string, string> = {
+    "estimate": t("statusEstimate"),
+    "issued": t("statusIssued"),
+    "in progress": t("statusInProgress"),
+    "fulfilled": t("statusFulfilled"),
+    "in process": t("statusInProcess"),
+    "unfulfilled": t("statusUnfulfilled"),
+    "partial": t("statusPartial"),
+    "closed short": t("statusClosedShort"),
+    "void": t("statusVoid"),
+    "cancelled": t("statusCancelled"),
+    "canceled": t("statusCancelled"),
+  };
+  return map[key] ?? status;
 }
 
 function formatMoney(v: number | null): string {
@@ -1052,9 +1103,11 @@ function emptyStyle(): React.CSSProperties {
 function StatusPill({
   status,
   statusId,
+  t,
 }: {
   status: string | null;
   statusId: number | null;
+  t: TFn;
 }) {
   if (!status) return null;
   const bg =
@@ -1076,7 +1129,7 @@ function StatusPill({
         border: "1px solid var(--stone, #e3dcc9)",
       }}
     >
-      {status}
+      {translateStatus(status, t)}
     </span>
   );
 }
@@ -1085,10 +1138,12 @@ function ShipDatePill({
   date,
   classification,
   t,
+  lang,
 }: {
   date: string;
   classification: ShipClassification;
   t: TFn;
+  lang: "en" | "es";
 }) {
   const bg = classification.overdue
     ? "#f7dfda"
@@ -1104,7 +1159,7 @@ function ShipDatePill({
     ? t("shipOverdueLabel")
     : classification.imminent
       ? t("shipInDaysLabel", { days: String(classification.daysAway) })
-      : formatShort(date);
+      : formatShort(date, lang);
   return (
     <span
       style={{
