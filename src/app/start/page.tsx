@@ -632,12 +632,12 @@ function StartWorkflow() {
   // formula IS the product identity, and PC-made products aren't sourced
   // via the purchase/stock flow.
   const showFormulaPicker = state.source === "pharmacenter" && state.form === "gummy";
-  // Contract Packaging adds a THIRD pill row — what dosage form is being
-  // packaged — which only opens once the packaging type is locked in.
-  // Bottles are exempt: their dosage type + count moved into the per-product
-  // Packaging spec panel (matching the PandaDoc form's Sections A/B).
-  const showDosageSection =
-    isContractPackaging && !!state.form && state.form !== "bottles";
+  // Contract Packaging does NOT ask dosage form / count on this page at
+  // all: that information is gathered on each product's Packaging spec
+  // form (PandaDoc Sections A/B — dosageType + bottleCount / cardCount),
+  // so asking here would be double entry. CP types whose spec panel isn't
+  // built yet (sachets, pouches, kitting…) capture it when their form
+  // lands — same logic for every packaging type.
   // Pick which option set + section heading goes in the form-section UI.
   const formOptions = isContractPackaging ? PACKAGING_TYPES : FORMS;
   const formLabel = isContractPackaging ? "Packaging type" : "Dosage form";
@@ -653,7 +653,6 @@ function StartWorkflow() {
     ? !!state.customerId
     : !!state.newCustomer.name.trim();
   const formOk = !showFormSection || !!state.form;
-  const dosageOk = !showDosageSection || !!state.dosage;
   const sourceOk = !showSourceSection || !!state.source;
 
   const productsOk = state.products.every((p) => {
@@ -672,7 +671,6 @@ function StartWorkflow() {
   if (!customerOk) missing.push("Customer");
   if (!state.type) missing.push("Quote type");
   if (!formOk) missing.push(formLabel);
-  if (!dosageOk) missing.push("Dosage form");
   if (!sourceOk) missing.push("Source");
   if (!productsOk) {
     missing.push(
@@ -1039,53 +1037,8 @@ function StartWorkflow() {
             </div>
           ) : null}
 
-          {/* ----- Dosage form (Contract Packaging only) -----
-              Shown after a packaging type is picked. Reuses the same FORMS
-              catalogue Bulk uses so users see the familiar Softgels /
-              Gummies / Tablets / Capsules / Other pills. */}
-          {showDosageSection ? (
-            <div style={sectionStyle}>
-              <p style={sectionLabelStyle}>Dosage form</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {FORMS.map((f) => {
-                  const active = state.dosage === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setField("dosage", f.id)}
-                      style={active ? pillActive : pillBase}
-                    >
-                      {f.name}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Count per display unit. Bottles capture this per product in
-                  the Packaging spec panel instead — this card only renders
-                  for the other CP packaging types. */}
-              <div style={{ marginTop: 14 }}>
-                <p style={sectionLabelStyle}>Count per unit</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={state.dosageCount ?? ""}
-                    onChange={(e) =>
-                      setField(
-                        "dosageCount",
-                        e.target.value.replace(/[^0-9]/g, "").slice(0, 5),
-                      )
-                    }
-                    placeholder="30"
-                    autoComplete="off"
-                    style={{ ...inputStyle, width: 120 }}
-                  />
-                  <span style={{ fontSize: 13, color: "var(--ink-3)" }}>ct</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          {/* Dosage form / count for Contract Packaging is captured on each
+              product's Packaging spec form (Sections A/B), never here. */}
 
           {/* ----- Source (bulk + gummies only) ----- */}
           {showSourceSection ? (

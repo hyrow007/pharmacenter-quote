@@ -363,7 +363,7 @@ const es: typeof en = {
   // ---- SO detail ----
   backOpenOrders: "← Órdenes abiertas",
   soPrefix: "SO",
-  syncedAgo: "Sincronizado hace {rel}",
+  syncedAgo: "Sincronizado {rel}",
   syncedStaleShort: "la sincronización nocturna no se ejecutó",
   factStatus: "Estado",
   factPo: "PO",
