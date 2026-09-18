@@ -257,32 +257,6 @@ export async function GET(request: Request) {
       monday: monday.length,
       memos: memos.length,
     },
-    debug: {
-      mondayRawRows: (mondayRes.data ?? []).length,
-      mondayError: mondayRes.error?.message ?? null,
-      memoRawRows: (memoRes.data ?? []).length,
-      memoError: memoRes.error?.message ?? null,
-      mondayFirstRow: (mondayRes.data ?? [])[0]
-        ? {
-            so_number: (mondayRes.data as unknown as Array<{ so_number: string }>)[0]
-              .so_number,
-            updates_type: typeof (
-              mondayRes.data as unknown as Array<{ updates: unknown }>
-            )[0].updates,
-            updates_len: Array.isArray(
-              (mondayRes.data as unknown as Array<{ updates: unknown }>)[0]
-                .updates,
-            )
-              ? (
-                  mondayRes.data as unknown as Array<{ updates: unknown[] }>
-                )[0].updates.length
-              : null,
-            updates_es_type: typeof (
-              mondayRes.data as unknown as Array<{ updates_es: unknown }>
-            )[0].updates_es,
-          }
-        : null,
-    },
   });
 }
 
