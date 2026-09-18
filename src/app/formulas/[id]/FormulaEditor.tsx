@@ -5803,8 +5803,15 @@ export default function FormulaEditor({
                   flexWrap: "wrap",
                 }}
               >
-                {/* ---- The panel (+ other-ingredients line below it) ---- */}
-                <div className="fe-label-wrap" style={{ width: 360, flexShrink: 0 }}>
+                {/* ---- The panel (+ other-ingredients line below it) ----
+                    v84.8: width flexes 360→720 instead of a fixed 360 so
+                    long active wording ("…(Salvia officinalis) Leaf
+                    Extract…") has room; it shares the row with the
+                    settings column and wraps under it when cramped. */}
+                <div
+                  className="fe-label-wrap"
+                  style={{ flex: "1 1 480px", minWidth: 360, maxWidth: 720 }}
+                >
                 <div
                   className="fe-label-panel"
                   style={{
@@ -6030,6 +6037,22 @@ export default function FormulaEditor({
                             i === visibleRows.length - 1 ? undefined : hair,
                         }}
                       >
+                        {printing ? (
+                          // v84.8: print renders the name as wrapping
+                          // text — an <input> is single-line and was
+                          // silently truncating long wording on the
+                          // customer document.
+                          <span
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              whiteSpace: "normal",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {r.displayName}
+                          </span>
+                        ) : (
                         <input
                           type="text"
                           value={r.displayName}
@@ -6053,6 +6076,7 @@ export default function FormulaEditor({
                             padding: 0,
                           }}
                         />
+                        )}
                         <span
                           style={{ fontWeight: 700, whiteSpace: "nowrap" }}
                         >
