@@ -462,11 +462,18 @@ export function computeCostingComputed(params: {
     }
     // Resolved $/kg per the saved Cost Source. Null = the "—" line
     // ("App" source is intentionally null — same as the editor).
+    // "Customer Supplied" is Manual's twin (FormulaEditor 2532–2541):
+    // the customer quoted the cost, but the operator still types it into
+    // the same manualCosts map — same map, same rules. Missing it here
+    // blanked materialUsdPerPiece for any formula with a customer-supplied
+    // ingredient, which made the PricingCalculator import claim the
+    // Costing tab was incomplete while the editor showed a full cost.
     const resolveCostPerKg = (e: CostEntry): number | null => {
       const src = costSourceByKey[e.key] ?? "Fish Bowl (Inventory)";
       if (src === "Fish Bowl (Inventory)") return e.inventoryCostPerKg;
       if (src === "Fish Bowl (Last Order)") return e.lastOrderCostPerKg;
-      if (src === "Manual") return manualCostByKey[e.key] ?? null;
+      if (src === "Manual" || src === "Customer Supplied")
+        return manualCostByKey[e.key] ?? null;
       return null;
     };
     let costSum = 0;

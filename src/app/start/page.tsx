@@ -4,9 +4,10 @@ import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, type Product } from "@/lib/supabase";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
-import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters } from "@/lib/workflows";
+import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters, blankPackagingSpecPouches } from "@/lib/workflows";
 import PackagingSpecSection from "./PackagingSpecSection";
 import PackagingSpecBlistersSection from "./PackagingSpecBlistersSection";
+import PackagingSpecPouchesSection from "./PackagingSpecPouchesSection";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
@@ -1277,6 +1278,25 @@ function StartWorkflow() {
                         ...cur,
                         blisterSpec: updater(
                           cur.blisterSpec ?? blankPackagingSpecBlisters(),
+                        ),
+                      }))
+                    }
+                  />
+                ) : null}
+
+                {/* Packaging spec (CP → Pouches) — the PandaDoc Packaging
+                    Form (Bags/Gusseted bags/Stand up pouch) questionnaire,
+                    per product. Same fill-now-or-later contract as bottles
+                    and blisters. Pouches ≠ sachets: sachets get their own
+                    form + section when that PandaDoc form lands. */}
+                {isContractPackaging && state.form === "pouches" ? (
+                  <PackagingSpecPouchesSection
+                    spec={p.pouchSpec}
+                    onChange={(updater) =>
+                      setProduct(p.uid, (cur) => ({
+                        ...cur,
+                        pouchSpec: updater(
+                          cur.pouchSpec ?? blankPackagingSpecPouches(),
                         ),
                       }))
                     }
