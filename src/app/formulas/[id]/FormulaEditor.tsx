@@ -931,6 +931,8 @@ export default function FormulaEditor({
   const [hoveredLabelVariantId, setHoveredLabelVariantId] = useState<
     string | null
   >(null);
+  // v84.9: "+ Serving Size" swaps to an inline count input.
+  const [addingLabelVariant, setAddingLabelVariant] = useState(false);
   // v81.1: Panel assistant chat — screen-local, never persisted. Edits
   // it makes land in the ordinary label* state, so Save picks them up.
   const [labelChatMessages, setLabelChatMessages] = useState<
@@ -5129,35 +5131,75 @@ export default function FormulaEditor({
                     </button>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const id = "sv_" + Math.random().toString(36).slice(2, 9);
-                    const count = labelVariants.length + 2;
-                    setLabelVariants((prev) => [
-                      ...prev,
-                      {
-                        id,
-                        name: `${count} Gummies`,
-                        gummiesPerServing: count,
-                        servingsPerContainer: null,
-                      },
-                    ]);
-                    setActiveLabelVariantId(id);
-                  }}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    border: "1px dashed var(--line, #e3dcc9)",
-                    background: "transparent",
-                    color: "var(--teal-700, #1d6c7b)",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  + {tr("Serving Size")}
-                </button>
+                {/* v84.9: "+ Serving Size" asks for the count up front —
+                    the button swaps to a gummies-per-serving input;
+                    Enter/blur creates the tab, Escape cancels. */}
+                {addingLabelVariant ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={labelVariants.length + 2}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        (e.target as HTMLInputElement).dataset.cancel = "1";
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === "Enter") {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      setAddingLabelVariant(false);
+                      if (e.target.dataset.cancel === "1") return;
+                      const g = Math.max(
+                        1,
+                        Math.round(Number(e.target.value) || 0),
+                      );
+                      if (!Number.isFinite(g) || g < 1) return;
+                      const id =
+                        "sv_" + Math.random().toString(36).slice(2, 9);
+                      setLabelVariants((prev) => [
+                        ...prev,
+                        {
+                          id,
+                          name: g === 1 ? "1 Gummy" : `${g} Gummies`,
+                          gummiesPerServing: g,
+                          servingsPerContainer: null,
+                        },
+                      ]);
+                      setActiveLabelVariantId(id);
+                    }}
+                    title="Gummies per serving for the new tab"
+                    className="pricing__input"
+                    style={{
+                      width: 90,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      padding: "6px 14px",
+                      textAlign: "right",
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAddingLabelVariant(true)}
+                    title="Add a serving-size tab — you'll be asked how many gummies per serving"
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 999,
+                      border: "1px dashed var(--line, #e3dcc9)",
+                      background: "transparent",
+                      color: "var(--teal-700, #1d6c7b)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + {tr("Serving Size")}
+                  </button>
+                )}
               </>
             );
           })()}
