@@ -5171,14 +5171,16 @@ export default function FormulaEditor({
                       setActiveLabelVariantId(id);
                     }}
                     title="Gummies per serving for the new tab"
-                    className="pricing__input"
+                    // fe-overage-input hides the number spinners so the
+                    // box stays as compact as the pills beside it.
+                    className="pricing__input fe-overage-input"
                     style={{
-                      width: 90,
+                      width: 48,
                       fontSize: 12,
                       fontWeight: 700,
                       borderRadius: 999,
-                      padding: "6px 14px",
-                      textAlign: "right",
+                      padding: "6px 10px",
+                      textAlign: "center",
                     }}
                   />
                 ) : (
