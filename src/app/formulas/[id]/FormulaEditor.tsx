@@ -6493,6 +6493,18 @@ export default function FormulaEditor({
 
                   {/* ---- Panel assistant chat ---- */}
                   <div
+                    // v84.6: drag a screenshot / image / PDF anywhere on
+                    // the chat card to attach it.
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes("Files"))
+                        e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      if (e.dataTransfer.files.length > 0) {
+                        e.preventDefault();
+                        void addChatFiles(e.dataTransfer.files);
+                      }
+                    }}
                     style={{
                       border: "1px solid var(--teal-700, #1d6c7b)",
                       borderRadius: 8,
@@ -6711,7 +6723,20 @@ export default function FormulaEditor({
                         onKeyDown={(e) => {
                           if (e.key === "Enter") void sendPanelChat();
                         }}
-                        placeholder={tr("Describe a panel edit…")}
+                        // v84.6: Ctrl+V a screenshot straight into the
+                        // chat — clipboard images become attachments
+                        // (downscaled like any other image).
+                        onPaste={(e) => {
+                          const files = Array.from(e.clipboardData.items)
+                            .filter((it) => it.kind === "file")
+                            .map((it) => it.getAsFile())
+                            .filter((f): f is File => !!f);
+                          if (files.length > 0) {
+                            e.preventDefault();
+                            void addChatFiles(files);
+                          }
+                        }}
+                        placeholder={tr("Describe a panel edit… (paste screenshots here)")}
                         className="pricing__input"
                         style={{ flex: 1, fontSize: 12.5 }}
                       />

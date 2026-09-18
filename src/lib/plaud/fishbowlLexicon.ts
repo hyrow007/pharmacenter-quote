@@ -75,7 +75,10 @@ export const STAFF_NAMES: string[] = [
   // Also on HR list (may be a shift/rotation worker not on chart)
   "Mario Medri",
   "Andreina Nunez", // note: distinct from Andreina Duarte
-  "Olivia Clawd",
+  // Note: "Olivia Clawd" appears on the HR export but is an AI agent
+  // being built, not a real staff member. Excluded from the lexicon
+  // so mentions of "Olivia" in Plaud transcripts aren't auto-corrected
+  // to a person that doesn't exist.
   // ── Bare first names — Plaud usually says only one part ──────
   "Andrea",
   "Andreina",
@@ -92,7 +95,6 @@ export const STAFF_NAMES: string[] = [
   "Maria",
   "Mario",
   "Melissa",
-  "Olivia",
   "Rosa",
   "Rosie",
   "Wilmer",

@@ -43,6 +43,12 @@ type SynthesisItem = {
   so_number: string;
   headline?: string | null;
   points: Point[];
+  // Optional Spanish companions — the /orders page prefers these when
+  // lang=es and falls back to the canonical English fields. Producers
+  // (the scheduled synthesis task, the render-time backfill) should
+  // send both when they can.
+  headline_es?: string | null;
+  points_es?: Point[] | null;
   based_on?: Record<string, unknown> | null;
 };
 
@@ -91,23 +97,15 @@ export async function POST(request: Request) {
     auth: { persistSession: false },
   });
 
-  const rows: Array<{
-    so_number: string;
-    headline: string | null;
-    points: Point[];
-    based_on: Record<string, unknown> | null;
-    generated_at: string;
-  }> = [];
+  const rows: Array<Record<string, unknown>> = [];
   const now = new Date().toISOString();
-  for (const raw of body.items as unknown[]) {
-    if (!raw || typeof raw !== "object") continue;
-    const s = raw as SynthesisItem;
-    if (typeof s.so_number !== "string" || s.so_number.trim() === "") continue;
-    const points = Array.isArray(s.points)
-      ? s.points
+  const cleanPoints = (arr: unknown): Point[] =>
+    Array.isArray(arr)
+      ? arr
           .filter(
             (p): p is Point =>
-              !!p && typeof (p as Point).text === "string" &&
+              !!p &&
+              typeof (p as Point).text === "string" &&
               (p as Point).text.trim().length > 0,
           )
           .map((p) => ({
@@ -115,7 +113,16 @@ export async function POST(request: Request) {
             source: typeof p.source === "string" ? p.source : undefined,
           }))
       : [];
-    rows.push({
+  for (const raw of body.items as unknown[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const s = raw as SynthesisItem;
+    if (typeof s.so_number !== "string" || s.so_number.trim() === "") continue;
+    const points = cleanPoints(s.points);
+    // Build the row conditionally — only include the *_es fields when
+    // the payload actually supplied them, so a producer that doesn't
+    // do Spanish (the render-time backfill) doesn't stomp on Spanish
+    // that a different producer (the scheduled task) already wrote.
+    const row: Record<string, unknown> = {
       so_number: s.so_number.trim(),
       headline:
         typeof s.headline === "string" && s.headline.trim()
@@ -127,7 +134,15 @@ export async function POST(request: Request) {
           ? (s.based_on as Record<string, unknown>)
           : null,
       generated_at: now,
-    });
+    };
+    if (typeof s.headline_es === "string") {
+      row.headline_es = s.headline_es.trim() || null;
+    }
+    if (s.points_es !== undefined) {
+      const cleaned = cleanPoints(s.points_es);
+      row.points_es = cleaned.length > 0 ? cleaned : null;
+    }
+    rows.push(row);
   }
 
   if (rows.length === 0) {

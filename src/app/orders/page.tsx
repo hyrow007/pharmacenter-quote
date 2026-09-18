@@ -107,7 +107,9 @@ export default async function OrdersLandingPage() {
       .limit(500),
     supabase
       .from("so_synthesis")
-      .select("so_number, headline, points, generated_at"),
+      .select(
+        "so_number, headline, points, headline_es, points_es, generated_at",
+      ),
     supabase
       .from("so_monday_activity")
       .select("so_number, status, item_updated_at, last_synced_at, updates"),
@@ -149,9 +151,28 @@ export default async function OrdersLandingPage() {
       so_number: string;
       headline: string | null;
       points: Array<{ text: string; source?: string }> | null;
+      headline_es: string | null;
+      points_es: Array<{ text: string; source?: string }> | null;
       generated_at: string;
     };
-    synBy.set(s.so_number, s);
+    // Prefer Spanish when lang=es AND the ES fields are populated;
+    // otherwise render the canonical English (matches the pattern
+    // used for meeting notes elsewhere in the app).
+    const useEs = lang === "es";
+    synBy.set(s.so_number, {
+      so_number: s.so_number,
+      headline:
+        useEs && s.headline_es && s.headline_es.trim()
+          ? s.headline_es
+          : s.headline,
+      points:
+        useEs &&
+        Array.isArray(s.points_es) &&
+        s.points_es.length > 0
+          ? s.points_es
+          : s.points,
+      generated_at: s.generated_at,
+    });
   }
 
   type MondayPreview = {
