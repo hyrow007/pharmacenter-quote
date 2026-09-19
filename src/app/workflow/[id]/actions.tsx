@@ -771,6 +771,11 @@ export default function WorkflowActions({
     (workflow.state.type ?? "") === "contract-packaging" &&
     (workflow.state.form ?? "") === "blisters";
 
+  /** Contract-packaging pouches / stand-up bags — same reasoning again. */
+  const isCpPouches =
+    (workflow.state.type ?? "") === "contract-packaging" &&
+    (workflow.state.form ?? "") === "pouches";
+
   const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
   return (
@@ -993,7 +998,7 @@ export default function WorkflowActions({
             empty cost, so both entry points are hidden for bottles and
             blisters alike — each has a calculator below that carries the job
             end to end. */}
-        {!isCpBottles && !isCpBlisters && (
+        {!isCpBottles && !isCpBlisters && !isCpPouches && (
           <>
             <a
               href={`/pricing?from=${workflow.id}`}
@@ -1055,6 +1060,23 @@ export default function WorkflowActions({
             <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Blisters) →</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
               Film + foil + crews + margin → price per finished unit.
+            </span>
+          </a>
+        )}
+
+        {/* Pouch costing — same architecture again: pouch machine PPM with
+            the house 20% penalty, printing / packout / cartoning / bundling
+            hand stations at per-person speeds, BOM seeded from the pouch
+            packaging spec. */}
+        {isCpPouches && (
+          <a
+            href={`/workflow/${workflow.id}/pouch-costing`}
+            style={editAction}
+            aria-label="Open the pouches pricing calculator"
+          >
+            <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Pouches) →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Bulk + pouches + crews + margin → price per finished unit.
             </span>
           </a>
         )}

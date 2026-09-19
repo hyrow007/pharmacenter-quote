@@ -1,0 +1,185 @@
+import { redirect, notFound } from "next/navigation";
+import { createClient } from "@/lib/auth/server";
+import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
+import AppHeader from "../../../_components/AppHeader";
+import PouchCostingBoard, {
+  type BoardProduct,
+  type SavedState,
+} from "./PouchCostingBoard";
+
+// /workflow/[id]/pouch-costing
+//
+// Builds the cost of ONE finished unit (a pouch, or the carton several
+// pouches go into) from its bill of materials, the line and hand-station
+// crews, and a share of overhead — the pouch counterpart of the blister
+// board, and the replacement for Jessica's "SKU Margins Analysis For packet
+// Work" sheet (the Honey gummy project workbook).
+//
+// Saves back onto the workflow through PUT /api/workflows/:id, the same
+// partial-state merge the bottle board and gummy formula use.
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export default async function PouchCostingPage({ params }: Ctx) {
+  const { id } = await params;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !user.email?.endsWith("@pharmacenterusa.com")) redirect("/");
+
+  const { data: row, error } = await supabase
+    .from("workflows")
+    .select("id, quote_number, state")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !row) notFound();
+
+  const w = row as Pick<WorkflowRow, "id" | "quote_number" | "state">;
+  const state = (w.state ?? {}) as Record<string, unknown>;
+
+  // This board only makes sense for contract-packaged pouches. Anything else
+  // gets sent back rather than shown a form that cannot describe its job.
+  const type = String(state.type ?? "");
+  const form = String(state.form ?? "");
+  if (type !== "contract-packaging" || form !== "pouches") {
+    redirect(`/workflow/${w.id}`);
+  }
+
+  const rawProducts = Array.isArray(state.products)
+    ? (state.products as Record<string, unknown>[])
+    : [];
+  // A malformed workflow with no products still gets one (blank) Base tab
+  // rather than a board that cannot render at all.
+  const productRows = rawProducts.length > 0 ? rawProducts : [{}];
+
+  // The workflow stores an existing customer as an ID, not a name — the name
+  // lives in the customers table. Resolving it here is what puts the real
+  // customer on the board header and the print sheet instead of "—".
+  let customerName =
+    (state.customerName as string) ??
+    ((state.newCustomer as Record<string, string> | undefined)?.name ?? "—");
+  const customerId = state.customerId as string | undefined;
+  if (customerId) {
+    const { data: c } = await supabase
+      .from("customers")
+      .select("name")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (c?.name) customerName = c.name;
+  }
+
+  // Same story for the products: an existing pick is an ID into products,
+  // a new one carries its name on newProduct. One `.in()` query resolves
+  // every picked name; the generic fallback only remains for a malformed
+  // record. Each product on the workflow becomes one Base tab on the board.
+  const pickedIds = productRows
+    .map((p) => p.productId as string | undefined)
+    .filter((id): id is string => Boolean(id) && id !== "new");
+  const namesById = new Map<string, string>();
+  if (pickedIds.length > 0) {
+    const { data: rows } = await supabase
+      .from("products")
+      .select("id, name")
+      .in("id", pickedIds);
+    for (const r of rows ?? []) {
+      if (r?.id && r?.name) namesById.set(String(r.id), String(r.name));
+    }
+  }
+
+  // pouchCosting keeps its historical meaning — the FIRST product's cost
+  // build-up — so every reader of single-product workflows still works.
+  // Products 2..n ride in pouchCostingMore, index-aligned.
+  const more = Array.isArray(state.pouchCostingMore)
+    ? (state.pouchCostingMore as (SavedState | null)[])
+    : [];
+  const products: BoardProduct[] = productRows.map((product, i) => {
+    const spec =
+      (product.pouchSpec as Record<string, string> | undefined) ?? null;
+    const quantities = Array.isArray(product.quantities)
+      ? (product.quantities as unknown[])
+      : [];
+    const firstQty = Number(
+      String(quantities[0] ?? "").toString().replace(/[^0-9.]/g, ""),
+    );
+    const quantity =
+      Number.isFinite(firstQty) && firstQty > 0 ? firstQty : null;
+    const productId = product.productId as string | undefined;
+    const name =
+      (productId && productId !== "new"
+        ? namesById.get(productId)
+        : undefined) ??
+      ((product.newProduct as Record<string, string> | undefined)?.name_desc ||
+        null) ??
+      (product.productName as string) ??
+      (product.name as string) ??
+      "Pouched product";
+    const initial =
+      i === 0
+        ? ((state.pouchCosting as SavedState | undefined) ?? null)
+        : (more[i - 1] ?? null);
+    return { name, quantity, spec, initial };
+  });
+
+  return (
+    <div className="app-shell">
+      <AppHeader user={{ email: user.email! }} />
+      <main className="page">
+        {/* Full 1240px shell, same reasoning as the bottle board: this IS the
+            pricing calculator for CP-pouches, so it reads at the same width
+            as the formula catalog, and the extra width lands on the Fishbowl
+            part-name column. */}
+        <div className="page__inner">
+          <a
+            href={`/workflow/${w.id}`}
+            className="bc-noprint"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              background: "var(--paper, #fffdf8)",
+              border: "1px solid var(--line, #e3dcc9)",
+              borderRadius: 999,
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--teal-900, #0f4a56)",
+              textDecoration: "none",
+              marginBottom: 12,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span aria-hidden="true">&larr;</span> Back to workflow (
+            {formatQuoteNumber(w.quote_number)})
+          </a>
+
+          <div style={{ marginBottom: 22 }}>
+            <p className="eyebrow" style={{ marginBottom: 6 }}>
+              PharmaCenter · Tools · {formatQuoteNumber(w.quote_number)}
+            </p>
+            <h1 className="page-header__title" style={{ marginBottom: 6 }}>
+              Pricing Calculator · Pouches
+            </h1>
+            <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
+              Build the price of one finished unit from its bulk, pouch
+              material and packaging, the line and hand-station crews, a
+              share of overhead
+              and your margin. Components are suggested from the packaging
+              spec, but every pick is yours to confirm — and any cost we
+              cannot resolve leaves the total blank rather than quietly
+              counting as zero.
+            </p>
+          </div>
+
+          <PouchCostingBoard
+            workflowId={w.id}
+            quoteNumber={formatQuoteNumber(w.quote_number)}
+            customerName={customerName}
+            products={products}
+          />
+        </div>
+      </main>
+    </div>
+  );
+}
