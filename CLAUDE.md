@@ -1,5 +1,12 @@
 # CLAUDE.md — PharmaCenter Quote generator
 
+> **Source of truth: this repo.** Edit `C:\code\pharmacenter-quote` and
+> deploy with `.\deploy.ps1 "message"`. This app used to be edited in
+> `C:\q`, with the checkout as a robocopy mirror of it — that mirror
+> overwrote edits made in the checkout, never propagated deletions, and
+> silently dropped excluded files. Retired 2026-09-19. **Anything written
+> into `C:\q` now will not reach production.**
+
 Customer-facing quote generator for PharmaCenter sales. Architectural twin of the
 Packing List generator: editor on the left, live 8.5×11 sheet on the right,
 autosave to `localStorage`, Print/Save-PDF button.
@@ -276,10 +283,20 @@ the session view and above the order-summary on `/orders/[so]`.
 - **Write endpoint:** `POST /api/sync/so-synthesis` (same bearer)
   accepts a batch `{ items: [{ so_number, headline, points, based_on }] }`
   and upserts on so_number.
-- **Generator:** a Cowork scheduled task pulls inputs, sends each SO
-  to Claude with a "give me 3-5 bullets a meeting reviewer needs"
-  prompt, and POSTs the batch back. No LLM key needed in the Vercel
-  app — the LLM cost lives inside Cowork's own model access.
+- **Generator: NOT CURRENTLY SCHEDULED.** The design was a Cowork
+  scheduled task that pulls inputs, sends each SO to Claude for
+  "3-5 bullets a meeting reviewer needs", and POSTs the batch back,
+  keeping LLM cost inside Cowork rather than putting an Anthropic key in
+  the Vercel app. That task was never created, and as written it cannot
+  run: Claude's egress allowlist blocks `*.pharmacenter.app`. Options,
+  undecided as of 2026-09-19:
+    1. Get `*.pharmacenter.app` allowlisted for the Claude org, then
+       build the Cowork task as originally designed.
+    2. A second Vercel Cron entry with `ANTHROPIC_API_KEY` in Vercel env.
+       Note Hobby allows only 2 crons, once-daily -- this would be the
+       second and last.
+  Until one is picked, "Key points" callouts show only hand-generated
+  content.
 
 **Monday cross-reference — `so_monday_activity` + `POST /api/sync/monday`:**
 
@@ -296,8 +313,20 @@ brings this in as a third source alongside Fishbowl and Plaud.
   `PLAUD_SYNC_SECRET`; env var `MONDAY_API_TOKEN` for the GraphQL call).
   Pages the whole Open Sales Orders board, upserts one row per SO with
   the last 5 updates. Idempotent on `so_number`.
-- **Schedule:** Cowork scheduled task hits it every couple hours (or on
-  demand via curl); Fishbowl doesn't need to know about it.
+- **Schedule:** **Vercel Cron**, once daily at 11:00 UTC / 7am ET
+  (`vercel.json` -> `crons`, path `/api/sync/monday`, `0 11 * * *`).
+  NOT every two hours: this Vercel account is on the **Hobby** plan,
+  which permits at most 2 cron jobs on **once-daily** schedules only. A
+  `0 */2 * * *` expression is rejected outright and Vercel creates no
+  deployment at all -- no failed-build row, nothing to notice. Raise the
+  frequency only after moving to Pro. The route exports a `GET` beside
+  `POST` because Vercel Cron only issues GET, and its auth accepts either
+  `PLAUD_SYNC_SECRET` or Vercel's `CRON_SECRET` (set that in Vercel env).
+  Still callable on demand via curl with the bearer.
+  (This previously read "Cowork scheduled task every couple hours." No
+  such task was ever created, and it could not have worked: Claude's
+  egress allowlist blocks both `*.pharmacenter.app` and `api.monday.com`.
+  Monday activity sat 24 days stale until this moved to Vercel Cron.)
 - **UI:** Session detail page shows a compact "Monday activity" strip
   per SO card under the line-items table; SO detail page (`/orders/[so]`)
   renders full-width "Monday activity" cards between the line items and

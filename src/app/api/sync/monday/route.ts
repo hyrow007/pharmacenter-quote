@@ -71,28 +71,62 @@ async function mondayGraphql<T>(token: string, query: string): Promise<T> {
   return body.data;
 }
 
-export async function POST(request: Request) {
-  const started = Date.now();
+// Paging a whole board with 30 updates per item takes well over the 10s
+// default. 60s is the ceiling on Hobby and comfortably inside Pro's, so
+// it is safe on either plan. Without this the cron fails silently on a
+// busy board.
+export const maxDuration = 60;
 
-  // ----- auth ---------------------------------------------------------
-  const expected = process.env.PLAUD_SYNC_SECRET; // reusing the shared sync bearer
-  if (!expected) {
-    console.error("PLAUD_SYNC_SECRET not configured");
-    return NextResponse.json(
-      { ok: false, error: "server_misconfigured" },
-      { status: 500 },
-    );
+// Accepts either the shared sync bearer (manual runs, curl, any external
+// caller) or Vercel's own CRON_SECRET, which Vercel sends as
+// `Authorization: Bearer $CRON_SECRET` on scheduled invocations. Keeping
+// both means the cron does not force us to widen where PLAUD_SYNC_SECRET
+// travels.
+function checkAuth(request: Request):
+  | { ok: true }
+  | { ok: false; response: NextResponse } {
+  const syncSecret = process.env.PLAUD_SYNC_SECRET;
+  const cronSecret = process.env.CRON_SECRET;
+  if (!syncSecret && !cronSecret) {
+    console.error("neither PLAUD_SYNC_SECRET nor CRON_SECRET configured");
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { ok: false, error: "server_misconfigured" },
+        { status: 500 },
+      ),
+    };
   }
   const authz = request.headers.get("authorization") || "";
   const provided = authz.startsWith("Bearer ")
     ? authz.slice("Bearer ".length).trim()
     : "";
-  if (provided !== expected) {
-    return NextResponse.json(
-      { ok: false, error: "unauthorized" },
-      { status: 401 },
-    );
+  const accepted =
+    (!!syncSecret && provided === syncSecret) ||
+    (!!cronSecret && provided === cronSecret);
+  if (!accepted) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { ok: false, error: "unauthorized" },
+        { status: 401 },
+      ),
+    };
   }
+  return { ok: true };
+}
+
+// Vercel Cron only ever issues GET. Same work, same auth.
+export async function GET(request: Request) {
+  return POST(request);
+}
+
+export async function POST(request: Request) {
+  const started = Date.now();
+
+  // ----- auth ---------------------------------------------------------
+  const auth = checkAuth(request);
+  if (!auth.ok) return auth.response;
 
   // ----- env ----------------------------------------------------------
   const mondayToken = process.env.MONDAY_API_TOKEN;
