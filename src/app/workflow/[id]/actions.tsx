@@ -283,6 +283,7 @@ export default function WorkflowActions({
         .from("products")
         .select("id, fp_code, name")
         .eq("active", true)
+        .ilike("fp_code", "PC-RW-%") // raw materials only
         .or(`name.ilike.${like},fp_code.ilike.${like}`)
         .order("fp_code", { ascending: true })
         .limit(12);
@@ -1186,7 +1187,7 @@ export default function WorkflowActions({
                       type="text"
                       value={matSearch}
                       onChange={(e) => runMatSearch(e.target.value)}
-                      placeholder='Search Fishbowl by name or product number (e.g. "PC-RW-0012")'
+                      placeholder='Search Fishbowl raw materials (PC-RW) by name or number (e.g. "PC-RW-0012")'
                       autoComplete="off"
                       autoFocus
                       style={{
@@ -1210,7 +1211,7 @@ export default function WorkflowActions({
                           </div>
                         ) : matResults.length === 0 ? (
                           <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--ink-3)" }}>
-                            No Fishbowl products match — use + Custom row instead.
+                            No Fishbowl raw materials (PC-RW) match — use + Custom row instead.
                           </div>
                         ) : (
                           matResults.map((p) => (
