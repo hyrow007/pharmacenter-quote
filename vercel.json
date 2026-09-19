@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "_comment": "Hobby plan allows cron jobs ONCE PER DAY only (and at most 2). A more frequent expression such as '0 */2 * * *' is rejected and the deployment is never created - which is exactly what happened on 2026-09-19. Raise the frequency only after moving to Pro.",
       "path": "/api/sync/monday",
       "schedule": "0 11 * * *"
     }
