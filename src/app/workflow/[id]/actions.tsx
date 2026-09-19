@@ -43,6 +43,77 @@ function parseValueInput(formatted: string): number {
   return parseFloat(formatted.replace(/,/g, ""));
 }
 
+// ----- Action-card icons ---------------------------------------------------
+// Inline Tabler outline icons (MIT) at 20px so they inherit the card's text
+// color. Monday gets the real brand mark, served from monday.com's own CDN
+// (their apple-touch-icon) rather than a hand-drawn approximation.
+const iconProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function IconSliders() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="14" cy="6" r="2" />
+      <path d="M4 6h8M16 6h4" />
+      <circle cx="8" cy="12" r="2" />
+      <path d="M4 12h2M10 12h10" />
+      <circle cx="17" cy="18" r="2" />
+      <path d="M4 18h11M19 18h1" />
+    </svg>
+  );
+}
+
+function IconCalculator() {
+  return (
+    <svg {...iconProps}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <rect x="8" y="7" width="8" height="3" rx="1" />
+      <path d="M8 14v.01M12 14v.01M16 14v.01M8 17v.01M12 17v.01M16 17v.01" />
+    </svg>
+  );
+}
+
+function IconFileDollar() {
+  return (
+    <svg {...iconProps}>
+      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+      <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+      <path d="M14 11h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3H10" />
+      <path d="M12 17v1m0-8v1" />
+    </svg>
+  );
+}
+
+function IconMonday() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="https://cdn.monday.com/apple-touch-icon-180x180.png"
+      alt=""
+      width={20}
+      height={20}
+      style={{ borderRadius: 4, display: "block" }}
+      aria-hidden
+    />
+  );
+}
+
+// Icon + title on one row, subtitle below — shared by all action cards.
+const actionTitleRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
 function valueForDisplay(n: number): string {
   // For pre-filling the edit form with existing SOs: re-format with commas
   // and two decimals.
@@ -883,7 +954,7 @@ export default function WorkflowActions({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
         <a href={`/start?workflow=${workflow.id}`} style={editAction}>
-          <span>Edit workflow →</span>
+          <span style={actionTitleRow}><IconSliders />Edit workflow →</span>
           <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
             Tweak any field, then push again.
           </span>
@@ -895,7 +966,8 @@ export default function WorkflowActions({
           onClick={() => (isPcGummy ? openMaterials() : pushToMonday())}
           disabled={submitting}
         >
-          <span>
+          <span style={actionTitleRow}>
+            <IconMonday />
             {submitting
               ? alreadyPushed
                 ? "Updating…"
@@ -928,7 +1000,7 @@ export default function WorkflowActions({
               style={editAction}
               aria-label="Open the pricing calculator"
             >
-              <span>Pricing Calculator →</span>
+              <span style={actionTitleRow}><IconCalculator />Pricing Calculator →</span>
               <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
                 Landed cost + margin → sale price.
               </span>
@@ -939,7 +1011,7 @@ export default function WorkflowActions({
               style={editAction}
               aria-label="Open the pricing calculator and issue a quote"
             >
-              <span>Issue Quote →</span>
+              <span style={actionTitleRow}><IconFileDollar />Issue Quote →</span>
               <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
                 Generate a customer-facing quote PDF.
               </span>
@@ -947,23 +1019,11 @@ export default function WorkflowActions({
           </>
         )}
 
-        {/* Gummy-formula calculator — only for workflows where we're actually
-            manufacturing gummies at PharmaCenter (Bulk → Gummy → PharmaCenter,
-            or the equivalent Contract-Packaging path via state.dosage). The
-            source id in /start is "pharmacenter" (matches the picker label),
-            NOT "pc" — this was the bug that hid the button on real workflows. */}
-        {isPcGummy && (
-          <a
-            href={`/workflow/${workflow.id}/gummy-formula`}
-            style={editAction}
-            aria-label="Open the gummy formula calculator"
-          >
-            <span>Gummy Formula →</span>
-            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-              Per-gummy COGS after 20 kg/day loss.
-            </span>
-          </a>
-        )}
+        {/* The old per-workflow Gummy Formula card was retired 2026-09-19:
+            the formula catalog (formula.pharmacenter.app) is where formulas
+            live now, and the pricing tool imports material cost from the
+            pinned formula's Costing tab. The /gummy-formula route still
+            exists for direct links but has no entry point here. */}
 
         {/* Bottle costing — the Contract-Packaging counterpart to the gummy
             formula. Gated on the same two facts the /start form records:
@@ -976,7 +1036,7 @@ export default function WorkflowActions({
             style={editAction}
             aria-label="Open the bottles pricing calculator"
           >
-            <span>Pricing Calculator (Bottles) →</span>
+            <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Bottles) →</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
               Components + line crew + margin → price per bottle.
             </span>
@@ -992,7 +1052,7 @@ export default function WorkflowActions({
             style={editAction}
             aria-label="Open the blisters pricing calculator"
           >
-            <span>Pricing Calculator (Blisters) →</span>
+            <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Blisters) →</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
               Film + foil + crews + margin → price per finished unit.
             </span>
