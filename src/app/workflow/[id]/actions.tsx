@@ -271,14 +271,15 @@ export default function WorkflowActions({
   const runMatSearch = async (q: string) => {
     setMatSearch(q);
     const t = q.trim();
-    if (t.length < 2) {
+    const sb = supabase; // may be null when env vars are missing — bail out
+    if (t.length < 2 || !sb) {
       setMatResults([]);
       return;
     }
     setMatSearching(true);
     try {
       const like = `%${t.replace(/[%_]/g, "")}%`;
-      const { data } = await supabase
+      const { data } = await sb
         .from("products")
         .select("id, fp_code, name")
         .eq("active", true)
