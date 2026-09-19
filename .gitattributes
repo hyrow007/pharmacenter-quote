@@ -1,0 +1,19 @@
+# Normalize line endings. Windows editors save CRLF; core.autocrlf=true
+# masked that at staging time, but it left the working tree permanently
+# "modified" so real changes were hard to spot in `git status`.
+# Store and check out LF everywhere; keep genuinely Windows-only
+# scripts as CRLF so PowerShell and cmd stay happy.
+* text=auto eol=lf
+
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
