@@ -5,7 +5,7 @@
 // server component can do `auth.getUser()` + Supabase fetches without dragging
 // the whole page over the client boundary.
 
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   WORKFLOW_STATUS_LABELS,
@@ -14,7 +14,7 @@ import {
   type WorkflowRow,
   type WorkflowStatus,
 } from "@/lib/workflows";
-import { supabase, type Customer } from "@/lib/supabase";
+import { type Customer } from "@/lib/supabase";
 
 // Draft row used by the inline Won form. Both fields are strings until we
 // validate-and-coerce on save (numbers via parseFloat). Keeps controlled
@@ -259,38 +259,64 @@ export default function WorkflowActions({
     ]);
   };
 
-  // "+ From Fishbowl" — type-to-search over the synced products table
-  // (name OR product number, hyphens kept so "PC-RW-0012" matches — same
-  // rule as every picker in the app). Picking adds a "CODE · Name" row
-  // with an empty qty for the pusher to fill.
+  // "+ From Fishbowl" — type-to-search over the synced raw_materials table
+  // (Fishbowl PARTS with -RW- in the number: PC-RW, CA-RW, …). The products
+  // table only carries Fishbowl *product* records, so a raw material with no
+  // product wrapper (e.g. PC-RW-0068 Melatonin) would never appear there.
+  // The full list is small (~120 rows) — fetch once, filter locally, hyphens
+  // kept so "PC-RW-0012" matches (same rule as every picker in the app).
+  // Picking adds a "CODE · Name" row with an empty qty for the pusher to fill.
+  type MatPick = { id: string; fp_code: string | null; name: string; unit: string };
   const [matPickerOpen, setMatPickerOpen] = useState(false);
   const [matSearch, setMatSearch] = useState("");
-  const [matResults, setMatResults] = useState<Array<{ id: string; fp_code: string | null; name: string }>>([]);
+  const [matResults, setMatResults] = useState<MatPick[]>([]);
   const [matSearching, setMatSearching] = useState(false);
+  const matAllRef = useRef<MatPick[] | null>(null);
+
+  const loadMatAll = async (): Promise<MatPick[]> => {
+    if (matAllRef.current) return matAllRef.current;
+    const res = await fetch("/api/raw-materials");
+    const json = (await res.json()) as {
+      ok?: boolean;
+      raw_materials?: Array<{
+        id: string;
+        fp_code: string | null;
+        name: string | null;
+        default_unit: string | null;
+        active: boolean;
+      }>;
+    };
+    const all: MatPick[] = (json.raw_materials ?? [])
+      .filter((m) => m.active && m.name)
+      .map((m) => ({
+        id: m.id,
+        fp_code: m.fp_code,
+        name: m.name as string,
+        unit: m.default_unit || "kg",
+      }))
+      .sort((a, b) => (a.fp_code ?? "￿").localeCompare(b.fp_code ?? "￿"));
+    matAllRef.current = all;
+    return all;
+  };
 
   const runMatSearch = async (q: string) => {
     setMatSearch(q);
-    const t = q.trim();
-    const sb = supabase; // may be null when env vars are missing — bail out
-    if (t.length < 2 || !sb) {
+    const t = q.trim().toLowerCase();
+    if (t.length < 2) {
       setMatResults([]);
       return;
     }
     setMatSearching(true);
     try {
-      const like = `%${t.replace(/[%_]/g, "")}%`;
-      const { data } = await sb
-        .from("products")
-        .select("id, fp_code, name")
-        .eq("active", true)
-        .ilike("fp_code", "PC-RW-%") // raw materials only
-        .or(`name.ilike.${like},fp_code.ilike.${like}`)
-        .order("fp_code", { ascending: true })
-        .limit(12);
+      const all = await loadMatAll();
       setMatResults(
-        ((data ?? []) as Array<{ id: string; fp_code: string | null; name: string | null }>)
-          .filter((p) => p.name)
-          .map((p) => ({ id: p.id, fp_code: p.fp_code, name: p.name as string })),
+        all
+          .filter(
+            (m) =>
+              m.name.toLowerCase().includes(t) ||
+              (m.fp_code ?? "").toLowerCase().includes(t),
+          )
+          .slice(0, 12),
       );
     } catch {
       setMatResults([]);
@@ -299,14 +325,14 @@ export default function WorkflowActions({
     }
   };
 
-  const addMatFromFishbowl = (p: { fp_code: string | null; name: string }) => {
+  const addMatFromFishbowl = (p: { fp_code: string | null; name: string; unit?: string }) => {
     setMatRows((rows) => [
       ...rows,
       {
         id: newRowId(),
         name: p.fp_code ? `${p.fp_code} · ${p.name}` : p.name,
         qty: "",
-        unit: "kg",
+        unit: p.unit || "kg",
         customerSupplied: false,
       },
     ]);
@@ -1187,7 +1213,7 @@ export default function WorkflowActions({
                       type="text"
                       value={matSearch}
                       onChange={(e) => runMatSearch(e.target.value)}
-                      placeholder='Search Fishbowl raw materials (PC-RW) by name or number (e.g. "PC-RW-0012")'
+                      placeholder='Search Fishbowl raw materials (RW) by name or number (e.g. "PC-RW-0012")'
                       autoComplete="off"
                       autoFocus
                       style={{
@@ -1211,7 +1237,7 @@ export default function WorkflowActions({
                           </div>
                         ) : matResults.length === 0 ? (
                           <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--ink-3)" }}>
-                            No Fishbowl raw materials (PC-RW) match — use + Custom row instead.
+                            No Fishbowl raw materials (RW) match — use + Custom row instead.
                           </div>
                         ) : (
                           matResults.map((p) => (
