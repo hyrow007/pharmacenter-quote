@@ -117,6 +117,9 @@ export type CostingComputed = {
   totalBatchCostUsd: number | null;
   basisTargetYieldUnits: number;
   basisBenchBatchG: number;
+  /** Material Costs table rows with run-total kg — see CostingMaterialRow.
+   *  Includes Water and Customer Supplied rows; consumers filter. */
+  materials: CostingMaterialRow[];
 };
 
 // -----------------------------------------------------------------------------
@@ -397,7 +400,7 @@ export function computeCostingComputed(params: {
   // --- Material $ / gummy (costingModel, FormulaEditor 1948–2080) ------------
   // Dedup ingredient entries (solutions expanded, Water merged), QTYs
   // scaled by batch counts, costs resolved per the saved Cost Source.
-  const materialUsdPerPieceRaw = (() => {
+  const { materialUsdPerPieceRaw, materials } = (() => {
     const qtyPrimaryBatches =
       scaleUpGummiesOf(scaleUp.carryKg) > 0
         ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
@@ -412,6 +415,8 @@ export function computeCostingComputed(params: {
       scaleUp.carryNetG > 0 ? (grams * cfaBatchKg) / scaleUp.carryNetG : 0;
     type CostEntry = {
       key: string;
+      /** First-seen resolved display name — for the materials list. */
+      name: string;
       preKg: number;
       cfaKg: number;
       inventoryCostPerKg: number | null;
@@ -437,6 +442,9 @@ export function computeCostingComputed(params: {
       if (!e) {
         e = {
           key,
+          // The Water merge (agua → name:water) keeps the first-seen name,
+          // matching how the editor displays the merged row.
+          name: key === "name:water" ? "Water" : name,
           preKg: 0,
           cfaKg: 0,
           inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
@@ -499,8 +507,23 @@ export function computeCostingComputed(params: {
       if (c === null) costMissing = true;
       else costSum += (e.preKg * qtyPrimaryBatches + e.cfaKg * qtyCfaBatches) * c;
     }
+    // Run-total kg per material — the Costing tab's "CANT. TOTAL" column.
+    // Rounded to 3 decimals (grams) for display/quoting.
+    const rows: CostingMaterialRow[] = order.map((k) => {
+      const e = byKey.get(k)!;
+      return {
+        key: e.key,
+        name: e.name,
+        totalKg: roundTo(e.preKg * qtyPrimaryBatches + e.cfaKg * qtyCfaBatches, 3),
+        source: costSourceByKey[e.key] ?? "Fish Bowl (Inventory)",
+      };
+    });
     // Null rule from the CostTab call site (FormulaEditor 4163–4166).
-    return !costMissing && targetYieldUnits > 0 ? costSum / targetYieldUnits : null;
+    return {
+      materialUsdPerPieceRaw:
+        !costMissing && targetYieldUnits > 0 ? costSum / targetYieldUnits : null,
+      materials: rows,
+    };
   })();
 
   // --- Direct Labor $ / gummy (FormulaEditor 2084–2117) ----------------------
@@ -638,5 +661,6 @@ export function computeCostingComputed(params: {
         : roundTo(totalRaw * targetYieldUnits, 2),
     basisTargetYieldUnits: targetYieldUnits,
     basisBenchBatchG: benchBatchG,
+    materials,
   };
 }

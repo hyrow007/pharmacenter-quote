@@ -9,6 +9,7 @@ import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   WORKFLOW_STATUS_LABELS,
+  type MondayMaterialRow,
   type SalesOrder,
   type WorkflowRow,
   type WorkflowStatus,
@@ -147,6 +148,126 @@ export default function WorkflowActions({
   const showToast = (msg: string, ms = 5500) => {
     setToast(msg);
     window.setTimeout(() => setToast((prev) => (prev === msg ? null : prev)), ms);
+  };
+
+  // ----- PC-gummy "Materials for Rosy" pre-push review --------------------
+  // For Bulk → Gummy → Manufactured-at-PharmaCenter workflows the sourcing
+  // ask isn't the finished product (we make it) — it's the raw materials on
+  // the formula's Material Costs card. Push opens this review screen first:
+  // reorder (drag), delete, edit quantities, add rows; Water never appears.
+  // The curated list is saved on the workflow at push time so the next push
+  // seeds from the user's last edits.
+  const wfState = workflow.state;
+  const gummyDosageOrForm = (wfState.form ?? "") || (wfState.dosage ?? "");
+  const isPcGummy =
+    (gummyDosageOrForm === "gummy" || gummyDosageOrForm === "gummies") &&
+    (wfState.source ?? "") === "pharmacenter";
+
+  const [matOpen, setMatOpen] = useState(false);
+  const [matLoading, setMatLoading] = useState(false);
+  const [matError, setMatError] = useState<string | null>(null);
+  const [matRows, setMatRows] = useState<MondayMaterialRow[]>([]);
+  const [matDragIdx, setMatDragIdx] = useState<number | null>(null);
+  const [matDropIdx, setMatDropIdx] = useState<number | null>(null);
+
+  const newRowId = () => `mat_${Math.random().toString(36).slice(2, 10)}`;
+  const isWaterName = (n: string) => {
+    const t = n.trim().toLowerCase();
+    return t === "water" || t === "agua";
+  };
+
+  const openMaterials = async () => {
+    setMatOpen(true);
+    setMatError(null);
+    // Saved list from a previous push wins — it carries the user's edits.
+    const saved = wfState.mondayMaterials;
+    if (saved && saved.length > 0) {
+      setMatRows(saved.filter((r) => !isWaterName(r.name)));
+      return;
+    }
+    // Otherwise seed from the pinned formula(s)' Material Costs tables.
+    const formulaIds = Array.from(
+      new Set(
+        wfState.products
+          .map((p) => p.pinnedFormula?.formulaId)
+          .filter((id): id is string => !!id),
+      ),
+    );
+    if (formulaIds.length === 0) {
+      setMatRows([]);
+      setMatError(
+        "No formula is pinned to this workflow — add rows by hand, or pin a formula on the workflow first.",
+      );
+      return;
+    }
+    setMatLoading(true);
+    try {
+      const seeded: MondayMaterialRow[] = [];
+      for (const fid of formulaIds) {
+        const res = await fetch(`/api/formulas/${fid}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        type ApiMaterial = { name: string; totalKg: number; source: string };
+        const mats: ApiMaterial[] =
+          (data.latestVersion?.costingComputed?.materials as ApiMaterial[] | undefined) ?? [];
+        for (const m of mats) {
+          if (isWaterName(m.name)) continue; // water is never quoted
+          seeded.push({
+            id: newRowId(),
+            name: m.name,
+            qty: String(m.totalKg),
+            unit: "kg",
+            customerSupplied: m.source === "Customer Supplied",
+          });
+        }
+      }
+      setMatRows(seeded);
+      if (seeded.length === 0) {
+        setMatError(
+          "The formula's Costing tab has no material rows yet — fill it in, or add rows by hand.",
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMatRows([]);
+      setMatError(`Couldn't load the formula's materials: ${msg}. You can still add rows by hand.`);
+    } finally {
+      setMatLoading(false);
+    }
+  };
+
+  const setMatField = (id: string, field: "name" | "qty" | "unit", val: string) => {
+    setMatRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
+  };
+  const removeMatRow = (id: string) => {
+    setMatRows((rows) => rows.filter((r) => r.id !== id));
+  };
+  const addMatRow = () => {
+    setMatRows((rows) => [
+      ...rows,
+      { id: newRowId(), name: "", qty: "", unit: "kg", customerSupplied: false },
+    ]);
+  };
+  const reorderMatRows = (from: number, to: number) => {
+    setMatRows((rows) => {
+      if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return rows;
+      const next = rows.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const confirmMaterialsPush = async () => {
+    const cleaned = matRows
+      .map((r) => ({ ...r, name: r.name.trim(), qty: r.qty.trim(), unit: r.unit.trim() || "kg" }))
+      .filter((r) => r.name.length > 0);
+    if (cleaned.length === 0) {
+      setMatError("Add at least one material to quote.");
+      return;
+    }
+    setMatError(null);
+    await pushToMonday(cleaned);
   };
 
   const openSoForm = (initial: SalesOrder[]) => {
@@ -327,7 +448,7 @@ export default function WorkflowActions({
     }
   };
 
-  const pushToMonday = async () => {
+  const pushToMonday = async (materials?: MondayMaterialRow[] | null) => {
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -335,11 +456,18 @@ export default function WorkflowActions({
       const products = state.products.map((p) => ({
         productId: p.productId,
         productName:
-          p.mode === "new"
+          (p.mode === "new"
             ? p.newProduct.name_desc
-            : productMap[p.productId ?? ""]?.name ?? null,
+            : productMap[p.productId ?? ""]?.name ?? null) ||
+          // PC-gummy products carry their identity on the pinned formula.
+          p.pinnedFormula?.name ||
+          null,
         productCode:
           p.mode === "new" ? null : productMap[p.productId ?? ""]?.fp_code ?? null,
+        // "F0017"-style tag so the monday item can name the formula.
+        formulaLabel: p.pinnedFormula
+          ? `F${String(p.pinnedFormula.formulaNumber).padStart(4, "0")}`
+          : null,
         notes: p.mode === "new" ? p.newProduct.notes : "",
         quantities: p.quantities.map(cleanQty).filter((q) => q.length > 0),
         attachments: p.attachments,
@@ -362,6 +490,18 @@ export default function WorkflowActions({
         customerName,
         newCustomer: state.customerMode === "new" ? state.newCustomer : null,
         products,
+        // PC-gummy pushes: the curated raw-materials list from the review
+        // screen. Presence of this array flips the route into its
+        // "please quote these raw materials" message shape.
+        materialsForQuote:
+          materials && materials.length > 0
+            ? materials.map((m) => ({
+                name: m.name,
+                qty: m.qty,
+                unit: m.unit,
+                customerSupplied: m.customerSupplied,
+              }))
+            : undefined,
       };
 
       const res = await fetch("/api/monday/create-item", {
@@ -410,6 +550,7 @@ export default function WorkflowActions({
                 ? `${verb} with ${uploaded} attachment${uploaded === 1 ? "" : "s"}.`
                 : `${verb}, but only ${uploaded}/${totalFiles} attachments uploaded.`;
       showToast(fileMsg);
+      setMatOpen(false);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       // Refresh server-side data so the "Last pushed" timestamp is current.
       router.refresh();
@@ -649,7 +790,12 @@ export default function WorkflowActions({
       ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
-        <button type="button" style={primaryAction} onClick={pushToMonday} disabled={submitting}>
+        <button
+          type="button"
+          style={primaryAction}
+          onClick={() => (isPcGummy ? openMaterials() : pushToMonday())}
+          disabled={submitting}
+        >
           <span>
             {submitting
               ? alreadyPushed
@@ -660,9 +806,11 @@ export default function WorkflowActions({
                 : "Push to Monday →"}
           </span>
           <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>
-            {alreadyPushed
-              ? "Post a fresh comment. Only files added since the last push are uploaded."
-              : "Create the Quotes-board item and ping Rosy."}
+            {isPcGummy
+              ? "Review the raw materials for Rosy to quote, then push."
+              : alreadyPushed
+                ? "Post a fresh comment. Only files added since the last push are uploaded."
+                : "Create the Quotes-board item and ping Rosy."}
           </span>
         </button>
 
@@ -712,25 +860,18 @@ export default function WorkflowActions({
             or the equivalent Contract-Packaging path via state.dosage). The
             source id in /start is "pharmacenter" (matches the picker label),
             NOT "pc" — this was the bug that hid the button on real workflows. */}
-        {(() => {
-          const s = workflow.state;
-          const dosageOrForm = (s.form ?? "") || (s.dosage ?? "");
-          const isGummy = dosageOrForm === "gummy" || dosageOrForm === "gummies";
-          const isPcMade = (s.source ?? "") === "pharmacenter";
-          if (!isGummy || !isPcMade) return null;
-          return (
-            <a
-              href={`/workflow/${workflow.id}/gummy-formula`}
-              style={editAction}
-              aria-label="Open the gummy formula calculator"
-            >
-              <span>Gummy Formula →</span>
-              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-                Per-gummy COGS after 20 kg/day loss.
-              </span>
-            </a>
-          );
-        })()}
+        {isPcGummy && (
+          <a
+            href={`/workflow/${workflow.id}/gummy-formula`}
+            style={editAction}
+            aria-label="Open the gummy formula calculator"
+          >
+            <span>Gummy Formula →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Per-gummy COGS after 20 kg/day loss.
+            </span>
+          </a>
+        )}
 
         {/* Bottle costing — the Contract-Packaging counterpart to the gummy
             formula. Gated on the same two facts the /start form records:
@@ -798,6 +939,185 @@ export default function WorkflowActions({
               ? "Admin override — created by someone else."
               : "Owner-only action."}
           </span>
+        </div>
+      ) : null}
+
+      {matOpen ? (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 90,
+            background: "rgba(15, 74, 86, 0.35)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) setMatOpen(false);
+          }}
+        >
+          <div
+            style={{
+              width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto",
+              background: "#fffdf8", borderRadius: 14, border: "1.5px solid #e3dcc9",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.18)", padding: "20px 22px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: "var(--teal-900)" }}>
+                Materials for Rosy
+              </span>
+              <button
+                type="button"
+                onClick={() => !submitting && setMatOpen(false)}
+                style={{ border: "none", background: "transparent", color: "var(--ink-3)", cursor: "pointer", fontSize: 18 }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ fontSize: 12.5, color: "var(--ink-3)", margin: "0 0 14px", lineHeight: 1.5 }}>
+              Seeded from the formula&apos;s Material Costs (water excluded).
+              Drag ⋮⋮ to reorder, × to drop a row from the push, edit
+              quantities, or add rows. This exact list goes to Rosy.
+            </p>
+
+            {matLoading ? (
+              <p style={{ fontSize: 13, color: "var(--ink-3)" }}>Loading the formula&apos;s materials…</p>
+            ) : (
+              <>
+                {matRows.map((r, idx) => (
+                  <div
+                    key={r.id}
+                    onDragOver={(e) => { e.preventDefault(); setMatDropIdx(idx); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (matDragIdx !== null) reorderMatRows(matDragIdx, idx);
+                      setMatDragIdx(null); setMatDropIdx(null);
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "6px 0",
+                      borderTop: matDropIdx === idx && matDragIdx !== null && matDragIdx !== idx
+                        ? "2px solid var(--teal-700)" : "2px solid transparent",
+                    }}
+                  >
+                    <span
+                      draggable
+                      onDragStart={() => setMatDragIdx(idx)}
+                      onDragEnd={() => { setMatDragIdx(null); setMatDropIdx(null); }}
+                      style={{ cursor: "grab", color: "var(--ink-3)", userSelect: "none", fontSize: 14, padding: "0 2px" }}
+                      title="Drag to reorder"
+                    >
+                      ⋮⋮
+                    </span>
+                    <input
+                      type="text"
+                      value={r.name}
+                      placeholder="Material name"
+                      onChange={(e) => setMatField(r.id, "name", e.target.value)}
+                      style={{
+                        flex: "1 1 auto", minWidth: 0, padding: "7px 10px",
+                        border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13,
+                        background: "#fff", fontFamily: "inherit", color: "var(--ink-1)",
+                      }}
+                      disabled={submitting}
+                    />
+                    {r.customerSupplied ? (
+                      <span
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                          textTransform: "uppercase", color: "var(--teal-700)",
+                          border: "1px solid var(--sage-300)", borderRadius: 999,
+                          padding: "2px 8px", whiteSpace: "nowrap", background: "#f4f8ec",
+                        }}
+                        title="The customer ships this material — delete the row if Rosy shouldn't quote it."
+                      >
+                        customer supplied
+                      </span>
+                    ) : null}
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={r.qty}
+                      placeholder="Qty"
+                      onChange={(e) => setMatField(r.id, "qty", e.target.value)}
+                      style={{
+                        width: 90, padding: "7px 10px", textAlign: "right",
+                        border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13,
+                        background: "#fff", fontFamily: "inherit", color: "var(--ink-1)",
+                      }}
+                      disabled={submitting}
+                    />
+                    <input
+                      type="text"
+                      value={r.unit}
+                      onChange={(e) => setMatField(r.id, "unit", e.target.value)}
+                      style={{
+                        width: 46, padding: "7px 6px", textAlign: "center",
+                        border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13,
+                        background: "#fff", fontFamily: "inherit", color: "var(--ink-3)",
+                      }}
+                      disabled={submitting}
+                      aria-label="Unit"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMatRow(r.id)}
+                      disabled={submitting}
+                      style={{ border: "none", background: "transparent", color: "var(--ink-3)", cursor: "pointer", fontSize: 16 }}
+                      aria-label="Remove material"
+                      title="Drop this row from the push"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addMatRow}
+                  disabled={submitting}
+                  style={{
+                    marginTop: 8, padding: "7px 12px", border: "1.5px dashed #e3dcc9",
+                    borderRadius: 8, background: "transparent", color: "var(--teal-900)",
+                    fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  + Add material
+                </button>
+              </>
+            )}
+
+            {matError ? (
+              <div style={{ marginTop: 10, fontSize: 12.5, color: "#8b2f2f" }}>{matError}</div>
+            ) : null}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => setMatOpen(false)}
+                disabled={submitting}
+                style={{
+                  padding: "9px 16px", borderRadius: 8, border: "1.5px solid #e3dcc9",
+                  background: "#fffdf8", color: "var(--ink-1)", fontFamily: "inherit",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmMaterialsPush}
+                disabled={submitting || matLoading}
+                style={{
+                  padding: "9px 18px", borderRadius: 8, border: "1.5px solid var(--teal-900)",
+                  background: "var(--teal-900)", color: "#fff", fontFamily: "inherit",
+                  fontSize: 13, fontWeight: 700, cursor: submitting ? "wait" : "pointer",
+                }}
+              >
+                {submitting
+                  ? alreadyPushed ? "Updating…" : "Pushing…"
+                  : alreadyPushed ? "Update Monday →" : "Push to Monday →"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

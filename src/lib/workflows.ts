@@ -53,6 +53,22 @@ export type PinnedFormula = {
   flavor: string | null;
 };
 
+// One row of the PC-gummy "Materials for Rosy" pre-push review screen.
+// Seeded from the pinned formula's Material Costs table (water excluded),
+// then user-curated: reorder, delete, edit quantities, add free rows.
+export type MondayMaterialRow = {
+  /** Client-generated row id — stable across reorders. */
+  id: string;
+  name: string;
+  /** Quantity as the typed string ("29.447") so edits round-trip exactly. */
+  qty: string;
+  /** Unit label, "kg" by default; free text on added rows. */
+  unit: string;
+  /** True when the formula's cost source was "Customer Supplied" — shown
+   *  as a tag so the pusher consciously keeps or drops the row. */
+  customerSupplied: boolean;
+};
+
 export type ProductEntry = {
   uid: string;
   mode: WorkflowMode;
@@ -755,6 +771,12 @@ export type WorkflowState = {
   // Record<productUid, snapshot> shape. The hydration code accepts both
   // shapes so existing rows still load.
   pricing?: PricingSnapshot[];
+  // PC-gummy monday push: the curated "Materials for Rosy" list from the
+  // pre-push review screen. Saved when the push fires so the next push
+  // seeds from the user's last edits (reorders, deletions, qty tweaks)
+  // instead of re-deriving from the formula. Optional — absent until the
+  // first materials push. Water is excluded at seed time and never stored.
+  mondayMaterials?: MondayMaterialRow[];
   // Saved customer-facing quote document versions ("Issue a Quote" tabs).
   // Each entry is one tab in the quote popup — a full snapshot of the
   // editable sheet HTML, so we round-trip every edit (line items, custom

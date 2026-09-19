@@ -66,6 +66,9 @@ type ProductPayload = {
   productId?: string | null;
   productName?: string | null;
   productCode?: string | null;
+  // "F0017"-style tag when the product's identity is a pinned gummy
+  // formula (PC-manufactured). Used in the item name for materials pushes.
+  formulaLabel?: string | null;
   notes?: string;
   quantities?: string[];
   attachments?: Attachment[];
@@ -73,6 +76,14 @@ type ProductPayload = {
   // them in inventory, Rosy doesn't need to source them. Optional for
   // backward compatibility with older clients.
   sourceMode?: "purchase" | "stock";
+};
+
+// One curated row from the PC-gummy "Materials for Rosy" review screen.
+type MaterialForQuote = {
+  name?: string;
+  qty?: string;
+  unit?: string;
+  customerSupplied?: boolean;
 };
 
 type Body = {
@@ -86,6 +97,10 @@ type Body = {
   // New (workflows era) — link the monday push back to a DB workflow row.
   workflowId?: string;
   mode?: "create" | "update";
+  // PC-gummy pushes only: the curated raw-materials list. Presence flips
+  // the Rosy message from "quote this product" to "quote these materials"
+  // and the list is persisted onto the workflow state for the next push.
+  materialsForQuote?: MaterialForQuote[];
 };
 
 async function fetchAttachmentAsBlob(att: Attachment): Promise<Blob | null> {
@@ -171,7 +186,9 @@ export async function POST(request: Request) {
   const products = purchaseProducts.map((p) => {
     const resolved = p.productId && p.productId !== "new" ? resolvedProducts[p.productId] : null;
     const name = (resolved?.name) ?? p.productName ?? "New product";
-    const code = (resolved?.fp_code) ?? p.productCode ?? null;
+    // Prefer the Fishbowl code, fall back to the formula tag ("F0017") so
+    // PC-gummy items still show their identity in parentheses.
+    const code = (resolved?.fp_code) ?? p.productCode ?? p.formulaLabel ?? null;
     const cleanQs = (p.quantities ?? [])
       .map((q) => String(q).trim())
       .filter((q) => q.length > 0 && /^\d+(\.\d+)?$/.test(q));
@@ -184,8 +201,26 @@ export async function POST(request: Request) {
     };
   });
 
+  // PC-gummy materials push: sanitized rows from the review screen. Water
+  // is excluded client-side; we defensively drop nameless rows here too.
+  const materials = (body.materialsForQuote ?? [])
+    .map((m) => ({
+      name: (m.name ?? "").trim(),
+      qty: (m.qty ?? "").trim(),
+      unit: (m.unit ?? "kg").trim() || "kg",
+      customerSupplied: m.customerSupplied === true,
+    }))
+    .filter((m) => m.name.length > 0);
+  const isMaterialsPush = materials.length > 0;
+
   let itemName: string;
-  if (products.length === 1) {
+  if (isMaterialsPush) {
+    // "ICF Fiber Complex Gummy (F0017) — raw materials"
+    const p = products[0];
+    itemName = p
+      ? `${p.code ? `${p.name} (${p.code})` : p.name} — raw materials`
+      : `${customerName} — raw materials`;
+  } else if (products.length === 1) {
     const p = products[0];
     const qtyJoined = p.qtys.map((q) => Number(q).toLocaleString()).join(" / ");
     const tail = qtyJoined ? ` — ${qtyJoined} units` : "";
@@ -243,10 +278,13 @@ export async function POST(request: Request) {
   // The workflow's user-facing quote number ("Q0025") for the board's
   // Quote Number column. Loaded from the DB row — never from the client.
   let quoteNumberText: string | null = null;
+  // Current state JSONB — needed so a materials push can merge the curated
+  // list back in without clobbering the rest of the workflow state.
+  let wfStateJson: Record<string, unknown> | null = null;
   if (body.workflowId) {
     const { data: wfRow } = await supabase
       .from("workflows")
-      .select("monday_item_id, monday_item_url, pushed_attachment_paths, quote_number")
+      .select("monday_item_id, monday_item_url, pushed_attachment_paths, quote_number, state")
       .eq("id", body.workflowId)
       .maybeSingle();
     if (wfRow) {
@@ -256,6 +294,7 @@ export async function POST(request: Request) {
       alreadyPushedPaths = new Set(paths);
       const qn = wfRow.quote_number as number | null;
       if (typeof qn === "number" && qn > 0) quoteNumberText = formatQuoteNumber(qn);
+      wfStateJson = (wfRow.state as Record<string, unknown> | null) ?? null;
     }
   }
   const isUpdateMode = body.mode === "update" && !!existingMondayItemId;
@@ -279,23 +318,34 @@ export async function POST(request: Request) {
       await setQuoteNumberColumn(item.id, quoteNumberText);
     }
 
-    const lines: string[] = isUpdateMode
+    const lines: string[] = isMaterialsPush
       ? [
           "Hi Rosy,",
           "",
-          "Quick update on this workflow — current state below:",
+          isUpdateMode
+            ? "Quick update on this PC-manufactured job — current raw-materials list below:"
+            : "This one is manufactured at PharmaCenter — can we please get quotes for the following raw materials:",
           "",
           `• Customer: ${customerName}`,
           `• Quote type: ${typeLabel || "—"}`,
         ]
-      : [
-          "Hi Rosy,",
-          "",
-          "Can we please start the quoting process for the following:",
-          "",
-          `• Customer: ${customerName}`,
-          `• Quote type: ${typeLabel || "—"}`,
-        ];
+      : isUpdateMode
+        ? [
+            "Hi Rosy,",
+            "",
+            "Quick update on this workflow — current state below:",
+            "",
+            `• Customer: ${customerName}`,
+            `• Quote type: ${typeLabel || "—"}`,
+          ]
+        : [
+            "Hi Rosy,",
+            "",
+            "Can we please start the quoting process for the following:",
+            "",
+            `• Customer: ${customerName}`,
+            `• Quote type: ${typeLabel || "—"}`,
+          ];
 
     if (products.length === 1) {
       const p = products[0];
@@ -318,6 +368,17 @@ export async function POST(request: Request) {
         if (p.attachments.length > 0) {
           lines.push(`        Attachments: ${p.attachments.length} file${p.attachments.length === 1 ? "" : "s"}`);
         }
+      }
+    }
+
+    // The raw-materials list itself — one line per row, in the exact order
+    // the pusher arranged on the review screen.
+    if (isMaterialsPush) {
+      lines.push("", "Raw materials to quote:");
+      for (const m of materials) {
+        const qtyPart = m.qty ? ` — ${m.qty} ${m.unit}` : "";
+        const csPart = m.customerSupplied ? " (customer supplied)" : "";
+        lines.push(`    – ${m.name}${qtyPart}${csPart}`);
       }
     }
 
@@ -361,14 +422,30 @@ export async function POST(request: Request) {
         ...Array.from(alreadyPushedPaths),
         ...newlyPushedPaths,
       ]));
+      const updatePayload: Record<string, unknown> = {
+        monday_item_id: item.id,
+        monday_item_url: item.url,
+        monday_last_pushed_at: new Date().toISOString(),
+        pushed_attachment_paths: mergedPaths,
+      };
+      // Materials push: persist the curated list into state.mondayMaterials
+      // so the review screen seeds from the user's last edits next time.
+      // Merged into the freshly-read state to avoid clobbering other keys.
+      if (isMaterialsPush && wfStateJson) {
+        updatePayload.state = {
+          ...wfStateJson,
+          mondayMaterials: materials.map((m, i) => ({
+            id: `mat_saved_${i}`,
+            name: m.name,
+            qty: m.qty,
+            unit: m.unit,
+            customerSupplied: m.customerSupplied,
+          })),
+        };
+      }
       const { error: linkErr } = await supabase
         .from("workflows")
-        .update({
-          monday_item_id: item.id,
-          monday_item_url: item.url,
-          monday_last_pushed_at: new Date().toISOString(),
-          pushed_attachment_paths: mergedPaths,
-        })
+        .update(updatePayload)
         .eq("id", body.workflowId);
       if (linkErr) {
         console.error("workflow monday-link save failed:", linkErr.message);
