@@ -59,6 +59,8 @@ import {
 export type CostingRawMaterial = {
   id: string;
   name: string;
+  /** Fishbowl product number ("PC-RW-0010"). Null/absent for manual rows. */
+  fpCode?: string | null;
   /** Fishbowl nightly-sync costs ($/kg). Null = no Fishbowl data. */
   inventoryCostPerKg?: number | null;
   lastOrderCostPerKg?: number | null;
@@ -81,6 +83,9 @@ export type CostingMaterialRow = {
   /** Dedup key — rawMaterialId or "name:<lower>" (same keys as the editor). */
   key: string;
   name: string;
+  /** Fishbowl product number ("PC-RW-0010") when the row is a curated /
+   *  Fishbowl material; null for hand-typed ingredients and Water. */
+  fpCode: string | null;
   /** Total kg across primary + CSA batches for the target yield. */
   totalKg: number;
   /** Saved Cost Source: "Fish Bowl (Inventory)" | "Fish Bowl (Last Order)"
@@ -417,6 +422,8 @@ export function computeCostingComputed(params: {
       key: string;
       /** First-seen resolved display name — for the materials list. */
       name: string;
+      /** Fishbowl product number, when the row maps to a raw material. */
+      fpCode: string | null;
       preKg: number;
       cfaKg: number;
       inventoryCostPerKg: number | null;
@@ -445,6 +452,7 @@ export function computeCostingComputed(params: {
           // The Water merge (agua → name:water) keeps the first-seen name,
           // matching how the editor displays the merged row.
           name: key === "name:water" ? "Water" : name,
+          fpCode: key === "name:water" ? null : rm?.fpCode ?? null,
           preKg: 0,
           cfaKg: 0,
           inventoryCostPerKg: rm?.inventoryCostPerKg ?? null,
@@ -514,6 +522,7 @@ export function computeCostingComputed(params: {
       return {
         key: e.key,
         name: e.name,
+        fpCode: e.fpCode,
         totalKg: roundTo(e.preKg * qtyPrimaryBatches + e.cfaKg * qtyCfaBatches, 3),
         source: costSourceByKey[e.key] ?? "Fish Bowl (Inventory)",
       };

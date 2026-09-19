@@ -136,6 +136,7 @@ export async function GET(
     const curated: CostingRawMaterial[] = (rmRes.data ?? []).map((r) => ({
       id: r.id as string,
       name: r.name as string,
+      fpCode: (r.fp_code as string | null) ?? null,
       inventoryCostPerKg:
         r.inventory_cost_per_kg === null || r.inventory_cost_per_kg === undefined
           ? null
@@ -160,6 +161,7 @@ export async function GET(
       .map((p) => ({
         id: `fb:${p.fp_code}`,
         name: p.name as string,
+        fpCode: (p.fp_code as string | null) ?? null,
         inventoryCostPerKg: null,
         lastOrderCostPerKg: null,
       }));

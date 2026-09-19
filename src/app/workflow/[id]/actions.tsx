@@ -14,7 +14,7 @@ import {
   type WorkflowRow,
   type WorkflowStatus,
 } from "@/lib/workflows";
-import type { Customer } from "@/lib/supabase";
+import { supabase, type Customer } from "@/lib/supabase";
 
 // Draft row used by the inline Won form. Both fields are strings until we
 // validate-and-coerce on save (numbers via parseFloat). Keeps controlled
@@ -185,7 +185,13 @@ export default function WorkflowActions({
       setMatRows(saved.filter((r) => !isWaterName(r.name)));
       return;
     }
-    // Otherwise seed from the pinned formula(s)' Material Costs tables.
+    await seedFromFormula();
+  };
+
+  // Seed (or re-seed, via the "Reseed from formula" link) from the pinned
+  // formula(s)' Material Costs tables. Discards any rows on screen.
+  const seedFromFormula = async () => {
+    setMatError(null);
     const formulaIds = Array.from(
       new Set(
         wfState.products
@@ -207,14 +213,18 @@ export default function WorkflowActions({
         const res = await fetch(`/api/formulas/${fid}`, { cache: "no-store" });
         const data = await res.json();
         if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-        type ApiMaterial = { name: string; totalKg: number; source: string };
+        type ApiMaterial = { name: string; fpCode?: string | null; totalKg: number; source: string };
         const mats: ApiMaterial[] =
           (data.latestVersion?.costingComputed?.materials as ApiMaterial[] | undefined) ?? [];
         for (const m of mats) {
           if (isWaterName(m.name)) continue; // water is never quoted
           seeded.push({
             id: newRowId(),
-            name: m.name,
+            // Prefix the Fishbowl product code when the material has one —
+            // same "PC-RW-0010 · Pectin Classic CS 502" convention as the
+            // formula editor's Material Costs table. Lives in the editable
+            // name so the pusher can trim it if they want.
+            name: m.fpCode ? `${m.fpCode} · ${m.name}` : m.name,
             qty: String(m.totalKg),
             unit: "kg",
             customerSupplied: m.source === "Customer Supplied",
@@ -247,6 +257,60 @@ export default function WorkflowActions({
       ...rows,
       { id: newRowId(), name: "", qty: "", unit: "kg", customerSupplied: false },
     ]);
+  };
+
+  // "+ From Fishbowl" — type-to-search over the synced products table
+  // (name OR product number, hyphens kept so "PC-RW-0012" matches — same
+  // rule as every picker in the app). Picking adds a "CODE · Name" row
+  // with an empty qty for the pusher to fill.
+  const [matPickerOpen, setMatPickerOpen] = useState(false);
+  const [matSearch, setMatSearch] = useState("");
+  const [matResults, setMatResults] = useState<Array<{ id: string; fp_code: string | null; name: string }>>([]);
+  const [matSearching, setMatSearching] = useState(false);
+
+  const runMatSearch = async (q: string) => {
+    setMatSearch(q);
+    const t = q.trim();
+    if (t.length < 2) {
+      setMatResults([]);
+      return;
+    }
+    setMatSearching(true);
+    try {
+      const like = `%${t.replace(/[%_]/g, "")}%`;
+      const { data } = await supabase
+        .from("products")
+        .select("id, fp_code, name")
+        .eq("active", true)
+        .or(`name.ilike.${like},fp_code.ilike.${like}`)
+        .order("fp_code", { ascending: true })
+        .limit(12);
+      setMatResults(
+        ((data ?? []) as Array<{ id: string; fp_code: string | null; name: string | null }>)
+          .filter((p) => p.name)
+          .map((p) => ({ id: p.id, fp_code: p.fp_code, name: p.name as string })),
+      );
+    } catch {
+      setMatResults([]);
+    } finally {
+      setMatSearching(false);
+    }
+  };
+
+  const addMatFromFishbowl = (p: { fp_code: string | null; name: string }) => {
+    setMatRows((rows) => [
+      ...rows,
+      {
+        id: newRowId(),
+        name: p.fp_code ? `${p.fp_code} · ${p.name}` : p.name,
+        qty: "",
+        unit: "kg",
+        customerSupplied: false,
+      },
+    ]);
+    setMatSearch("");
+    setMatResults([]);
+    setMatPickerOpen(false);
   };
   const reorderMatRows = (from: number, to: number) => {
     setMatRows((rows) => {
@@ -977,7 +1041,20 @@ export default function WorkflowActions({
             <p style={{ fontSize: 12.5, color: "var(--ink-3)", margin: "0 0 14px", lineHeight: 1.5 }}>
               Seeded from the formula&apos;s Material Costs (water excluded).
               Drag ⋮⋮ to reorder, × to drop a row from the push, edit
-              quantities, or add rows. This exact list goes to Rosy.
+              quantities, or add rows. This exact list goes to Rosy.{" "}
+              <button
+                type="button"
+                onClick={seedFromFormula}
+                disabled={submitting || matLoading}
+                style={{
+                  border: "none", background: "transparent", padding: 0,
+                  color: "var(--teal-700)", fontFamily: "inherit", fontSize: 12.5,
+                  fontWeight: 700, cursor: "pointer", textDecoration: "underline",
+                }}
+                title="Discard the edits on screen and re-derive the list from the formula's Material Costs table"
+              >
+                Reseed from formula
+              </button>
             </p>
 
             {matLoading ? (
@@ -1070,18 +1147,97 @@ export default function WorkflowActions({
                     </button>
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={addMatRow}
-                  disabled={submitting}
-                  style={{
-                    marginTop: 8, padding: "7px 12px", border: "1.5px dashed #e3dcc9",
-                    borderRadius: 8, background: "transparent", color: "var(--teal-900)",
-                    fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                  }}
-                >
-                  + Add material
-                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMatPickerOpen((v) => !v);
+                      setMatSearch("");
+                      setMatResults([]);
+                    }}
+                    disabled={submitting}
+                    style={{
+                      padding: "7px 12px", border: "1.5px dashed #e3dcc9",
+                      borderRadius: 8, background: matPickerOpen ? "#f4f8ec" : "transparent",
+                      color: "var(--teal-900)", fontFamily: "inherit", fontSize: 13,
+                      fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    + From Fishbowl
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addMatRow}
+                    disabled={submitting}
+                    style={{
+                      padding: "7px 12px", border: "1.5px dashed #e3dcc9",
+                      borderRadius: 8, background: "transparent", color: "var(--teal-900)",
+                      fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    + Custom row
+                  </button>
+                </div>
+
+                {matPickerOpen ? (
+                  <div style={{ marginTop: 10 }}>
+                    <input
+                      type="text"
+                      value={matSearch}
+                      onChange={(e) => runMatSearch(e.target.value)}
+                      placeholder='Search Fishbowl by name or product number (e.g. "PC-RW-0012")'
+                      autoComplete="off"
+                      autoFocus
+                      style={{
+                        width: "100%", padding: "8px 12px", border: "1.5px solid #e3dcc9",
+                        borderRadius: 8, fontSize: 13, background: "#fff",
+                        fontFamily: "inherit", color: "var(--ink-1)", boxSizing: "border-box",
+                      }}
+                      disabled={submitting}
+                    />
+                    {matSearch.trim().length >= 2 ? (
+                      <div
+                        style={{
+                          border: "1.5px solid #e3dcc9", borderTop: "none",
+                          borderRadius: "0 0 8px 8px", background: "#fff",
+                          maxHeight: 180, overflowY: "auto",
+                        }}
+                      >
+                        {matSearching ? (
+                          <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--ink-3)" }}>
+                            Searching…
+                          </div>
+                        ) : matResults.length === 0 ? (
+                          <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--ink-3)" }}>
+                            No Fishbowl products match — use + Custom row instead.
+                          </div>
+                        ) : (
+                          matResults.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => addMatFromFishbowl(p)}
+                              style={{
+                                display: "block", width: "100%", textAlign: "left",
+                                padding: "8px 12px", border: "none", background: "transparent",
+                                fontFamily: "inherit", fontSize: 13, color: "var(--ink-1)",
+                                cursor: "pointer", borderBottom: "1px solid #f0ead9",
+                              }}
+                            >
+                              {p.fp_code ? (
+                                <span style={{ color: "var(--teal-700)", fontWeight: 700 }}>
+                                  {p.fp_code}
+                                </span>
+                              ) : null}
+                              {p.fp_code ? " · " : ""}
+                              {p.name}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </>
             )}
 
