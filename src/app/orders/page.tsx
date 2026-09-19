@@ -33,7 +33,7 @@ const MONDAY_PREVIEW_MAX_AGE_DAYS = 120;
 // The old /meetings/sales-orders hub still works; this is the new
 // front door when visiting order.pharmacenter.app / orders.pharmacenter.app.
 
-export const metadata = { title: "Sales Order Tracker" };
+export const metadata = { title: "Sales Orders" };
 
 // SO statuses we treat as "in flight" and show on this landing.
 const OPEN_STATUS_IDS = [10, 20, 25];
