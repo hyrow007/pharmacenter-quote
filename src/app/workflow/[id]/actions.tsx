@@ -882,6 +882,13 @@ export default function WorkflowActions({
       ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
+        <a href={`/start?workflow=${workflow.id}`} style={editAction}>
+          <span>Edit workflow →</span>
+          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+            Tweak any field, then push again.
+          </span>
+        </a>
+
         <button
           type="button"
           style={primaryAction}
@@ -906,13 +913,6 @@ export default function WorkflowActions({
           </span>
         </button>
 
-        <a href={`/start?workflow=${workflow.id}`} style={editAction}>
-          <span>Edit workflow →</span>
-          <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-            Tweak any field, then push again.
-          </span>
-        </a>
-
         {/* The generic pricing calculator models a LANDED cost — freight,
             duty, incoterms, a purchased unit cost. Contract-packaging bottles
             have none of that shape: the customer supplies the components and
@@ -924,17 +924,6 @@ export default function WorkflowActions({
         {!isCpBottles && !isCpBlisters && (
           <>
             <a
-              href={`/pricing?from=${workflow.id}&issue=1`}
-              style={editAction}
-              aria-label="Open the pricing calculator and issue a quote"
-            >
-              <span>Issue Quote →</span>
-              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
-                Generate a customer-facing quote PDF.
-              </span>
-            </a>
-
-            <a
               href={`/pricing?from=${workflow.id}`}
               style={editAction}
               aria-label="Open the pricing calculator"
@@ -942,6 +931,17 @@ export default function WorkflowActions({
               <span>Pricing Calculator →</span>
               <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
                 Landed cost + margin → sale price.
+              </span>
+            </a>
+
+            <a
+              href={`/pricing?from=${workflow.id}&issue=1`}
+              style={editAction}
+              aria-label="Open the pricing calculator and issue a quote"
+            >
+              <span>Issue Quote →</span>
+              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+                Generate a customer-facing quote PDF.
               </span>
             </a>
           </>
