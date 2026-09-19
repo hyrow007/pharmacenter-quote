@@ -74,6 +74,21 @@ export const LINE_OPERATOR_ADP_ID = "oquendo diaz, leticia c";
 // Output contract (consumed by the quote-side PricingCalculator)
 // -----------------------------------------------------------------------------
 
+/** One deduped row of the Costing tab's Material Costs table, with its
+ *  TOTAL quantity for the run (kg) — what a buyer needs to quote it.
+ *  Consumed by the PC-gummy monday push's "Materials for Rosy" screen. */
+export type CostingMaterialRow = {
+  /** Dedup key — rawMaterialId or "name:<lower>" (same keys as the editor). */
+  key: string;
+  name: string;
+  /** Total kg across primary + CSA batches for the target yield. */
+  totalKg: number;
+  /** Saved Cost Source: "Fish Bowl (Inventory)" | "Fish Bowl (Last Order)"
+   *  | "Manual" | "Customer Supplied" | "App". Default when unset is
+   *  "Fish Bowl (Inventory)" — same rule as the editor. */
+  source: string;
+};
+
 export type CostingComputed = {
   materialUsdPerPiece: number | null;
   laborUsdPerPiece: number | null;
