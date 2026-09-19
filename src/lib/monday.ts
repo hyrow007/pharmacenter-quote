@@ -22,6 +22,86 @@ export const QUOTES_COLUMNS = {
   files: "file_mm46grfp",
 } as const;
 
+// "Quote Number" column — added to the board on 2026-09-18, after the map
+// above was captured, and its id wasn't recorded at creation time. We
+// resolve it at runtime BY TITLE and cache per lambda instance, so the
+// push keeps working if the id was never captured and degrades gracefully
+// (skips the column, never fails the item) if the column is renamed or
+// deleted. One extra GraphQL query per cold start.
+export const QUOTE_NUMBER_COLUMN_TITLE = "Quote Number";
+let quoteNumberColumnCache:
+  | { id: string; type: string }
+  | null
+  | undefined;
+
+export async function getQuoteNumberColumn(): Promise<{ id: string; type: string } | null> {
+  if (quoteNumberColumnCache !== undefined) return quoteNumberColumnCache;
+  const query = `
+    query ($boardId: [ID!]) {
+      boards(ids: $boardId) {
+        columns { id title type }
+      }
+    }
+  `;
+  const body = await gql<{
+    boards: Array<{ columns: Array<{ id: string; title: string; type: string }> }>;
+  }>(query, { boardId: [String(QUOTES_BOARD_ID)] });
+  if (body.errors?.length) {
+    // Transient API failure — log and DON'T cache, so the next push retries.
+    console.error("monday quote-number column lookup errors:", body.errors);
+    return null;
+  }
+  const col =
+    body.data?.boards?.[0]?.columns?.find(
+      (c) => c.title.trim().toLowerCase() === QUOTE_NUMBER_COLUMN_TITLE.toLowerCase(),
+    ) ?? null;
+  quoteNumberColumnCache = col ? { id: col.id, type: col.type } : null;
+  if (!col) {
+    console.warn(
+      `monday Quotes board has no "${QUOTE_NUMBER_COLUMN_TITLE}" column — skipping.`,
+    );
+  }
+  return quoteNumberColumnCache;
+}
+
+/**
+ * Write the workflow's quote number (e.g. "Q0025") into the Quote Number
+ * column on an item. Called on BOTH create and update pushes so existing
+ * items backfill the first time someone pushes an update. Best-effort:
+ * returns false (and logs) rather than throwing, because the quote number
+ * is nice-to-have and must never sink the whole push.
+ */
+export async function setQuoteNumberColumn(
+  itemId: string,
+  quoteNumber: string,
+): Promise<boolean> {
+  const col = await getQuoteNumberColumn();
+  if (!col) return false;
+  // If someone created the column as a Numbers type, a "Q0025" string is
+  // rejected — send the bare digits instead.
+  const value = /numer|number/i.test(col.type) && col.type !== "text"
+    ? quoteNumber.replace(/\D/g, "").replace(/^0+/, "") || "0"
+    : quoteNumber;
+  const query = `
+    mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String!) {
+      change_simple_column_value(
+        board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value
+      ) { id }
+    }
+  `;
+  const body = await gql<{ change_simple_column_value: { id: string } }>(query, {
+    boardId: String(QUOTES_BOARD_ID),
+    itemId,
+    columnId: col.id,
+    value,
+  });
+  if (body.errors?.length || !body.data?.change_simple_column_value) {
+    console.error("monday setQuoteNumberColumn failed:", body.errors ?? body.error_message);
+    return false;
+  }
+  return true;
+}
+
 type MondayUserLookup = { id: string; name: string; email: string } | null;
 
 type MondayResponse<T> = {

@@ -6,8 +6,10 @@ import {
   createQuoteItem,
   findUserByEmail,
   postUpdate,
+  setQuoteNumberColumn,
   uploadFileToColumn,
 } from "@/lib/monday";
+import { formatQuoteNumber } from "@/lib/workflows";
 
 // POST /api/monday/create-item
 //
@@ -238,10 +240,13 @@ export async function POST(request: Request) {
   let existingMondayItemId: string | null = null;
   let existingMondayItemUrl: string | null = null;
   let alreadyPushedPaths = new Set<string>();
+  // The workflow's user-facing quote number ("Q0025") for the board's
+  // Quote Number column. Loaded from the DB row — never from the client.
+  let quoteNumberText: string | null = null;
   if (body.workflowId) {
     const { data: wfRow } = await supabase
       .from("workflows")
-      .select("monday_item_id, monday_item_url, pushed_attachment_paths")
+      .select("monday_item_id, monday_item_url, pushed_attachment_paths, quote_number")
       .eq("id", body.workflowId)
       .maybeSingle();
     if (wfRow) {
@@ -249,6 +254,8 @@ export async function POST(request: Request) {
       existingMondayItemUrl = (wfRow.monday_item_url as string | null) ?? null;
       const paths = (wfRow.pushed_attachment_paths as string[] | null) ?? [];
       alreadyPushedPaths = new Set(paths);
+      const qn = wfRow.quote_number as number | null;
+      if (typeof qn === "number" && qn > 0) quoteNumberText = formatQuoteNumber(qn);
     }
   }
   const isUpdateMode = body.mode === "update" && !!existingMondayItemId;
@@ -263,6 +270,14 @@ export async function POST(request: Request) {
           qtyText: qtyColumnText,
           submitterMondayId: submitterId,
         });
+
+    // Fill the board's Quote Number column ("Q0025") on every push —
+    // create AND update — so items created before the column existed
+    // backfill the first time someone pushes an update. Best-effort:
+    // a failure logs inside setQuoteNumberColumn and never sinks the push.
+    if (quoteNumberText) {
+      await setQuoteNumberColumn(item.id, quoteNumberText);
+    }
 
     const lines: string[] = isUpdateMode
       ? [

@@ -22,7 +22,12 @@ export const runtime = "nodejs"; // service-role + fetch to external API
 
 const MONDAY_BOARD_ID = 18389208010;
 const MONDAY_API_URL = "https://api.monday.com/v2";
-const UPDATES_PER_ITEM = 5;
+// Fetch a generous window of updates per SO so the synthesis task can
+// spot older-but-still-operational context (a "caps ETA 9/15 confirmed"
+// from three weeks ago is often more useful than today's "moved to In
+// Progress" chatter). 30 covers ~2-3 months of typical activity on the
+// busiest SOs while staying well inside Monday's per-query cost budget.
+const UPDATES_PER_ITEM = 30;
 const ITEMS_PER_PAGE = 100;
 
 // Shape of what Monday returns per items_page. Only the fields we care
