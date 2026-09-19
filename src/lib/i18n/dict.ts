@@ -207,6 +207,7 @@ const en = {
   statusVoid: "Void",
   statusCancelled: "Cancelled",
   // Relative time — used by describeFreshness()
+  syncNever: "never",
   timeJustNow: "just now",
   timeMinAgo: "{n} min ago",
   timeHrAgo: "{n}h ago",
@@ -416,6 +417,7 @@ const es: typeof en = {
   statusVoid: "Anulada",
   statusCancelled: "Cancelada",
   // Relative time
+  syncNever: "nunca",
   timeJustNow: "ahora mismo",
   timeMinAgo: "hace {n} min",
   timeHrAgo: "hace {n}h",
