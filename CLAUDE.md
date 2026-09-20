@@ -195,7 +195,7 @@ the hub itself.
 | `/meetings/sales-orders/orders/[so]`             | One SO — live Fishbowl state + every meeting note about it    |
 | `/meetings/sales-orders/sessions/[session]`      | One weekly session — SOs discussed with at-meeting-vs-now diffs |
 
-**Tables (see `sql/meetings.sql`):**
+**Tables** (schema lives in the `pharmacenter-db` repo — see below):
 
 - `meeting_types` — hub tiles (slug, name, tagline, cadence, active).
 - `meeting_sessions` — one row per meeting held (type, date, source, plaud_recording_id, summary, attendees, other_business).
@@ -223,11 +223,21 @@ the hub itself.
 - CNAME `meeting` → `cname.vercel-dns.com` at Wix.
 - Add `https://meeting.pharmacenter.app/auth/callback` to the Supabase
   Auth Redirect URLs allowlist.
-- Run `sql/meetings.sql` in the shared Supabase project SQL editor.
+- Schema changes go through the `pharmacenter-db` repo as a Supabase
+  migration, never by pasting SQL into the Supabase editor.
+
+  This line used to read "Run `sql/meetings.sql` in the shared Supabase
+  project SQL editor." That is how finding C1 happened: the live schema was
+  edited by hand, no repo held it, and nothing could be rebuilt or reviewed.
+  The full schema is now captured as a baseline migration in
+  `pharmacenter-db/supabase/migrations/`. Following the old instruction would
+  recreate the problem, which is why it is called out rather than deleted.
 
 **Plaud ingest — `POST /api/plaud/webhook`:**
 
-Bearer-authenticated with `PLAUD_SYNC_SECRET` (add to Vercel env).
+Bearer-authenticated with `PLAUD_WEBHOOK_SECRET`. (It accepted the shared
+`PLAUD_SYNC_SECRET` until the H4 split; that fallback is on its way out —
+see `src/lib/sync-auth-core.ts`.)
 Mirrors `/api/sync/sales-orders`. Handler at
 `src/app/api/plaud/webhook/route.ts`; extraction library at
 `src/lib/plaud/extract.ts`.
@@ -275,7 +285,7 @@ the session view and above the order-summary on `/orders/[so]`.
 - **Table:** `so_synthesis` (so_number PK, headline text, points jsonb,
   based_on jsonb, generated_at). Authenticated read via RLS.
 - **Read endpoint:** `GET /api/sync/so-synthesis/inputs` (bearer auth
-  via `PLAUD_SYNC_SECRET`) returns a pre-joined blob per SO: Fishbowl
+  via `SO_SYNTHESIS_SECRET`, or `CRON_SECRET` from the daily cron) returns a pre-joined blob per SO: Fishbowl
   fields + sale items, Monday status + last 5 updates, all meeting
   notes across sessions, and the existing synthesis stamp so the
   generator can skip fresh ones. Only SOs with meeting notes OR Monday
@@ -309,8 +319,9 @@ brings this in as a third source alongside Fishbowl and Plaud.
 - **Table:** `so_monday_activity` (so_number PK, monday_item_id,
   monday_url, status, updates jsonb, last_synced_at). Populated by
   service-role writes only; authenticated read via RLS.
-- **Sync route:** `POST /api/sync/monday` (bearer auth via the shared
-  `PLAUD_SYNC_SECRET`; env var `MONDAY_API_TOKEN` for the GraphQL call).
+- **Sync route:** `POST /api/sync/monday` (bearer auth via
+  `MONDAY_SYNC_SECRET`, or `CRON_SECRET` from Vercel Cron; env var
+  `MONDAY_API_TOKEN` for the GraphQL call).
   Pages the whole Open Sales Orders board, upserts one row per SO with
   the last 5 updates. Idempotent on `so_number`.
 - **Schedule:** **Vercel Cron**, once daily at 11:00 UTC / 7am ET
@@ -321,7 +332,7 @@ brings this in as a third source alongside Fishbowl and Plaud.
   deployment at all -- no failed-build row, nothing to notice. Raise the
   frequency only after moving to Pro. The route exports a `GET` beside
   `POST` because Vercel Cron only issues GET, and its auth accepts either
-  `PLAUD_SYNC_SECRET` or Vercel's `CRON_SECRET` (set that in Vercel env).
+  `MONDAY_SYNC_SECRET` or Vercel's `CRON_SECRET` (set that in Vercel env).
   Still callable on demand via curl with the bearer.
   (This previously read "Cowork scheduled task every couple hours." No
   such task was ever created, and it could not have worked: Claude's
@@ -335,7 +346,14 @@ brings this in as a third source alongside Fishbowl and Plaud.
 **Wiring the ingest.** Plaud's own webhook (with `Plaud-Signature`
 verification) can post directly here, or route via Zapier ("New Plaud
 file" → HTTP POST to `https://meeting.pharmacenter.app/api/plaud/webhook`
-with `Authorization: Bearer $PLAUD_SYNC_SECRET`). Plaud's OAuth-only
-"list files" REST is private-beta — until it's live, weekly ingestion
-runs either through Plaud's own webhook, Zapier, or a Cowork agent
-that pushes the pre-extracted payload.
+with `Authorization: Bearer $PLAUD_WEBHOOK_SECRET`). Plaud's OAuth-only
+"list files" REST is private-beta — until it's live, weekly ingestion runs
+through Plaud's own webhook, Zapier, or a **chat session** using the Plaud
+MCP to fetch the recording and post it.
+
+Not a Cowork *scheduled task*, which an earlier version of this line
+suggested. A scheduled task cannot make an authenticated HTTP call at all:
+its sandbox has no outbound network, its shell is Linux, its web fetch
+cannot set headers, and the browser route is refused by a credential
+classifier. This is the one job still without an unattended home; see
+`claude/automation.md`.
