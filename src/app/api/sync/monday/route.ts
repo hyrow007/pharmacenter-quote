@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireSyncAuth } from "@/lib/sync-auth";
 
 // POST /api/sync/monday
 //
@@ -11,7 +12,8 @@ import { createClient } from "@supabase/supabase-js";
 // Auth: same pattern as /api/sync/sales-orders — bearer token in the
 // Authorization header. Set FISHBOWL_SYNC_SECRET-style
 // SYNC_SHARED_SECRET or accept the Vercel-side PLAUD_SYNC_SECRET as a
-// generic sync bearer. Using PLAUD_SYNC_SECRET here to avoid adding
+// generic sync bearer. Now handled by requireSyncAuth(request, "monday"),
+// which takes MONDAY_SYNC_SECRET, or Vercel's CRON_SECRET, or
 // another env var for the same job.
 //
 // Data source: Monday GraphQL v2. Requires MONDAY_API_TOKEN in env.
@@ -77,44 +79,6 @@ async function mondayGraphql<T>(token: string, query: string): Promise<T> {
 // busy board.
 export const maxDuration = 60;
 
-// Accepts either the shared sync bearer (manual runs, curl, any external
-// caller) or Vercel's own CRON_SECRET, which Vercel sends as
-// `Authorization: Bearer $CRON_SECRET` on scheduled invocations. Keeping
-// both means the cron does not force us to widen where PLAUD_SYNC_SECRET
-// travels.
-function checkAuth(request: Request):
-  | { ok: true }
-  | { ok: false; response: NextResponse } {
-  const syncSecret = process.env.PLAUD_SYNC_SECRET;
-  const cronSecret = process.env.CRON_SECRET;
-  if (!syncSecret && !cronSecret) {
-    console.error("neither PLAUD_SYNC_SECRET nor CRON_SECRET configured");
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { ok: false, error: "server_misconfigured" },
-        { status: 500 },
-      ),
-    };
-  }
-  const authz = request.headers.get("authorization") || "";
-  const provided = authz.startsWith("Bearer ")
-    ? authz.slice("Bearer ".length).trim()
-    : "";
-  const accepted =
-    (!!syncSecret && provided === syncSecret) ||
-    (!!cronSecret && provided === cronSecret);
-  if (!accepted) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { ok: false, error: "unauthorized" },
-        { status: 401 },
-      ),
-    };
-  }
-  return { ok: true };
-}
 
 // Vercel Cron only ever issues GET. Same work, same auth.
 export async function GET(request: Request) {
@@ -125,8 +89,8 @@ export async function POST(request: Request) {
   const started = Date.now();
 
   // ----- auth ---------------------------------------------------------
-  const auth = checkAuth(request);
-  if (!auth.ok) return auth.response;
+  const denied = requireSyncAuth(request, "monday");
+  if (denied) return denied;
 
   // ----- env ----------------------------------------------------------
   const mondayToken = process.env.MONDAY_API_TOKEN;
