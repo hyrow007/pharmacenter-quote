@@ -287,3 +287,67 @@ export function chunk<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+// ---- freshness ------------------------------------------------------------
+
+/** Latest of the timestamps a synthesis is derived from, or null if none. */
+export function newestInputTime(so: SynthesisInput): number | null {
+  const times: number[] = [];
+
+  const push = (v: unknown) => {
+    if (typeof v !== "string") return;
+    const t = Date.parse(v);
+    if (!Number.isNaN(t)) times.push(t);
+  };
+
+  const fb = so.fishbowl as Record<string, unknown> | null | undefined;
+  if (fb) push(fb.synced_at);
+
+  const md = so.monday as Record<string, unknown> | null | undefined;
+  if (md) {
+    push(md.item_updated_at);
+    push(md.last_synced_at);
+    if (Array.isArray(md.updates)) {
+      for (const u of md.updates) {
+        if (u && typeof u === "object") push((u as Record<string, unknown>).created_at);
+      }
+    }
+  }
+
+  if (Array.isArray(so.meetings)) {
+    for (const m of so.meetings) {
+      if (m && typeof m === "object") push((m as Record<string, unknown>).session_date);
+    }
+  }
+
+  return times.length ? Math.max(...times) : null;
+}
+
+/**
+ * True when this SO's synthesis already reflects everything feeding it.
+ *
+ * The inputs endpoint returns every SO with any activity, synthesized or not —
+ * its own docs say the caller is responsible for skipping fresh ones. Without
+ * this, a loop re-synthesizes the same orders forever: the backlog never
+ * shrinks, and each pass costs a full set of model calls to rewrite bullets
+ * that were already correct. That is exactly what happened on the first drain
+ * run, where `remaining` oscillated between 60 and 63 instead of falling.
+ */
+export function isFresh(so: SynthesisInput): boolean {
+  const generatedAt = so.existing_synthesis?.generated_at;
+  if (!generatedAt) return false;
+
+  const generated = Date.parse(generatedAt);
+  if (Number.isNaN(generated)) return false;
+
+  const newest = newestInputTime(so);
+  // Nothing dated to compare against, but a synthesis exists: treat it as
+  // fresh. Redoing it every run is the failure mode this guards.
+  if (newest === null) return true;
+
+  return generated >= newest;
+}
+
+export function selectStale(sos: SynthesisInput[]): SynthesisInput[] {
+  return sos.filter((so) => !isFresh(so));
+}

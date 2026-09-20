@@ -154,3 +154,74 @@ t("so_number guarding behaves the same", () => {
 });
 
 console.log(`${passed} passed`);
+
+// ---- freshness -----------------------------------------------------------
+
+import { isFresh, selectStale, newestInputTime } from "./llm-core.ts";
+
+t("no existing synthesis is never fresh", () => {
+  assert.equal(isFresh({ so_number: "1" }), false);
+  assert.equal(isFresh({ so_number: "1", existing_synthesis: null }), false);
+});
+
+t("synthesis newer than every input is fresh", () => {
+  assert.equal(isFresh({
+    so_number: "1",
+    fishbowl: { synced_at: "2026-09-19T10:00:00Z" },
+    existing_synthesis: { generated_at: "2026-09-20T10:00:00Z" },
+  }), true);
+});
+
+t("synthesis older than an input is stale", () => {
+  assert.equal(isFresh({
+    so_number: "1",
+    fishbowl: { synced_at: "2026-09-21T10:00:00Z" },
+    existing_synthesis: { generated_at: "2026-09-20T10:00:00Z" },
+  }), false);
+});
+
+t("a newer Monday update alone makes it stale", () => {
+  assert.equal(isFresh({
+    so_number: "1",
+    fishbowl: { synced_at: "2026-09-01T00:00:00Z" },
+    monday: { updates: [{ created_at: "2026-09-25T00:00:00Z" }] },
+    existing_synthesis: { generated_at: "2026-09-20T00:00:00Z" },
+  }), false);
+});
+
+t("a newer meeting alone makes it stale", () => {
+  assert.equal(isFresh({
+    so_number: "1",
+    meetings: [{ session_date: "2026-09-25" }],
+    existing_synthesis: { generated_at: "2026-09-20T00:00:00Z" },
+  }), false);
+});
+
+t("synthesis with no dated inputs is fresh, not reprocessed forever", () => {
+  // The loop bug: anything never treated as fresh gets redone every pass.
+  assert.equal(isFresh({
+    so_number: "1",
+    existing_synthesis: { generated_at: "2026-09-20T00:00:00Z" },
+  }), true);
+});
+
+t("unparseable timestamps do not crash or wrongly skip", () => {
+  assert.equal(isFresh({
+    so_number: "1",
+    fishbowl: { synced_at: "not a date" },
+    existing_synthesis: { generated_at: "also not a date" },
+  }), false);
+  assert.equal(newestInputTime({ so_number: "1", fishbowl: { synced_at: "nope" } }), null);
+});
+
+t("selectStale keeps only what needs work", () => {
+  const stale = selectStale([
+    { so_number: "A" },
+    { so_number: "B", existing_synthesis: { generated_at: "2026-09-20T00:00:00Z" } },
+    { so_number: "C", fishbowl: { synced_at: "2026-09-21T00:00:00Z" },
+      existing_synthesis: { generated_at: "2026-09-20T00:00:00Z" } },
+  ]);
+  assert.deepEqual(stale.map((s) => s.so_number), ["A", "C"]);
+});
+
+console.log(`${passed} passed (incl. freshness)`);

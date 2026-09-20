@@ -10,6 +10,7 @@ import {
   noteNeedsWork,
   trimSynthesisInput,
   chunk,
+  selectStale,
   type PendingSession,
   type PendingNote,
   type SynthesisInput,
@@ -206,9 +207,25 @@ async function synthesis(
     sos?: SynthesisInput[];
   };
   const all = body.sos ?? [];
-  if (all.length === 0) return { ok: true, synthesized: 0, note: "nothing pending" };
 
-  const queue = all.slice(0, MAX_SOS).map(trimSynthesisInput);
+  // The inputs endpoint returns EVERY SO with activity, synthesized or not —
+  // skipping fresh ones is the caller's job. Without this filter the same
+  // orders are regenerated on every run: the backlog never shrinks and each
+  // pass pays for bullets that were already correct. The first drain attempt
+  // oscillated between 60 and 63 "remaining" for five passes before this
+  // filter existed.
+  const stale = selectStale(all);
+
+  if (stale.length === 0) {
+    return {
+      ok: true,
+      synthesized: 0,
+      note: "all current",
+      considered: all.length,
+    };
+  }
+
+  const queue = stale.slice(0, MAX_SOS).map(trimSynthesisInput);
 
   let written = 0;
   let chunksDone = 0;
@@ -268,7 +285,12 @@ async function synthesis(
     ok: written > 0 || (queue.length === 0 && errors.length === 0),
     synthesized: written,
     chunks: chunksDone,
-    remaining: all.length - written,
+    // Stale minus written — a number that actually falls as work completes.
+    // The old `all.length - written` counted every SO the endpoint returned,
+    // including fresh ones, so it could never reach zero no matter how much
+    // was done. A progress counter that cannot reach zero hides a loop.
+    remaining: Math.max(0, stale.length - written),
+    considered: all.length,
     ...(stopped ? { stopped } : {}),
     ...(errors.length ? { errors: errors.slice(0, 5) } : {}),
   };
