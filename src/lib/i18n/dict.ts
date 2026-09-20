@@ -207,6 +207,7 @@ const en = {
   statusVoid: "Void",
   statusCancelled: "Cancelled",
   // Relative time — used by describeFreshness()
+  syncNever: "never",
   timeJustNow: "just now",
   timeMinAgo: "{n} min ago",
   timeHrAgo: "{n}h ago",
@@ -223,6 +224,96 @@ const en = {
   warnProduct:
     '⚠ Plaud text mentions "{said}" but this SO\'s line items are {has}. Verify.',
   noMatchingProduct: "no matching product on file",
+
+  // ---- Workflow inbox (/workflows) ----
+  // Finding I3: the nav was translated but the page under it was not, so on
+  // the Spanish setting this screen rendered "Flujos de trabajo" in the nav
+  // above an entirely English page. Half-translated reads worse than
+  // untranslated.
+  workflowsTitle: "Work Flows",
+  workflowsLede: "Your drafts and every pushed workflow across the workspace.",
+  newWorkflow: "+ New workflow",
+  workflowsSearch: "Search quote #, customer, description, type, or submitter…",
+  workflowsEmpty: "No workflows yet",
+  colQuoteNumber: "Quote #",
+  colQuoteType: "Quote type",
+  colSubmitter: "Submitter",
+  deleteWorkflow: "Delete workflow",
+  deleteNamed: "Delete {name}",
+  addShortDescription: "Add a short description",
+  workflowDescriptionAria: "Workflow description",
+  savingEllipsis: "Saving…",
+  statusWon: "Won",
+  statusLost: "Lost",
+
+  // Quote type / dosage form. Values are stored in English in the DB; these
+  // are display labels only.
+  quoteTypeBulk: "Bulk",
+  quoteTypeContractPackaging: "Contract Packaging",
+  quoteTypeFinishedProduct: "Finished Product",
+  quoteTypeOther: "Other",
+  formSoftgel: "Softgels",
+  formGummy: "Gummies",
+  formTablet: "Tablets",
+  formCapsule: "Capsules",
+  formOther: "Other",
+
+  // Packaging types (Contract Packaging). state.form is overloaded: it holds
+  // a dosage form for bulk/finished-product quotes and a packaging type for
+  // contract-packaging ones. Two id namespaces in one column, disambiguated
+  // by state.type -- see DESCRIPTION_PACKAGING_LABELS in lib/workflows.ts.
+  packagingBottles: "Bottles",
+  packagingBlisters: "Blisters",
+  packagingSachets: "Sachets",
+  packagingPouches: "Pouches",
+  packagingKitting: "Kitting",
+  packagingOther: "Other",
+
+  // Relative time, longer buckets. timeJustNow/timeMinAgo/timeHrAgo/
+  // timeDayAgo already exist above and are reused.
+  timeWeekAgo: "{n}w ago",
+  timeMonthAgo: "{n}mo ago",
+  timeYearAgo: "{n}y ago",
+  // Spanish needs a singular form ("hace 1 mes", not "hace 1 meses"). English
+  // reads fine either way, so these are the same string -- kept as separate
+  // keys so the es side has somewhere to differ.
+  timeMonthAgoOne: "{n}mo ago",
+  timeYearAgoOne: "{n}y ago",
+  newCustomerPlaceholder: "New customer",
+  unknownCustomer: "Unknown customer",
+  createYourFirst: "+ Create your first",
+  noWorkflowsMatch: 'No workflows match "{q}".',
+  confirmDeleteWorkflow:
+    "Delete {name}? This cannot be undone. Files in storage will remain.",
+  deleteForbidden: "Only the workflow owner or an admin can delete this.",
+  deleteFailed: "Delete failed: {reason}",
+
+  // ---- Hub (pharmacenter.app apex) ----
+  // Tile titles get their OWN keys rather than reusing the nav keys, because
+  // the two are doing different jobs. A nav label is read inside a product,
+  // underneath a wordmark that already says which product it is -- "Lists" is
+  // unambiguous there. On a directory of five tools, standing alone, it is
+  // not. The first version of this page reused navLists and the tile read
+  // "Lists"; the fix is a name that works without the wordmark above it.
+  //
+  // The set is deliberately parallel -- plural, no "Generator"/"Tracker"
+  // suffixes -- matching the convention H3 settled on for tab titles.
+  hubQuoteName: "Quotes",
+  hubListsName: "Packing Lists",
+  hubFormulasName: "Formulas",
+  hubOrdersName: "Sales Orders",
+  hubMeetingsName: "Meetings",
+  hubEyebrow: "PharmaCenter · Tools",
+  hubTitle: "Your tools",
+  hubLede: "Everything we use for work, in one place.",
+  hubOpen: "Open",
+  hubQuoteDesc: "Build a customer quote and push it to monday.",
+  hubListsDesc: "Generate packing lists for outbound shipments.",
+  hubFormulasDesc: "Gummy formula catalog, scale-up and costing.",
+  hubOrdersDesc: "Open sales orders, synced nightly from Fishbowl.",
+  hubMeetingsDesc: "Weekly sales order review — notes and action items.",
+  hubSignInLede:
+    "One place for the tools we use for work. Sign in with your PharmaCenter Google account to continue.",
 };
 
 const es: typeof en = {
@@ -416,6 +507,7 @@ const es: typeof en = {
   statusVoid: "Anulada",
   statusCancelled: "Cancelada",
   // Relative time
+  syncNever: "nunca",
   timeJustNow: "ahora mismo",
   timeMinAgo: "hace {n} min",
   timeHrAgo: "hace {n}h",
@@ -432,6 +524,78 @@ const es: typeof en = {
   warnProduct:
     '⚠ El texto de Plaud menciona "{said}" pero los ítems de línea de esta SO son {has}. Verifique.',
   noMatchingProduct: "sin producto coincidente en el sistema",
+
+  // ---- Bandeja de flujos de trabajo (/workflows) ----
+  workflowsTitle: "Flujos de trabajo",
+  workflowsLede:
+    "Sus borradores y todos los flujos de trabajo publicados en el espacio de trabajo.",
+  newWorkflow: "+ Nuevo flujo de trabajo",
+  workflowsSearch:
+    "Buscar por n.º de cotización, cliente, descripción, tipo o solicitante…",
+  workflowsEmpty: "Aún no hay flujos de trabajo",
+  colQuoteNumber: "N.º de cotización",
+  colQuoteType: "Tipo de cotización",
+  colSubmitter: "Solicitante",
+  deleteWorkflow: "Eliminar flujo de trabajo",
+  deleteNamed: "Eliminar {name}",
+  addShortDescription: "Agregue una descripción breve",
+  workflowDescriptionAria: "Descripción del flujo de trabajo",
+  savingEllipsis: "Guardando…",
+  statusWon: "Ganada",
+  statusLost: "Perdida",
+
+  // Tipo de cotización / forma farmacéutica.
+  quoteTypeBulk: "Granel",
+  quoteTypeContractPackaging: "Empaque por contrato",
+  quoteTypeFinishedProduct: "Producto terminado",
+  quoteTypeOther: "Otro",
+  formSoftgel: "Cápsulas blandas",
+  formGummy: "Gomitas",
+  formTablet: "Tabletas",
+  formCapsule: "Cápsulas",
+  formOther: "Otro",
+
+  // Tipos de empaque (Empaque por contrato).
+  packagingBottles: "Botellas",
+  packagingBlisters: "Blísteres",
+  packagingSachets: "Sobres",
+  packagingPouches: "Bolsas",
+  packagingKitting: "Kits",
+  packagingOther: "Otro",
+
+  // Tiempo relativo, rangos largos.
+  timeWeekAgo: "hace {n} sem",
+  timeMonthAgo: "hace {n} meses",
+  timeYearAgo: "hace {n} años",
+  timeMonthAgoOne: "hace {n} mes",
+  timeYearAgoOne: "hace {n} año",
+  newCustomerPlaceholder: "Cliente nuevo",
+  unknownCustomer: "Cliente desconocido",
+  createYourFirst: "+ Cree el primero",
+  noWorkflowsMatch: 'Ningún flujo de trabajo coincide con "{q}".',
+  confirmDeleteWorkflow:
+    "¿Eliminar {name}? Esta acción no se puede deshacer. Los archivos almacenados se conservarán.",
+  deleteForbidden:
+    "Solo el propietario del flujo de trabajo o un administrador puede eliminarlo.",
+  deleteFailed: "No se pudo eliminar: {reason}",
+
+  // ---- Hub (apex pharmacenter.app) ----
+  hubQuoteName: "Cotizaciones",
+  hubListsName: "Listas de empaque",
+  hubFormulasName: "Fórmulas",
+  hubOrdersName: "Órdenes de venta",
+  hubMeetingsName: "Reuniones",
+  hubEyebrow: "PharmaCenter · Herramientas",
+  hubTitle: "Sus herramientas",
+  hubLede: "Todo lo que usamos para trabajar, en un solo lugar.",
+  hubOpen: "Abrir",
+  hubQuoteDesc: "Cree una cotización y envíela a monday.",
+  hubListsDesc: "Genere listas de empaque para los envíos.",
+  hubFormulasDesc: "Catálogo de fórmulas de gomitas, escalado y costeo.",
+  hubOrdersDesc: "Pedidos abiertos, sincronizados cada noche desde Fishbowl.",
+  hubMeetingsDesc: "Revisión semanal de pedidos — notas y tareas.",
+  hubSignInLede:
+    "Un solo lugar para las herramientas que usamos para trabajar. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
 };
 
 export type DictKey = keyof typeof en;

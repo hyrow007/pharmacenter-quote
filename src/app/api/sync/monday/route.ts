@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireSyncAuth } from "@/lib/sync-auth";
 
 // POST /api/sync/monday
 //
@@ -10,8 +11,9 @@ import { createClient } from "@supabase/supabase-js";
 //
 // Auth: same pattern as /api/sync/sales-orders — bearer token in the
 // Authorization header. Set FISHBOWL_SYNC_SECRET-style
-// SYNC_SHARED_SECRET or accept the Vercel-side PLAUD_SYNC_SECRET as a
-// generic sync bearer. Using PLAUD_SYNC_SECRET here to avoid adding
+// SYNC_SHARED_SECRET or accept the Vercel-side MONDAY_SYNC_SECRET as a
+// generic sync bearer. Now handled by requireSyncAuth(request, "monday"),
+// which takes MONDAY_SYNC_SECRET, or Vercel's CRON_SECRET, or
 // another env var for the same job.
 //
 // Data source: Monday GraphQL v2. Requires MONDAY_API_TOKEN in env.
@@ -71,28 +73,24 @@ async function mondayGraphql<T>(token: string, query: string): Promise<T> {
   return body.data;
 }
 
+// Paging a whole board with 30 updates per item takes well over the 10s
+// default. 60s is the ceiling on Hobby and comfortably inside Pro's, so
+// it is safe on either plan. Without this the cron fails silently on a
+// busy board.
+export const maxDuration = 60;
+
+
+// Vercel Cron only ever issues GET. Same work, same auth.
+export async function GET(request: Request) {
+  return POST(request);
+}
+
 export async function POST(request: Request) {
   const started = Date.now();
 
   // ----- auth ---------------------------------------------------------
-  const expected = process.env.PLAUD_SYNC_SECRET; // reusing the shared sync bearer
-  if (!expected) {
-    console.error("PLAUD_SYNC_SECRET not configured");
-    return NextResponse.json(
-      { ok: false, error: "server_misconfigured" },
-      { status: 500 },
-    );
-  }
-  const authz = request.headers.get("authorization") || "";
-  const provided = authz.startsWith("Bearer ")
-    ? authz.slice("Bearer ".length).trim()
-    : "";
-  if (provided !== expected) {
-    return NextResponse.json(
-      { ok: false, error: "unauthorized" },
-      { status: 401 },
-    );
-  }
+  const denied = requireSyncAuth(request, "monday");
+  if (denied) return denied;
 
   // ----- env ----------------------------------------------------------
   const mondayToken = process.env.MONDAY_API_TOKEN;

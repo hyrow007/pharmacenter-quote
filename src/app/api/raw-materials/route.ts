@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 
 // GET    /api/raw-materials                   list active materials (with includeInactive=1 to show all)

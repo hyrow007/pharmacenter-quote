@@ -1,10 +1,11 @@
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../../../../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
+import { describeFreshness } from "@/lib/freshness";
 
 // /meetings/sales-orders/orders/[so]
 //
@@ -146,7 +147,7 @@ export default async function SalesOrderDetailPage({
   const items = (row.items ?? []).filter((it) =>
     it.type_id ? SALE_TYPE_IDS.has(it.type_id) : false,
   );
-  const freshness = describeFreshness(row.synced_at);
+  const freshness = describeFreshness(row.synced_at, t, lang);
 
   // AI-synthesized key points — Claude-generated from Fishbowl +
   // Monday + meeting notes by a Cowork scheduled task, stored in
@@ -1044,22 +1045,4 @@ function formatMoney(n: number | null | undefined): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-function describeFreshness(iso: string | null): {
-  relative: string;
-  stale: boolean;
-} {
-  if (!iso) return { relative: "never", stale: true };
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return { relative: "never", stale: true };
-  const ageMs = Date.now() - t;
-  const ageH = ageMs / (60 * 60 * 1000);
-  const stale = ageH > 26;
-  let relative: string;
-  if (ageMs < 60_000) relative = "just now";
-  else if (ageMs < 60 * 60_000)
-    relative = `${Math.floor(ageMs / 60_000)} min ago`;
-  else if (ageH < 24) relative = `${Math.floor(ageH)}h ago`;
-  else relative = `${Math.floor(ageH / 24)}d ago`;
-  return { relative, stale };
 }

@@ -1,23 +1,24 @@
+// Typecheck-only config, used by deploy.ps1 before it commits anything.
+//
+// It exists because the main tsconfig.json includes ".next/types/**/*.ts",
+// which only exists after a build. Running tsc against that config on a
+// clean checkout fails for reasons that have nothing to do with your code.
+//
+// This inherits every compiler option from tsconfig.json -- same strictness,
+// same paths -- and only narrows what gets checked.
+//
+// A previous version of this file hardcoded
+//   "baseUrl": "/sessions/brave-sharp-einstein/mnt/packing-list/quote"
+// which is a container path from a Claude session that no longer exists. It
+// could never have run on anyone's machine. baseUrl is not needed at all --
+// "paths" resolves relative to this file's own directory.
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": false,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "plugins": [{ "name": "next" }],
-    "baseUrl": "/sessions/brave-sharp-einstein/mnt/packing-list/quote",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    // Deterministic: never reuse a stale tsbuildinfo for a gate whose whole
+    // job is to be trustworthy.
+    "incremental": false
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "legacy", ".next"]
 }

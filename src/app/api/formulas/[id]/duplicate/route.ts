@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { recordFromRow, type GummyFormulaRecord } from "@/lib/formulas";
 
 // POST /api/formulas/[id]/duplicate — clone a formula into a brand-new

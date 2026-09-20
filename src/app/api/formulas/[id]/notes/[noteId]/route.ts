@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import type { GummyFormulaNote } from "@/lib/formulas";
 
 // PATCH  /api/formulas/[id]/notes/[noteId]  { body: string }

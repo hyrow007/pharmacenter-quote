@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import type { SavedSolution, SolutionComponent } from "@/lib/formulas";
 
 // GET  /api/solutions          — list active saved solutions

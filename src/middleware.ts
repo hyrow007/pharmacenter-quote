@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/auth/middleware";
+import { updateSession } from "@/lib/supabase/middleware";
 
 // Vanity subdomain: formula.pharmacenter.app serves the gummy formula
 // catalog as a standalone. Under the hood it's still the same Next.js
