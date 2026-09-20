@@ -61,12 +61,44 @@ const MAX_SOS = 15;
 
 type StepResult = Record<string, unknown>;
 
+// Any of the custom domains serves every /api route: src/middleware.ts carves
+// /api out of all host rewrites. quote is chosen because it is the canonical
+// one; nothing depends on which.
+const PUBLIC_BASE = "https://quote.pharmacenter.app";
+
 function baseUrl(request: Request): string {
-  // VERCEL_URL is the deployment's own host and has no protocol. Falling back
-  // to the incoming request's origin keeps this working in local dev.
-  const fromEnv = process.env.VERCEL_URL;
-  if (fromEnv) return `https://${fromEnv}`;
-  return new URL(request.url).origin;
+  const override = process.env.SYNC_BASE_URL;
+  if (override) return override.replace(/\/+$/, "");
+
+  const origin = new URL(request.url).origin;
+
+  // NOT VERCEL_URL, and not a *.vercel.app origin. Those deployment URLs sit
+  // behind Vercel's Deployment Protection, which answers an unauthenticated
+  // request with an HTML SSO page rather than the route. The fetch then dies
+  // on `Unexpected token '<'` — a JSON parse error that looks like a bug in
+  // the endpoint being called, not an auth wall in front of it. The custom
+  // domains are public, so use one of those.
+  if (origin.endsWith(".vercel.app")) return PUBLIC_BASE;
+
+  return origin;
+}
+
+/**
+ * Read a JSON response, or explain what arrived instead.
+ *
+ * A bare res.json() on an HTML error page throws `Unexpected token '<'`, which
+ * says nothing about which host answered or why. Naming the content-type and
+ * showing the first bytes turns a whole debugging session into one log line.
+ */
+async function readJson(res: Response, what: string): Promise<unknown> {
+  const type = res.headers.get("content-type") ?? "";
+  if (!type.includes("json")) {
+    const head = (await res.text().catch(() => "")).slice(0, 120);
+    throw new Error(
+      `${what}: expected JSON, got ${type || "no content-type"} from ${res.url} — ${head}`,
+    );
+  }
+  return res.json();
 }
 
 // Record<string, string> rather than HeadersInit on purpose: HeadersInit is a
@@ -94,7 +126,7 @@ async function translations(
     return { ok: false, error: `fetch_${res.status}` };
   }
 
-  const body = (await res.json()) as {
+  const body = (await readJson(res, "translations read")) as {
     sessions?: PendingSession[];
     notes?: PendingNote[];
   };
@@ -155,7 +187,9 @@ async function synthesis(
   });
   if (!res.ok) return { ok: false, error: `fetch_${res.status}` };
 
-  const body = (await res.json()) as { sos?: SynthesisInput[] };
+  const body = (await readJson(res, "synthesis inputs read")) as {
+    sos?: SynthesisInput[];
+  };
   const all = body.sos ?? [];
   const sos = all.slice(0, MAX_SOS);
 
