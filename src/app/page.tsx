@@ -1,3 +1,4 @@
+import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -25,10 +26,12 @@ export default async function Home({
     hostHeader.startsWith("meeting.") || hostHeader.startsWith("meetings.");
   const isOrderHost =
     hostHeader.startsWith("order.") || hostHeader.startsWith("orders.");
-  // The apex, pharmacenter.app -- the hub. An exact match after stripping the
-  // port and a www. prefix, because every other host ENDS with the apex too.
-  const isApexHost =
-    hostHeader.split(":")[0].replace(/^www\./, "") === "pharmacenter.app";
+  // The hub hosts: pharmacenter.app and pharmacenter.tools (www. of either).
+  // An exact match after stripping the port and a www. prefix, because every
+  // other host ENDS with the apex too.
+  const isApexHost = HUB_HOSTS.has(
+    hostHeader.split(":")[0].replace(/^www\./, ""),
+  );
 
   if (user) {
     if (isFormulaHost) redirect("/formulas");

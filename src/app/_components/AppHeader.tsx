@@ -1,3 +1,4 @@
+import { HUB_HOSTS } from "@/lib/hub-hosts";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -51,10 +52,11 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onFormulaHost = host.startsWith("formula.") || host.startsWith("formulas.");
   const onMeetingHost = host.startsWith("meeting.") || host.startsWith("meetings.");
   const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
-  // Apex only: pharmacenter.app and www.pharmacenter.app. Deliberately NOT a
-  // prefix test -- "quote.pharmacenter.app" ends with the apex too.
+  // Hub hosts only: pharmacenter.app, pharmacenter.tools and their www.
+  // Deliberately NOT a suffix test -- "quote.pharmacenter.app" ends with the
+  // apex too.
   const bare = host.split(":")[0].replace(/^www\./, "");
-  const onApexHost = bare === "pharmacenter.app";
+  const onApexHost = HUB_HOSTS.has(bare);
   const lang = await getLangFromCookie();
 
   // Effective identity: explicit context from the page wins, otherwise

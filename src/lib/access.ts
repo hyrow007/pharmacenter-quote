@@ -57,7 +57,7 @@ export function readViewAsUser(): boolean {
 export function setViewAsUser(next: boolean): void {
   if (typeof window === "undefined") return;
 
-  const onProdDomain = window.location.hostname.endsWith(".pharmacenter.app");
+  const onProdDomain = window.location.hostname === "pharmacenter.app" || window.location.hostname.endsWith(".pharmacenter.app");
   const domain = onProdDomain ? "; domain=.pharmacenter.app" : "";
   // Same trap LangToggle documents: a browser will hold a host-only cookie
   // AND an apex-domain cookie under one name, and the server reads whichever
