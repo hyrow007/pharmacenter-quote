@@ -228,3 +228,62 @@ export function keepKnownSoNumbers<T extends { so_number?: unknown }>(
       known.has(String((i as { so_number: unknown }).so_number)),
   );
 }
+
+// ---- input trimming ------------------------------------------------------
+
+/**
+ * Cut a synthesis input down to what a summary actually needs.
+ *
+ * The inputs endpoint returns everything: every sale_item line, every Monday
+ * update, every meeting note ever recorded against the SO. Sending all of it
+ * costs input tokens, slows the call, and buries the recent signal — which is
+ * the only part a "what is happening now" summary uses.
+ *
+ * Caps are deliberately small. A bullet justified by the 12th-most-recent
+ * Monday update is not a bullet anyone needed.
+ */
+export function trimSynthesisInput(so: SynthesisInput): SynthesisInput {
+  const fb = so.fishbowl as Record<string, unknown> | null | undefined;
+  const md = so.monday as Record<string, unknown> | null | undefined;
+  const meetings = Array.isArray(so.meetings) ? so.meetings : [];
+
+  return {
+    so_number: so.so_number,
+    fishbowl: fb
+      ? {
+          status_name: fb.status_name,
+          is_open: fb.is_open,
+          customer_name: fb.customer_name,
+          customer_po: fb.customer_po,
+          salesman: fb.salesman,
+          note: fb.note,
+          date_first_ship: fb.date_first_ship,
+          date_issued: fb.date_issued,
+          synced_at: fb.synced_at,
+          // Line-item detail rarely changes the headline, and a long order
+          // can carry dozens of lines. Keep a count and the first few.
+          line_count: Array.isArray(fb.sale_items) ? fb.sale_items.length : 0,
+          sale_items: Array.isArray(fb.sale_items)
+            ? fb.sale_items.slice(0, 4)
+            : [],
+        }
+      : null,
+    monday: md
+      ? {
+          status: md.status,
+          item_updated_at: md.item_updated_at,
+          updates: Array.isArray(md.updates) ? md.updates.slice(0, 5) : [],
+        }
+      : null,
+    meetings: meetings.slice(0, 3),
+    existing_synthesis: so.existing_synthesis ?? null,
+  };
+}
+
+/** Split into fixed-size chunks; a partial final chunk is kept. */
+export function chunk<T>(items: T[], size: number): T[][] {
+  if (size < 1) throw new Error("chunk size must be >= 1");
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}

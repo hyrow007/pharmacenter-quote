@@ -8,6 +8,8 @@ import {
   keepKnownSoNumbers,
   sessionNeedsWork,
   noteNeedsWork,
+  trimSynthesisInput,
+  chunk,
   type PendingSession,
   type PendingNote,
   type SynthesisInput,
@@ -57,7 +59,19 @@ const BUDGET_MS = 50_000;
 // first model call. Whatever is left is still pending next run.
 const MAX_SESSIONS = 12;
 const MAX_NOTES = 25;
-const MAX_SOS = 15;
+const MAX_SOS = 24;
+
+// Synthesis goes out in small chunks, each written back as it completes.
+//
+// One call covering 15 SOs cannot finish inside the budget: bilingual bullets
+// for that many orders run to thousands of output tokens, and generation is
+// the bottleneck. The first attempt spent the entire 50s and wrote nothing.
+// Three per call is ~10s, and a chunk that finishes is a chunk that is saved.
+const SO_CHUNK = 3;
+
+// Do not start a chunk without room to finish it. Starting one with 5s left
+// guarantees a wasted model call and a timeout instead of a clean stop.
+const CHUNK_HEADROOM_MS = 14_000;
 
 type StepResult = Record<string, unknown>;
 
@@ -178,6 +192,7 @@ async function translations(
 async function synthesis(
   request: Request,
   signal: AbortSignal,
+  deadline: number,
 ): Promise<StepResult> {
   const root = baseUrl(request);
 
@@ -191,29 +206,72 @@ async function synthesis(
     sos?: SynthesisInput[];
   };
   const all = body.sos ?? [];
-  const sos = all.slice(0, MAX_SOS);
+  if (all.length === 0) return { ok: true, synthesized: 0, note: "nothing pending" };
 
-  if (sos.length === 0) return { ok: true, synthesized: 0, note: "nothing pending" };
+  const queue = all.slice(0, MAX_SOS).map(trimSynthesisInput);
 
-  const answer = await askForJson(buildSynthesisPrompt(sos), 8000, signal);
-  if (!answer.ok) return { ok: false, error: answer.error, detail: answer.detail };
+  let written = 0;
+  let chunksDone = 0;
+  let stopped: string | null = null;
+  const errors: string[] = [];
 
-  const out = answer.json as { items?: unknown };
-  const items = keepKnownSoNumbers(
-    out.items,
-    sos.map((s) => String(s.so_number)),
-  );
-  if (items.length === 0) return { ok: false, error: "model_returned_no_usable_items" };
+  for (const group of chunk(queue, SO_CHUNK)) {
+    if (Date.now() + CHUNK_HEADROOM_MS > deadline) {
+      stopped = "out_of_time";
+      break;
+    }
 
-  const write = await fetch(`${root}/api/sync/so-synthesis`, {
-    method: "POST",
-    headers: { ...internalHeaders(), "content-type": "application/json" },
-    body: JSON.stringify({ items }),
-    signal,
-  });
-  if (!write.ok) return { ok: false, error: `write_${write.status}` };
+    // Tokens scale with the chunk, not the backlog.
+    const answer = await askForJson(buildSynthesisPrompt(group), 2500, signal);
+    if (!answer.ok) {
+      errors.push(answer.error);
+      // A timeout means the clock beat us and every later chunk would too.
+      // Any other error may be specific to this chunk's content, so continue.
+      if (answer.error === "timeout") {
+        stopped = "timeout";
+        break;
+      }
+      continue;
+    }
 
-  return { ok: true, synthesized: items.length, remaining: all.length - sos.length };
+    const out = answer.json as { items?: unknown };
+    const items = keepKnownSoNumbers(
+      out.items,
+      group.map((g) => String(g.so_number)),
+    );
+    if (items.length === 0) {
+      errors.push("no_usable_items");
+      continue;
+    }
+
+    // Write each chunk as it lands. This is the whole point of chunking: a
+    // run cut short keeps everything finished so far instead of losing it.
+    const write = await fetch(`${root}/api/sync/so-synthesis`, {
+      method: "POST",
+      headers: { ...internalHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ items }),
+      signal,
+    });
+    if (!write.ok) {
+      errors.push(`write_${write.status}`);
+      continue;
+    }
+
+    written += items.length;
+    chunksDone++;
+  }
+
+  return {
+    // Partial progress is success. The remainder is still pending and the next
+    // run picks it up; reporting ok=false here would cry wolf every day there
+    // is a backlog.
+    ok: written > 0 || (queue.length === 0 && errors.length === 0),
+    synthesized: written,
+    chunks: chunksDone,
+    remaining: all.length - written,
+    ...(stopped ? { stopped } : {}),
+    ...(errors.length ? { errors: errors.slice(0, 5) } : {}),
+  };
 }
 
 async function run(request: Request): Promise<NextResponse> {
@@ -221,6 +279,7 @@ async function run(request: Request): Promise<NextResponse> {
   if (denied) return denied;
 
   const started = Date.now();
+  const deadline = started + BUDGET_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), BUDGET_MS);
 
@@ -232,7 +291,7 @@ async function run(request: Request): Promise<NextResponse> {
     result.translations = await translations(request, controller.signal).catch(
       (err: unknown) => ({ ok: false, error: describe(err) }),
     );
-    result.synthesis = await synthesis(request, controller.signal).catch(
+    result.synthesis = await synthesis(request, controller.signal, deadline).catch(
       (err: unknown) => ({ ok: false, error: describe(err) }),
     );
   } finally {
