@@ -25,7 +25,10 @@ export type AppContext =
   | "formulas"
   | "packing-list"
   | "meetings"
-  | "orders";
+  | "orders"
+  // The apex, pharmacenter.app. Not a product -- the hub IS PharmaCenter, so
+  // it wears the wordmark alone with no product name beside it.
+  | "hub";
 
 type Props = {
   user: { email: string };
@@ -48,6 +51,10 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onFormulaHost = host.startsWith("formula.") || host.startsWith("formulas.");
   const onMeetingHost = host.startsWith("meeting.") || host.startsWith("meetings.");
   const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
+  // Apex only: pharmacenter.app and www.pharmacenter.app. Deliberately NOT a
+  // prefix test -- "quote.pharmacenter.app" ends with the apex too.
+  const bare = host.split(":")[0].replace(/^www\./, "");
+  const onApexHost = bare === "pharmacenter.app";
   const lang = await getLangFromCookie();
 
   // Effective identity: explicit context from the page wins, otherwise
@@ -59,9 +66,17 @@ export default async function AppHeader({ user, appContext }: Props) {
   const ctx: AppContext = onOrderHost
     ? "orders"
     : (appContext ??
-      (onFormulaHost ? "formulas" : onMeetingHost ? "meetings" : "quote"));
+      (onFormulaHost
+        ? "formulas"
+        : onMeetingHost
+          ? "meetings"
+          : onApexHost
+            ? "hub"
+            : "quote"));
   const brandHref =
-    ctx === "formulas"
+    ctx === "hub"
+      ? "/"
+      : ctx === "formulas"
       ? onFormulaHost
         ? "/"
         : "https://formula.pharmacenter.app/"
@@ -111,6 +126,11 @@ export default async function AppHeader({ user, appContext }: Props) {
             width={140}
             height={40}
           />
+          {/* The wordmark already says PharmaCenter. On the apex that is the
+              whole identity, so the divider and product name are omitted
+              rather than filled with something redundant. */}
+          {ctx === "hub" ? null : (
+            <>
           <span className="app-nav__divider" aria-hidden="true" />
           <span className="app-nav__product">
             {/* v48.8/v49.2: the header wears the identity of the app the
@@ -118,6 +138,8 @@ export default async function AppHeader({ user, appContext }: Props) {
             <span className="app-nav__product-main">{productMain}</span>
             <span className="app-nav__product-sub">{productSub}</span>
           </span>
+            </>
+          )}
         </Link>
 
         <NavLinks

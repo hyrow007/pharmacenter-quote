@@ -122,6 +122,32 @@ export default async function WorkflowPage({ params }: Ctx) {
     }
   }
 
+  // Attachment links. The quote-attachments bucket went private on
+  // 2026-09-20, so the `url` stored on the row no longer opens anything --
+  // and for anything uploaded since, there is no stored url at all. Sign the
+  // paths here, at render, in one round trip for the whole page.
+  //
+  // Signed rather than proxied through a route of our own because this is a
+  // server component that already has the user's session: the signing itself
+  // is the authorization check, and the link then works from the browser
+  // without the file passing through a Vercel function.
+  const ATTACHMENT_URL_TTL_SECONDS = 60 * 60;
+  const attachmentUrls: Record<string, string> = {};
+  {
+    const paths = (workflow.state.products ?? [])
+      .flatMap((p) => p.attachments ?? [])
+      .map((a) => a.path)
+      .filter((path): path is string => !!path);
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from("quote-attachments")
+        .createSignedUrls(paths, ATTACHMENT_URL_TTL_SECONDS);
+      for (const u of signed ?? []) {
+        if (u.path && u.signedUrl) attachmentUrls[u.path] = u.signedUrl;
+      }
+    }
+  }
+
   // Auto-computed "Description" label — matches the one shown in the
   // /workflows listing. Used as the placeholder in the inline description
   // editor so the user can see what the listing would show by default.
@@ -381,9 +407,9 @@ export default async function WorkflowPage({ params }: Ctx) {
                         <ul className="attachment-list">
                           {attachments.map((a) => (
                             <li key={a.path} className="attachment-list__item">
-                              {a.url ? (
+                              {attachmentUrls[a.path] ?? a.url ? (
                                 <a
-                                  href={a.url}
+                                  href={attachmentUrls[a.path] ?? a.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="attachment-list__link"

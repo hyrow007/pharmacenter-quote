@@ -23,8 +23,12 @@ export type WorkflowAttachment = {
   name: string;
   size: number;
   type: string;
-  // Public URL — what the server uses to download for the monday push.
-  url: string;
+  // Legacy public URL. Empty for anything uploaded after 2026-09-20: the
+  // quote-attachments bucket is private, and both readers (the monday push and
+  // the workflow page) now work from `path` instead -- the push downloads with
+  // the service role, the page signs a short-lived URL at render. Kept on the
+  // type because rows written before that date still carry one.
+  url?: string;
 };
 
 // Lightweight uuid (no need for a dep — these IDs are non-cryptographic).
@@ -67,13 +71,13 @@ export async function uploadAttachment(
     console.error("uploadAttachment failed:", error.message);
     return null;
   }
-  const { data: pub } = sb.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(path);
+  // No getPublicUrl here any more. It produced a URL that worked for anyone
+  // who had it, which is exactly what making the bucket private was for.
   return {
     path,
     name: file.name,
     size: file.size,
     type: file.type || "application/octet-stream",
-    url: pub.publicUrl,
   };
 }
 

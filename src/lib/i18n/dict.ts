@@ -287,6 +287,33 @@ const en = {
     "Delete {name}? This cannot be undone. Files in storage will remain.",
   deleteForbidden: "Only the workflow owner or an admin can delete this.",
   deleteFailed: "Delete failed: {reason}",
+
+  // ---- Hub (pharmacenter.app apex) ----
+  // Tile titles get their OWN keys rather than reusing the nav keys, because
+  // the two are doing different jobs. A nav label is read inside a product,
+  // underneath a wordmark that already says which product it is -- "Lists" is
+  // unambiguous there. On a directory of five tools, standing alone, it is
+  // not. The first version of this page reused navLists and the tile read
+  // "Lists"; the fix is a name that works without the wordmark above it.
+  //
+  // The set is deliberately parallel -- plural, no "Generator"/"Tracker"
+  // suffixes -- matching the convention H3 settled on for tab titles.
+  hubQuoteName: "Quotes",
+  hubListsName: "Packing Lists",
+  hubFormulasName: "Formulas",
+  hubOrdersName: "Sales Orders",
+  hubMeetingsName: "Meetings",
+  hubEyebrow: "PharmaCenter · Tools",
+  hubTitle: "Your tools",
+  hubLede: "Everything we use for work, in one place.",
+  hubOpen: "Open",
+  hubQuoteDesc: "Build a customer quote and push it to monday.",
+  hubListsDesc: "Generate packing lists for outbound shipments.",
+  hubFormulasDesc: "Gummy formula catalog, scale-up and costing.",
+  hubOrdersDesc: "Open sales orders, synced nightly from Fishbowl.",
+  hubMeetingsDesc: "Weekly sales order review — notes and action items.",
+  hubSignInLede:
+    "One place for the tools we use for work. Sign in with your PharmaCenter Google account to continue.",
 };
 
 const es: typeof en = {
@@ -551,6 +578,24 @@ const es: typeof en = {
   deleteForbidden:
     "Solo el propietario del flujo de trabajo o un administrador puede eliminarlo.",
   deleteFailed: "No se pudo eliminar: {reason}",
+
+  // ---- Hub (apex pharmacenter.app) ----
+  hubQuoteName: "Cotizaciones",
+  hubListsName: "Listas de empaque",
+  hubFormulasName: "Fórmulas",
+  hubOrdersName: "Órdenes de venta",
+  hubMeetingsName: "Reuniones",
+  hubEyebrow: "PharmaCenter · Herramientas",
+  hubTitle: "Sus herramientas",
+  hubLede: "Todo lo que usamos para trabajar, en un solo lugar.",
+  hubOpen: "Abrir",
+  hubQuoteDesc: "Cree una cotización y envíela a monday.",
+  hubListsDesc: "Genere listas de empaque para los envíos.",
+  hubFormulasDesc: "Catálogo de fórmulas de gomitas, escalado y costeo.",
+  hubOrdersDesc: "Pedidos abiertos, sincronizados cada noche desde Fishbowl.",
+  hubMeetingsDesc: "Revisión semanal de pedidos — notas y tareas.",
+  hubSignInLede:
+    "Un solo lugar para las herramientas que usamos para trabajar. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
 };
 
 export type DictKey = keyof typeof en;

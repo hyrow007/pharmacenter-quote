@@ -1,0 +1,334 @@
+/* ============================================================
+   App chrome — the band at the top of every signed-in page, and
+   the page wrapper under it.
+   ============================================================
+
+   THIS FILE IS DUPLICATED VERBATIM ACROSS THE TWO PHARMACENTER REPOS,
+   pharmacenter-quote and pharmacenter-packing-list. The two copies must stay
+   BYTE-IDENTICAL: `diff` between them should print nothing. Same arrangement
+   as src/lib/freshness.ts, and for the same reason -- there is no shared
+   package between the repos, so the only thing keeping them together is that
+   the file is one file, copied, and obviously so.
+
+   WHY IT EXISTS. Until 2026-09-20 the four quote-family surfaces used
+   `.app-nav__*` and the packing list hand-rolled `.appshell__*`. Side by side
+   they did not look like one product:
+
+     logo         40px          vs  36px
+     divider      36px, stone   vs  28px, a one-off rgba
+     product      24px / 600    vs  22px / 500
+     nav links    14/600, gap 22, underline on active
+                                vs  13/500, gap 4, rounded pill on hover
+     bar          #fff, 60px min-height
+                                vs  --paper, no min-height
+     email        12.5px plain  vs  12px monospace
+
+   None of that was a decision; it was two people solving the same problem a
+   few months apart. Quote's version won because four surfaces already used it
+   and one did not.
+
+   ONE DELIBERATE DIFFERENCE REMAINS, and it is a feature rather than drift:
+   the packing list renders the signed-in email as a link to /profile. Quote
+   has no profile page, so it renders plain text. Both use .app-nav__email;
+   the link adds .app-nav__email--link.
+   ============================================================ */
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--teal-900);
+  margin-bottom: 20px;
+}
+
+.lede {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-1);
+  margin-bottom: 24px;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--cream);
+}
+
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+  border-bottom: 1px solid var(--stone);
+}
+
+.app-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 28px;
+  min-height: 60px;
+}
+
+.app-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-nav__logo {
+  height: 40px;
+  width: auto;
+  display: block;
+}
+
+/* Single-line layout: "Quote" big in serif, "Work Flows" smaller italic in
+   muted serif right next to it — mirrors the sister Packing List app's
+   "Packing List Generator" wordmark. */
+.app-nav__product {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 1;
+}
+.app-nav__product-main {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--teal-900);
+  letter-spacing: 0.005em;
+}
+.app-nav__product-sub {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.app-nav__divider {
+  width: 1px;
+  height: 36px;
+  background: var(--stone);
+  margin: 0 4px;
+}
+
+.app-nav__links {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.app-nav__link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-1);
+  text-decoration: none;
+  padding: 6px 2px;
+  line-height: 1.2;
+  transition: color 0.15s ease;
+}
+.app-nav__link:hover {
+  color: var(--teal-700);
+}
+.app-nav__link--active {
+  color: var(--teal-900);
+}
+.app-nav__link--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 2px;
+  background: var(--teal-700);
+  border-radius: 1px;
+}
+
+.app-nav__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.app-nav__email {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Full-width page wrapper (replaces the centered .hero/.card)
+   ============================================================ */
+
+.page {
+  flex: 1;
+  width: 100%;
+  padding: 36px 28px 64px;
+}
+
+.page__inner {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.page__inner--narrow {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.page-header__title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--teal-900);
+  margin-bottom: 6px;
+}
+
+.page-header__subtitle {
+  font-size: 14px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+.page-header__action {
+  flex-shrink: 0;
+}
+
+/* ---- EN/ES toggle -------------------------------------------------------
+   Was inline styles in quote's LangToggle and a differently-shaped
+   `.langtoggle` class in the packing list. One class now, both apps. */
+.langtoggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--stone);
+  border-radius: 999px;
+  background: var(--paper);
+}
+.langtoggle button {
+  border: none;
+  background: transparent;
+  color: var(--teal-900);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.langtoggle button.is-active,
+.langtoggle button[aria-pressed="true"] {
+  background: var(--teal-700);
+  color: #fff;
+  cursor: default;
+}
+.langtoggle button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* ---- Sign out, and any other button living in the band -------------------
+   Quote had this as an inline `secondaryStyle` object; the packing list used
+   its general `.btn .btn-secondary`, which is 8px-rounded and sized for the
+   dense editor UI. Neither app's other buttons are touched by this class. */
+.btn-chrome {
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--teal-700);
+  border: 1px solid var(--stone);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-chrome:hover:not(:disabled) {
+  border-color: var(--teal-500);
+}
+.btn-chrome:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* The packing list's email is a link to /profile; quote's is plain text. */
+.app-nav__email--link {
+  color: var(--teal-700);
+  text-decoration: none;
+}
+.app-nav__email--link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Page headings ------------------------------------------------------
+   The packing list writes its page headings as .pageheader / .pageheader h1 /
+   .pageheader__lede, across twelve pages. Quote writes them as .page-header /
+   .page-header__title / .page-header__subtitle. Rather than rewrite twelve
+   files, the packing spellings are aliased onto the same treatment here, so
+   the two can no longer drift apart:
+
+     title  was 36px / line-height 1, no letter-spacing  ->  44px / 1.05 / -0.01em
+     lede   was 14px --ink-3                             ->  14px --ink-3 (unchanged)
+
+   Quote renders no .pageheader element, so these rules are inert there. They
+   live in the shared file anyway, because a rule that exists in only one copy
+   is how a "kept identical" pair stops being identical. */
+.pageheader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.pageheader h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--teal-900);
+  margin: 0 0 6px;
+}
+
+.pageheader__lede {
+  font-size: 14px;
+  color: var(--ink-3);
+  line-height: 1.5;
+  margin-top: 0;
+}

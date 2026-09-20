@@ -61,10 +61,17 @@ function safeFilename(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "file";
 }
 
-function publicUrlFor(path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  return `${base}/storage/v1/object/public/${FILES_BUCKET}/${path}`;
-}
+// How long a view link stays good. The list is signed at render, so a link is
+// always fresh when the card first draws; this is the window for a tab left
+// open. Long enough that nobody hits a dead link mid-session, short enough
+// that a URL pasted into a chat stops working the same day.
+const VIEW_URL_TTL_SECONDS = 60 * 60;
+
+// Was publicUrlFor(), which hand-built
+// `${base}/storage/v1/object/public/formula-files/${path}` -- an endpoint that
+// does not consult RLS at all, so every formula document was readable by
+// anyone who had or guessed the URL, signed in or not. Replaced 2026-09-20
+// when the bucket was made private.
 
 type FileRow = {
   id: string;
@@ -76,12 +83,14 @@ type FileRow = {
   uploaded_at: string;
 };
 
-function filePayload(row: FileRow) {
+function filePayload(row: FileRow, url: string | null) {
   return {
     id: row.id,
     filename: row.filename,
     storagePath: row.storage_path,
-    publicUrl: publicUrlFor(row.storage_path),
+    // Named `url`, not `publicUrl`, because it is no longer public and a name
+    // that lies is how the old behaviour survived review for as long as it did.
+    url,
     sizeBytes: Number(row.size_bytes) || 0,
     mimeType: row.mime_type,
     uploadedByEmail: row.uploaded_by_email,
@@ -110,9 +119,27 @@ export async function GET(
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
+  const rows = (data ?? []) as FileRow[];
+
+  // One round trip for the whole list rather than one per file. A path that
+  // fails to sign yields url: null, and the card renders the row without a
+  // link instead of a link that 400s.
+  const signed = new Map<string, string>();
+  if (rows.length > 0) {
+    const { data: urls } = await supabase.storage
+      .from(FILES_BUCKET)
+      .createSignedUrls(
+        rows.map((r) => r.storage_path),
+        VIEW_URL_TTL_SECONDS,
+      );
+    for (const u of urls ?? []) {
+      if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
-    files: (data ?? []).map((r) => filePayload(r as FileRow)),
+    files: rows.map((r) => filePayload(r, signed.get(r.storage_path) ?? null)),
   });
 }
 
@@ -191,7 +218,16 @@ export async function POST(
         { status: 500 },
       );
     }
-    return NextResponse.json({ ok: true, file: filePayload(data as FileRow) });
+    // Sign the freshly committed file too, so the card can link it without
+    // refetching the list.
+    const row = data as FileRow;
+    const { data: signedOne } = await supabase.storage
+      .from(FILES_BUCKET)
+      .createSignedUrl(row.storage_path, VIEW_URL_TTL_SECONDS);
+    return NextResponse.json({
+      ok: true,
+      file: filePayload(row, signedOne?.signedUrl ?? null),
+    });
   }
 
   return NextResponse.json({ ok: false, error: "unknown_action" }, { status: 400 });

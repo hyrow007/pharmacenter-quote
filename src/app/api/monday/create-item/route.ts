@@ -59,7 +59,10 @@ type Attachment = {
   name: string;
   size: number;
   type: string;
-  url: string;
+  // Optional since 2026-09-20: new uploads carry no public URL at all, because
+  // the bucket is private. Older rows still have one and the fallback in
+  // fetchAttachmentAsBlob uses it.
+  url?: string;
 };
 
 type ProductPayload = {
@@ -103,7 +106,55 @@ type Body = {
   materialsForQuote?: MaterialForQuote[];
 };
 
+const ATTACHMENTS_BUCKET = "quote-attachments";
+
+/**
+ * Pull an attachment's bytes for the monday upload.
+ *
+ * This used to `fetch(att.url)` -- a public storage URL stored on the workflow
+ * row. That worked only because the quote-attachments bucket was public, which
+ * also meant anyone holding one of those URLs could read the file. The bucket
+ * is private as of 2026-09-20, so the bytes come straight out of storage with
+ * the service role instead. No URL is produced, which is strictly better: the
+ * fetch never leaves the server and there is nothing to leak.
+ *
+ * Rows written before this change still carry a `url` and may predate `path`,
+ * so that fallback stays until those rows age out. It will fail against a
+ * private bucket -- deliberately visible in the log rather than silent.
+ */
 async function fetchAttachmentAsBlob(att: Attachment): Promise<Blob | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (att.path && supabaseUrl && serviceRoleKey) {
+    try {
+      const admin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false },
+      });
+      const { data, error } = await admin.storage
+        .from(ATTACHMENTS_BUCKET)
+        .download(att.path);
+      if (error || !data) {
+        console.error(`Attachment download failed: ${att.path} -> ${error?.message}`);
+        return null;
+      }
+      return new Blob([await data.arrayBuffer()], {
+        type: att.type || "application/octet-stream",
+      });
+    } catch (err) {
+      console.error(`Attachment download errored: ${att.path}`, err);
+      return null;
+    }
+  }
+
+  if (!att.url) {
+    console.error("Attachment has neither a storage path nor a URL; skipping.");
+    return null;
+  }
+  console.warn(
+    `Attachment ${att.name} has no storage path - falling back to its stored URL. ` +
+      "This fails against a private bucket; the row predates the 2026-09-20 change.",
+  );
   try {
     const res = await fetch(att.url, { cache: "no-store" });
     if (!res.ok) {

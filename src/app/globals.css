@@ -1,3 +1,4 @@
+@import "./app-chrome.css";
 /* PharmaCenter palette — kept in lockstep with the sister Packing List app's
  * brand stylesheet (see legacy/packing-list.css) so the two web apps look
  * like they belong together. When the brand deck moves, update both. */
@@ -69,31 +70,6 @@ html, body {
   }
 }
 
-.eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--teal-700);
-  margin-bottom: 12px;
-}
-
-h1 {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 56px;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--teal-900);
-  margin-bottom: 20px;
-}
-
-.lede {
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink-1);
-  margin-bottom: 24px;
-}
 
 .cta {
   display: inline-block;
@@ -179,174 +155,6 @@ h1 {
    App shell + top nav (used by /workflows, /workflow/[id], /start)
    ============================================================ */
 
-.app-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background: var(--cream);
-}
-
-.app-nav {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: #fff;
-  border-bottom: 1px solid var(--stone);
-}
-
-.app-nav__inner {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 12px 28px;
-  min-height: 60px;
-}
-
-.app-nav__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  text-decoration: none;
-  color: inherit;
-}
-
-.app-nav__logo {
-  height: 40px;
-  width: auto;
-  display: block;
-}
-
-/* Single-line layout: "Quote" big in serif, "Work Flows" smaller italic in
-   muted serif right next to it — mirrors the sister Packing List app's
-   "Packing List Generator" wordmark. */
-.app-nav__product {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  line-height: 1;
-}
-.app-nav__product-main {
-  font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--teal-900);
-  letter-spacing: 0.005em;
-}
-.app-nav__product-sub {
-  font-family: var(--serif);
-  font-size: 16px;
-  font-style: italic;
-  font-weight: 500;
-  color: var(--ink-3);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.app-nav__divider {
-  width: 1px;
-  height: 36px;
-  background: var(--stone);
-  margin: 0 4px;
-}
-
-.app-nav__links {
-  display: inline-flex;
-  align-items: center;
-  gap: 22px;
-}
-
-.app-nav__link {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-1);
-  text-decoration: none;
-  padding: 6px 2px;
-  line-height: 1.2;
-  transition: color 0.15s ease;
-}
-.app-nav__link:hover {
-  color: var(--teal-700);
-}
-.app-nav__link--active {
-  color: var(--teal-900);
-}
-.app-nav__link--active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -10px;
-  height: 2px;
-  background: var(--teal-700);
-  border-radius: 1px;
-}
-
-.app-nav__user {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-}
-
-.app-nav__email {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ============================================================
-   Full-width page wrapper (replaces the centered .hero/.card)
-   ============================================================ */
-
-.page {
-  flex: 1;
-  width: 100%;
-  padding: 36px 28px 64px;
-}
-
-.page__inner {
-  max-width: 1240px;
-  margin: 0 auto;
-}
-
-.page__inner--narrow {
-  max-width: 880px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 18px;
-  margin-bottom: 22px;
-}
-
-.page-header__title {
-  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
-  font-weight: 500;
-  font-size: 44px;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-  color: var(--teal-900);
-  margin-bottom: 6px;
-}
-
-.page-header__subtitle {
-  font-size: 14px;
-  color: var(--ink-3);
-  line-height: 1.5;
-}
-
-.page-header__action {
-  flex-shrink: 0;
-}
 
 .button-primary {
   display: inline-flex;
@@ -1624,5 +1432,129 @@ h1 {
   }
   thead tr {
     background: #f2f2f2 !important;
+  }
+}
+
+/* ============================================================
+   Hub — the apex landing at pharmacenter.app
+   ============================================================ */
+
+.hub-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* auto-fit rather than a fixed column count: five tiles land 3+2 on a wide
+     screen, 2+2+1 on a laptop, and stack on a phone, with no breakpoints to
+     keep in sync as tools are added or retired. */
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 16px;
+}
+
+.hub-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  height: 100%;
+  padding: 20px 20px 18px;
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  position: relative;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.hub-tile:hover,
+.hub-tile:focus-visible {
+  border-color: var(--teal-500);
+  box-shadow: 0 6px 18px rgba(15, 74, 86, 0.09);
+  transform: translateY(-2px);
+}
+
+/* The tile is the link, so the focus ring belongs on the tile. Without this
+   the ring lands on an inline box the size of the text and reads as a bug. */
+.hub-tile:focus-visible {
+  outline: 2px solid var(--teal-700);
+  outline-offset: 2px;
+}
+
+.hub-tile__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--cream);
+  color: var(--teal-700);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.hub-tile:hover .hub-tile__icon {
+  background: var(--teal-700);
+  color: var(--paper);
+}
+
+.hub-tile__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hub-tile__name {
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--teal-900);
+}
+
+.hub-tile__desc {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* Reads as an affordance on hover without occupying a row of its own — the
+   tile is already the click target, this just says so. */
+.hub-tile__go {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.hub-tile:hover .hub-tile__go,
+.hub-tile:focus-visible .hub-tile__go {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Leave room for the hover label so it never sits on the description. */
+.hub-tile__body {
+  padding-bottom: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-tile,
+  .hub-tile__icon,
+  .hub-tile__go {
+    transition: none;
+  }
+  .hub-tile:hover {
+    transform: none;
   }
 }

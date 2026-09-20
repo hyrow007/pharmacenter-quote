@@ -25,7 +25,9 @@ type FormulaFile = {
   id: string;
   filename: string;
   storagePath: string;
-  publicUrl: string;
+  /** Signed view URL, or null when signing failed. Not public: the
+   *  formula-files bucket is private as of 2026-09-20. */
+  url: string | null;
   sizeBytes: number;
   mimeType: string | null;
   uploadedByEmail: string;
@@ -339,7 +341,7 @@ export default function FilesCard({ formulaId }: { formulaId: string }) {
               }}
             >
               <a
-                href={f.publicUrl}
+                href={f.url ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 style={{
