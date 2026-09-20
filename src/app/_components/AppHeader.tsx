@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { SignOutButton } from "../auth-buttons";
 import AdminToggle from "./AdminToggle";

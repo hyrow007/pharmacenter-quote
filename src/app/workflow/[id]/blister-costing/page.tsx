@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
 import AppHeader from "../../../_components/AppHeader";
 import BlisterCostingBoard, {

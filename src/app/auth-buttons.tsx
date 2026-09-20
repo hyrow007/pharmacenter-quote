@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { createClient } from "@/lib/auth/client";
+import { createClient } from "@/lib/supabase/client";
 
 const primaryStyle: CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 8,

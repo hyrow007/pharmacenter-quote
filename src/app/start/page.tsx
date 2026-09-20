@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase, type Product } from "@/lib/supabase";
+import { supabase, type Product } from "@/lib/supabase/legacy";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
 import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters, blankPackagingSpecPouches } from "@/lib/workflows";
 import PackagingSpecSection from "./PackagingSpecSection";

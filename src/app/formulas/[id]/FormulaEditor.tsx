@@ -26,7 +26,7 @@ import { makeTr } from "@/lib/i18n/labels";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase/legacy";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,

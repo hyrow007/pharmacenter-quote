@@ -12,7 +12,7 @@
 // by URL. File paths are uuid-prefixed so listing the bucket doesn't leak
 // anything useful — knowing the bucket name isn't enough to discover files.
 
-import { supabase } from "./supabase";
+import { supabase } from "./supabase/legacy";
 
 export const ATTACHMENTS_BUCKET = "quote-attachments";
 

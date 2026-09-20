@@ -3,7 +3,7 @@
 // Nudge build: force Vercel to redeploy the latest signature-trim change.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase/legacy";
 import type {
   IssuedQuoteTab,
   PricingSnapshot,

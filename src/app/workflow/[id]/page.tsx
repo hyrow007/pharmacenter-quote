@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import {
   buildAutoDescription,
   formatQuoteNumber,

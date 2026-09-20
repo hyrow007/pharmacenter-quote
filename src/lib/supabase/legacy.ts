@@ -1,6 +1,20 @@
-// Shared Supabase client. Used by all PharmaCenter quote/packing/etc. apps that
-// point at the same Supabase project. Set the env vars in Vercel as Team-level
-// Shared variables so a single rotation flows to all linked projects:
+// LEGACY module-scope Supabase client. Prefer ./server.ts or ./client.ts.
+//
+// This is NOT the request-aware SSR client the rest of the app uses. It is a
+// single anon client created once at module load, with no cookies and no
+// signed-in user attached, so every query it makes runs as `anon` no matter
+// who is looking at the page. Four files still import it -- FormulaEditor,
+// PricingCalculator, /start and workflow actions -- and they work because the
+// tables they touch are readable by anon.
+//
+// It was called `@/lib/supabase` until 2026-09-20, which was a genuine trap
+// worth naming: in the packing-list repo `@/lib/supabase/server` is the real
+// auth-aware client, so the same-looking import meant two different things in
+// the two repos, and neither one failed loudly when pasted into the other.
+// Renamed to `legacy` so the import itself says which one you got. (H5.)
+//
+// Env vars are set in Vercel as Team-level Shared variables, so one rotation
+// flows to every linked project:
 //
 //   NEXT_PUBLIC_SUPABASE_URL              project URL (https://<id>.supabase.co)
 //   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  publishable key (sb_publishable_*)
