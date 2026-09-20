@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import AppHeader from "../_components/AppHeader";
-import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 import {
@@ -34,7 +33,7 @@ const MONDAY_PREVIEW_MAX_AGE_DAYS = 120;
 // The old /meetings/sales-orders hub still works; this is the new
 // front door when visiting order.pharmacenter.app / orders.pharmacenter.app.
 
-export const metadata = { title: "Sales Orders" };
+export const metadata = { title: "Sales Order Tracker" };
 
 // SO statuses we treat as "in flight" and show on this landing.
 const OPEN_STATUS_IDS = [10, 20, 25];
@@ -441,17 +440,7 @@ export default async function OrdersLandingPage() {
               <span>
                 {t("ordersCustomerCount", { n: String(customerGroups.length) })}
               </span>
-              {/* H2 remainder, 2026-09-20: this line rendered an age and
-                  nothing else, so the page could read "hace 10h" and stay
-                  silent at ten days. Its inline describeFreshness had no
-                  staleness concept at all. Same red-bold + banner treatment
-                  every other nightly-sync surface already uses. */}
-              <span
-                style={{
-                  color: freshness.stale ? "#8b2f2f" : undefined,
-                  fontWeight: freshness.stale ? 700 : undefined,
-                }}
-              >
+              <span>
                 {t("syncedAgo", { rel: freshness.relative })}
               </span>
               <Link
@@ -466,24 +455,6 @@ export default async function OrdersLandingPage() {
               </Link>
             </div>
           </div>
-
-          {freshness.stale ? (
-            <div
-              role="status"
-              style={{
-                margin: "0 0 16px",
-                padding: "10px 14px",
-                background: "#fdecec",
-                border: "1px solid #f5c2c2",
-                color: "#8b2f2f",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              {t("syncStale", { rel: freshness.relative })}
-            </div>
-          ) : null}
 
           {customerGroups.length === 0 ? (
             <div style={emptyStyle()}>{t("ordersNoOpen")}</div>
@@ -1045,6 +1016,41 @@ function isStale(
   if (candidates.length === 0) return true; // never mentioned = stale
   const newest = Math.max(...candidates);
   return now - newest > threshold;
+}
+
+function describeFreshness(
+  iso: string | null,
+  t?: TFn,
+  lang?: "en" | "es",
+): { relative: string } {
+  if (!iso) return { relative: "—" };
+  const d = new Date(iso).getTime();
+  if (!Number.isFinite(d)) return { relative: iso };
+  const diff = Date.now() - d;
+  const mins = Math.round(diff / 60000);
+  const tr = (k: string, n?: number): string => {
+    if (t)
+      return t(
+        k as unknown as Parameters<TFn>[0],
+        n !== undefined ? { n: String(n) } : undefined,
+      );
+    if (k === "timeJustNow") return "just now";
+    if (k === "timeMinAgo") return `${n} min ago`;
+    if (k === "timeHrAgo") return `${n}h ago`;
+    if (k === "timeDayAgo") return `${n}d ago`;
+    return "";
+  };
+  if (mins < 1) return { relative: tr("timeJustNow") };
+  if (mins < 60) return { relative: tr("timeMinAgo", mins) };
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return { relative: tr("timeHrAgo", hrs) };
+  const days = Math.round(hrs / 24);
+  if (days < 30) return { relative: tr("timeDayAgo", days) };
+  return {
+    relative: new Date(iso).toLocaleDateString(
+      lang === "es" ? "es" : "en-US",
+    ),
+  };
 }
 
 function truncate(s: string, max: number): string {

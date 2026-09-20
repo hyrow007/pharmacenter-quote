@@ -656,7 +656,7 @@ export function resolveLine(line: BomLine): {
 
   const qty = num(line.qtyPerUnit);
   if (qty === null || qty <= 0)
-    return mk("no_qty", "Quantity per bottle is missing.");
+    return mk("no_qty", "Quantity per finished unit is missing.");
 
   // A UOM we cannot convert poisons BOTH Fishbowl sources, so it is checked
   // before the source switch. Manual sidesteps it — that is the escape hatch.
@@ -693,7 +693,7 @@ export function resolveLine(line: BomLine): {
   if (waste === null)
     return mk(
       "waste_invalid",
-      "Waste % must be between 0 and 99. At 100% every unit bought is scrapped, so no quantity produces a bottle.",
+      "Waste % must be between 0 and 99. At 100% every unit bought is scrapped, so no quantity produces a finished unit.",
     );
 
   return { cost: qty * cost * waste, issue: null };

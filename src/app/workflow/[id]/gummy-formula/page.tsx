@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import {
   formatQuoteNumber,
   type GummyFormula,

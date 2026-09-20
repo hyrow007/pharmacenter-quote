@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireSyncAuth } from "@/lib/sync-auth";
 
 // /api/sync/meeting-translations
 //
@@ -30,11 +29,9 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 //          }
 //        Idempotent — retranslating just overwrites.
 //
-// Auth: requireSyncAuth(request, "meeting-translations") — see
-// src/lib/sync-auth.ts. Accepts MEETING_TRANSLATIONS_SECRET, or CRON_SECRET
-// from the daily cron. Driven by /api/cron/daily, which fetches GET, calls
-// Claude to translate, and POSTs back. It was a Cowork scheduled task until
-// 2026-09-20; those cannot make an authenticated call at all.
+// Auth: shared bearer PLAUD_SYNC_SECRET (same secret the other sync
+// routes use). Used by a scheduled Cowork task that fetches GET,
+// asks Claude to translate, and POSTs back.
 
 export const runtime = "nodejs";
 
@@ -43,7 +40,24 @@ function badRequest(msg: string): NextResponse {
 }
 
 function auth(request: Request): NextResponse | null {
-  return requireSyncAuth(request, "meeting-translations");
+  const expected = process.env.PLAUD_SYNC_SECRET;
+  if (!expected) {
+    return NextResponse.json(
+      { ok: false, error: "server_misconfigured" },
+      { status: 500 },
+    );
+  }
+  const authz = request.headers.get("authorization") || "";
+  const provided = authz.startsWith("Bearer ")
+    ? authz.slice("Bearer ".length).trim()
+    : "";
+  if (provided !== expected) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized" },
+      { status: 401 },
+    );
+  }
+  return null;
 }
 
 function client() {

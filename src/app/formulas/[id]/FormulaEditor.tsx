@@ -26,7 +26,7 @@ import { makeTr } from "@/lib/i18n/labels";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getBrowserClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 import {
   BLEND_PHASE_HINTS,
   BLEND_PHASE_LABELS,
@@ -1655,7 +1655,7 @@ export default function FormulaEditor({
   // one maybeSingle() to fetch the paired display fields off the row.
   useEffect(() => {
     if (!customerId || customerName) return;
-    const sb = getBrowserClient();
+    const sb = supabase;
     if (!sb) return;
     let cancelled = false;
     sb.from("customers")
@@ -1675,7 +1675,7 @@ export default function FormulaEditor({
   // Debounced customer search — same shape as /start's customer effect
   // (180ms setTimeout, active-only rows, name ilike, capped at 50).
   useEffect(() => {
-    const sb = getBrowserClient();
+    const sb = supabase;
     if (!sb) return;
     const term = customerSearch.trim();
     if (term.length === 0) {
