@@ -31,9 +31,10 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 //        Idempotent — retranslating just overwrites.
 //
 // Auth: requireSyncAuth(request, "meeting-translations") — see
-// src/lib/sync-auth.ts. Accepts MEETING_TRANSLATIONS_SECRET if set, else
-// the shared PLAUD_SYNC_SECRET. Used by a scheduled Cowork task that
-// fetches GET, asks Claude to translate, and POSTs back.
+// src/lib/sync-auth.ts. Accepts MEETING_TRANSLATIONS_SECRET, or CRON_SECRET
+// from the daily cron. Driven by /api/cron/daily, which fetches GET, calls
+// Claude to translate, and POSTs back. It was a Cowork scheduled task until
+// 2026-09-20; those cannot make an authenticated call at all.
 
 export const runtime = "nodejs";
 

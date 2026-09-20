@@ -11,7 +11,7 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 //
 // Auth: requireSyncAuth(request, "so-synthesis-inputs") — see
 // src/lib/sync-auth.ts. Shares SO_SYNTHESIS_SECRET with the write side if
-// set, else the shared PLAUD_SYNC_SECRET. Read-only: the generator step
+// or CRON_SECRET from the daily cron. Read-only: the generator step
 // can only fetch what it needs to summarize, no wider access.
 //
 // Query params:

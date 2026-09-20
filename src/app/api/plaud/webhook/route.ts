@@ -54,7 +54,7 @@ import {
 // Response: { ok, session_id, inserted_notes, mismatched, snapshotted }
 //
 // Auth: requireSyncAuth(request, "plaud-webhook") — see src/lib/sync-auth.ts.
-// Accepts PLAUD_WEBHOOK_SECRET if set, else the shared PLAUD_SYNC_SECRET.
+// Accepts PLAUD_WEBHOOK_SECRET.
 
 export const runtime = "nodejs"; // service-role client needs Node
 

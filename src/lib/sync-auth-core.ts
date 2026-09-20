@@ -10,7 +10,7 @@ import { timingSafeEqual } from "node:crypto";
 // NextResponse and logs them.
 //
 // ---------------------------------------------------------------------------
-// Why this exists (finding H4)
+// Why this exists (finding H4) — migration COMPLETE 2026-09-20
 // ---------------------------------------------------------------------------
 // A single token, PLAUD_SYNC_SECRET, authenticated FIVE endpoints: the Plaud
 // webhook, the Monday board sync, meeting-translations (read and write), and
@@ -18,18 +18,20 @@ import { timingSafeEqual } from "node:crypto";
 // all of them, and Vercel stored it as readable Config rather than a Secret,
 // which is why it was flagged "Needs Attention".
 //
-// Splitting in one move would mean rotating every caller at once, including
-// ones configured outside this repo — Plaud's own webhook settings, a Zapier
-// hop. That is how migrations get abandoned half-done. So each scope accepts,
-// in order:
+// It leaked exactly as predicted — pasted into a chat while rotating it.
 //
-//   1. its own dedicated secret, if set        <- where we are going
-//   2. Vercel's CRON_SECRET, for cron scopes   <- Vercel sends only this
-//   3. the shared PLAUD_SYNC_SECRET            <- where we are coming from
+// The migration ran with a three-step fallback (dedicated -> CRON_SECRET ->
+// shared) so callers could move one at a time without an outage. Every caller
+// has now moved, and the shared step is gone. Each scope accepts:
 //
-// Set one dedicated secret, move that caller, confirm from the logs that it
-// is using the new one, repeat. When no scope reports `shared` any more,
-// delete PLAUD_SYNC_SECRET from both Vercel projects and drop step 3.
+//   1. its own dedicated secret
+//   2. Vercel's CRON_SECRET, for cron scopes only
+//
+// A leaked token now exposes one endpoint instead of five.
+//
+// Do not reintroduce a shared fallback. If a new caller 401s, give it the
+// dedicated secret for its scope; adding a catch-all is how the original
+// problem was built.
 
 export type SyncScope =
   | "plaud-webhook"
@@ -70,10 +72,9 @@ const CRON_SCOPES: ReadonlySet<SyncScope> = new Set<SyncScope>([
   "so-synthesis-inputs",
 ]);
 
-export const SHARED = "PLAUD_SYNC_SECRET";
 
 export type SyncAuthResult =
-  | { ok: true; matched: string; legacy: boolean }
+  | { ok: true; matched: string }
   | { ok: false; status: 401 | 500; error: string; detail: string };
 
 // Constant-time compare. The five inline checks this replaced all used `!==`,
@@ -99,7 +100,6 @@ export function bearerFrom(authorization: string | null | undefined): string {
 export function candidateNames(scope: SyncScope): string[] {
   const names = [DEDICATED[scope]];
   if (CRON_SCOPES.has(scope)) names.push("CRON_SECRET");
-  names.push(SHARED);
   return names;
 }
 
@@ -134,7 +134,7 @@ export function evaluateSyncAuth(
 
   for (const [name, value] of configured) {
     if (secretMatches(provided, value)) {
-      return { ok: true, matched: name, legacy: name === SHARED };
+      return { ok: true, matched: name };
     }
   }
 

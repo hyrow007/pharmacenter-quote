@@ -13,7 +13,7 @@ export type { SyncScope } from "@/lib/sync-auth-core";
 // Every accepted request logs which secret matched, BY NAME, never by value:
 //
 //   sync-auth: scope=monday matched=CRON_SECRET
-//   sync-auth: scope=plaud-webhook matched=PLAUD_SYNC_SECRET (shared, legacy)
+//   sync-auth: scope=plaud-webhook matched=PLAUD_WEBHOOK_SECRET
 //
 // You cannot finish a migration you cannot observe. A caller still on the
 // shared token says so on every request, in Vercel's function logs, instead
@@ -33,10 +33,7 @@ export function requireSyncAuth(
   const result = evaluateSyncAuth(request.headers.get("authorization"), scope);
 
   if (result.ok) {
-    console.log(
-      `sync-auth: scope=${scope} matched=${result.matched}` +
-        (result.legacy ? " (shared, legacy)" : ""),
-    );
+    console.log(`sync-auth: scope=${scope} matched=${result.matched}`);
     return null;
   }
 

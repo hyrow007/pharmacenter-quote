@@ -11,7 +11,7 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 //
 // Auth: same pattern as /api/sync/sales-orders — bearer token in the
 // Authorization header. Set FISHBOWL_SYNC_SECRET-style
-// SYNC_SHARED_SECRET or accept the Vercel-side PLAUD_SYNC_SECRET as a
+// SYNC_SHARED_SECRET or accept the Vercel-side MONDAY_SYNC_SECRET as a
 // generic sync bearer. Now handled by requireSyncAuth(request, "monday"),
 // which takes MONDAY_SYNC_SECRET, or Vercel's CRON_SECRET, or
 // another env var for the same job.

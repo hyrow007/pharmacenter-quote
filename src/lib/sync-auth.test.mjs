@@ -35,21 +35,37 @@ const status = (authz, scope) => {
 clearEnv();
 ok('no secrets at all -> 500, not 401', status(req('anything'), 'monday') === 500);
 
-// --- 2. legacy state: the shared token still opens everything -------------
+// --- 2. the shared token is GONE: it must open nothing --------------------
+// These assertions were inverted on 2026-09-20 when the H4 migration finished.
+// They used to prove the shared token still worked. Now they prove it cannot
+// come back: a stray PLAUD_SYNC_SECRET in the environment must not grant
+// anything, or the whole split silently undoes itself.
 clearEnv(); process.env.PLAUD_SYNC_SECRET = 'shared-abc';
 for (const s of ['monday', 'plaud-webhook', 'so-synthesis', 'so-synthesis-inputs', 'meeting-translations']) {
-  ok(`${s} accepts shared`, status(req('shared-abc'), s) === 200);
+  ok(`${s} does NOT accept the retired shared token`, status(req('shared-abc'), s) === 500);
 }
+
+clearEnv(); process.env.MONDAY_SYNC_SECRET = 'monday-xyz';
 ok('wrong token rejected', status(req('nope'), 'monday') === 401);
 ok('no bearer header rejected', status(req(), 'monday') === 401);
 
-// --- 3. migration window: dedicated and shared both work ------------------
+// --- 3. dedicated only ----------------------------------------------------
 clearEnv();
 process.env.PLAUD_SYNC_SECRET = 'shared-abc';
 process.env.MONDAY_SYNC_SECRET = 'monday-xyz';
 ok('dedicated accepted', status(req('monday-xyz'), 'monday') === 200);
-ok('shared still accepted (caller not moved yet)', status(req('shared-abc'), 'monday') === 200);
+ok('shared no longer accepted even when present', status(req('shared-abc'), 'monday') === 401);
+
+// plaud-webhook needs its own secret set for this to test what it claims.
+// Without the shared fallback an unconfigured scope returns 500
+// (misconfigured), not 401 (bad token) — a distinction worth preserving, and
+// one this assertion used to ride the shared secret to avoid.
+process.env.PLAUD_WEBHOOK_SECRET = 'plaud-def';
 ok('monday secret does NOT unlock plaud-webhook', status(req('monday-xyz'), 'plaud-webhook') === 401);
+ok('unconfigured scope is 500, not 401', (() => {
+  delete process.env.PLAUD_WEBHOOK_SECRET;
+  return status(req('monday-xyz'), 'plaud-webhook') === 500;
+})());
 
 // --- 4. end state: shared deleted, blast radius contained -----------------
 clearEnv();
@@ -72,11 +88,11 @@ ok('so-synthesis read side', status(req('syn-777'), 'so-synthesis-inputs') === 2
 
 // --- 7. edges the old `!==` check also handled, kept so the constant-time
 //        compare cannot regress them -------------------------------------
-clearEnv(); process.env.PLAUD_SYNC_SECRET = 'shared-abc';
+clearEnv(); process.env.MONDAY_SYNC_SECRET = 'shared-abc';
 ok('prefix of real token rejected', status(req('shared-ab'), 'monday') === 401);
 ok('superstring of real token rejected', status(req('shared-abcd'), 'monday') === 401);
 ok('empty bearer rejected', status(req(''), 'monday') === 401);
-clearEnv(); process.env.PLAUD_SYNC_SECRET = '';
+clearEnv(); process.env.MONDAY_SYNC_SECRET = '';
 ok('empty-string secret counts as unset -> 500', status(req(''), 'monday') === 500);
 
 console.log(`\n${pass} passed, ${fail} failed`);

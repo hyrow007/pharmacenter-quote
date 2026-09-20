@@ -12,7 +12,7 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 // render a "Key points" block at the top of every SO card.
 //
 // Auth: requireSyncAuth(request, "so-synthesis") — see src/lib/sync-auth.ts.
-// Accepts SO_SYNTHESIS_SECRET if set, else the shared PLAUD_SYNC_SECRET.
+// Accepts SO_SYNTHESIS_SECRET, or CRON_SECRET from the daily cron.
 //
 // Request body (batch):
 //   {
