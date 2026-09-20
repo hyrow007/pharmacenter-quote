@@ -4,7 +4,7 @@
 # Usage from PowerShell in this folder:
 #   .\deploy.ps1 "short description of the change"
 #   .\deploy.ps1                    # prompts, rather than reusing a stale message
-#   .\deploy.ps1 -SkipTypecheck "…" # emergency escape hatch, avoid
+#   .\deploy.ps1 -SkipTypecheck "..." # emergency escape hatch, avoid
 #
 # It typechecks first and refuses to commit if that fails, then stages,
 # commits, rebases over origin/main and pushes. Vercel builds in ~60s.
@@ -103,7 +103,35 @@ if (-not $SkipTypecheck) {
         Write-Host "Typecheck passed." -ForegroundColor Green
     }
 }
+# A zero-byte .git/index.lock left behind by a crashed git process blocks
+# every subsequent `git add`. Git writes this file and renames it within
+# milliseconds, so a zero-byte lock more than 10 minutes old is debris, never
+# a live operation.
+#
+# Hit twice on 2026-09-20. The second time it cost a whole deploy, and the way
+# it cost it is the part worth fixing: `git add -A` failed, nothing was
+# staged, and the check below then printed "Nothing to commit." and exited 0.
+# A hard failure wearing the costume of a clean no-op -- the same shape as the
+# C4 auto-updater, and as a deploy that reports success on a commit Vercel
+# never built.
+$lockFile = Join-Path $PSScriptRoot ".git\index.lock"
+if (Test-Path $lockFile) {
+    $lock = Get-Item $lockFile -Force
+    $ageMin = ([DateTime]::Now - $lock.LastWriteTime).TotalMinutes
+    if ($lock.Length -eq 0 -and $ageMin -gt 10) {
+        Write-Host ("Removing stale .git/index.lock - 0 bytes, {0:N0} min old." -f $ageMin) -ForegroundColor Yellow
+        Remove-Item $lockFile -Force
+    } else {
+        Write-Error ("A git process is holding .git/index.lock ({0} bytes, {1:N0} min old). Close any running git or editor operation, then retry." -f $lock.Length, $ageMin)
+        exit 1
+    }
+}
+
 git add -A
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "git add failed - nothing staged, nothing committed, nothing pushed."
+    exit 1
+}
 $staged = git diff --cached --name-only
 if (-not $staged) {
     Write-Host "Nothing to commit." -ForegroundColor Yellow
@@ -116,11 +144,13 @@ $staged | Select-Object -First 20 | ForEach-Object { Write-Host "    $_" }
 if (@($staged).Count -gt 20) { Write-Host "    ... and $(@($staged).Count - 20) more" }
 
 git commit -m $msg
+if ($LASTEXITCODE -ne 0) { Write-Error "git commit failed - nothing pushed."; exit 1 }
 # Rebase over anything pushed from elsewhere (another chat, the GitHub UI,
 # another machine) so a stale local main can't turn a deploy into a rejected
 # push.
 git pull --rebase origin main
 git push
+if ($LASTEXITCODE -ne 0) { Write-Error "git push FAILED - this deploy did not ship."; exit 1 }
 
 Write-Host ""
 Write-Host "Pushed. Vercel is rebuilding - give it ~60s." -ForegroundColor Green
