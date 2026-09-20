@@ -37,6 +37,22 @@ const FORM_KEYS: Record<string, DictKey> = {
   capsule: "formCapsule",
   other: "formOther",
 };
+// state.form is overloaded: a dosage form for bulk/finished-product quotes,
+// a packaging type for contract-packaging ones. Two id namespaces in one
+// column, disambiguated by state.type -- the same split lib/workflows.ts
+// makes between DESCRIPTION_FORM_LABELS and DESCRIPTION_PACKAGING_LABELS.
+//
+// The old code used the dosage map for both, so a contract-packaging quote
+// rendered the raw id: "Contract Packaging · pouches", lowercase and
+// unlabelled. That was wrong in English too, not just untranslated.
+const PACKAGING_KEYS: Record<string, DictKey> = {
+  bottles: "packagingBottles",
+  blisters: "packagingBlisters",
+  sachets: "packagingSachets",
+  pouches: "packagingPouches",
+  kitting: "packagingKitting",
+  other: "packagingOther",
+};
 
 type T = ReturnType<typeof makeT>;
 
@@ -56,8 +72,14 @@ function relativeTime(iso: string, t: T): string {
   const day = Math.floor(hr / 24);
   if (day < 7) return t("timeDayAgo", { n: day });
   if (day < 30) return t("timeWeekAgo", { n: Math.floor(day / 7) });
-  if (day < 365) return t("timeMonthAgo", { n: Math.floor(day / 30) });
-  return t("timeYearAgo", { n: Math.floor(day / 365) });
+  // Spanish needs the singular ("hace 1 mes", not "hace 1 meses"). Caught on
+  // the live page, not by the key-resolution test -- both forms resolved.
+  if (day < 365) {
+    const n = Math.floor(day / 30);
+    return t(n === 1 ? "timeMonthAgoOne" : "timeMonthAgo", { n });
+  }
+  const years = Math.floor(day / 365);
+  return t(years === 1 ? "timeYearAgoOne" : "timeYearAgo", { n: years });
 }
 
 function localPart(email: string): string {
@@ -175,9 +197,11 @@ export default async function WorkflowsPage() {
       state.customerMode === "new"
         ? state.newCustomer?.contact || ""
         : (state.customerId && customerInfo[state.customerId]?.ship) || "";
+    const formKeys =
+      state.type === "contract-packaging" ? PACKAGING_KEYS : FORM_KEYS;
     const typeLabel = [
       state.type ? (TYPE_KEYS[state.type] ? t(TYPE_KEYS[state.type]) : state.type) : null,
-      state.form ? (FORM_KEYS[state.form] ? t(FORM_KEYS[state.form]) : state.form) : null,
+      state.form ? (formKeys[state.form] ? t(formKeys[state.form]) : state.form) : null,
     ]
       .filter(Boolean)
       .join(" · ");

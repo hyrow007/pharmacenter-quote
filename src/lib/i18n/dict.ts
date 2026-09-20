@@ -258,11 +258,27 @@ const en = {
   formCapsule: "Capsules",
   formOther: "Other",
 
+  // Packaging types (Contract Packaging). state.form is overloaded: it holds
+  // a dosage form for bulk/finished-product quotes and a packaging type for
+  // contract-packaging ones. Two id namespaces in one column, disambiguated
+  // by state.type -- see DESCRIPTION_PACKAGING_LABELS in lib/workflows.ts.
+  packagingBottles: "Bottles",
+  packagingBlisters: "Blisters",
+  packagingSachets: "Sachets",
+  packagingPouches: "Pouches",
+  packagingKitting: "Kitting",
+  packagingOther: "Other",
+
   // Relative time, longer buckets. timeJustNow/timeMinAgo/timeHrAgo/
   // timeDayAgo already exist above and are reused.
   timeWeekAgo: "{n}w ago",
   timeMonthAgo: "{n}mo ago",
   timeYearAgo: "{n}y ago",
+  // Spanish needs a singular form ("hace 1 mes", not "hace 1 meses"). English
+  // reads fine either way, so these are the same string -- kept as separate
+  // keys so the es side has somewhere to differ.
+  timeMonthAgoOne: "{n}mo ago",
+  timeYearAgoOne: "{n}y ago",
   newCustomerPlaceholder: "New customer",
   unknownCustomer: "Unknown customer",
   createYourFirst: "+ Create your first",
@@ -512,10 +528,20 @@ const es: typeof en = {
   formCapsule: "Cápsulas",
   formOther: "Otro",
 
+  // Tipos de empaque (Empaque por contrato).
+  packagingBottles: "Botellas",
+  packagingBlisters: "Blísteres",
+  packagingSachets: "Sobres",
+  packagingPouches: "Bolsas",
+  packagingKitting: "Kits",
+  packagingOther: "Otro",
+
   // Tiempo relativo, rangos largos.
   timeWeekAgo: "hace {n} sem",
   timeMonthAgo: "hace {n} meses",
   timeYearAgo: "hace {n} años",
+  timeMonthAgoOne: "hace {n} mes",
+  timeYearAgoOne: "hace {n} año",
   newCustomerPlaceholder: "Cliente nuevo",
   unknownCustomer: "Cliente desconocido",
   createYourFirst: "+ Cree el primero",
