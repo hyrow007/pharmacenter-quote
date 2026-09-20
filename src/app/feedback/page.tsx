@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import FeedbackBoard, { type FeedbackDisplayRow } from "./FeedbackBoard";
@@ -43,7 +43,8 @@ const KNOWN_APPS = ["quote", "formulas", "packing-list"] as const;
 export default async function FeedbackPage({
   searchParams,
 }: {
-  searchParams?: { from?: string };
+  // Next 15 made searchParams (and params) a Promise. Awaited below.
+  searchParams?: Promise<{ from?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -75,7 +76,8 @@ export default async function FeedbackPage({
   }
   const rows = rawRows ?? [];
 
-  const fromParam = (searchParams?.from ?? "").toLowerCase();
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const fromParam = (resolvedSearchParams.from ?? "").toLowerCase();
   const postApp = (KNOWN_APPS as readonly string[]).includes(fromParam)
     ? fromParam
     : "quote";

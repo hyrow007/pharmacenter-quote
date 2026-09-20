@@ -1,6 +1,7 @@
+import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { SignInButton } from "./auth-buttons";
 
 export default async function Home({
@@ -25,11 +26,18 @@ export default async function Home({
     hostHeader.startsWith("meeting.") || hostHeader.startsWith("meetings.");
   const isOrderHost =
     hostHeader.startsWith("order.") || hostHeader.startsWith("orders.");
+  // The hub hosts: pharmacenter.app and pharmacenter.tools (www. of either).
+  // An exact match after stripping the port and a www. prefix, because every
+  // other host ENDS with the apex too.
+  const isApexHost = HUB_HOSTS.has(
+    hostHeader.split(":")[0].replace(/^www\./, ""),
+  );
 
   if (user) {
     if (isFormulaHost) redirect("/formulas");
     if (isOrderHost) redirect("/orders");
     if (isMeetingHost) redirect("/meetings");
+    if (isApexHost) redirect("/hub");
     redirect("/workflows");
   }
 
@@ -39,7 +47,13 @@ export default async function Home({
   // Sign-in copy — swapped per subdomain so operators landing on
   // formula.pharmacenter.app see "Formula / Catalog", those on
   // orders.pharmacenter.app see "Sales Order / Tracker", etc.
-  const copy = isFormulaHost
+  const copy = isApexHost
+    ? {
+        titleTop: "PharmaCenter",
+        titleSub: "Tools",
+        lede: "One place for the tools we use for work. Sign in with your PharmaCenter Google account to continue.",
+      }
+    : isFormulaHost
     ? {
         titleTop: "Formula",
         titleSub: "Catalog",

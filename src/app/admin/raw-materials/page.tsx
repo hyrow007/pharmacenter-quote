@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import AppHeader from "../../_components/AppHeader";
 import RawMaterialsBoard, { type RawMaterialRow } from "./RawMaterialsBoard";
+import { describeFreshness } from "@/lib/freshness";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // /admin/raw-materials — manage the Fishbowl-synced raw material catalogue
 // plus any manual one-off entries. Editable: default_cost_per_kg (override
@@ -33,6 +36,20 @@ export default async function AdminRawMaterialsPage() {
     .order("name", { ascending: true });
 
   const rows: RawMaterialRow[] = error ? [] : ((data ?? []) as RawMaterialRow[]);
+
+  // Newest synced_at across the catalogue = when the Fishbowl feed last
+  // landed. Manual one-off rows carry no synced_at, so they are skipped
+  // rather than dragging the reading backwards.
+  const lastSyncAt = rows.reduce<string | null>(
+    (newest, r) =>
+      typeof r.synced_at === "string" && (!newest || r.synced_at > newest)
+        ? r.synced_at
+        : newest,
+    null,
+  );
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
+  const freshness = describeFreshness(lastSyncAt, t);
 
   return (
     <div className="app-shell">
@@ -73,7 +90,40 @@ export default async function AdminRawMaterialsPage() {
               blend category, and notes are overlays the lab team maintains
               here — Fishbowl never overwrites them.
             </p>
+            <p
+              className="lede"
+              style={{
+                marginTop: 8,
+                marginBottom: 0,
+                fontSize: 12,
+                color: freshness.stale
+                  ? "#8b2f2f"
+                  : "var(--ink-3, #8a9498)",
+                fontWeight: freshness.stale ? 700 : undefined,
+              }}
+              title={lastSyncAt ?? undefined}
+            >
+              {t("syncedAgo", { rel: freshness.relative })}
+            </p>
           </div>
+
+          {freshness.stale ? (
+            <div
+              role="status"
+              style={{
+                margin: "0 0 16px",
+                padding: "10px 14px",
+                background: "#fdecec",
+                border: "1px solid #f5c2c2",
+                color: "#8b2f2f",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {t("syncStale", { rel: freshness.relative })}
+            </div>
+          ) : null}
 
           <RawMaterialsBoard initialRows={rows} />
         </div>

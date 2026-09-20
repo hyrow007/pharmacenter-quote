@@ -37,7 +37,8 @@ export default function NavLinks({
     | "formulas"
     | "packing-list"
     | "meetings"
-    | "orders";
+    | "orders"
+    | "hub";
   lang: Lang;
 }) {
   const pathname = usePathname() || "";

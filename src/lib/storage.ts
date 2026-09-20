@@ -12,7 +12,7 @@
 // by URL. File paths are uuid-prefixed so listing the bucket doesn't leak
 // anything useful — knowing the bucket name isn't enough to discover files.
 
-import { supabase } from "./supabase";
+import { getBrowserClient } from "./supabase/client";
 
 export const ATTACHMENTS_BUCKET = "quote-attachments";
 
@@ -23,8 +23,12 @@ export type WorkflowAttachment = {
   name: string;
   size: number;
   type: string;
-  // Public URL — what the server uses to download for the monday push.
-  url: string;
+  // Legacy public URL. Empty for anything uploaded after 2026-09-20: the
+  // quote-attachments bucket is private, and both readers (the monday push and
+  // the workflow page) now work from `path` instead -- the push downloads with
+  // the service role, the page signs a short-lived URL at render. Kept on the
+  // type because rows written before that date still carry one.
+  url?: string;
 };
 
 // Lightweight uuid (no need for a dep — these IDs are non-cryptographic).
@@ -50,12 +54,13 @@ export async function uploadAttachment(
   workflowUid: string,
   file: File,
 ): Promise<WorkflowAttachment | null> {
-  if (!supabase) {
+  const sb = getBrowserClient();
+  if (!sb) {
     console.error("Supabase client not configured; cannot upload attachment.");
     return null;
   }
   const path = `workflows/${workflowUid}/${uid()}-${safeFilename(file.name)}`;
-  const { error } = await supabase.storage
+  const { error } = await sb.storage
     .from(ATTACHMENTS_BUCKET)
     .upload(path, file, {
       cacheControl: "3600",
@@ -66,13 +71,13 @@ export async function uploadAttachment(
     console.error("uploadAttachment failed:", error.message);
     return null;
   }
-  const { data: pub } = supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(path);
+  // No getPublicUrl here any more. It produced a URL that worked for anyone
+  // who had it, which is exactly what making the bucket private was for.
   return {
     path,
     name: file.name,
     size: file.size,
     type: file.type || "application/octet-stream",
-    url: pub.publicUrl,
   };
 }
 
@@ -82,8 +87,9 @@ export async function uploadAttachment(
  * to clean up.
  */
 export async function removeAttachment(path: string): Promise<boolean> {
-  if (!supabase) return false;
-  const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).remove([path]);
+  const sb = getBrowserClient();
+  if (!sb) return false;
+  const { error } = await sb.storage.from(ATTACHMENTS_BUCKET).remove([path]);
   if (error) {
     console.error("removeAttachment failed:", error.message);
     return false;

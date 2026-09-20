@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 
 // POST /api/formulas/[id]/panel-chat — the Panel tab's edit assistant.
 //

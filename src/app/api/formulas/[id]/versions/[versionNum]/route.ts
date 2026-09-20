@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { versionFromRow } from "@/lib/formulas";
 
 // GET /api/formulas/[id]/versions/[versionNum]

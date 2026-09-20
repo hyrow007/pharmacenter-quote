@@ -3693,22 +3693,7 @@ export default function PouchCostingBoard({
               slotKeyOf(line)?.label ??
               SLOTS.find((s) => s.slot === line.slot)?.label ??
               line.slot;
-            const rawIssue = r.issues.find((i) => i.lineId === line.id);
-            // The pouch material's qty per unit is DERIVED from the film
-            // yield in Considerations (pouches per unit ÷ pouches per UOM),
-            // so a missing qty on that row always means a missing yield.
-            // Say so, in pouch terms, instead of the shared lib's generic
-            // "quantity missing" — the user cannot type a qty on this row.
-            const issue =
-              rawIssue &&
-              rawIssue.reason === "no_qty" &&
-              slotKeyOf(line)?.perPouch
-                ? {
-                    ...rawIssue,
-                    message:
-                      "Film yield not set — enter pouches per UOM under Considerations (premade bags = 1).",
-                  }
-                : rawIssue;
+            const issue = r.issues.find((i) => i.lineId === line.id);
             return (
               <div
                 key={line.id}
