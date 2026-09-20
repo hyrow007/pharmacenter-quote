@@ -7,6 +7,43 @@
 > silently dropped excluded files. Retired 2026-09-19. **Anything written
 > into `C:\q` now will not reach production.**
 
+## Read this before writing code here — current as of 2026-09-20
+
+This repo serves **four identities** behind host rewrites — Quote, Formula,
+Orders, Meetings — plus the **Hub** at `pharmacenter.app`. Three separate
+project chats (Quote Flows, Formulas, Sales Order tracker) all edit this one
+repo, blind to each other. Ownership and the full map are in the project docs
+`claude/working-agreement.md` and `claude/ecosystem-registry.md`.
+
+1. **Next.js 15.5 + React 19.** `params` and `searchParams` are Promises —
+   `await` them. `cookies()` and `headers()` are async.
+2. **`tsc` is not a build.** The `deploy.ps1` typecheck cannot see Next's
+   generated `PageProps`, so a wrongly-typed route prop passes it and fails on
+   Vercel. Use `.\deploy.ps1 -FullBuild "msg"` when you touch route props,
+   `package.json` or `next.config`.
+3. **Supabase clients are in `src/lib/supabase/`:** `server.ts` for server
+   components and routes, `client.ts` → `getBrowserClient()` for client
+   components, `rows.ts` for row types. **There is no anon client.** The old
+   `import { supabase } from "@/lib/supabase"` was deleted — do not recreate it.
+   It ran every query as the anonymous role, which is how the customer list
+   ended up readable by anyone holding the public key.
+4. **Storage is private.** Never call `getPublicUrl`; never build an
+   `/object/public/` URL by hand. Sign with `createSignedUrls()` (see
+   `src/app/api/formulas/[id]/files/route.ts`), or on the server use the
+   service role's `.download(path)` (see `src/app/api/monday/create-item`).
+5. **Two files are byte-identical with `pharmacenter-packing-list`:**
+   `src/app/app-chrome.css` and `src/lib/freshness.ts`. Change one, change the
+   other, `diff` them. No shared package exists; this is the only link.
+6. **Never name a font family literally in `app-chrome.css`.** Packing loads
+   fonts via `next/font` under hashed names — a literal lookup silently falls
+   back to Georgia. Use `var(--serif)`.
+7. **No schema here.** Tables and policies live in `pharmacenter-db`. New table
+   → migration there, a row in its `TABLES.md`, `.\Check-Tables.ps1` CLEAN.
+8. **A push is not a deployment.** Vercel has silently skipped a push before.
+   After deploying, check the change on the live page.
+9. **A new tool gets a hub tile** — `TOOLS` in `src/app/hub/page.tsx`, plus a
+   name and description key in both dictionaries.
+
 Customer-facing quote generator for PharmaCenter sales. Architectural twin of the
 Packing List generator: editor on the left, live 8.5×11 sheet on the right,
 autosave to `localStorage`, Print/Save-PDF button.
