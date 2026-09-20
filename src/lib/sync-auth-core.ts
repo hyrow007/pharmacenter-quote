@@ -52,7 +52,23 @@ export const DEDICATED: Record<SyncScope, string> = {
 
 // Scopes Vercel Cron invokes itself. Vercel sends CRON_SECRET and nothing
 // else, so these must accept it or the scheduled run 401s.
-const CRON_SCOPES: ReadonlySet<SyncScope> = new Set<SyncScope>(["monday"]);
+//
+// translations and synthesis were added 2026-09-20 when the work moved
+// server-side. /api/cron/daily calls these three endpoints over HTTP with
+// CRON_SECRET rather than duplicating their query logic, so each must accept
+// that secret. The dedicated secrets still work for manual and laptop callers.
+//
+// Why they moved: a Cowork scheduled task cannot make an authenticated HTTP
+// call at all. Its sandbox has no outbound network, its shell is Linux (so
+// Windows scripts are unrunnable), its web fetch cannot set headers, and the
+// browser route is refused by a credential classifier. Four walls, no gaps.
+// See claude/automation.md.
+const CRON_SCOPES: ReadonlySet<SyncScope> = new Set<SyncScope>([
+  "monday",
+  "meeting-translations",
+  "so-synthesis",
+  "so-synthesis-inputs",
+]);
 
 export const SHARED = "PLAUD_SYNC_SECRET";
 
