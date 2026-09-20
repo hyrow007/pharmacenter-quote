@@ -10,6 +10,9 @@ import {
 } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
+import { I18nProvider } from "@/lib/i18n/context";
+import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT, type DictKey } from "@/lib/i18n/dict";
 
 // Workflow inbox — every quote workflow visible to the signed-in user.
 // Server component so the customer/product joins happen on the server in one
@@ -17,31 +20,44 @@ import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
 // search box is delegated to <WorkflowTable/> (client) which receives the
 // pre-shaped rows.
 
-const TYPE_LABELS: Record<string, string> = {
-  "bulk": "Bulk",
-  "contract-packaging": "Contract Packaging",
-  "finished-product": "Finished Product",
-  "other": "Other",
+// Quote type / dosage form are stored in English in the DB. These map the
+// stored value to a dictionary key so the *display* follows the language
+// cookie; an unrecognised value falls back to the raw string rather than
+// rendering a key name at the user.
+const TYPE_KEYS: Record<string, DictKey> = {
+  "bulk": "quoteTypeBulk",
+  "contract-packaging": "quoteTypeContractPackaging",
+  "finished-product": "quoteTypeFinishedProduct",
+  "other": "quoteTypeOther",
 };
-const FORM_LABELS: Record<string, string> = {
-  softgel: "Softgels", gummy: "Gummies", tablet: "Tablets", capsule: "Capsules", other: "Other",
+const FORM_KEYS: Record<string, DictKey> = {
+  softgel: "formSoftgel",
+  gummy: "formGummy",
+  tablet: "formTablet",
+  capsule: "formCapsule",
+  other: "formOther",
 };
 
-function relativeTime(iso: string): string {
+type T = ReturnType<typeof makeT>;
+
+// Computed server-side so the client table needs no date library. Buckets
+// match the ones describeFreshness() uses, and reuse the same dictionary
+// keys where they overlap.
+function relativeTime(iso: string, t: T): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
   const diff = Math.max(0, now - then);
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return "now";
+  if (sec < 60) return t("timeJustNow");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t("timeMinAgo", { n: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t("timeHrAgo", { n: hr });
   const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  if (day < 30) return `${Math.floor(day / 7)}w ago`;
-  if (day < 365) return `${Math.floor(day / 30)}mo ago`;
-  return `${Math.floor(day / 365)}y ago`;
+  if (day < 7) return t("timeDayAgo", { n: day });
+  if (day < 30) return t("timeWeekAgo", { n: Math.floor(day / 7) });
+  if (day < 365) return t("timeMonthAgo", { n: Math.floor(day / 30) });
+  return t("timeYearAgo", { n: Math.floor(day / 365) });
 }
 
 function localPart(email: string): string {
@@ -64,6 +80,8 @@ const usdFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export default async function WorkflowsPage() {
+  const lang = await getLangFromCookie();
+  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -151,15 +169,15 @@ export default async function WorkflowsPage() {
     const state = row.state;
     const customerName =
       state.customerMode === "new"
-        ? state.newCustomer?.name || "New customer"
-        : (state.customerId && customerInfo[state.customerId]?.name) || "Unknown customer";
+        ? state.newCustomer?.name || t("newCustomerPlaceholder")
+        : (state.customerId && customerInfo[state.customerId]?.name) || t("unknownCustomer");
     const customerSub =
       state.customerMode === "new"
         ? state.newCustomer?.contact || ""
         : (state.customerId && customerInfo[state.customerId]?.ship) || "";
     const typeLabel = [
-      state.type ? TYPE_LABELS[state.type] || state.type : null,
-      state.form ? FORM_LABELS[state.form] || state.form : null,
+      state.type ? (TYPE_KEYS[state.type] ? t(TYPE_KEYS[state.type]) : state.type) : null,
+      state.form ? (FORM_KEYS[state.form] ? t(FORM_KEYS[state.form]) : state.form) : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -214,7 +232,7 @@ export default async function WorkflowsPage() {
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
-      updatedRelative: relativeTime(row.updated_at),
+      updatedRelative: relativeTime(row.updated_at, t),
       updatedSort: new Date(row.updated_at).getTime(),
       pushed: !!row.monday_item_id,
       status,
@@ -229,19 +247,19 @@ export default async function WorkflowsPage() {
         <div className="page__inner">
           <div className="page-header">
             <div>
-              <h1 className="page-header__title">Work Flows</h1>
-              <p className="page-header__subtitle">
-                Your drafts and every pushed workflow across the workspace.
-              </p>
+              <h1 className="page-header__title">{t("workflowsTitle")}</h1>
+              <p className="page-header__subtitle">{t("workflowsLede")}</p>
             </div>
             <div className="page-header__action">
               <Link href="/start?fresh=1" className="button-primary">
-                + New workflow
+                {t("newWorkflow")}
               </Link>
             </div>
           </div>
 
-          <WorkflowTable rows={display} />
+          <I18nProvider lang={lang}>
+            <WorkflowTable rows={display} />
+          </I18nProvider>
         </div>
       </main>
     </div>

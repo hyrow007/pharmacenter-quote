@@ -224,6 +224,53 @@ const en = {
   warnProduct:
     '⚠ Plaud text mentions "{said}" but this SO\'s line items are {has}. Verify.',
   noMatchingProduct: "no matching product on file",
+
+  // ---- Workflow inbox (/workflows) ----
+  // Finding I3: the nav was translated but the page under it was not, so on
+  // the Spanish setting this screen rendered "Flujos de trabajo" in the nav
+  // above an entirely English page. Half-translated reads worse than
+  // untranslated.
+  workflowsTitle: "Work Flows",
+  workflowsLede: "Your drafts and every pushed workflow across the workspace.",
+  newWorkflow: "+ New workflow",
+  workflowsSearch: "Search quote #, customer, description, type, or submitter…",
+  workflowsEmpty: "No workflows yet",
+  colQuoteNumber: "Quote #",
+  colQuoteType: "Quote type",
+  colSubmitter: "Submitter",
+  deleteWorkflow: "Delete workflow",
+  deleteNamed: "Delete {name}",
+  addShortDescription: "Add a short description",
+  workflowDescriptionAria: "Workflow description",
+  savingEllipsis: "Saving…",
+  statusWon: "Won",
+  statusLost: "Lost",
+
+  // Quote type / dosage form. Values are stored in English in the DB; these
+  // are display labels only.
+  quoteTypeBulk: "Bulk",
+  quoteTypeContractPackaging: "Contract Packaging",
+  quoteTypeFinishedProduct: "Finished Product",
+  quoteTypeOther: "Other",
+  formSoftgel: "Softgels",
+  formGummy: "Gummies",
+  formTablet: "Tablets",
+  formCapsule: "Capsules",
+  formOther: "Other",
+
+  // Relative time, longer buckets. timeJustNow/timeMinAgo/timeHrAgo/
+  // timeDayAgo already exist above and are reused.
+  timeWeekAgo: "{n}w ago",
+  timeMonthAgo: "{n}mo ago",
+  timeYearAgo: "{n}y ago",
+  newCustomerPlaceholder: "New customer",
+  unknownCustomer: "Unknown customer",
+  createYourFirst: "+ Create your first",
+  noWorkflowsMatch: 'No workflows match "{q}".',
+  confirmDeleteWorkflow:
+    "Delete {name}? This cannot be undone. Files in storage will remain.",
+  deleteForbidden: "Only the workflow owner or an admin can delete this.",
+  deleteFailed: "Delete failed: {reason}",
 };
 
 const es: typeof en = {
@@ -434,6 +481,50 @@ const es: typeof en = {
   warnProduct:
     '⚠ El texto de Plaud menciona "{said}" pero los ítems de línea de esta SO son {has}. Verifique.',
   noMatchingProduct: "sin producto coincidente en el sistema",
+
+  // ---- Bandeja de flujos de trabajo (/workflows) ----
+  workflowsTitle: "Flujos de trabajo",
+  workflowsLede:
+    "Sus borradores y todos los flujos de trabajo publicados en el espacio de trabajo.",
+  newWorkflow: "+ Nuevo flujo de trabajo",
+  workflowsSearch:
+    "Buscar por n.º de cotización, cliente, descripción, tipo o solicitante…",
+  workflowsEmpty: "Aún no hay flujos de trabajo",
+  colQuoteNumber: "N.º de cotización",
+  colQuoteType: "Tipo de cotización",
+  colSubmitter: "Solicitante",
+  deleteWorkflow: "Eliminar flujo de trabajo",
+  deleteNamed: "Eliminar {name}",
+  addShortDescription: "Agregue una descripción breve",
+  workflowDescriptionAria: "Descripción del flujo de trabajo",
+  savingEllipsis: "Guardando…",
+  statusWon: "Ganada",
+  statusLost: "Perdida",
+
+  // Tipo de cotización / forma farmacéutica.
+  quoteTypeBulk: "Granel",
+  quoteTypeContractPackaging: "Empaque por contrato",
+  quoteTypeFinishedProduct: "Producto terminado",
+  quoteTypeOther: "Otro",
+  formSoftgel: "Cápsulas blandas",
+  formGummy: "Gomitas",
+  formTablet: "Tabletas",
+  formCapsule: "Cápsulas",
+  formOther: "Otro",
+
+  // Tiempo relativo, rangos largos.
+  timeWeekAgo: "hace {n} sem",
+  timeMonthAgo: "hace {n} meses",
+  timeYearAgo: "hace {n} años",
+  newCustomerPlaceholder: "Cliente nuevo",
+  unknownCustomer: "Cliente desconocido",
+  createYourFirst: "+ Cree el primero",
+  noWorkflowsMatch: 'Ningún flujo de trabajo coincide con "{q}".',
+  confirmDeleteWorkflow:
+    "¿Eliminar {name}? Esta acción no se puede deshacer. Los archivos almacenados se conservarán.",
+  deleteForbidden:
+    "Solo el propietario del flujo de trabajo o un administrador puede eliminarlo.",
+  deleteFailed: "No se pudo eliminar: {reason}",
 };
 
 export type DictKey = keyof typeof en;
