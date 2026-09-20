@@ -14,7 +14,7 @@ import {
   type WorkflowRow,
   type WorkflowStatus,
 } from "@/lib/workflows";
-import { type Customer } from "@/lib/supabase/legacy";
+import { type Customer } from "@/lib/supabase/rows";
 
 // Draft row used by the inline Won form. Both fields are strings until we
 // validate-and-coerce on save (numbers via parseFloat). Keeps controlled

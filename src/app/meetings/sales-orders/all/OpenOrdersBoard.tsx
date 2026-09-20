@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { makeT, type Lang } from "@/lib/i18n/dict";
+import { describeFreshness } from "@/lib/freshness";
 
 // Client-side board for /meetings/sales-orders/all.
 //
@@ -263,7 +264,7 @@ export default function OpenOrdersBoard({
     }
   }
 
-  const freshness = describeFreshness(syncedAt);
+  const freshness = describeFreshness(syncedAt, t, lang);
 
   return (
     <div>
@@ -1054,21 +1055,3 @@ function formatMoney(n: number | null): string {
 
 // Freshness: how long ago did the sync run, and is it >26h old (i.e.
 // last night's job failed)? Threshold matches the spec.
-function describeFreshness(iso: string | null): {
-  relative: string;
-  stale: boolean;
-} {
-  if (!iso) return { relative: "never", stale: true };
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return { relative: "never", stale: true };
-  const ageMs = Date.now() - t;
-  const ageH = ageMs / (60 * 60 * 1000);
-  const stale = ageH > 26;
-  let relative: string;
-  if (ageMs < 60_000) relative = "just now";
-  else if (ageMs < 60 * 60_000)
-    relative = `${Math.floor(ageMs / 60_000)} min ago`;
-  else if (ageH < 24) relative = `${Math.floor(ageH)}h ago`;
-  else relative = `${Math.floor(ageH / 24)}d ago`;
-  return { relative, stale };
-}

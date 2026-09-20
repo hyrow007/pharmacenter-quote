@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, Suspense, type ChangeEvent, type FormEvent, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase, type Product } from "@/lib/supabase/legacy";
+import { getBrowserClient } from "@/lib/supabase/client";
+import { type Product } from "@/lib/supabase/rows";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
 import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters, blankPackagingSpecPouches } from "@/lib/workflows";
 import PackagingSpecSection from "./PackagingSpecSection";
@@ -432,7 +433,7 @@ function StartWorkflow() {
   }, [hydrated, state.customerId]);
 
   useEffect(() => {
-    const sb = supabase;
+    const sb = getBrowserClient();
     if (!sb) return;
     const term = customerSearch.trim();
     if (term.length === 0) { setCustomers([]); return; }
@@ -451,7 +452,7 @@ function StartWorkflow() {
   // Hydrate customer name from ID (when coming back from review).
   useEffect(() => {
     if (!state.customerId || customerName) return;
-    const sb = supabase;
+    const sb = getBrowserClient();
     if (!sb) return;
     sb.from("customers").select("id, name, default_ship_to").eq("id", state.customerId).maybeSingle()
       .then(({ data }) => {
@@ -469,7 +470,7 @@ function StartWorkflow() {
 
   // Debounced search per product card.
   useEffect(() => {
-    const sb = supabase;
+    const sb = getBrowserClient();
     if (!sb) return;
     const handles: ReturnType<typeof setTimeout>[] = [];
     for (const p of state.products) {
@@ -496,7 +497,7 @@ function StartWorkflow() {
 
   // Hydrate product display names from IDs (when coming back from review).
   useEffect(() => {
-    const sb = supabase;
+    const sb = getBrowserClient();
     if (!sb) return;
     for (const p of state.products) {
       if (!p.productId || p._name) continue;

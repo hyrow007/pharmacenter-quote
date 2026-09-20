@@ -4,6 +4,7 @@
 # Usage from PowerShell in this folder:
 #   .\deploy.ps1 "short description of the change"
 #   .\deploy.ps1                    # prompts, rather than reusing a stale message
+#   .\deploy.ps1 -FullBuild "..."     # real next build, not just tsc
 #   .\deploy.ps1 -SkipTypecheck "..." # emergency escape hatch, avoid
 #
 # It typechecks first and refuses to commit if that fails, then stages,
@@ -27,6 +28,11 @@
 
 param(
     [switch] $SkipTypecheck,
+    # Run a real `next build` instead of `tsc`. Slower (~60s vs ~10s) but it
+    # catches a class `tsc` structurally cannot -- see the note on the gate
+    # below. Use it whenever package.json, next.config or a route's props
+    # change; deploy.ps1 turns it on by itself when it spots the first of those.
+    [switch] $FullBuild,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $Message
 )
@@ -51,6 +57,30 @@ if (-not $SkipTypecheck) {
     if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
         Write-Host "npx not found - skipping typecheck. Install Node to enable it." -ForegroundColor Yellow
     } else {
+        # Dependencies can be stale as well as missing. npm rewrites
+        # node_modules\.package-lock.json on every install, so if package.json is
+        # NEWER than that file, what is installed is not what package.json asks
+        # for -- and typechecking against the old tree proves nothing about the
+        # build Vercel is about to run. Found during the Next 14 -> 15 upgrade:
+        # the gate would happily have passed on React 18 types while the commit
+        # said React 19.
+        $depsStale = $false
+        $installedMarker = Join-Path $PSScriptRoot "node_modules\.package-lock.json"
+        $pkgJson = Join-Path $PSScriptRoot "package.json"
+        if ((Test-Path $installedMarker) -and (Test-Path $pkgJson)) {
+            if ((Get-Item $pkgJson).LastWriteTime -gt (Get-Item $installedMarker).LastWriteTime) {
+                $depsStale = $true
+                $FullBuild = $true   # a dependency change is exactly when tsc is not enough
+                Write-Host "package.json is newer than the installed tree - reinstalling." -ForegroundColor Yellow
+            }
+        }
+        if ($depsStale) {
+            Push-Location $PSScriptRoot
+            npm install
+            $instCode = $LASTEXITCODE
+            Pop-Location
+            if ($instCode -ne 0) { Write-Error "Dependency install failed - cannot typecheck."; exit 1 }
+        }
         if (-not (Test-Path "$PSScriptRoot\node_modules")) {
             # First run on a fresh clone. ~1-2 minutes, once.
             #
@@ -88,19 +118,42 @@ if (-not $SkipTypecheck) {
                 '/// <reference types="next/image-types/global" />'
             )
         }
-        Write-Host "Typechecking..." -ForegroundColor Cyan
+        # WHAT tsc HERE CANNOT CATCH, and why -FullBuild exists.
+        #
+        # tsconfig-check.json deliberately excludes ".next/types/**/*.ts", which
+        # only exists after a build. That directory is where Next puts the
+        # generated PageProps/LayoutProps constraints that check a route's
+        # `params` and `searchParams` against the framework's expectations.
+        #
+        # So a route typed `searchParams?: { from?: string }` passes this gate
+        # and fails Vercel's build. That is exactly what happened on the Next 15
+        # upgrade, where those props became Promises: tsc said 0 errors, the
+        # real build failed on src/app/feedback/page.tsx. The gate is still worth
+        # having -- it catches everything else in seconds -- but it is not a
+        # substitute for a build, and it should not be described as one.
         Push-Location $PSScriptRoot
-        npx tsc -p tsconfig-check.json --noEmit
+        if ($FullBuild) {
+            Write-Host "Running a full next build (slower, checks route props too)..." -ForegroundColor Cyan
+            npx next build
+        } else {
+            Write-Host "Typechecking..." -ForegroundColor Cyan
+            npx tsc -p tsconfig-check.json --noEmit
+        }
         $tscCode = $LASTEXITCODE
         Pop-Location
         if ($tscCode -ne 0) {
             Write-Host ""
-            Write-Host "TYPECHECK FAILED - nothing staged, committed or pushed." -ForegroundColor Red
+            if ($FullBuild) {
+                Write-Host "BUILD FAILED - nothing staged, committed or pushed." -ForegroundColor Red
+            } else {
+                Write-Host "TYPECHECK FAILED - nothing staged, committed or pushed." -ForegroundColor Red
+                Write-Host "If this passes but Vercel fails, retry with -FullBuild." -ForegroundColor DarkGray
+            }
             Write-Host "Fix the errors above, then run deploy again." -ForegroundColor Red
             Write-Host "To deploy anyway (you almost never want this): .\deploy.ps1 -SkipTypecheck ""msg""" -ForegroundColor DarkGray
             exit 1
         }
-        Write-Host "Typecheck passed." -ForegroundColor Green
+        Write-Host $(if ($FullBuild) { "Build passed." } else { "Typecheck passed." }) -ForegroundColor Green
     }
 }
 # A zero-byte .git/index.lock left behind by a crashed git process blocks

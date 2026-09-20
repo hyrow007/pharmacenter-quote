@@ -11,14 +11,20 @@
  * nothing on the page said how old it was. An automated job that leaves no
  * visible evidence will eventually stop running silently.
  *
- * Keep this identical to pharmacenter-packing-list/src/lib/freshness.ts.
+ * This module is duplicated verbatim across the two PharmaCenter repos,
+ * pharmacenter-packing-list and pharmacenter-quote. The two copies must
+ * stay BYTE-IDENTICAL: `diff` between them should print nothing. Keeping
+ * the header symmetric (rather than each pointing at the other) is what
+ * makes that check mechanical instead of a reading exercise. Change one,
+ * change the other in the same session.
  *
- * TODO: three older copies of this logic still live inline and should
- * fold into this module -- they already disagree on shape:
- *   - src/app/meetings/sales-orders/all/OpenOrdersBoard.tsx (has the 26h rule, English only)
- *   - src/app/meetings/sales-orders/orders/[so]/page.tsx    (has the 26h rule, English only)
- *   - src/app/orders/page.tsx                               (i18n-aware, NO staleness at all)
- * That last one is why the Orders landing shows an age but never warns.
+ * The three inline copies this module was written to replace are gone as of
+ * 2026-09-20. They had drifted in ways that showed on screen: two were
+ * English-only regardless of the language toggle, and the third -- the one
+ * behind the Orders landing page -- had no staleness concept at all, which
+ * is why that page could read "hace 10h" and stay silent at ten days. It
+ * also rounded where this one floors, so the same timestamp read "1h ago"
+ * on Orders and "31 min ago" everywhere else.
  */
 
 export const STALE_AFTER_HOURS = 26;
@@ -86,6 +92,7 @@ function phrase(
 export function describeFreshness(
   iso: string | null | undefined,
   t?: Translate,
+  lang?: "en" | "es",
 ): Freshness {
   if (!iso) {
     return { relative: phrase(t, "syncNever"), stale: true, ageHours: null };
@@ -104,7 +111,13 @@ export function describeFreshness(
   else if (ageMs < 60 * 60_000)
     relative = phrase(t, "timeMinAgo", Math.floor(ageMs / 60_000));
   else if (ageHours < 24) relative = phrase(t, "timeHrAgo", Math.floor(ageHours));
-  else relative = phrase(t, "timeDayAgo", Math.floor(ageHours / 24));
+  else if (ageHours < 24 * 30)
+    relative = phrase(t, "timeDayAgo", Math.floor(ageHours / 24));
+  // Past a month "847d ago" stops being information. The Orders landing's
+  // inline copy did this and it was the one thing it did better, so it is
+  // kept here rather than lost in the consolidation. `lang` only picks the
+  // date locale; everything above is translated through `t`.
+  else relative = new Date(ms).toLocaleDateString(lang === "es" ? "es" : "en-US");
 
   return { relative, stale, ageHours };
 }
