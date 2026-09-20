@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import AdminPanel, { type AdminPanelUser } from "./AdminPanel";

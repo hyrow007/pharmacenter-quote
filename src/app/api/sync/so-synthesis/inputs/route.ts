@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireSyncAuth } from "@/lib/sync-auth";
 
 // GET /api/sync/so-synthesis/inputs
 //
@@ -9,10 +8,8 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 // key-point bullets — a pre-joined view of Fishbowl, Monday, and
 // Plaud meeting notes for every SO that has activity on any source.
 //
-// Auth: requireSyncAuth(request, "so-synthesis-inputs") — see
-// src/lib/sync-auth.ts. Shares SO_SYNTHESIS_SECRET with the write side if
-// or CRON_SECRET from the daily cron. Read-only: the generator step
-// can only fetch what it needs to summarize, no wider access.
+// Auth: shared bearer PLAUD_SYNC_SECRET (task can only read what the
+// generator step needs — no wider access).
 //
 // Query params:
 //   ?so=<n>       only this SO (useful for one-off regeneration)
@@ -54,8 +51,23 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const denied = requireSyncAuth(request, "so-synthesis-inputs");
-  if (denied) return denied;
+  const expected = process.env.PLAUD_SYNC_SECRET;
+  if (!expected) {
+    return NextResponse.json(
+      { ok: false, error: "server_misconfigured" },
+      { status: 500 },
+    );
+  }
+  const authz = request.headers.get("authorization") || "";
+  const provided = authz.startsWith("Bearer ")
+    ? authz.slice("Bearer ".length).trim()
+    : "";
+  if (provided !== expected) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized" },
+      { status: 401 },
+    );
+  }
 
   const url = new URL(request.url);
   const singleSo = url.searchParams.get("so")?.trim() || null;

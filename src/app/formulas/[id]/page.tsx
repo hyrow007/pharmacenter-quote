@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import AppHeader from "../../_components/AppHeader";
 import { I18nProvider } from "@/lib/i18n/context";
 import { getLangFromCookie } from "@/lib/i18n/server";

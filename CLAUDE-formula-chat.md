@@ -56,7 +56,7 @@ via `/api/formulas/[id]` (costingComputed).
   '%@pharmacenterusa.com'`; inserts pin `author_email = auth.email()`.
 - The BROWSER supabase client is anonymous (auth = httpOnly cookies) —
   authed reads/writes go through server routes using `createClient`
-  from `@/lib/supabase/server` (see notes/files/panel-chat routes for the
+  from `@/lib/auth/server` (see notes/files/panel-chat routes for the
   pattern). File uploads use signed upload URLs (sign → browser PUT →
   commit) to dodge the ~4.5MB serverless body cap; bucket
   "formula-files", metadata table `gummy_formula_files`.

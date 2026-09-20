@@ -10,16 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WorkflowStatus } from "@/lib/workflows";
-import { useLang } from "@/lib/i18n/context";
-import { makeT, type DictKey } from "@/lib/i18n/dict";
-
-// Status labels come from the dictionary rather than WORKFLOW_STATUS_LABELS
-// in lib/workflows.ts, which is English-only and also feeds non-UI callers.
-const STATUS_KEYS: Record<WorkflowStatus, DictKey> = {
-  in_progress: "statusInProgress",
-  won: "statusWon",
-  lost: "statusLost",
-};
+import { WORKFLOW_STATUS_LABELS } from "@/lib/workflows";
 
 // Client child of /workflows. Owns the search box + live filtering. The
 // parent (server) page does the data fetching + customer-name join, then
@@ -72,7 +63,6 @@ type DescDraft = { value: string; baseline: string; saving: boolean };
 
 export default function WorkflowTable({ rows }: Props) {
   const router = useRouter();
-  const t = makeT(useLang());
   const [search, setSearch] = useState("");
 
   // Local state map keyed by row id. Seeded lazily on first edit per row so
@@ -132,7 +122,9 @@ export default function WorkflowTable({ rows }: Props) {
   const deleteRow = useCallback(
     async (id: string, label: string) => {
       if (deletingId) return;
-      const ok = window.confirm(t("confirmDeleteWorkflow", { name: label }));
+      const ok = window.confirm(
+        `Delete ${label}? This cannot be undone. Files in storage will remain.`,
+      );
       if (!ok) return;
       setError(null);
       setDeletingId(id);
@@ -155,8 +147,8 @@ export default function WorkflowTable({ rows }: Props) {
           });
           setError(
             reason === "forbidden"
-              ? t("deleteForbidden")
-              : t("deleteFailed", { reason }),
+              ? "Only the workflow owner or an admin can delete this."
+              : `Delete failed: ${reason}`,
           );
           return;
         }
@@ -230,7 +222,7 @@ export default function WorkflowTable({ rows }: Props) {
     <>
       <input
         type="text"
-        placeholder={t("workflowsSearch")}
+        placeholder="Search quote #, customer, description, type, or submitter…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="search-input"
@@ -239,26 +231,26 @@ export default function WorkflowTable({ rows }: Props) {
       {rows.length === 0 ? (
         <div className="table">
           <div className="table__empty">
-            <div className="table__empty-title">{t("workflowsEmpty")}</div>
+            <div className="table__empty-title">No workflows yet</div>
             <Link href="/start?fresh=1" className="button-primary">
-              {t("createYourFirst")}
+              + Create your first
             </Link>
           </div>
         </div>
       ) : (
         <div className="table">
           <div className="table__head">
-            <div className="table__head-cell">{t("colCustomer")}</div>
-            <div className="table__head-cell">{t("colQuoteNumber")}</div>
-            <div className="table__head-cell">{t("colQuoteType")}</div>
-            <div className="table__head-cell">{t("colDescription")}</div>
-            <div className="table__head-cell">{t("colSubmitter")}</div>
-            <div className="table__head-cell">{t("colUpdated")} &#x25BC;</div>
-            <div className="table__head-cell">{t("colStatus")}</div>
+            <div className="table__head-cell">Customer</div>
+            <div className="table__head-cell">Quote #</div>
+            <div className="table__head-cell">Quote type</div>
+            <div className="table__head-cell">Description</div>
+            <div className="table__head-cell">Submitter</div>
+            <div className="table__head-cell">Updated &#x25BC;</div>
+            <div className="table__head-cell">Status</div>
           </div>
           {filtered.length === 0 ? (
             <div className="table__empty">
-              <div style={{ fontSize: 14 }}>{t("noWorkflowsMatch", { q: search })}</div>
+              <div style={{ fontSize: 14 }}>No workflows match &ldquo;{search}&rdquo;.</div>
             </div>
           ) : (
             filtered.map((row) => {
@@ -291,7 +283,7 @@ export default function WorkflowTable({ rows }: Props) {
                   </div>
                   <div className="table__cell table__cell--status">
                     <span className={`status-pill status-pill--${row.status.replace("_", "-")}`}>
-                      {t(STATUS_KEYS[row.status])}
+                      {WORKFLOW_STATUS_LABELS[row.status]}
                     </span>
                     {row.salesOrdersTotalLabel ? (
                       <span className="table__cell-sub table__cell-sub--won">
@@ -302,8 +294,8 @@ export default function WorkflowTable({ rows }: Props) {
                       <button
                         type="button"
                         className="row-delete"
-                        aria-label={t("deleteNamed", { name: row.quoteNumberLabel })}
-                        title={t("deleteWorkflow")}
+                        aria-label={`Delete ${row.quoteNumberLabel}`}
+                        title="Delete workflow"
                         disabled={deletingId === row.id}
                         // Stop the click from reaching the parent <Link>;
                         // otherwise Next would navigate to /workflow/[id]
@@ -358,10 +350,6 @@ function DescriptionCell({
   onChange: (next: string) => void;
   onCommit: (raw: string) => void;
 }) {
-  // Reads the language from context rather than taking a prop — this is
-  // rendered once per row, and threading t through would mean touching every
-  // call site for no gain.
-  const t = makeT(useLang());
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Don't let space, enter, etc. propagate up — the anchor element treats
     // Enter/Space as "activate" which would navigate.
@@ -394,7 +382,7 @@ function DescriptionCell({
         type="text"
         className="description-cell__input"
         value={value}
-        placeholder={autoLabel || t("addShortDescription")}
+        placeholder={autoLabel || "Add a short description"}
         onChange={(e) => onChange(e.target.value)}
         onBlur={(e) => onCommit(e.currentTarget.value)}
         onKeyDown={onKeyDown}
@@ -403,10 +391,10 @@ function DescriptionCell({
         maxLength={200}
         disabled={saving}
         autoComplete="off"
-        aria-label={t("workflowDescriptionAria")}
+        aria-label="Workflow description"
       />
       {saving ? (
-        <span className="description-cell__status">{t("savingEllipsis")}</span>
+        <span className="description-cell__status">Saving…</span>
       ) : null}
     </div>
   );

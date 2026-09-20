@@ -19,7 +19,7 @@ export default function LangToggle({ lang }: { lang: Lang }) {
 
   const setLang = (next: Lang) => {
     if (next === lang) return;
-    const onProdDomain = window.location.hostname === "pharmacenter.app" || window.location.hostname.endsWith(".pharmacenter.app");
+    const onProdDomain = window.location.hostname.endsWith(".pharmacenter.app");
     const domain = onProdDomain ? "; domain=.pharmacenter.app" : "";
     // Kill any stale host-only cookie from an earlier version of this
     // toggle — the browser will happily hold both a host-only cookie
@@ -42,13 +42,36 @@ export default function LangToggle({ lang }: { lang: Lang }) {
       onClick={() => setLang(code)}
       disabled={pending}
       aria-pressed={lang === code}
+      style={{
+        border: "none",
+        background: lang === code ? "var(--teal-700, #1d6c7b)" : "transparent",
+        color: lang === code ? "#fff" : "var(--teal-900, #0f4a56)",
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+        padding: "3px 8px",
+        borderRadius: 999,
+        cursor: lang === code ? "default" : "pointer",
+        opacity: pending ? 0.6 : 1,
+      }}
     >
       {label}
     </button>
   );
 
   return (
-    <div className="langtoggle" role="group" aria-label="Language">
+    <div
+      role="group"
+      aria-label="Language"
+      style={{
+        display: "inline-flex",
+        gap: 2,
+        padding: 2,
+        border: "1px solid var(--line, #e3dcc9)",
+        borderRadius: 999,
+        background: "var(--paper, #fffdf8)",
+      }}
+    >
       {btn("en", "EN")}
       {btn("es", "ES")}
     </div>

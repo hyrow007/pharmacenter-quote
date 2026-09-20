@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 
 // GET /api/packaging-components?slot=bottle&q=150 PET amber
 //

@@ -1,0 +1,5 @@
+-- SUPERSEDED — do not run.
+--
+-- public.sales_orders already exists and belongs to the Packing List app
+-- (packing-list ↔ SO linkage). The Fishbowl open-sales-orders mirror was
+-- renamed to avoid it. Run fishbowl_sales_orders.sql instead.

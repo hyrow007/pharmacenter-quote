@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireSyncAuth } from "@/lib/sync-auth";
 
 // POST /api/sync/so-synthesis
 //
@@ -11,8 +10,8 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 // Read side of the meetings hub reads from public.so_synthesis to
 // render a "Key points" block at the top of every SO card.
 //
-// Auth: requireSyncAuth(request, "so-synthesis") — see src/lib/sync-auth.ts.
-// Accepts SO_SYNTHESIS_SECRET, or CRON_SECRET from the daily cron.
+// Auth: shared bearer PLAUD_SYNC_SECRET (same secret the other sync
+// routes use).
 //
 // Request body (batch):
 //   {
@@ -58,8 +57,24 @@ function badRequest(msg: string): NextResponse {
 }
 
 export async function POST(request: Request) {
-  const denied = requireSyncAuth(request, "so-synthesis");
-  if (denied) return denied;
+  const expected = process.env.PLAUD_SYNC_SECRET;
+  if (!expected) {
+    console.error("PLAUD_SYNC_SECRET not configured");
+    return NextResponse.json(
+      { ok: false, error: "server_misconfigured" },
+      { status: 500 },
+    );
+  }
+  const authz = request.headers.get("authorization") || "";
+  const provided = authz.startsWith("Bearer ")
+    ? authz.slice("Bearer ".length).trim()
+    : "";
+  if (provided !== expected) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized" },
+      { status: 401 },
+    );
+  }
 
   let body: { items?: unknown };
   try {

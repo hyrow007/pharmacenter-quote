@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import {
   buildAutoDescription,
   formatQuoteNumber,
@@ -10,9 +10,6 @@ import {
 } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import WorkflowTable, { type WorkflowDisplayRow } from "./WorkflowTable";
-import { I18nProvider } from "@/lib/i18n/context";
-import { getLangFromCookie } from "@/lib/i18n/server";
-import { makeT, type DictKey } from "@/lib/i18n/dict";
 
 // Workflow inbox — every quote workflow visible to the signed-in user.
 // Server component so the customer/product joins happen on the server in one
@@ -20,66 +17,31 @@ import { makeT, type DictKey } from "@/lib/i18n/dict";
 // search box is delegated to <WorkflowTable/> (client) which receives the
 // pre-shaped rows.
 
-// Quote type / dosage form are stored in English in the DB. These map the
-// stored value to a dictionary key so the *display* follows the language
-// cookie; an unrecognised value falls back to the raw string rather than
-// rendering a key name at the user.
-const TYPE_KEYS: Record<string, DictKey> = {
-  "bulk": "quoteTypeBulk",
-  "contract-packaging": "quoteTypeContractPackaging",
-  "finished-product": "quoteTypeFinishedProduct",
-  "other": "quoteTypeOther",
+const TYPE_LABELS: Record<string, string> = {
+  "bulk": "Bulk",
+  "contract-packaging": "Contract Packaging",
+  "finished-product": "Finished Product",
+  "other": "Other",
 };
-const FORM_KEYS: Record<string, DictKey> = {
-  softgel: "formSoftgel",
-  gummy: "formGummy",
-  tablet: "formTablet",
-  capsule: "formCapsule",
-  other: "formOther",
-};
-// state.form is overloaded: a dosage form for bulk/finished-product quotes,
-// a packaging type for contract-packaging ones. Two id namespaces in one
-// column, disambiguated by state.type -- the same split lib/workflows.ts
-// makes between DESCRIPTION_FORM_LABELS and DESCRIPTION_PACKAGING_LABELS.
-//
-// The old code used the dosage map for both, so a contract-packaging quote
-// rendered the raw id: "Contract Packaging · pouches", lowercase and
-// unlabelled. That was wrong in English too, not just untranslated.
-const PACKAGING_KEYS: Record<string, DictKey> = {
-  bottles: "packagingBottles",
-  blisters: "packagingBlisters",
-  sachets: "packagingSachets",
-  pouches: "packagingPouches",
-  kitting: "packagingKitting",
-  other: "packagingOther",
+const FORM_LABELS: Record<string, string> = {
+  softgel: "Softgels", gummy: "Gummies", tablet: "Tablets", capsule: "Capsules", other: "Other",
 };
 
-type T = ReturnType<typeof makeT>;
-
-// Computed server-side so the client table needs no date library. Buckets
-// match the ones describeFreshness() uses, and reuse the same dictionary
-// keys where they overlap.
-function relativeTime(iso: string, t: T): string {
+function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
   const diff = Math.max(0, now - then);
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return t("timeJustNow");
+  if (sec < 60) return "now";
   const min = Math.floor(sec / 60);
-  if (min < 60) return t("timeMinAgo", { n: min });
+  if (min < 60) return `${min}m ago`;
   const hr = Math.floor(min / 60);
-  if (hr < 24) return t("timeHrAgo", { n: hr });
+  if (hr < 24) return `${hr}h ago`;
   const day = Math.floor(hr / 24);
-  if (day < 7) return t("timeDayAgo", { n: day });
-  if (day < 30) return t("timeWeekAgo", { n: Math.floor(day / 7) });
-  // Spanish needs the singular ("hace 1 mes", not "hace 1 meses"). Caught on
-  // the live page, not by the key-resolution test -- both forms resolved.
-  if (day < 365) {
-    const n = Math.floor(day / 30);
-    return t(n === 1 ? "timeMonthAgoOne" : "timeMonthAgo", { n });
-  }
-  const years = Math.floor(day / 365);
-  return t(years === 1 ? "timeYearAgoOne" : "timeYearAgo", { n: years });
+  if (day < 7) return `${day}d ago`;
+  if (day < 30) return `${Math.floor(day / 7)}w ago`;
+  if (day < 365) return `${Math.floor(day / 30)}mo ago`;
+  return `${Math.floor(day / 365)}y ago`;
 }
 
 function localPart(email: string): string {
@@ -102,8 +64,6 @@ const usdFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export default async function WorkflowsPage() {
-  const lang = await getLangFromCookie();
-  const t = makeT(lang);
   const supabase = await createClient();
   const {
     data: { user },
@@ -191,17 +151,15 @@ export default async function WorkflowsPage() {
     const state = row.state;
     const customerName =
       state.customerMode === "new"
-        ? state.newCustomer?.name || t("newCustomerPlaceholder")
-        : (state.customerId && customerInfo[state.customerId]?.name) || t("unknownCustomer");
+        ? state.newCustomer?.name || "New customer"
+        : (state.customerId && customerInfo[state.customerId]?.name) || "Unknown customer";
     const customerSub =
       state.customerMode === "new"
         ? state.newCustomer?.contact || ""
         : (state.customerId && customerInfo[state.customerId]?.ship) || "";
-    const formKeys =
-      state.type === "contract-packaging" ? PACKAGING_KEYS : FORM_KEYS;
     const typeLabel = [
-      state.type ? (TYPE_KEYS[state.type] ? t(TYPE_KEYS[state.type]) : state.type) : null,
-      state.form ? (formKeys[state.form] ? t(formKeys[state.form]) : state.form) : null,
+      state.type ? TYPE_LABELS[state.type] || state.type : null,
+      state.form ? FORM_LABELS[state.form] || state.form : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -256,7 +214,7 @@ export default async function WorkflowsPage() {
       productSearchBlob,
       submitterFull: row.created_by_email,
       submitterShort: submitterNames[row.created_by_email] || titleCase(localPart(row.created_by_email)),
-      updatedRelative: relativeTime(row.updated_at, t),
+      updatedRelative: relativeTime(row.updated_at),
       updatedSort: new Date(row.updated_at).getTime(),
       pushed: !!row.monday_item_id,
       status,
@@ -271,19 +229,19 @@ export default async function WorkflowsPage() {
         <div className="page__inner">
           <div className="page-header">
             <div>
-              <h1 className="page-header__title">{t("workflowsTitle")}</h1>
-              <p className="page-header__subtitle">{t("workflowsLede")}</p>
+              <h1 className="page-header__title">Work Flows</h1>
+              <p className="page-header__subtitle">
+                Your drafts and every pushed workflow across the workspace.
+              </p>
             </div>
             <div className="page-header__action">
               <Link href="/start?fresh=1" className="button-primary">
-                {t("newWorkflow")}
+                + New workflow
               </Link>
             </div>
           </div>
 
-          <I18nProvider lang={lang}>
-            <WorkflowTable rows={display} />
-          </I18nProvider>
+          <WorkflowTable rows={display} />
         </div>
       </main>
     </div>

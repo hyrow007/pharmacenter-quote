@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireSyncAuth } from "@/lib/sync-auth";
 import {
   extractMentionsFromSummary,
   extractOtherBusinessFromSummary,
@@ -53,8 +52,7 @@ import {
 //
 // Response: { ok, session_id, inserted_notes, mismatched, snapshotted }
 //
-// Auth: requireSyncAuth(request, "plaud-webhook") — see src/lib/sync-auth.ts.
-// Accepts PLAUD_WEBHOOK_SECRET.
+// Auth: bearer PLAUD_SYNC_SECRET header; mirrors /api/sync/sales-orders.
 
 export const runtime = "nodejs"; // service-role client needs Node
 
@@ -93,8 +91,24 @@ function badRequest(msg: string): NextResponse {
 
 export async function POST(request: Request) {
   // Bearer auth --------------------------------------------------------
-  const denied = requireSyncAuth(request, "plaud-webhook");
-  if (denied) return denied;
+  const expected = process.env.PLAUD_SYNC_SECRET;
+  if (!expected) {
+    console.error("PLAUD_SYNC_SECRET not configured");
+    return NextResponse.json(
+      { ok: false, error: "server_misconfigured" },
+      { status: 500 },
+    );
+  }
+  const authz = request.headers.get("authorization") || "";
+  const provided = authz.startsWith("Bearer ")
+    ? authz.slice("Bearer ".length).trim()
+    : "";
+  if (provided !== expected) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized" },
+      { status: 401 },
+    );
+  }
 
   // Body ---------------------------------------------------------------
   let body: Body;

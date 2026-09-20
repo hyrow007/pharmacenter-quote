@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 import AppHeader from "../_components/AppHeader";
 
 // Server layout for /start (and all its child routes). Renders the shared

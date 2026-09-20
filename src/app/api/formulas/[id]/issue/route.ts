@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/auth/server";
 
 // POST /api/formulas/[id]/issue — stamp the current revision with the
 // next official version number (v54 issue/revision split).

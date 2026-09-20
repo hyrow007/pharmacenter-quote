@@ -1,49 +1,5 @@
 # CLAUDE.md — PharmaCenter Quote generator
 
-> **Source of truth: this repo.** Edit `C:\code\pharmacenter-quote` and
-> deploy with `.\deploy.ps1 "message"`. This app used to be edited in
-> `C:\q`, with the checkout as a robocopy mirror of it — that mirror
-> overwrote edits made in the checkout, never propagated deletions, and
-> silently dropped excluded files. Retired 2026-09-19. **Anything written
-> into `C:\q` now will not reach production.**
-
-## Read this before writing code here — current as of 2026-09-20
-
-This repo serves **four identities** behind host rewrites — Quote, Formula,
-Orders, Meetings — plus the **Hub** at `pharmacenter.app`. Three separate
-project chats (Quote Flows, Formulas, Sales Order tracker) all edit this one
-repo, blind to each other. Ownership and the full map are in the project docs
-`claude/working-agreement.md` and `claude/ecosystem-registry.md`.
-
-1. **Next.js 15.5 + React 19.** `params` and `searchParams` are Promises —
-   `await` them. `cookies()` and `headers()` are async.
-2. **`tsc` is not a build.** The `deploy.ps1` typecheck cannot see Next's
-   generated `PageProps`, so a wrongly-typed route prop passes it and fails on
-   Vercel. Use `.\deploy.ps1 -FullBuild "msg"` when you touch route props,
-   `package.json` or `next.config`.
-3. **Supabase clients are in `src/lib/supabase/`:** `server.ts` for server
-   components and routes, `client.ts` → `getBrowserClient()` for client
-   components, `rows.ts` for row types. **There is no anon client.** The old
-   `import { supabase } from "@/lib/supabase"` was deleted — do not recreate it.
-   It ran every query as the anonymous role, which is how the customer list
-   ended up readable by anyone holding the public key.
-4. **Storage is private.** Never call `getPublicUrl`; never build an
-   `/object/public/` URL by hand. Sign with `createSignedUrls()` (see
-   `src/app/api/formulas/[id]/files/route.ts`), or on the server use the
-   service role's `.download(path)` (see `src/app/api/monday/create-item`).
-5. **Two files are byte-identical with `pharmacenter-packing-list`:**
-   `src/app/app-chrome.css` and `src/lib/freshness.ts`. Change one, change the
-   other, `diff` them. No shared package exists; this is the only link.
-6. **Never name a font family literally in `app-chrome.css`.** Packing loads
-   fonts via `next/font` under hashed names — a literal lookup silently falls
-   back to Georgia. Use `var(--serif)`.
-7. **No schema here.** Tables and policies live in `pharmacenter-db`. New table
-   → migration there, a row in its `TABLES.md`, `.\Check-Tables.ps1` CLEAN.
-8. **A push is not a deployment.** Vercel has silently skipped a push before.
-   After deploying, check the change on the live page.
-9. **A new tool gets a hub tile** — `TOOLS` in `src/app/hub/page.tsx`, plus a
-   name and description key in both dictionaries.
-
 Customer-facing quote generator for PharmaCenter sales. Architectural twin of the
 Packing List generator: editor on the left, live 8.5×11 sheet on the right,
 autosave to `localStorage`, Print/Save-PDF button.
@@ -232,7 +188,7 @@ the hub itself.
 | `/meetings/sales-orders/orders/[so]`             | One SO — live Fishbowl state + every meeting note about it    |
 | `/meetings/sales-orders/sessions/[session]`      | One weekly session — SOs discussed with at-meeting-vs-now diffs |
 
-**Tables** (schema lives in the `pharmacenter-db` repo — see below):
+**Tables (see `sql/meetings.sql`):**
 
 - `meeting_types` — hub tiles (slug, name, tagline, cadence, active).
 - `meeting_sessions` — one row per meeting held (type, date, source, plaud_recording_id, summary, attendees, other_business).
@@ -260,21 +216,11 @@ the hub itself.
 - CNAME `meeting` → `cname.vercel-dns.com` at Wix.
 - Add `https://meeting.pharmacenter.app/auth/callback` to the Supabase
   Auth Redirect URLs allowlist.
-- Schema changes go through the `pharmacenter-db` repo as a Supabase
-  migration, never by pasting SQL into the Supabase editor.
-
-  This line used to read "Run `sql/meetings.sql` in the shared Supabase
-  project SQL editor." That is how finding C1 happened: the live schema was
-  edited by hand, no repo held it, and nothing could be rebuilt or reviewed.
-  The full schema is now captured as a baseline migration in
-  `pharmacenter-db/supabase/migrations/`. Following the old instruction would
-  recreate the problem, which is why it is called out rather than deleted.
+- Run `sql/meetings.sql` in the shared Supabase project SQL editor.
 
 **Plaud ingest — `POST /api/plaud/webhook`:**
 
-Bearer-authenticated with `PLAUD_WEBHOOK_SECRET`. (It accepted the shared
-`PLAUD_SYNC_SECRET` until the H4 split; that fallback is on its way out —
-see `src/lib/sync-auth-core.ts`.)
+Bearer-authenticated with `PLAUD_SYNC_SECRET` (add to Vercel env).
 Mirrors `/api/sync/sales-orders`. Handler at
 `src/app/api/plaud/webhook/route.ts`; extraction library at
 `src/lib/plaud/extract.ts`.
@@ -322,7 +268,7 @@ the session view and above the order-summary on `/orders/[so]`.
 - **Table:** `so_synthesis` (so_number PK, headline text, points jsonb,
   based_on jsonb, generated_at). Authenticated read via RLS.
 - **Read endpoint:** `GET /api/sync/so-synthesis/inputs` (bearer auth
-  via `SO_SYNTHESIS_SECRET`, or `CRON_SECRET` from the daily cron) returns a pre-joined blob per SO: Fishbowl
+  via `PLAUD_SYNC_SECRET`) returns a pre-joined blob per SO: Fishbowl
   fields + sale items, Monday status + last 5 updates, all meeting
   notes across sessions, and the existing synthesis stamp so the
   generator can skip fresh ones. Only SOs with meeting notes OR Monday
@@ -330,20 +276,10 @@ the session view and above the order-summary on `/orders/[so]`.
 - **Write endpoint:** `POST /api/sync/so-synthesis` (same bearer)
   accepts a batch `{ items: [{ so_number, headline, points, based_on }] }`
   and upserts on so_number.
-- **Generator: NOT CURRENTLY SCHEDULED.** The design was a Cowork
-  scheduled task that pulls inputs, sends each SO to Claude for
-  "3-5 bullets a meeting reviewer needs", and POSTs the batch back,
-  keeping LLM cost inside Cowork rather than putting an Anthropic key in
-  the Vercel app. That task was never created, and as written it cannot
-  run: Claude's egress allowlist blocks `*.pharmacenter.app`. Options,
-  undecided as of 2026-09-19:
-    1. Get `*.pharmacenter.app` allowlisted for the Claude org, then
-       build the Cowork task as originally designed.
-    2. A second Vercel Cron entry with `ANTHROPIC_API_KEY` in Vercel env.
-       Note Hobby allows only 2 crons, once-daily -- this would be the
-       second and last.
-  Until one is picked, "Key points" callouts show only hand-generated
-  content.
+- **Generator:** a Cowork scheduled task pulls inputs, sends each SO
+  to Claude with a "give me 3-5 bullets a meeting reviewer needs"
+  prompt, and POSTs the batch back. No LLM key needed in the Vercel
+  app — the LLM cost lives inside Cowork's own model access.
 
 **Monday cross-reference — `so_monday_activity` + `POST /api/sync/monday`:**
 
@@ -356,25 +292,12 @@ brings this in as a third source alongside Fishbowl and Plaud.
 - **Table:** `so_monday_activity` (so_number PK, monday_item_id,
   monday_url, status, updates jsonb, last_synced_at). Populated by
   service-role writes only; authenticated read via RLS.
-- **Sync route:** `POST /api/sync/monday` (bearer auth via
-  `MONDAY_SYNC_SECRET`, or `CRON_SECRET` from Vercel Cron; env var
-  `MONDAY_API_TOKEN` for the GraphQL call).
+- **Sync route:** `POST /api/sync/monday` (bearer auth via the shared
+  `PLAUD_SYNC_SECRET`; env var `MONDAY_API_TOKEN` for the GraphQL call).
   Pages the whole Open Sales Orders board, upserts one row per SO with
   the last 5 updates. Idempotent on `so_number`.
-- **Schedule:** **Vercel Cron**, once daily at 11:00 UTC / 7am ET
-  (`vercel.json` -> `crons`, path `/api/sync/monday`, `0 11 * * *`).
-  NOT every two hours: this Vercel account is on the **Hobby** plan,
-  which permits at most 2 cron jobs on **once-daily** schedules only. A
-  `0 */2 * * *` expression is rejected outright and Vercel creates no
-  deployment at all -- no failed-build row, nothing to notice. Raise the
-  frequency only after moving to Pro. The route exports a `GET` beside
-  `POST` because Vercel Cron only issues GET, and its auth accepts either
-  `MONDAY_SYNC_SECRET` or Vercel's `CRON_SECRET` (set that in Vercel env).
-  Still callable on demand via curl with the bearer.
-  (This previously read "Cowork scheduled task every couple hours." No
-  such task was ever created, and it could not have worked: Claude's
-  egress allowlist blocks both `*.pharmacenter.app` and `api.monday.com`.
-  Monday activity sat 24 days stale until this moved to Vercel Cron.)
+- **Schedule:** Cowork scheduled task hits it every couple hours (or on
+  demand via curl); Fishbowl doesn't need to know about it.
 - **UI:** Session detail page shows a compact "Monday activity" strip
   per SO card under the line-items table; SO detail page (`/orders/[so]`)
   renders full-width "Monday activity" cards between the line items and
@@ -383,14 +306,7 @@ brings this in as a third source alongside Fishbowl and Plaud.
 **Wiring the ingest.** Plaud's own webhook (with `Plaud-Signature`
 verification) can post directly here, or route via Zapier ("New Plaud
 file" → HTTP POST to `https://meeting.pharmacenter.app/api/plaud/webhook`
-with `Authorization: Bearer $PLAUD_WEBHOOK_SECRET`). Plaud's OAuth-only
-"list files" REST is private-beta — until it's live, weekly ingestion runs
-through Plaud's own webhook, Zapier, or a **chat session** using the Plaud
-MCP to fetch the recording and post it.
-
-Not a Cowork *scheduled task*, which an earlier version of this line
-suggested. A scheduled task cannot make an authenticated HTTP call at all:
-its sandbox has no outbound network, its shell is Linux, its web fetch
-cannot set headers, and the browser route is refused by a credential
-classifier. This is the one job still without an unattended home; see
-`claude/automation.md`.
+with `Authorization: Bearer $PLAUD_SYNC_SECRET`). Plaud's OAuth-only
+"list files" REST is private-beta — until it's live, weekly ingestion
+runs either through Plaud's own webhook, Zapier, or a Cowork agent
+that pushes the pre-extracted payload.
