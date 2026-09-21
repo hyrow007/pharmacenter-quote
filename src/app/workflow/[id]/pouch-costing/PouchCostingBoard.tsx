@@ -1332,9 +1332,8 @@ export type ComponentOption = {
   cost_status: CostStatus;
   /**
    * Raw Fishbowl figures, denominated in the purchase UOM (a roll, a kg).
-   * For the pouch material this IS the price: the film yield in Considerations
-   * converts per-UOM to per-pouch, so a part the view flags uom_unresolved
-   * is perfectly priceable on a web row.
+   * Shown as a reference caption in the picker; this board prices preformed
+   * bags per each and does not price from these directly.
    */
   inventory_cost_per_purchase_unit: number | null;
   last_order_cost_per_purchase_unit: number | null;
@@ -1396,6 +1395,8 @@ export type SavedState = {
    * per each. Null = not stated yet, which BLOCKS the film line rather than
    * multiplying a roll price by the pouch count and quoting nonsense.
    */
+  /** DEPRECATED — read by nothing. Kept so quotes saved while the film
+   *  yield input existed still load against this type. */
   filmPouchesPerUom: number | null;
   /**
    * Bottles in one master box, for a job WITHOUT an inner pack.
@@ -1528,7 +1529,7 @@ const SLOTS: SlotDef[] = [
   // roll stock (yield = pouches one UOM of film forms). The Honey gummy sheet
   // ran premade customer-supplied bags at 0.25% waste; 5% is the house seed
   // for a PC-supplied job, editable like every waste figure.
-  { key: "film", slot: "other", label: "Pouch film / premade bags", presenceKey: null, suppliedKey: "filmSuppliedBy", waste: 5, perPouch: true },
+  { key: "film", slot: "other", label: "Preformed bags", presenceKey: null, suppliedKey: "filmSuppliedBy", waste: 5, perPouch: true },
   { key: "retail", slot: "carton", label: "Retail / unit carton", presenceKey: "retailRequired", suppliedKey: "retailSuppliedBy", waste: 3 },
   { key: "safety_seal", slot: "safety_seal", label: "Safety seal", presenceKey: "safetySealRequired", suppliedKey: "safetySealSuppliedBy", waste: 5 },
   { key: "insert", slot: "insert", label: "Insert", presenceKey: "insertRequired", suppliedKey: "insertSuppliedBy", waste: 5 },
@@ -1685,11 +1686,9 @@ export function blankState(
       slot: s.slot,
       fpCode: null,
       name: s.label,
-      // The pouch material is priced per UOM, and how many pouches a UOM
-      // forms is not known until the yield is typed (premade bags = 1) —
-      // so it starts BLANK and blocks, exactly like an unchosen part. A
-      // master box is shared across the units inside it; an inner pack
-      // arrives blank.
+      // Preformed bags start blank here and are filled at once by the qty
+      // effect (pouches per unit). A master box is shared across the units
+      // inside it; an inner pack arrives blank.
       qtyPerUnit:
         s.slot === "master_box"
           ? unitsPerBox && unitsPerBox > 0
@@ -2600,7 +2599,7 @@ export default function PouchCostingBoard({
         .filter((l) => l.fpCode && !l.customPart)
         .map((l) => l.fpCode as string);
       const rows = await fetchFishbowlCosts(codes);
-      const res = refreshBomCosts(st.bom, rows, (line) => Boolean(slotKeyOf(line)?.perPouch));
+      const res = refreshBomCosts(st.bom, rows, () => false);
       setSt((p) => ({ ...p, bom: res.bom }));
       setCostRefreshNote({
         changes: res.changes,
@@ -2656,14 +2655,9 @@ export default function PouchCostingBoard({
                   ? 1 / p.bottlesPerMasterBox
                   : null
                 : meta?.perPouch
-                  ? (() => {
-                      const y = p.filmPouchesPerUom;
-                      const bpu =
-                        p.pouchesPerUnit && p.pouchesPerUnit > 0
-                          ? p.pouchesPerUnit
-                          : 1;
-                      return y && y > 0 ? bpu / y : null;
-                    })()
+                  ? p.pouchesPerUnit && p.pouchesPerUnit > 0
+                    ? p.pouchesPerUnit
+                    : 1
                   : 1,
           costPerUnit: null,
           costStatus: "no_cost",
@@ -2782,21 +2776,18 @@ export default function PouchCostingBoard({
             ...l,
             qtyPerUnit: perInner && perInner > 0 ? 1 / perInner : null,
           };
-        // Pouch material: one UOM forms `pouchesPerUom` pouches (premade
-        // bags = 1), and each finished unit consumes `pouchesPerUnit` of
-        // them — qty per unit = pouches per unit / pouches per UOM.
-        // Missing yield leaves the line null (blocked), never a guess.
+        // Preformed bags: one bag per pouch, bought and priced per each,
+        // so qty per finished unit is simply pouches per unit. (This board
+        // once took a roll-stock "film yield" too; PharmaCenter only runs
+        // preformed bags, so that input and its per-UOM pricing are gone.)
         const def = slotKeyOf(l);
         if (def?.perPouch) {
-          const yieldPerUom = st.filmPouchesPerUom;
-          const bpu =
-            st.pouchesPerUnit && st.pouchesPerUnit > 0
-              ? st.pouchesPerUnit
-              : 1;
           return {
             ...l,
             qtyPerUnit:
-              yieldPerUom && yieldPerUom > 0 ? bpu / yieldPerUom : null,
+              st.pouchesPerUnit && st.pouchesPerUnit > 0
+                ? st.pouchesPerUnit
+                : 1,
           };
         }
         return l;
@@ -2806,7 +2797,6 @@ export default function PouchCostingBoard({
     bottlesPerMasterBoxEffective,
     st.bottlesPerInnerPack,
     st.pouchesPerUnit,
-    st.filmPouchesPerUom,
   ]);
 
   const inputs: PouchCostingInputs = useMemo(
@@ -3644,19 +3634,6 @@ export default function PouchCostingBoard({
               placeholder="1"
             />
           </ParamBlock>
-          {/* Pouch-material yield: Fishbowl prices the part per UOM (a roll,
-              a kg, an each — whatever it is stocked in), and this converts
-              that price to per-pouch. PREMADE stand-up bags are the yield-1
-              case: one bag per pouch. Required before the pouch-material
-              line can price: a roll price multiplied by a pouch count is
-              exactly the plausible-looking nonsense this board refuses. */}
-          <ParamBlock label="Film yield (pouches / UOM — premade bags = 1)">
-            <NumField
-              value={st.filmPouchesPerUom}
-              onChange={(v) => set("filmPouchesPerUom", v)}
-              placeholder="required"
-            />
-          </ParamBlock>
           {/* Per PERSON, unlike the line speed. The hand stations scale with
               headcount: two people pack twice as fast, whereas the line runs
               at its own pace whoever is watching it. Blank = the job skips
@@ -3826,22 +3803,7 @@ export default function PouchCostingBoard({
               slotKeyOf(line)?.label ??
               SLOTS.find((s) => s.slot === line.slot)?.label ??
               line.slot;
-            const rawIssue = r.issues.find((i) => i.lineId === line.id);
-            // The pouch material's qty per unit is DERIVED from the film
-            // yield in Considerations (pouches per unit ÷ pouches per UOM),
-            // so a missing qty on that row always means a missing yield.
-            // Say so in pouch terms instead of the shared lib's generic
-            // "quantity missing" — there is no qty to type on this row.
-            const issue =
-              rawIssue &&
-              rawIssue.reason === "no_qty" &&
-              slotKeyOf(line)?.perPouch
-                ? {
-                    ...rawIssue,
-                    message:
-                      "Film yield not set — enter pouches per UOM under Considerations (premade bags = 1).",
-                  }
-                : rawIssue;
+            const issue = r.issues.find((i) => i.lineId === line.id);
             return (
               <div
                 key={line.id}
@@ -3946,10 +3908,9 @@ export default function PouchCostingBoard({
                       ALWAYS for the master box — otherwise a spec with no
                       units-per-box would render no caption and leave nowhere
                       to type the number. */}
-                  {/* The pouch material is excluded: its fraction comes from
-                      the film yield in Considerations, and offering a second
-                      place to type the same ratio is how two numbers learn
-                      to disagree. They get a read-only caption below. */}
+                  {/* Preformed bags are excluded: their qty is pouches per
+                      unit, set in Considerations, and a second place to type
+                      the same number is how two numbers learn to disagree. */}
                   {!slotKeyOf(line)?.perPouch &&
                     (line.slot === "master_box" ||
                     line.slot === "inner_pack" ||
@@ -4068,30 +4029,6 @@ export default function PouchCostingBoard({
                           )}
                       </div>
                     )}
-                  {/* Pouch material: read-only, because the ratio is DERIVED
-                      from the film yield typed in Considerations — the one
-                      place that number lives. */}
-                  {(() => {
-                    const def = slotKeyOf(line);
-                    if (!def?.perPouch) return null;
-                    const y = st.filmPouchesPerUom;
-                    return (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 500,
-                          textTransform: "none",
-                          letterSpacing: 0,
-                          color: "var(--ink-3, #7b7364)",
-                          marginTop: 2,
-                        }}
-                      >
-                        {y && y > 0
-                          ? `yield: ${y.toLocaleString("en-US")} pouches / UOM`
-                          : "needs a film yield — see Considerations"}
-                      </div>
-                    );
-                  })()}
                   {/* Safety seal and bulk: an editable per-unit COUNT —
                       2 seals per unit, 56 doses per carton. Unlike the
                       shared containers this is a straight multiplier, so it
@@ -4186,7 +4123,9 @@ export default function PouchCostingBoard({
                         // conversion. So the raw per-purchase-unit figures
                         // become the row's costs, and the status clears:
                         // qty (bpu ÷ yield) × cost-per-UOM prices correctly.
-                        const web = Boolean(slotKeyOf(line)?.perPouch);
+                        // Preformed bags are stocked and priced per each, so this
+                        // board has no web-priced rows (see the qty effect).
+                        const web = false;
                         const rawInv =
                           opt?.inventory_cost_per_purchase_unit ?? null;
                         const webPriced =
@@ -4523,12 +4462,7 @@ export default function PouchCostingBoard({
                           : null;
                       const parts: string[] = [];
                       if (line.qtyPerUnit !== null && line.qtyPerUnit !== 1)
-                        // Web rows are priced per UOM of web, not per each —
-                        // saying "each" there would misname the yield math.
-                        parts.push(
-                          money(c) +
-                            (slotKeyOf(line)?.perPouch ? " / UOM" : " each"),
-                        );
+                        parts.push(money(c) + " each");
                       if (w !== null && w > 0 && w < 100)
                         parts.push("incl. " + w + "% waste");
                       if (!parts.length) return null;
