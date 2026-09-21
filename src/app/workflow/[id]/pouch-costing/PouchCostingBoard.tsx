@@ -1249,6 +1249,76 @@ const numInput: React.CSSProperties = {
   textAlign: "right",
 };
 
+/**
+ * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
+ * which the costing can override without touching the form. Choosing what
+ * the form already says clears the override, so the board goes back to
+ * following the form; the caption always says which of the two is in force.
+ */
+function FormYesNo({
+  on,
+  fromForm,
+  overridden,
+  onChange,
+}: {
+  on: boolean;
+  fromForm: boolean;
+  overridden: boolean;
+  /** null = follow the form again. */
+  onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <>
+      <select
+        value={on ? "yes" : "no"}
+        onChange={(e) => {
+          const v = e.target.value === "yes";
+          onChange(v === fromForm ? null : v);
+        }}
+        style={{ ...numInput, textAlign: "left", cursor: "pointer" }}
+      >
+        <option value="no">No</option>
+        <option value="yes">Yes</option>
+      </select>
+      <div
+        className="bc-noprint"
+        style={{
+          marginTop: 3,
+          fontSize: 11,
+          fontWeight: 500,
+          textTransform: "none",
+          letterSpacing: 0,
+          color: "var(--ink-3, #7b7364)",
+        }}
+      >
+        {!overridden ? (
+          "From packaging form"
+        ) : (
+          <>
+            Changed here — form says {fromForm ? "Yes" : "No"}
+            {" · "}
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "none",
+                font: "inherit",
+                color: "var(--teal-700, #1d6c7b)",
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              use form
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function NumField({
   value,
   onChange,
@@ -1384,11 +1454,25 @@ export type SavedState = {
   /** Units per minute PER PERSON on lot/EXP printing. Only read when
    *  printingOffLine is true. */
   printingSpeed: number | null;
-  /** Units per minute PER PERSON on packout. Blank = job has no packout. */
+  /**
+   * Packout (secondary packaging) on or off FOR THIS COSTING.
+   *
+   * null = follow the packaging form: on when it answers "Secondary/retail
+   * packaging required?" Yes. true/false = overridden here. The override
+   * lives only in the costing — it never writes back to the form, so a
+   * what-if on the board cannot change what the customer specified.
+   */
+  packoutRequired: boolean | null;
+  /** Units per minute PER PERSON on packout. Only read when packout is on. */
   packoutSpeed: number | null;
   /** Units per minute PER PERSON on cartoning / carton printing. */
   cartoningSpeed: number | null;
-  /** Units per minute PER PERSON on bundling. */
+  /**
+   * Bundling on or off FOR THIS COSTING. null = follow the packaging form's
+   * "Bundling required?"; true/false = overridden here, never written back.
+   */
+  bundlingRequired: boolean | null;
+  /** Units per minute PER PERSON on bundling. Only read when bundling is on. */
   bundlingSpeed: number | null;
   /**
    * FILM YIELD — the bridge between how Fishbowl prices the pouch material
@@ -1735,8 +1819,10 @@ export function blankState(
     // discover — answering Yes is what reveals the speed.
     printingOffLine: false,
     printingSpeed: null,
+    packoutRequired: null,
     packoutSpeed: null,
     cartoningSpeed: null,
+    bundlingRequired: null,
     bundlingSpeed: null,
     filmPouchesPerUom: null,
     // With an inner pack the box counts inners (the form's masterBoxQty
@@ -2240,6 +2326,26 @@ function hydrateSaved(
       // speed typed was priced WITH a printing station, so it comes back Yes
       // and its total does not move; anything else comes back No. `??` keeps
       // a deliberate saved false.
+      // Costings saved before the packout question: follow the form, UNLESS
+      // the job was priced with a packout speed the form would now switch
+      // off — then keep it on explicitly so the saved total does not move.
+      packoutRequired:
+        initial.packoutRequired !== undefined
+          ? initial.packoutRequired
+          : typeof initial.packoutSpeed === "number" &&
+              initial.packoutSpeed > 0 &&
+              (spec?.retailRequired ?? "") !== "yes"
+            ? true
+            : null,
+      // Same migration as packout, against the form's bundling answer.
+      bundlingRequired:
+        initial.bundlingRequired !== undefined
+          ? initial.bundlingRequired
+          : typeof initial.bundlingSpeed === "number" &&
+              initial.bundlingSpeed > 0 &&
+              (spec?.bundlingRequired ?? "") !== "yes"
+            ? true
+            : null,
       printingOffLine:
         initial.printingOffLine ??
         (typeof initial.printingSpeed === "number" &&
@@ -2819,6 +2925,13 @@ export default function PouchCostingBoard({
     st.pouchesPerUnit,
   ]);
 
+  // Packout follows the packaging form's secondary-packaging answer unless
+  // this costing overrides it (see SavedState.packoutRequired).
+  const packoutFromForm = (spec?.retailRequired ?? "") === "yes";
+  const packoutOn = st.packoutRequired ?? packoutFromForm;
+  const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
+  const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
+
   const inputs: PouchCostingInputs = useMemo(
     () => ({
       quantity: qty,
@@ -2830,9 +2943,9 @@ export default function PouchCostingBoard({
         // No off-line printing = no printing hours, whatever speed is
         // stored from an earlier Yes.
         printingSpeed: st.printingOffLine ? st.printingSpeed : null,
-        packoutSpeed: st.packoutSpeed,
+        packoutSpeed: packoutOn ? st.packoutSpeed : null,
         cartoningSpeed: st.cartoningSpeed,
-        bundlingSpeed: st.bundlingSpeed,
+        bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
         setup: {
           hours: st.setupHours,
           leaders: st.setupLeaders,
@@ -2919,7 +3032,7 @@ export default function PouchCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, qty],
+    [st, qty, packoutOn, bundlingOn],
   );
 
   const r = useMemo(() => computePouchCosting(inputs), [inputs]);
@@ -2947,10 +3060,13 @@ export default function PouchCostingBoard({
     () =>
       lb
         ? lb.phases.filter(
-            (p) => st.printingOffLine || p.label !== "Printing",
+            (p) =>
+              (st.printingOffLine || p.label !== "Printing") &&
+              (packoutOn || p.label !== "Packout") &&
+              (bundlingOn || p.label !== "Bundling"),
           )
         : [],
-    [lb, st.printingOffLine],
+    [lb, st.printingOffLine, packoutOn, bundlingOn],
   );
 
   /**
@@ -3704,24 +3820,46 @@ export default function PouchCostingBoard({
               />
             </ParamBlock>
           )}
-          <ParamBlock label="Packout speed (units / min / person)">
-            <NumField
-              value={st.packoutSpeed}
-              onChange={(v) => set("packoutSpeed", v)}
+          <ParamBlock label="Secondary packaging (packout)?">
+            <FormYesNo
+              on={packoutOn}
+              fromForm={packoutFromForm}
+              overridden={st.packoutRequired !== null}
+              onChange={(v) => set("packoutRequired", v)}
             />
           </ParamBlock>
+          {packoutOn && (
+            <ParamBlock label="Packout speed (units / min / person)">
+              <NumField
+                value={st.packoutSpeed}
+                onChange={(v) => set("packoutSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           <ParamBlock label="Cartoning speed (units / min / person)">
             <NumField
               value={st.cartoningSpeed}
               onChange={(v) => set("cartoningSpeed", v)}
             />
           </ParamBlock>
-          <ParamBlock label="Bundling speed (units / min / person)">
-            <NumField
-              value={st.bundlingSpeed}
-              onChange={(v) => set("bundlingSpeed", v)}
+          <ParamBlock label="Bundling?">
+            <FormYesNo
+              on={bundlingOn}
+              fromForm={bundlingFromForm}
+              overridden={st.bundlingRequired !== null}
+              onChange={(v) => set("bundlingRequired", v)}
             />
           </ParamBlock>
+          {bundlingOn && (
+            <ParamBlock label="Bundling speed (units / min / person)">
+              <NumField
+                value={st.bundlingSpeed}
+                onChange={(v) => set("bundlingSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           {/* Only when the two differ, so the override is never silent. */}
           {st.quantityOverride !== null &&
             st.quantityOverride !== quantity && (
