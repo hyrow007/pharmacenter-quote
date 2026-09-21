@@ -1374,7 +1374,15 @@ export type SavedState = {
    * Quantity everywhere on this board is FINISHED UNITS.
    */
   pouchesPerUnit: number | null;
-  /** Units per minute PER PERSON on lot/EXP printing. Blank = no such step. */
+  /**
+   * Does this job print lot/EXP OFF the line, as a separate hand station?
+   * Asked in Considerations. No = the printing speed is hidden, the phase
+   * drops out of the labour tables and contributes nothing; the speed and
+   * crew figures are kept, so flipping back to Yes restores them.
+   */
+  printingOffLine: boolean;
+  /** Units per minute PER PERSON on lot/EXP printing. Only read when
+   *  printingOffLine is true. */
   printingSpeed: number | null;
   /** Units per minute PER PERSON on packout. Blank = job has no packout. */
   packoutSpeed: number | null;
@@ -1722,6 +1730,10 @@ export function blankState(
     pouchesPerMinute: null,
     speedPenaltyPct: DEFAULT_POUCH_SPEED_PENALTY_PCT,
     pouchesPerUnit: bpu,
+    // Most jobs code on the line or not at all, so a new costing starts
+    // with no off-line printing step. It is a question, not a default to
+    // discover — answering Yes is what reveals the speed.
+    printingOffLine: false,
     printingSpeed: null,
     packoutSpeed: null,
     cartoningSpeed: null,
@@ -2224,6 +2236,14 @@ function hydrateSaved(
       displayDec: initial.displayDec ?? blank.displayDec,
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       pouchesPerUnit: initial.pouchesPerUnit ?? blank.pouchesPerUnit,
+      // Costings saved before the question existed: one that had a printing
+      // speed typed was priced WITH a printing station, so it comes back Yes
+      // and its total does not move; anything else comes back No. `??` keeps
+      // a deliberate saved false.
+      printingOffLine:
+        initial.printingOffLine ??
+        (typeof initial.printingSpeed === "number" &&
+          initial.printingSpeed > 0),
       printingLeaders: initial.printingLeaders ?? blank.printingLeaders,
       printingOperators: initial.printingOperators ?? blank.printingOperators,
       packoutLeaders: initial.packoutLeaders ?? blank.packoutLeaders,
@@ -2807,7 +2827,9 @@ export default function PouchCostingBoard({
         pouchesPerMinute: st.pouchesPerMinute,
         speedPenaltyPct: st.speedPenaltyPct,
         pouchesPerUnit: st.pouchesPerUnit,
-        printingSpeed: st.printingSpeed,
+        // No off-line printing = no printing hours, whatever speed is
+        // stored from an earlier Yes.
+        printingSpeed: st.printingOffLine ? st.printingSpeed : null,
         packoutSpeed: st.packoutSpeed,
         cartoningSpeed: st.cartoningSpeed,
         bundlingSpeed: st.bundlingSpeed,
@@ -2911,6 +2933,24 @@ export default function PouchCostingBoard({
   const lb = useMemo(
     () => pouchLaborBreakdown(qty, inputs.labor),
     [qty, inputs.labor],
+  );
+
+  /**
+   * The phases the labour tables DRAW. With no off-line printing the
+   * Printing phase is still in the model (zero hours, so it costs nothing)
+   * but a column of zeros for a step the job does not have is noise — it
+   * goes silent. Every table below maps over this, and the crew inputs are
+   * keyed by phase LABEL rather than position, so dropping a column cannot
+   * shift an edit into the neighbouring phase.
+   */
+  const shownPhases = useMemo(
+    () =>
+      lb
+        ? lb.phases.filter(
+            (p) => st.printingOffLine || p.label !== "Printing",
+          )
+        : [],
+    [lb, st.printingOffLine],
   );
 
   /**
@@ -3643,12 +3683,27 @@ export default function PouchCostingBoard({
               straight into the neighbouring label. Wrapping to two lines is
               the fix, not smaller words — "units / min / person" is the unit
               and it stays. */}
-          <ParamBlock label="Printing speed (units / min / person)">
-            <NumField
-              value={st.printingSpeed}
-              onChange={(v) => set("printingSpeed", v)}
-            />
+          <ParamBlock label="Printing off the line?">
+            <select
+              value={st.printingOffLine ? "yes" : "no"}
+              onChange={(e) =>
+                set("printingOffLine", e.target.value === "yes")
+              }
+              style={{ ...numInput, textAlign: "left", cursor: "pointer" }}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
           </ParamBlock>
+          {st.printingOffLine && (
+            <ParamBlock label="Printing speed (units / min / person)">
+              <NumField
+                value={st.printingSpeed}
+                onChange={(v) => set("printingSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           <ParamBlock label="Packout speed (units / min / person)">
             <NumField
               value={st.packoutSpeed}
@@ -4600,7 +4655,7 @@ export default function PouchCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4611,7 +4666,7 @@ export default function PouchCostingBoard({
                 <tbody>
                   <tr style={labTotalRow}>
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <td key={p.label} style={labTd}>
                         {/* Every quantity-driven phase is READ-ONLY. Each is
                             a function of inputs typed in Considerations —
@@ -4667,7 +4722,7 @@ export default function PouchCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4683,40 +4738,40 @@ export default function PouchCostingBoard({
                       {
                         label: "QTY of Line Leaders",
                         get: (p: (typeof lb.phases)[number]) => p.leaders,
-                        keys: [
-                          "setupLeaders",
-                          "prodLeaders",
-                          "printingLeaders",
-                          "packoutLeaders",
-                          "cartoningLeaders",
-                          "bundlingLeaders",
-                          "cleaningLeaders",
-                        ],
+                        keys: {
+                          Setup: "setupLeaders",
+                          "Pouch Line": "prodLeaders",
+                          Printing: "printingLeaders",
+                          Packout: "packoutLeaders",
+                          Cartoning: "cartoningLeaders",
+                          Bundling: "bundlingLeaders",
+                          Cleaning: "cleaningLeaders",
+                        },
                       },
                       {
                         label: "QTY of Line Operators",
                         get: (p: (typeof lb.phases)[number]) => p.operators,
-                        keys: [
-                          "setupOperators",
-                          "prodOperators",
-                          "printingOperators",
-                          "packoutOperators",
-                          "cartoningOperators",
-                          "bundlingOperators",
-                          "cleaningOperators",
-                        ],
+                        keys: {
+                          Setup: "setupOperators",
+                          "Pouch Line": "prodOperators",
+                          Printing: "printingOperators",
+                          Packout: "packoutOperators",
+                          Cartoning: "cartoningOperators",
+                          Bundling: "bundlingOperators",
+                          Cleaning: "cleaningOperators",
+                        },
                       },
                     ] as const
                   ).map((row) => (
                     <tr key={row.label} style={labBodyRow}>
                       <td style={{ ...labTh, textAlign: "left" }}>{row.label}</td>
-                      {lb.phases.map((p, i) => (
+                      {shownPhases.map((p) => (
                         <td key={p.label} style={labTd}>
                           <LabNum
                             value={row.get(p)}
                             onChange={(n) =>
                               set(
-                                row.keys[i],
+                                row.keys[p.label as keyof typeof row.keys],
                                 n === null ? null : Math.max(0, Math.round(n)),
                               )
                             }
@@ -4738,7 +4793,7 @@ export default function PouchCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4750,12 +4805,12 @@ export default function PouchCostingBoard({
                   {[
                     {
                       label: "Line Leaders Man Hours",
-                      per: lb.phases.map((p) => p.leaderManHours),
+                      per: shownPhases.map((p) => p.leaderManHours),
                       total: lb.roles[0].manHours,
                     },
                     {
                       label: "Line Operators Man Hours",
-                      per: lb.phases.map((p) => p.operatorManHours),
+                      per: shownPhases.map((p) => p.operatorManHours),
                       total: lb.roles[1].manHours,
                     },
                   ].map((row) => (
