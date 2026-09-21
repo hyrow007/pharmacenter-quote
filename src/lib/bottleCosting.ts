@@ -222,6 +222,15 @@ export type LaborInputs = {
    * crew count and the speed are separate inputs rather than one fudged rate.
    */
   kittingSpeed?: number | null;
+  /**
+   * Packout (secondary packaging) and bundling — hand stations like
+   * kitting, at a per-person speed. Null/0 = the job has no such step (the
+   * board passes null whenever its Yes/No for the station is No). Optional,
+   * with optional phases below, so costings from before these stations
+   * existed price exactly as they did.
+   */
+  packoutSpeed?: number | null;
+  bundlingSpeed?: number | null;
   setup: LaborPhase;
   /**
    * Production is a full phase like the others now, so the board can show
@@ -238,6 +247,8 @@ export type LaborInputs = {
    * DEFAULT_KITTING_HOURS for why it does not get a house default.
    */
   kitting: LaborPhase;
+  packout?: LaborPhase;
+  bundling?: LaborPhase;
   leaderRate: number | null;
   operatorRate: number | null;
   leaderTaxPct?: number | null;
@@ -849,6 +860,22 @@ export function laborBreakdown(
   const kitHours =
     num(labor.kitting?.hours) ?? derivedKitHours ?? DEFAULT_KITTING_HOURS;
 
+  // Packout and bundling: same hand-station derivation as kitting, but a
+  // missing speed simply means the station is not part of this job — zero.
+  const handHours = (
+    phase: LaborPhase | undefined,
+    speed: number | null | undefined,
+  ) => {
+    const typed = num(phase?.hours);
+    if (typed !== null) return typed;
+    const sp = num(speed);
+    const people = (num(phase?.leaders) ?? 0) + (num(phase?.operators) ?? 0);
+    if (q === null || q <= 0 || sp === null || sp <= 0 || people <= 0) return 0;
+    return q / (people * sp * 60);
+  };
+  const packoutHours = handHours(labor.packout, labor.packoutSpeed);
+  const bundlingHours = handHours(labor.bundling, labor.bundlingSpeed);
+
   // Typed run length wins over the derivation, which is also how a job gets
   // priced before anyone has timed the line.
   const prodHours =
@@ -888,6 +915,18 @@ export function laborBreakdown(
       kitHours,
       labor.kitting?.leaders,
       labor.kitting?.operators,
+    ),
+    mk(
+      "Packout",
+      packoutHours,
+      labor.packout?.leaders,
+      labor.packout?.operators,
+    ),
+    mk(
+      "Bundling",
+      bundlingHours,
+      labor.bundling?.leaders,
+      labor.bundling?.operators,
     ),
     mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
   ];
@@ -933,7 +972,12 @@ export function laborBreakdown(
   return {
     phases,
     totalHours: phases.reduce((s, p) => s + p.totalHours, 0),
-    occupancyHours: setupHours + cleanHours + Math.max(prodHours, kitHours),
+    // Every hand station runs alongside the line, so the floor is held for
+    // whichever of them runs longest — never their sum.
+    occupancyHours:
+      setupHours +
+      cleanHours +
+      Math.max(prodHours, kitHours, packoutHours, bundlingHours),
     roles,
     grandTotal,
     perUnit: q !== null && q > 0 ? grandTotal / q : null,

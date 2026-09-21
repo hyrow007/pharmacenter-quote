@@ -374,7 +374,7 @@ const L={
 const b=B.laborBreakdown(300000,L);
 
 ok('house defaults are 2 h', [B.DEFAULT_SETUP_HOURS,B.DEFAULT_CLEANING_HOURS], [2,2]);
-ok('setup + cleaning default to 2 h', [b.phases[0].totalHours,b.phases[3].totalHours], [2,2]);
+ok('setup + cleaning default to 2 h', [b.phases[0].totalHours,b.phases.find((p) => p.label === 'Cleaning').totalHours], [2,2]);
 ok('production takes the typed hours', b.phases[1].totalHours, 32);
 ok('total hours', b.totalHours, 36);
 
@@ -401,7 +401,7 @@ ok('  ...laborPerUnit null too',  B.laborPerUnit(12000,n), null);
 
 // an explicit 0 survives -- "no cleaning on this job" must not become 2 h
 ok('explicit 0 cleaning stays 0',
-   B.laborBreakdown(300000,{...L, cleaning:{...L.cleaning, hours:0}}).phases[3].totalHours, 0);
+   B.laborBreakdown(300000,{...L, cleaning:{...L.cleaning, hours:0}}).phases.find((p) => p.label === 'Cleaning').totalHours, 0);
 
 // the wrapper agrees with the breakdown
 ok('laborPerUnit matches', B.laborPerUnit(300000,L), b.perUnit);
@@ -425,7 +425,7 @@ ok('kitting default is 0 h', B.DEFAULT_KITTING_HOURS, 0);
 
 // four phases, kitting last
 const b=B.laborBreakdown(12000, base);
-ok('four phases', b.phases.map(p=>p.label), ['Setup','Production','Kitting','Cleaning']);
+ok('six phases', b.phases.map(p=>p.label), ['Setup','Production','Kitting','Packout','Bundling','Cleaning']);
 ok('kitting rides with production', b.phases[2].label, 'Kitting');
 ok('kitting hours default 0', b.phases[2].totalHours, 0);
 ok('a 0-hour phase adds no man hours', b.phases[2].operatorManHours, 0);
@@ -756,4 +756,22 @@ ok('zero other rate falls back, power is never free',
 ok('all three rates scale together with days',
    B.overheadPerUnit(1000,{...base,other:[],otherPerRunDay:176.98},3),
    ((467.97+383.00+176.98)*3)/1000);
+}
+
+// --- packout + bundling hand stations (2026-09-21)
+{
+  const d = {
+    bottlesPerMinute: 40,
+    setup: { hours: null, leaders: 1, operators: 6 },
+    production: { hours: null, leaders: 1, operators: 6 },
+    cleaning: { hours: null, leaders: 1, operators: 6 },
+    kitting: { hours: null, leaders: 0, operators: 0 },
+    leaderRate: 25, operatorRate: 15,
+  };
+  const base = B.laborBreakdown(12000, d);
+  ok('no packout speed -> 0 h', base.phases.find((p) => p.label === 'Packout').totalHours, 0);
+  ok('no bundling speed -> 0 h', base.phases.find((p) => p.label === 'Bundling').totalHours, 0);
+  const po = B.laborBreakdown(12000, { ...d, packoutSpeed: 10, packout: { hours: null, leaders: 0, operators: 2 } });
+  // 12000 / (2 x 10 x 60) = 10 h
+  ok('packout 12000 @ 10/min x 2 = 10 h', po.phases.find((p) => p.label === 'Packout').totalHours, 10);
 }

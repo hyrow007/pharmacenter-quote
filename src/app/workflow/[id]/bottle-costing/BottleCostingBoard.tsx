@@ -1239,6 +1239,76 @@ const numInput: React.CSSProperties = {
   textAlign: "right",
 };
 
+/**
+ * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
+ * which the costing can override without touching the form. Choosing what
+ * the form already says clears the override, so the board goes back to
+ * following the form; the caption always says which of the two is in force.
+ */
+function FormYesNo({
+  on,
+  fromForm,
+  overridden,
+  onChange,
+}: {
+  on: boolean;
+  fromForm: boolean;
+  overridden: boolean;
+  /** null = follow the form again. */
+  onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <>
+      <select
+        value={on ? "yes" : "no"}
+        onChange={(e) => {
+          const v = e.target.value === "yes";
+          onChange(v === fromForm ? null : v);
+        }}
+        style={{ ...numInput, textAlign: "left", cursor: "pointer" }}
+      >
+        <option value="no">No</option>
+        <option value="yes">Yes</option>
+      </select>
+      <div
+        className="bc-noprint"
+        style={{
+          marginTop: 3,
+          fontSize: 11,
+          fontWeight: 500,
+          textTransform: "none",
+          letterSpacing: 0,
+          color: "var(--ink-3, #7b7364)",
+        }}
+      >
+        {!overridden ? (
+          "From packaging form"
+        ) : (
+          <>
+            Changed here — form says {fromForm ? "Yes" : "No"}
+            {" · "}
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "none",
+                font: "inherit",
+                color: "var(--teal-700, #1d6c7b)",
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              use form
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function NumField({
   value,
   onChange,
@@ -1345,6 +1415,19 @@ export type SavedState = {
   /** Bottles per minute PER PERSON on kitting. Drives the kitting hours. */
   kittingSpeed: number | null;
   /**
+   * Packout (secondary packaging) FOR THIS COSTING. null = follow the
+   * packaging form's "Secondary/retail packaging required?"; true/false =
+   * overridden here, never written back to the form.
+   */
+  packoutRequired: boolean | null;
+  /** Units per minute PER PERSON on packout. Only read when packout is on. */
+  packoutSpeed: number | null;
+  /** Bundling FOR THIS COSTING. null = follow the form's "Bundling
+   *  required?"; true/false = overridden here, never written back. */
+  bundlingRequired: boolean | null;
+  /** Units per minute PER PERSON on bundling. Only read when bundling is on. */
+  bundlingSpeed: number | null;
+  /**
    * Bottles in one master box, for a job WITHOUT an inner pack.
    *
    * With an inner pack the master box is counted in inners instead, and this
@@ -1379,6 +1462,10 @@ export type SavedState = {
   cleaningOperators: number | null;
   kittingLeaders: number | null;
   kittingOperators: number | null;
+  packoutLeaders: number | null;
+  packoutOperators: number | null;
+  bundlingLeaders: number | null;
+  bundlingOperators: number | null;
   leaderRate: number | null;
   operatorRate: number | null;
   /** Payroll burden, per role and editable — as on the gummy Pay Rates card. */
@@ -1630,6 +1717,11 @@ export function blankState(
     baseName: "Base",
     bottlesPerMinute: null,
     kittingSpeed: null,
+    // null = follow the packaging form.
+    packoutRequired: null,
+    packoutSpeed: null,
+    bundlingRequired: null,
+    bundlingSpeed: null,
     bottlesPerMasterBox,
     // No spec question to seed these from, and no house standard worth
     // assuming — a blank that the user fills in is honest, a guessed 6 is not.
@@ -1647,6 +1739,11 @@ export function blankState(
     cleaningOperators: 2,
     kittingLeaders: 0,
     kittingOperators: 2,
+    // Same starting crews as the blister and pouch boards' stations.
+    packoutLeaders: 0,
+    packoutOperators: 1,
+    bundlingLeaders: 0,
+    bundlingOperators: 2,
     leaderRate: DEFAULT_LEADER_RATE,
     operatorRate: DEFAULT_OPERATOR_RATE,
     leaderTaxPct: DEFAULT_TAX_PCT,
@@ -2109,6 +2206,17 @@ function hydrateSaved(
       displayDec: initial.displayDec ?? blank.displayDec,
       kittingLeaders: initial.kittingLeaders ?? blank.kittingLeaders,
       kittingOperators: initial.kittingOperators ?? blank.kittingOperators,
+      // Bottle costings saved before these stations existed carry no speed,
+      // so following the form cannot move their totals (a station with no
+      // speed is zero hours).
+      packoutRequired: initial.packoutRequired ?? null,
+      packoutSpeed: initial.packoutSpeed ?? null,
+      packoutLeaders: initial.packoutLeaders ?? blank.packoutLeaders,
+      packoutOperators: initial.packoutOperators ?? blank.packoutOperators,
+      bundlingRequired: initial.bundlingRequired ?? null,
+      bundlingSpeed: initial.bundlingSpeed ?? null,
+      bundlingLeaders: initial.bundlingLeaders ?? blank.bundlingLeaders,
+      bundlingOperators: initial.bundlingOperators ?? blank.bundlingOperators,
       leaderTaxPct: initial.leaderTaxPct ?? blank.leaderTaxPct,
       leaderWcPct: initial.leaderWcPct ?? blank.leaderWcPct,
       operatorTaxPct: initial.operatorTaxPct ?? blank.operatorTaxPct,
@@ -2673,6 +2781,13 @@ export default function BottleCostingBoard({
     }));
   }, [bottlesPerMasterBoxEffective, st.bottlesPerInnerPack]);
 
+  // Packout and bundling follow the packaging form unless this costing
+  // overrides them (see SavedState.packoutRequired / bundlingRequired).
+  const packoutFromForm = (spec?.retailRequired ?? "") === "yes";
+  const packoutOn = st.packoutRequired ?? packoutFromForm;
+  const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
+  const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
+
   const inputs: BottleCostingInputs = useMemo(
     () => ({
       quantity: qty,
@@ -2680,6 +2795,8 @@ export default function BottleCostingBoard({
       labor: {
         bottlesPerMinute: st.bottlesPerMinute,
         kittingSpeed: st.kittingSpeed,
+        packoutSpeed: packoutOn ? st.packoutSpeed : null,
+        bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
         setup: {
           hours: st.setupHours,
           leaders: st.setupLeaders,
@@ -2706,6 +2823,16 @@ export default function BottleCostingBoard({
           hours: null,
           leaders: st.kittingLeaders,
           operators: st.kittingOperators,
+        },
+        packout: {
+          hours: null,
+          leaders: st.packoutLeaders,
+          operators: st.packoutOperators,
+        },
+        bundling: {
+          hours: null,
+          leaders: st.bundlingLeaders,
+          operators: st.bundlingOperators,
         },
         leaderRate: st.leaderRate,
         operatorRate: st.operatorRate,
@@ -2755,7 +2882,7 @@ export default function BottleCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, qty],
+    [st, qty, packoutOn, bundlingOn],
   );
 
   const r = useMemo(() => computeBottleCosting(inputs), [inputs]);
@@ -2769,6 +2896,24 @@ export default function BottleCostingBoard({
   const lb = useMemo(
     () => laborBreakdown(qty, inputs.labor),
     [qty, inputs.labor],
+  );
+
+  /**
+   * The phases the labour tables DRAW: a station answered No in
+   * Considerations stays in the model at zero hours but goes silent here.
+   * Crew inputs are keyed by phase LABEL, so a hidden column cannot shift an
+   * edit into its neighbour.
+   */
+  const shownPhases = useMemo(
+    () =>
+      lb
+        ? lb.phases.filter(
+            (p) =>
+              (packoutOn || p.label !== "Packout") &&
+              (bundlingOn || p.label !== "Bundling"),
+          )
+        : [],
+    [lb, packoutOn, bundlingOn],
   );
 
   /**
@@ -3460,6 +3605,40 @@ export default function BottleCostingBoard({
               onChange={(v) => set("kittingSpeed", v)}
             />
           </ParamBlock>
+          <ParamBlock label="Secondary packaging (packout)?">
+            <FormYesNo
+              on={packoutOn}
+              fromForm={packoutFromForm}
+              overridden={st.packoutRequired !== null}
+              onChange={(v) => set("packoutRequired", v)}
+            />
+          </ParamBlock>
+          {packoutOn && (
+            <ParamBlock label="Packout speed (units / min / person)">
+              <NumField
+                value={st.packoutSpeed}
+                onChange={(v) => set("packoutSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
+          <ParamBlock label="Bundling?">
+            <FormYesNo
+              on={bundlingOn}
+              fromForm={bundlingFromForm}
+              overridden={st.bundlingRequired !== null}
+              onChange={(v) => set("bundlingRequired", v)}
+            />
+          </ParamBlock>
+          {bundlingOn && (
+            <ParamBlock label="Bundling speed (units / min / person)">
+              <NumField
+                value={st.bundlingSpeed}
+                onChange={(v) => set("bundlingSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           {/* Only when the two differ, so the override is never silent. */}
           {st.quantityOverride !== null &&
             st.quantityOverride !== quantity && (
@@ -4366,7 +4545,7 @@ export default function BottleCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4377,7 +4556,7 @@ export default function BottleCostingBoard({
                 <tbody>
                   <tr style={labTotalRow}>
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <td key={p.label} style={labTd}>
                         {/* Kitting and Production are READ-ONLY. Each is a
                             function of inputs typed elsewhere — kitting of
@@ -4386,7 +4565,7 @@ export default function BottleCostingBoard({
                             would offer to contradict the inputs that produce
                             it, and whichever the user changed last would win
                             silently. Change the speed instead. */}
-                        {p.label === "Kitting" || p.label === "Production" ? (
+                        {p.label !== "Setup" && p.label !== "Cleaning" ? (
                           labSum(p.totalHours)
                         ) : (
                           <LabNum
@@ -4430,7 +4609,7 @@ export default function BottleCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4446,34 +4625,38 @@ export default function BottleCostingBoard({
                       {
                         label: "QTY of Line Leaders",
                         get: (p: (typeof lb.phases)[number]) => p.leaders,
-                        keys: [
-                          "setupLeaders",
-                          "prodLeaders",
-                          "kittingLeaders",
-                          "cleaningLeaders",
-                        ],
+                        keys: {
+                          Setup: "setupLeaders",
+                          Production: "prodLeaders",
+                          Kitting: "kittingLeaders",
+                          Packout: "packoutLeaders",
+                          Bundling: "bundlingLeaders",
+                          Cleaning: "cleaningLeaders",
+                        },
                       },
                       {
                         label: "QTY of Line Operators",
                         get: (p: (typeof lb.phases)[number]) => p.operators,
-                        keys: [
-                          "setupOperators",
-                          "prodOperators",
-                          "kittingOperators",
-                          "cleaningOperators",
-                        ],
+                        keys: {
+                          Setup: "setupOperators",
+                          Production: "prodOperators",
+                          Kitting: "kittingOperators",
+                          Packout: "packoutOperators",
+                          Bundling: "bundlingOperators",
+                          Cleaning: "cleaningOperators",
+                        },
                       },
                     ] as const
                   ).map((row) => (
                     <tr key={row.label} style={labBodyRow}>
                       <td style={{ ...labTh, textAlign: "left" }}>{row.label}</td>
-                      {lb.phases.map((p, i) => (
+                      {shownPhases.map((p) => (
                         <td key={p.label} style={labTd}>
                           <LabNum
                             value={row.get(p)}
                             onChange={(n) =>
                               set(
-                                row.keys[i],
+                                row.keys[p.label as keyof typeof row.keys],
                                 n === null ? null : Math.max(0, Math.round(n)),
                               )
                             }
@@ -4495,7 +4678,7 @@ export default function BottleCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4507,12 +4690,12 @@ export default function BottleCostingBoard({
                   {[
                     {
                       label: "Line Leaders Man Hours",
-                      per: lb.phases.map((p) => p.leaderManHours),
+                      per: shownPhases.map((p) => p.leaderManHours),
                       total: lb.roles[0].manHours,
                     },
                     {
                       label: "Line Operators Man Hours",
-                      per: lb.phases.map((p) => p.operatorManHours),
+                      per: shownPhases.map((p) => p.operatorManHours),
                       total: lb.roles[1].manHours,
                     },
                   ].map((row) => (
