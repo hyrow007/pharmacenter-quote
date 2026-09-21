@@ -761,6 +761,11 @@ export type WorkflowState = {
   // typed string like every other numeric input. Optional so historical
   // rows still parse.
   dosageCount?: string | null;
+  // Finished Product only: the packaging type (bottles / blisters / pouches).
+  // A Finished Product quote is bulk + packaging, so it needs BOTH answers:
+  // state.form keeps its Bulk meaning (dosage form) and the packaging type
+  // lives here. Optional so every existing row still parses.
+  packagingType?: string | null;
   products: ProductEntry[];
   // Pricing tabs in order. Each entry is the saved state of one calculator
   // tab. Order is meaningful (it matches the order shown in the calculator
@@ -961,6 +966,16 @@ export function buildAutoDescription(
       : "";
     const pack = state.form
       ? DESCRIPTION_PACKAGING_LABELS[state.form] || state.form
+      : "";
+    if (dosage && pack) formLabel = `${dosage} in ${pack}`;
+    else formLabel = dosage || pack;
+  } else if (state.type === "finished-product") {
+    const dosage = state.form
+      ? DESCRIPTION_FORM_LABELS[state.form] || state.form
+      : "";
+    const pack = state.packagingType
+      ? DESCRIPTION_PACKAGING_LABELS[state.packagingType] ||
+        state.packagingType
       : "";
     if (dosage && pack) formLabel = `${dosage} in ${pack}`;
     else formLabel = dosage || pack;

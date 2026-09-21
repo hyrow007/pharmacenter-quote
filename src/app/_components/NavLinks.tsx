@@ -51,6 +51,7 @@ export default function NavLinks({
   const isMeetings = pathname.startsWith("/meetings");
   const isFeedback = pathname.startsWith("/feedback");
   const isAdmin = pathname.startsWith("/admin");
+  const isRoadmap = pathname.startsWith("/roadmap");
 
   return (
     <nav className="app-nav__links" aria-label="Primary">
@@ -110,6 +111,28 @@ export default function NavLinks({
       >
         {t("navFeedback")}
       </Link>
+      {/* Roadmap: hub only, admins only. Relative href on purpose -- the hub
+          is served on pharmacenter.app AND pharmacenter.tools, and a sign-in
+          on one does not carry to the other, so the link must stay on
+          whichever host the admin is already signed in to. */}
+      {appContext === "hub" && effectiveAdmin ? (
+        <Link
+          href="/roadmap"
+          className={`app-nav__link${isRoadmap ? " app-nav__link--active" : ""}`}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            style={{ marginRight: 4, verticalAlign: "-1px" }}
+          >
+            <path d="M12 2l2.9 6.9L22 10l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.2L2 10l7.1-1.1L12 2z" />
+          </svg>
+          {t("navRoadmap")}
+        </Link>
+      ) : null}
       {effectiveAdmin ? (
         <Link
           href={

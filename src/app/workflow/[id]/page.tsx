@@ -341,6 +341,14 @@ export default async function WorkflowPage({ params }: Ctx) {
               </div>
             </div>
           ) : null}
+          {state.type === "finished-product" && state.packagingType ? (
+            <div style={sectionStyle}>
+              <span style={labelStyle}>Packaging type</span>
+              <div style={valueStyle}>
+                {PACKAGING_LABELS[state.packagingType] || state.packagingType}
+              </div>
+            </div>
+          ) : null}
           {state.type === "contract-packaging" && state.dosage ? (
             <div style={sectionStyle}>
               <span style={labelStyle}>Dosage form</span>
@@ -396,7 +404,10 @@ export default async function WorkflowPage({ params }: Ctx) {
                           <span key={i}>
                             {i > 0 ? <span style={{ color: "var(--ink-3)", margin: "0 6px" }}>·</span> : null}
                             {Number(q).toLocaleString()}{" "}
-                            {state.type === "contract-packaging" ? "eaches" : "units"}
+                            {state.type === "contract-packaging" ||
+                            state.type === "finished-product"
+                              ? "eaches"
+                              : "units"}
                           </span>
                         ))}
                       </div>

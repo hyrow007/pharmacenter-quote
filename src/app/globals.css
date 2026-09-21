@@ -1558,3 +1558,245 @@ html, body {
     transform: none;
   }
 }
+
+/* ============================================================
+   Roadmap — /roadmap, admin-only, linked from the hub nav
+   ============================================================ */
+
+.roadmap-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 12px;
+}
+
+.roadmap-add__heading {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+}
+
+.roadmap-add__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.roadmap-add__row .btn-chrome {
+  margin-left: auto;
+}
+
+.roadmap-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.roadmap-input,
+.roadmap-select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-1);
+  background: #fff;
+  border: 1px solid var(--stone);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.roadmap-input:focus-visible,
+.roadmap-select:focus-visible {
+  outline: 2px solid var(--teal-500);
+  outline-offset: 1px;
+  border-color: var(--teal-500);
+}
+
+.roadmap-input--area {
+  resize: vertical;
+  min-height: 44px;
+}
+
+.roadmap-select--sm {
+  font-size: 12.5px;
+  padding: 4px 6px;
+}
+
+.roadmap-error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fbeceb;
+  color: #8a2a22;
+  font-size: 13.5px;
+}
+
+/* Four working columns that collapse to two, then one, on narrower screens.
+   auto-fit keeps it breakpoint-free, same as the hub grid. */
+.roadmap-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.roadmap-col {
+  background: var(--cream-soft);
+  border: 1px solid var(--stone-2);
+  border-radius: 12px;
+  padding: 14px;
+  min-width: 0;
+}
+
+.roadmap-col__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--teal-900);
+}
+
+.roadmap-col__count {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.roadmap-col--shipped .roadmap-col__title {
+  color: var(--sage-700);
+}
+
+.roadmap-empty {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.roadmap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roadmap-card {
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-left: 3px solid var(--stone);
+  border-radius: 8px;
+  padding: 12px 12px 10px;
+}
+
+/* Priority reads at a glance from the left rule: teal high, sage medium,
+   stone low. The text label next to it carries the same fact for anyone who
+   can't rely on the colour. */
+.roadmap-card--p1 { border-left-color: var(--teal-700); }
+.roadmap-card--p2 { border-left-color: var(--sage-500); }
+.roadmap-card--p3 { border-left-color: var(--stone); }
+
+.roadmap-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.roadmap-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sage-pill-bg);
+  color: var(--sage-pill-ink);
+}
+
+.roadmap-prio {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.roadmap-prio--1 { color: var(--teal-700); }
+
+.roadmap-card__title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink-1);
+  overflow-wrap: anywhere;
+}
+
+.roadmap-card__details {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.roadmap-card__meta {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.roadmap-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.roadmap-link {
+  font: inherit;
+  font-size: 12.5px;
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  color: var(--teal-700);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.roadmap-link--danger {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.roadmap-link--danger:hover,
+.roadmap-link--danger.is-armed {
+  color: #a3372d;
+}
+
+.roadmap-dropped {
+  margin-top: 20px;
+}
+
+.roadmap-list--dropped {
+  margin-top: 10px;
+  max-width: 520px;
+  opacity: 0.8;
+}
+
+.roadmap[aria-busy="true"] .roadmap-board {
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}

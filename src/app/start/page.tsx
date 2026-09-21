@@ -55,6 +55,12 @@ const NEW_PRODUCT_PLACEHOLDERS_PACKAGING: Record<string, string> = {
   other: "e.g. Custom format — describe the finished pack",
 };
 
+// Finished Product packaging types: only the ones with a costing board.
+// Sachets and kitting join when their boards exist.
+const FP_PACKAGING_TYPES = PACKAGING_TYPES.filter((t) =>
+  ["bottles", "blisters", "pouches"].includes(t.id),
+);
+
 // Gummies are only sourced as Third party or Manufactured at PharmaCenter.
 // We don't have an "Other" source for gummies — keeping the list tight
 // avoids the UX of presenting a pointless option.
@@ -112,6 +118,15 @@ function formatQty(raw: string): string {
   return Number.isFinite(n) ? n.toLocaleString("en-US") : digits;
 }
 
+/** On a Finished Product quote the bulk is ours by definition, so a fresh
+ *  packaging spec starts with "Bulk supplied by" = PharmaCenter. */
+function fpSeed<T extends { bulkSuppliedBy: string }>(
+  spec: T,
+  isFinished: boolean,
+): T {
+  return isFinished ? { ...spec, bulkSuppliedBy: "pharmacenter" } : spec;
+}
+
 function newProductEntry(): ProductEntry {
   return {
     uid: uid(),
@@ -167,6 +182,7 @@ function blankState(): WorkflowState {
     // Contract Packaging pieces per display unit (30ct / 60ct). Null when
     // not in a CP workflow.
     dosageCount: null,
+    packagingType: null,
     products: [newProductEntry()],
   };
 }
@@ -625,10 +641,22 @@ function StartWorkflow() {
   // ----- derived flags -------------------------------------------------
   const isBulk = state.type === "bulk";
   const isContractPackaging = state.type === "contract-packaging";
+  // Finished Product = bulk + packaging. It asks the Bulk questions (dosage
+  // form, source, a pinned formula for PC gummies) AND the Contract
+  // Packaging ones (packaging type, the per-product packaging spec).
+  const isFinished = state.type === "finished-product";
   // Both Bulk and Contract Packaging show a second-step picker reusing
   // state.form — Bulk picks a dosage form, CP picks a packaging type.
-  const showFormSection = isBulk || isContractPackaging;
-  const showSourceSection = isBulk && state.form === "gummy";
+  // Finished Product uses it as Bulk does (dosage form).
+  const showFormSection = isBulk || isContractPackaging || isFinished;
+  const showSourceSection = (isBulk || isFinished) && state.form === "gummy";
+  // The packaging type a spec panel keys off: state.form on CP, the
+  // dedicated field on Finished Product.
+  const specPackaging = isContractPackaging
+    ? state.form
+    : isFinished
+      ? (state.packagingType ?? null)
+      : null;
   // Per-product formula picker: only for PC-manufactured gummies. When
   // active, the ProductPicker + Purchase/Stock toggle are hidden — the
   // formula IS the product identity, and PC-made products aren't sourced
@@ -655,6 +683,7 @@ function StartWorkflow() {
     ? !!state.customerId
     : !!state.newCustomer.name.trim();
   const formOk = !showFormSection || !!state.form;
+  const packagingTypeOk = !isFinished || !!state.packagingType;
   const sourceOk = !showSourceSection || !!state.source;
 
   const productsOk = state.products.every((p) => {
@@ -673,6 +702,7 @@ function StartWorkflow() {
   if (!customerOk) missing.push("Customer");
   if (!state.type) missing.push("Quote type");
   if (!formOk) missing.push(formLabel);
+  if (!packagingTypeOk) missing.push("Packaging type");
   if (!sourceOk) missing.push("Source");
   if (!productsOk) {
     missing.push(
@@ -766,9 +796,13 @@ function StartWorkflow() {
       // value in state.form, but the id spaces are different. Whenever
       // the user switches between type "families" we wipe the form (and
       // source) so the old selection doesn't carry over.
+      // Bulk and Finished Product share the dosage-form id space, so
+      // moving between them keeps the form and source.
+      const dosageFamily = (t: string | null) =>
+        t === "bulk" || t === "finished-product";
       const sameFamily =
         s.type === id ||
-        (s.type === "bulk" && id === "bulk") ||
+        (dosageFamily(s.type) && dosageFamily(id)) ||
         (s.type === "contract-packaging" && id === "contract-packaging");
       return {
         ...s,
@@ -781,6 +815,9 @@ function StartWorkflow() {
           id === "contract-packaging" && s.type === "contract-packaging"
             ? s.dosage
             : null,
+        // packagingType only lives on Finished Product.
+        packagingType:
+          id === "finished-product" ? (s.packagingType ?? null) : null,
       };
     });
   };
@@ -1042,6 +1079,32 @@ function StartWorkflow() {
           {/* Dosage form / count for Contract Packaging is captured on each
               product's Packaging spec form (Sections A/B), never here. */}
 
+          {/* ----- Packaging type (Finished Product only) -----
+              Finished Product needs the dosage form above AND this. Only
+              the formats with a costing board are offered. */}
+          {isFinished ? (
+            <div style={sectionStyle}>
+              <p style={sectionLabelStyle}>Packaging type</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {FP_PACKAGING_TYPES.map((f) => {
+                  const active = state.packagingType === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() =>
+                        setState((s) => ({ ...s, packagingType: f.id }))
+                      }
+                      style={active ? pillActive : pillBase}
+                    >
+                      {f.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {/* ----- Source (bulk + gummies only) ----- */}
           {showSourceSection ? (
             <div style={sectionStyle}>
@@ -1205,7 +1268,7 @@ function StartWorkflow() {
                           onChange={(e) => setProduct(p.uid, (cur) => ({ ...cur, quantities: cur.quantities.map((q, j) => (j === i ? formatQty(e.target.value) : q)) }))}
                           style={inputStyle} />
                         <div style={{ padding: "10px 14px", background: "#fffdf8", border: "1.5px solid #e3dcc9", borderRadius: 8, fontSize: 13, color: "var(--ink-2)", fontWeight: 600, whiteSpace: "nowrap" }}>
-                          {isContractPackaging ? "eaches" : "units"}
+                          {isContractPackaging || isFinished ? "eaches" : "units"}
                         </div>
                         {p.quantities.length > 1 ? (
                           <button type="button"
@@ -1252,14 +1315,15 @@ function StartWorkflow() {
                     Packaging Specification Form questionnaire, per product.
                     Fillable later; a future PandaDoc sync will push the
                     answers into a real form for signature. */}
-                {isContractPackaging && state.form === "bottles" ? (
+                {specPackaging === "bottles" ? (
                   <PackagingSpecSection
                     spec={p.packagingSpec}
                     onChange={(updater) =>
                       setProduct(p.uid, (cur) => ({
                         ...cur,
                         packagingSpec: updater(
-                          cur.packagingSpec ?? blankPackagingSpecBottles(),
+                          cur.packagingSpec ??
+                            fpSeed(blankPackagingSpecBottles(), isFinished),
                         ),
                       }))
                     }
@@ -1271,14 +1335,15 @@ function StartWorkflow() {
                     fill-now-or-later contract as the bottles spec; the
                     blister costing board reads it to seed the finished-unit
                     structure (blisters per carton, film/foil supplied-by …). */}
-                {isContractPackaging && state.form === "blisters" ? (
+                {specPackaging === "blisters" ? (
                   <PackagingSpecBlistersSection
                     spec={p.blisterSpec}
                     onChange={(updater) =>
                       setProduct(p.uid, (cur) => ({
                         ...cur,
                         blisterSpec: updater(
-                          cur.blisterSpec ?? blankPackagingSpecBlisters(),
+                          cur.blisterSpec ??
+                            fpSeed(blankPackagingSpecBlisters(), isFinished),
                         ),
                       }))
                     }
@@ -1290,14 +1355,15 @@ function StartWorkflow() {
                     per product. Same fill-now-or-later contract as bottles
                     and blisters. Pouches ≠ sachets: sachets get their own
                     form + section when that PandaDoc form lands. */}
-                {isContractPackaging && state.form === "pouches" ? (
+                {specPackaging === "pouches" ? (
                   <PackagingSpecPouchesSection
                     spec={p.pouchSpec}
                     onChange={(updater) =>
                       setProduct(p.uid, (cur) => ({
                         ...cur,
                         pouchSpec: updater(
-                          cur.pouchSpec ?? blankPackagingSpecPouches(),
+                          cur.pouchSpec ??
+                            fpSeed(blankPackagingSpecPouches(), isFinished),
                         ),
                       }))
                     }
