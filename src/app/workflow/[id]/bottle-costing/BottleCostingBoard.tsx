@@ -1240,6 +1240,20 @@ const numInput: React.CSSProperties = {
 };
 
 /**
+ * Yes/No selects in Considerations. Pinned to the same 33px box as the
+ * NumField inputs beside them — a native select otherwise renders a pixel
+ * or two taller and the row's bottom edges stop lining up.
+ */
+const yesNoSelect: React.CSSProperties = {
+  ...numInput,
+  height: 33,
+  boxSizing: "border-box",
+  padding: "0 9px",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+/**
  * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
  * which the costing can override without touching the form. Choosing what
  * the form already says clears the override, so the board goes back to
@@ -1258,22 +1272,31 @@ function FormYesNo({
   onChange: (v: boolean | null) => void;
 }) {
   return (
-    <>
+    <div style={{ position: "relative" }}>
       <select
         value={on ? "yes" : "no"}
         onChange={(e) => {
           const v = e.target.value === "yes";
           onChange(v === fromForm ? null : v);
         }}
-        style={{ ...numInput, textAlign: "left", cursor: "pointer" }}
+        style={yesNoSelect}
       >
         <option value="no">No</option>
         <option value="yes">Yes</option>
       </select>
       <div
         className="bc-noprint"
+        // Out of flow, hanging just below the select: the Considerations
+        // grid bottom-aligns its cells, so an in-flow caption would lift
+        // this select above every input in the row.
         style={{
-          marginTop: 3,
+          position: "absolute",
+          top: "100%",
+          left: 0,
+          right: 0,
+          whiteSpace: "nowrap",
+          lineHeight: "14px",
+          marginTop: 2,
           fontSize: 11,
           fontWeight: 500,
           textTransform: "none",
@@ -1305,7 +1328,7 @@ function FormYesNo({
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -3553,7 +3576,9 @@ export default function BottleCostingBoard({
       {/* ---------- Considerations ---------- */}
       <div className="bc-card" style={shell}>
         <div style={band}>Considerations</div>
-        <div style={metricGrid}>
+        {/* Extra row gap: the form-driven Yes/No captions hang below their
+            selects, out of flow, and need the space between rows. */}
+        <div style={{ ...metricGrid, rowGap: 24, paddingBottom: 22 }}>
           {/* Editable, because the quantity on the request is often a
               placeholder and a costing is where you test alternatives. It
               writes to quantityOverride, NOT back to the workflow — what the
