@@ -95,6 +95,8 @@ export type ProductEntry = {
   // Contract Packaging → Pouches: mirrors the PandaDoc "Packaging Form
   // (Bags/Gusseted bags/Stand up pouch)" version 202401.
   pouchSpec?: PackagingSpecPouches;
+  // Contract Packaging → Sachets (and Finished Product → Sachets).
+  sachetSpec?: PackagingSpecSachets;
   // Hydrated display fields — not persisted to JSONB. Marked optional so the
   // server-loaded rows (which won't have them) typecheck.
   _name?: string | null;
@@ -642,6 +644,150 @@ export function blankPackagingSpecPouches(): PackagingSpecPouches {
   };
 }
 
+
+// -----------------------------------------------------------------------------
+// Packaging Specification Form (Sachets) — no PandaDoc form yet, so this is
+// the pouch spec's shape reused field-for-field (bagWidth/bagHeight hold the
+// sachet size; hanging hole / zipper stay blank — the section does not ask).
+// Lot / EXP are always printed on the line for sachets.
+// -----------------------------------------------------------------------------
+export type PackagingSpecSachets = {
+  formVersion: string; // "sachets-v1"
+
+  // --- Section A — finished product ---
+  // (product code + name come from the product card; only the count lives
+  // here so one workflow can quote a 30ct and a 60ct sachet side by side)
+  sachetCount: string;              // pieces per sachet/bag, e.g. "60"
+
+  // --- Section B — bulk ---
+  bulkSuppliedBy: string;          // "" | "pharmacenter" | "customer"
+  bulkProductCode: string;         // PC bulk code when PharmaCenter-supplied
+  dosageType: string;              // softgel | gummy | tablet | capsule | other
+  dosageTypeOther: string;
+  dosageSize: string;
+  dosageShape: string;
+
+  // --- Section C — gusseted bag / stand-up sachet ---
+  filmSuppliedBy: string;          // pre-made sachet / roll stock supplier
+  filmMaterial: string;            // mylar | kraft | pet-pe | foil | other
+  filmMaterialOther: string;
+  bagWidth: string;                // e.g. inches; free text or picklist value
+  bagHeight: string;
+  bagSizeOther: string;            // when width/height need explanation
+  hangingHoleRequired: string;     // yes/no
+  hangingHoleStyle: string;        // round | euro-slot | other free text
+  tearNotchRequired: string;       // yes/no
+  zipperRequired: string;          // yes/no
+
+  // --- Section D — film printing ---
+  filmArtwork: string;             // artwork reference / who supplies art
+  printWhere: string;              // where lot & EXP go on the bag
+  printColor: string;
+  printFormat: string;             // default "Lot: X#### EXP: MM/YYYY" | other
+  printFormatOther: string;
+  lotSource: string;               // where the printed lot number comes from
+  expSource: string;               // where the printed EXP date comes from
+
+  // --- Section E — secondary/retail packaging ---
+  retailRequired: string;          // yes/no
+  retailSuppliedBy: string;
+  retailType: string;              // carton | display-box | other
+  retailTypeOther: string;
+  retailBagsPerPack: string;       // bags per finished retail unit
+  // E.1 — retail printing
+  retailArtwork: string;
+  retailPrintWhere: string;
+  retailPrintColor: string;
+  retailPrintFormat: string;
+  retailPrintFormatOther: string;
+  retailLotSource: string;
+  retailExpSource: string;
+  // E.2 — retail extra applications
+  safetySealRequired: string;      // yes/no
+  safetySealSuppliedBy: string;
+  insertRequired: string;          // yes/no
+  insertSuppliedBy: string;
+  stickersRequired: string;        // yes/no
+  stickersSuppliedBy: string;
+  stickersWhere: string;
+  retailExtraOther: string;        // free text ("" = none)
+
+  // --- Section F — bundling ---
+  bundlingRequired: string;        // yes/no
+  bundleUnitsPerBundle: string;
+  bundleShrinkWrap: string;        // yes/no
+  bundleShrinkWrapSuppliedBy: string;
+  bundleTrays: string;             // yes/no
+  bundleTraysSuppliedBy: string;
+  bundleOther: string;
+  // F.1 — bundle extra applications
+  bundleStickersRequired: string;  // yes/no
+  bundleStickersWhere: string;
+  bundleExtraOther: string;
+
+  // --- Section G — inner pack ---
+  innerPackRequired: string;       // yes/no
+  innerPackSuppliedBy: string;
+  innerPackHow: string;            // upright | laydown | bulk | other
+  innerPackHowOther: string;
+  innerPackQty: string;
+  innerPackSize: string;
+  innerPackLabelInfo: string;
+  innerPackLabelSize: string;
+
+  // --- Section H — master box ---
+  masterBoxSuppliedBy: string;
+  masterBoxQty: string;            // finished units or inner cases per box
+  masterBoxSize: string;
+  masterBoxLabelInfo: string;
+  masterBoxLabelSize: string;
+
+  // --- Section I — pallet ---
+  palletType: string;              // gma-wood | heat-treated | plastic | other
+  palletTypeOther: string;
+  palletSize: string;              // 48x40 | 48x42 | euro | other
+  palletSizeOther: string;
+  palletConfig: string;
+  palletDimensionLimits: string;
+  palletLabelRequired: string;     // yes/no
+  palletLabelInfo: string;
+  palletLabelSize: string;
+  palletTemptale: string;          // yes/no
+
+  // --- Section J — additional ---
+  additionalInfo: string;
+};
+
+/** A fresh, fully-blank Packaging Spec (Sachets) — every field "". */
+export function blankPackagingSpecSachets(): PackagingSpecSachets {
+  return {
+    formVersion: "sachets-v1",
+    sachetCount: "",
+    bulkSuppliedBy: "", bulkProductCode: "", dosageType: "", dosageTypeOther: "", dosageSize: "", dosageShape: "",
+    filmSuppliedBy: "", filmMaterial: "", filmMaterialOther: "",
+    bagWidth: "", bagHeight: "", bagSizeOther: "",
+    hangingHoleRequired: "", hangingHoleStyle: "",
+    tearNotchRequired: "", zipperRequired: "",
+    filmArtwork: "", printWhere: "", printColor: "",
+    printFormat: "", printFormatOther: "", lotSource: "", expSource: "",
+    retailRequired: "", retailSuppliedBy: "", retailType: "", retailTypeOther: "", retailBagsPerPack: "",
+    retailArtwork: "", retailPrintWhere: "", retailPrintColor: "", retailPrintFormat: "",
+    retailPrintFormatOther: "", retailLotSource: "", retailExpSource: "",
+    safetySealRequired: "", safetySealSuppliedBy: "", insertRequired: "", insertSuppliedBy: "",
+    stickersRequired: "", stickersSuppliedBy: "", stickersWhere: "", retailExtraOther: "",
+    bundlingRequired: "", bundleUnitsPerBundle: "", bundleShrinkWrap: "", bundleShrinkWrapSuppliedBy: "",
+    bundleTrays: "", bundleTraysSuppliedBy: "", bundleOther: "",
+    bundleStickersRequired: "", bundleStickersWhere: "", bundleExtraOther: "",
+    innerPackRequired: "", innerPackSuppliedBy: "", innerPackHow: "", innerPackHowOther: "",
+    innerPackQty: "", innerPackSize: "", innerPackLabelInfo: "", innerPackLabelSize: "",
+    masterBoxSuppliedBy: "", masterBoxQty: "", masterBoxSize: "", masterBoxLabelInfo: "", masterBoxLabelSize: "",
+    palletType: "", palletTypeOther: "", palletSize: "", palletSizeOther: "",
+    palletConfig: "", palletDimensionLimits: "",
+    palletLabelRequired: "", palletLabelInfo: "", palletLabelSize: "", palletTemptale: "",
+    additionalInfo: "",
+  };
+}
+
 // A saved pricing-calculator snapshot. A workflow can have many — they show
 // up as Excel-style tabs in the calculator. Each tab targets one workflow
 // product (optional) so a single workflow with multiple products can have
@@ -809,6 +955,9 @@ export type WorkflowState = {
   // save here, index-aligned with state.products[1..]. Same for blisters.
   bottleCostingMore?: Record<string, unknown>[];
   blisterCostingMore?: Record<string, unknown>[];
+  // Sachet cost build-up — same convention as bottles / blisters / pouches.
+  sachetCosting?: Record<string, unknown>;
+  sachetCostingMore?: Record<string, unknown>[];
   // Reference to a snapshotted version in the gummy_formulas catalog. See
   // /lib/formulas.ts (GummyFormulaReference). Small enough to store on the
   // state row without bloating it — cached identity fields let the workflow

@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { type Product } from "@/lib/supabase/rows";
 import { uploadAttachment, removeAttachment, type WorkflowAttachment } from "@/lib/storage";
-import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters, blankPackagingSpecPouches } from "@/lib/workflows";
+import { formatQuoteNumber, blankPackagingSpecBottles, blankPackagingSpecBlisters, blankPackagingSpecPouches, blankPackagingSpecSachets } from "@/lib/workflows";
 import PackagingSpecSection from "./PackagingSpecSection";
 import PackagingSpecBlistersSection from "./PackagingSpecBlistersSection";
 import PackagingSpecPouchesSection from "./PackagingSpecPouchesSection";
+import PackagingSpecSachetsSection from "./PackagingSpecSachetsSection";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
 import { useEffectiveAdmin } from "@/lib/access";
 
@@ -58,7 +59,7 @@ const NEW_PRODUCT_PLACEHOLDERS_PACKAGING: Record<string, string> = {
 // Finished Product packaging types: only the ones with a costing board.
 // Sachets and kitting join when their boards exist.
 const FP_PACKAGING_TYPES = PACKAGING_TYPES.filter((t) =>
-  ["bottles", "blisters", "pouches"].includes(t.id),
+  ["bottles", "blisters", "pouches", "sachets"].includes(t.id),
 );
 
 // Gummies are only sourced as Third party or Manufactured at PharmaCenter.
@@ -1400,6 +1401,23 @@ function StartWorkflow() {
                     per product. Same fill-now-or-later contract as bottles
                     and blisters. Pouches ≠ sachets: sachets get their own
                     form + section when that PandaDoc form lands. */}
+                {/* Packaging spec (Sachets) — adapted from the pouch form
+                    (no PandaDoc sachet form yet); read by the sachet board. */}
+                {specPackaging === "sachets" ? (
+                  <PackagingSpecSachetsSection
+                    spec={p.sachetSpec}
+                    onChange={(updater) =>
+                      setProduct(p.uid, (cur) => ({
+                        ...cur,
+                        sachetSpec: updater(
+                          cur.sachetSpec ??
+                            fpSeed(blankPackagingSpecSachets(), isFinished),
+                        ),
+                      }))
+                    }
+                  />
+                ) : null}
+
                 {specPackaging === "pouches" ? (
                   <PackagingSpecPouchesSection
                     spec={p.pouchSpec}

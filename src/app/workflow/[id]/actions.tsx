@@ -786,6 +786,11 @@ export default function WorkflowActions({
   const isFinishedProduct =
     (workflow.state.type ?? "") === "finished-product";
 
+  /** Contract-packaging sachets — the pouch board's sibling. */
+  const isCpSachets =
+    (workflow.state.type ?? "") === "contract-packaging" &&
+    (workflow.state.form ?? "") === "sachets";
+
   const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
   return (
@@ -1021,7 +1026,7 @@ export default function WorkflowActions({
           </a>
         )}
 
-        {!isCpBottles && !isCpBlisters && !isCpPouches && !isFinishedProduct && (
+        {!isCpBottles && !isCpBlisters && !isCpPouches && !isCpSachets && !isFinishedProduct && (
           <>
             <a
               href={`/pricing?from=${workflow.id}`}
@@ -1100,6 +1105,21 @@ export default function WorkflowActions({
             <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Pouches) →</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
               Bulk + pouches + crews + margin → price per finished unit.
+            </span>
+          </a>
+        )}
+
+        {/* Sachet costing — the pouch board's sibling: sachet film charged
+            per impression (per sachet), printed on the line only. */}
+        {isCpSachets && (
+          <a
+            href={`/workflow/${workflow.id}/sachet-costing`}
+            style={editAction}
+            aria-label="Open the sachets pricing calculator"
+          >
+            <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Sachets) →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Bulk + sachet film + crews + margin → price per finished unit.
             </span>
           </a>
         )}

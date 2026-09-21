@@ -239,7 +239,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
                   ? (p.blisterSpec?.cardCount ?? "")
                   : pack === "pouches"
                     ? (p.pouchSpec?.pouchCount ?? "")
-                    : "",
+                    : pack === "sachets"
+                      ? (p.sachetSpec?.sachetCount ?? "")
+                      : "",
             ).replace(/[^0-9.]/g, ""),
           );
           const eaches = Number(String(firstQty ?? "").replace(/[^0-9.]/g, ""));

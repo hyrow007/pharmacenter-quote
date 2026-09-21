@@ -14,6 +14,7 @@ const PACKAGING_LABEL: Record<string, string> = {
   bottles: "Bottles",
   blisters: "Blisters",
   pouches: "Pouches",
+  sachets: "Sachets",
 };
 
 export function finishedProductPackagingHref(
@@ -23,6 +24,7 @@ export function finishedProductPackagingHref(
   if (packagingType === "bottles") return `/workflow/${workflowId}/bottle-costing`;
   if (packagingType === "blisters") return `/workflow/${workflowId}/blister-costing`;
   if (packagingType === "pouches") return `/workflow/${workflowId}/pouch-costing`;
+  if (packagingType === "sachets") return `/workflow/${workflowId}/sachet-costing`;
   return null;
 }
 
