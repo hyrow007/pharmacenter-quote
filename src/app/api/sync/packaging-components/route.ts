@@ -243,7 +243,22 @@ export async function POST(request: Request) {
       (typeof v.last_order_cost_uom === "string" && v.last_order_cost_uom.trim()
         ? v.last_order_cost_uom
         : purchaseUom) || null;
-    const lastOrderFactor = eachesPerPurchaseUom(lastOrderUom);
+    // ...but only when the two agree. Fishbowl's PO lines do not reliably
+    // carry the UOM the price was actually quoted in: on 2026-09-20 the first
+    // run with last-order costs produced PC-PK-0267 at $150.00 per EACH for a
+    // bottle whose inventory cost is $0.01875 -- a 8000x ratio, because the
+    // line says "ea" and is plainly priced per thousand. Where the two
+    // denominations disagree we cannot tell which is right, so the per-each
+    // last-order cost is left NULL and only the raw purchase-unit number is
+    // stored, for audit. A blank blanks the costing line; a wrong number
+    // quotes confidently. Affected ~15 of 859 PharmaCenter parts.
+    const uomsAgree =
+      !!lastOrderUom &&
+      !!purchaseUom &&
+      lastOrderUom.trim().toLowerCase() === purchaseUom.trim().toLowerCase();
+    const lastOrderFactor = uomsAgree
+      ? eachesPerPurchaseUom(lastOrderUom)
+      : null;
 
     /** Purchase-unit cost -> per-each cost. Null in, null out; and an
      *  unconvertible UOM also yields null, which is the point: a missing
