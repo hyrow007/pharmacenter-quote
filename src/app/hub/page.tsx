@@ -8,7 +8,8 @@ import { makeT, type DictKey } from "@/lib/i18n/dict";
 //
 // Replaces a Wix page that had been the front door since 2023 and listed
 // Google Drive folders by department. That page now lives at
-// old.pharmacenter.app; this one lists the five apps instead.
+// old.pharmacenter.app; this one lists the apps instead (Meetings is hidden
+// until it is built out -- see the `hidden` flag below).
 //
 // Signed-in only, like every other surface. There is no redirect loop to worry
 // about: an unauthenticated visitor never reaches this page, because the apex
@@ -29,6 +30,11 @@ type Tool = {
   titleKey: DictKey;
   descKey: DictKey;
   icon: React.ReactNode;
+  // Built, named and translated, but not ready to be handed to anyone yet.
+  // Kept in the array rather than deleted so restoring it is one word, and so
+  // the tile, its icon and its two dictionary keys never drift apart while it
+  // waits. Filtered out at render -- see VISIBLE_TOOLS.
+  hidden?: boolean;
 };
 
 // Stroke icons rather than glyphs or emoji: they take currentColor, so each
@@ -107,6 +113,9 @@ const TOOLS: Tool[] = [
     href: "https://meeting.pharmacenter.app/meetings",
     titleKey: "hubMeetingsName",
     descKey: "hubMeetingsDesc",
+    // Hidden 2026-09-20: Meetings is not built out. Set this to false (or
+    // delete the line) to put the tile back.
+    hidden: true,
     // Two overlapping speech bubbles — a recurring conversation, not a date.
     icon: (
       <svg {...ICON}>
@@ -116,6 +125,8 @@ const TOOLS: Tool[] = [
     ),
   },
 ];
+
+const VISIBLE_TOOLS = TOOLS.filter((tool) => !tool.hidden);
 
 export default async function HubPage() {
   const supabase = await createClient();
@@ -145,7 +156,7 @@ export default async function HubPage() {
           </div>
 
           <ul className="hub-grid">
-            {TOOLS.map((tool) => (
+            {VISIBLE_TOOLS.map((tool) => (
               <li key={tool.key}>
                 {/* The whole tile is the link, so the target is the card
                     rather than a word inside it. */}
