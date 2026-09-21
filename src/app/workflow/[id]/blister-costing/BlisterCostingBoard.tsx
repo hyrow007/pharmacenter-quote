@@ -77,7 +77,12 @@ import {
   OVERHEAD_OTHER_DEFAULTS,
   INDIRECT_HOURS_PER_MONTH,
 } from "@/lib/overheadCosting";
-import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalculator";
+import {
+  buildQuoteHtml,
+  bulkCostPerPiece,
+  type QuoteLineItem,
+} from "@/app/pricing/PricingCalculator";
+import type { PricingSnapshot } from "@/lib/workflows";
 import {
   fetchFishbowlCosts,
   refreshBomCosts,
@@ -2227,11 +2232,27 @@ function StatusChip({ status }: { status: CostStatus }) {
 /** One product tab's inputs, straight off the workflow. A workflow with
  *  several products gets one of these per product — and one Base pill
  *  (plus its own scenarios) per product on the board. */
+/** A new Finished Product costing: the Bulk row prices from the Bulk tab
+ *  rather than defaulting to Manual. Saved costings keep their choice. */
+function seedBulkFromBulkTab(state: SavedState): SavedState {
+  return {
+    ...state,
+    bom: state.bom.map((l) =>
+      slotKeyOf(l)?.key === "bulk"
+        ? { ...l, suppliedBy: "pharmacenter", costSource: "Bulk tab" }
+        : l,
+    ),
+  };
+}
+
 export type BoardProduct = {
   name: string;
   quantity: number | null;
   spec: Record<string, string> | null;
   initial: SavedState | null;
+  /** Finished Product only: this product's saved Bulk-tab pricing, whose
+   *  landed cost prices the Bulk row. Null = not priced there yet. */
+  bulkSnapshot?: PricingSnapshot | null;
 };
 
 /** Build the working state for one product: its saved costing hydrated
@@ -2387,11 +2408,15 @@ export default function BlisterCostingBoard({
   quoteNumber,
   customerName,
   products,
+  finishedProduct = null,
 }: {
   workflowId: string;
   quoteNumber: string;
   customerName: string;
   products: BoardProduct[];
+  /** Set on a Finished Product quote, where this board is the Packaging
+   *  tab and the Bulk row is priced from the Bulk tab. */
+  finishedProduct?: { dosageForm: string | null } | null;
 }) {
   // ---- Multi-product dimension -------------------------------------
   // Every product on the workflow gets its own Base tab with its own
@@ -2403,7 +2428,9 @@ export default function BlisterCostingBoard({
   const productStatesRef = useRef<SavedState[] | null>(null);
   if (productStatesRef.current === null)
     productStatesRef.current = products.map((p) =>
-      hydrateSaved(p.initial, p.spec),
+      finishedProduct && !p.initial
+        ? seedBulkFromBulkTab(hydrateSaved(p.initial, p.spec))
+        : hydrateSaved(p.initial, p.spec),
     );
   // Ref edits (rename / delete on an INACTIVE product's pills) don't
   // re-render on their own — this ticks the strip after one.
@@ -2412,6 +2439,15 @@ export default function BlisterCostingBoard({
     products[activeBaseIdx]?.name ?? "Blistered product";
   const quantity = products[activeBaseIdx]?.quantity ?? null;
   const spec = products[activeBaseIdx]?.spec ?? null;
+
+  // Finished Product: the bulk COST per dose from this product's saved Bulk
+  // tab (landed, before that tab's margin and commissions). Null = not
+  // priced there yet, which blocks the Bulk row instead of pricing it $0.
+  const bulkTabCost = useMemo(() => {
+    const snap = products[activeBaseIdx]?.bulkSnapshot ?? null;
+    if (!finishedProduct || !snap) return null;
+    return bulkCostPerPiece(snap, finishedProduct.dosageForm);
+  }, [finishedProduct, products, activeBaseIdx]);
 
   const [st, setSt] = useState<SavedState>(
     () => productStatesRef.current![0],
@@ -2943,7 +2979,14 @@ export default function BlisterCostingBoard({
   const inputs: BlisterCostingInputs = useMemo(
     () => ({
       quantity: qty,
-      bom: st.bom,
+      // The Bulk-tab cost is derived on read, never stored on the line.
+      bom: finishedProduct
+        ? st.bom.map((l) =>
+            l.costSource === "Bulk tab"
+              ? { ...l, bulkTabCostPerUnit: bulkTabCost }
+              : l,
+          )
+        : st.bom,
       labor: {
         strokesPerMinute: st.strokesPerMinute,
         blistersPerStroke: st.blistersPerStroke,
@@ -3033,7 +3076,7 @@ export default function BlisterCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, qty, packoutOn, bundlingOn],
+    [st, qty, packoutOn, bundlingOn, finishedProduct, bulkTabCost],
   );
 
   const r = useMemo(() => computeBlisterCosting(inputs), [inputs]);
@@ -4540,12 +4583,28 @@ export default function BlisterCostingBoard({
                           background: "#fff",
                         }}
                       >
-                        {COST_SOURCES.map((s) => (
+                        {(finishedProduct && slotKeyOf(line)?.key === "bulk"
+                          ? [...COST_SOURCES, "Bulk tab" as CostSource]
+                          : COST_SOURCES
+                        ).map((s) => (
                           <option key={s} value={s}>
                             {s}
                           </option>
                         ))}
                       </select>
+                      {line.costSource === "Bulk tab" && (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 11,
+                            color: "var(--ink-3, #7b7364)",
+                          }}
+                        >
+                          {bulkTabCost !== null
+                            ? `${money(bulkTabCost * 1000, 2)} / 1,000 doses from the Bulk tab`
+                            : "Not priced on the Bulk tab yet"}
+                        </div>
+                      )}
                       {line.costSource === "Manual" && (
                         <div style={{ marginTop: 4 }}>
                           <NumField

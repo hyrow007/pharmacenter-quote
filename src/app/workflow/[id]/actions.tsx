@@ -776,6 +776,16 @@ export default function WorkflowActions({
     (workflow.state.type ?? "") === "contract-packaging" &&
     (workflow.state.form ?? "") === "pouches";
 
+  /**
+   * Finished Product — bulk + packaging priced as one retail-ready unit, on a
+   * two-tab calculator: the Bulk tab is the generic pricing calculator, the
+   * Packaging tab is the board for the chosen packaging type. The quote
+   * document comes from the Packaging tab (it carries the finished-unit
+   * price), so the generic Issue Quote is not offered here.
+   */
+  const isFinishedProduct =
+    (workflow.state.type ?? "") === "finished-product";
+
   const STATUS_ORDER: WorkflowStatus[] = ["in_progress", "won", "lost"];
 
   return (
@@ -998,7 +1008,20 @@ export default function WorkflowActions({
             empty cost, so both entry points are hidden for bottles and
             blisters alike — each has a calculator below that carries the job
             end to end. */}
-        {!isCpBottles && !isCpBlisters && !isCpPouches && (
+        {isFinishedProduct && (
+          <a
+            href={`/pricing?from=${workflow.id}`}
+            style={editAction}
+            aria-label="Open the finished product pricing calculator"
+          >
+            <span style={actionTitleRow}><IconCalculator />Pricing Calculator (Finished Product) →</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-3)" }}>
+              Bulk tab + Packaging tab → price per finished unit.
+            </span>
+          </a>
+        )}
+
+        {!isCpBottles && !isCpBlisters && !isCpPouches && !isFinishedProduct && (
           <>
             <a
               href={`/pricing?from=${workflow.id}`}

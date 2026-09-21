@@ -68,7 +68,12 @@ import {
   OVERHEAD_OTHER_DEFAULTS,
   INDIRECT_HOURS_PER_MONTH,
 } from "@/lib/overheadCosting";
-import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalculator";
+import {
+  buildQuoteHtml,
+  bulkCostPerPiece,
+  type QuoteLineItem,
+} from "@/app/pricing/PricingCalculator";
+import type { PricingSnapshot } from "@/lib/workflows";
 import {
   fetchFishbowlCosts,
   refreshBomCosts,
@@ -2132,11 +2137,58 @@ function StatusChip({ status }: { status: CostStatus }) {
 /** One product tab's inputs, straight off the workflow. A workflow with
  *  several products gets one of these per product — and one Base pill
  *  (plus its own scenarios) per product on the board. */
+/** A new Finished Product costing: the bottle IS the finished unit, so it
+ *  carries a Bulk row priced from the Bulk tab — added if the spec-built
+ *  list has none, doses per bottle seeded from the bottle count. Saved
+ *  costings keep whatever they were saved with. */
+function seedBulkFromBulkTab(
+  state: SavedState,
+  spec: Record<string, string> | null,
+): SavedState {
+  const isBulk = (l: { id: string }) => l.id.includes("-bulk-");
+  if (state.bom.some(isBulk))
+    return {
+      ...state,
+      bom: state.bom.map((l) =>
+        isBulk(l)
+          ? { ...l, suppliedBy: "pharmacenter", costSource: "Bulk tab" }
+          : l,
+      ),
+    };
+  const doses = Number(
+    String(spec?.bottleCount ?? "").replace(/[^0-9.]/g, ""),
+  );
+  return {
+    ...state,
+    bom: [
+      {
+        id: "slot-bulk-0",
+        slot: "other",
+        fpCode: null,
+        name: "Bulk (doses)",
+        qtyPerUnit: Number.isFinite(doses) && doses > 0 ? doses : null,
+        costPerUnit: null,
+        costStatus: "no_cost",
+        suppliedBy: "pharmacenter",
+        costSource: "Bulk tab",
+        wastePct: 3,
+        manualCostPerUnit: null,
+        inventoryCostPerUnit: null,
+        lastOrderCostPerUnit: null,
+      },
+      ...state.bom,
+    ],
+  };
+}
+
 export type BoardProduct = {
   name: string;
   quantity: number | null;
   spec: Record<string, string> | null;
   initial: SavedState | null;
+  /** Finished Product only: this product's saved Bulk-tab pricing, whose
+   *  landed cost prices the Bulk row. Null = not priced there yet. */
+  bulkSnapshot?: PricingSnapshot | null;
 };
 
 /** Build the working state for one product: its saved costing hydrated
@@ -2278,11 +2330,15 @@ export default function BottleCostingBoard({
   quoteNumber,
   customerName,
   products,
+  finishedProduct = null,
 }: {
   workflowId: string;
   quoteNumber: string;
   customerName: string;
   products: BoardProduct[];
+  /** Set on a Finished Product quote, where this board is the Packaging
+   *  tab and the Bulk row is priced from the Bulk tab. */
+  finishedProduct?: { dosageForm: string | null } | null;
 }) {
   // ---- Multi-product dimension -------------------------------------
   // Every product on the workflow gets its own Base tab with its own
@@ -2294,7 +2350,9 @@ export default function BottleCostingBoard({
   const productStatesRef = useRef<SavedState[] | null>(null);
   if (productStatesRef.current === null)
     productStatesRef.current = products.map((p) =>
-      hydrateSaved(p.initial, p.spec),
+      finishedProduct && !p.initial
+        ? seedBulkFromBulkTab(hydrateSaved(p.initial, p.spec), p.spec)
+        : hydrateSaved(p.initial, p.spec),
     );
   // Ref edits (rename / delete on an INACTIVE product's pills) don't
   // re-render on their own — this ticks the strip after one.
@@ -2303,6 +2361,15 @@ export default function BottleCostingBoard({
     products[activeBaseIdx]?.name ?? "Bottled product";
   const quantity = products[activeBaseIdx]?.quantity ?? null;
   const spec = products[activeBaseIdx]?.spec ?? null;
+
+  // Finished Product: the bulk COST per dose from this product's saved Bulk
+  // tab (landed, before that tab's margin and commissions). Null = not
+  // priced there yet, which blocks the Bulk row instead of pricing it $0.
+  const bulkTabCost = useMemo(() => {
+    const snap = products[activeBaseIdx]?.bulkSnapshot ?? null;
+    if (!finishedProduct || !snap) return null;
+    return bulkCostPerPiece(snap, finishedProduct.dosageForm);
+  }, [finishedProduct, products, activeBaseIdx]);
 
   const [st, setSt] = useState<SavedState>(
     () => productStatesRef.current![0],
@@ -2814,7 +2881,14 @@ export default function BottleCostingBoard({
   const inputs: BottleCostingInputs = useMemo(
     () => ({
       quantity: qty,
-      bom: st.bom,
+      // The Bulk-tab cost is derived on read, never stored on the line.
+      bom: finishedProduct
+        ? st.bom.map((l) =>
+            l.costSource === "Bulk tab"
+              ? { ...l, bulkTabCostPerUnit: bulkTabCost }
+              : l,
+          )
+        : st.bom,
       labor: {
         bottlesPerMinute: st.bottlesPerMinute,
         kittingSpeed: st.kittingSpeed,
@@ -2905,7 +2979,7 @@ export default function BottleCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, qty, packoutOn, bundlingOn],
+    [st, qty, packoutOn, bundlingOn, finishedProduct, bulkTabCost],
   );
 
   const r = useMemo(() => computeBottleCosting(inputs), [inputs]);
@@ -4274,12 +4348,28 @@ export default function BottleCostingBoard({
                           background: "#fff",
                         }}
                       >
-                        {COST_SOURCES.map((s) => (
+                        {(finishedProduct && isBulkLine
+                          ? [...COST_SOURCES, "Bulk tab" as CostSource]
+                          : COST_SOURCES
+                        ).map((s) => (
                           <option key={s} value={s}>
                             {s}
                           </option>
                         ))}
                       </select>
+                      {line.costSource === "Bulk tab" && (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 11,
+                            color: "var(--ink-3, #7b7364)",
+                          }}
+                        >
+                          {bulkTabCost !== null
+                            ? `${money(bulkTabCost * 1000, 2)} / 1,000 doses from the Bulk tab`
+                            : "Not priced on the Bulk tab yet"}
+                        </div>
+                      )}
                       {line.costSource === "Manual" && (
                         <div style={{ marginTop: 4 }}>
                           {/* Bulk is bought per 1,000 doses (house rule), so

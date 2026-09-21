@@ -146,6 +146,14 @@ export type BomLine = {
   inventoryCostPerUnit?: number | null;
   /** Per-each cost from the last purchase order. */
   lastOrderCostPerUnit?: number | null;
+  /**
+   * Finished Product only: the bulk COST per dose from the quote's Bulk tab
+   * (its saved landed cost, before the Bulk tab's own margin and
+   * commissions). Injected by the board at calculation time from the saved
+   * Bulk tab — never typed. The packaging margin is applied once, to the
+   * whole finished unit.
+   */
+  bulkTabCostPerUnit?: number | null;
 
   /**
    * Scrap rate for this component, as a percentage of what we BUY.
@@ -175,7 +183,10 @@ export type CostSource =
   | "Fish Bowl (Inventory)"
   | "Fish Bowl (Last Order)"
   | "App"
-  | "Manual";
+  | "Manual"
+  // Finished Product bulk rows only — deliberately NOT in COST_SOURCES, so
+  // it is offered on that one row and nowhere else.
+  | "Bulk tab";
 
 export const COST_SOURCES: CostSource[] = [
   "Fish Bowl (Inventory)",
@@ -656,13 +667,23 @@ export function resolveLine(line: BomLine): {
   //
   // A hand-typed part counts as chosen. It has no fpCode and never will, so
   // the guard below would otherwise call it "not chosen yet" forever.
-  if (line.customPart && line.costSource !== "Manual")
+  // Finished Product: the bulk row is priced from the quote's own Bulk tab.
+  // It has no Fishbowl part by design, so the part guards below do not
+  // apply to it.
+  const fromBulkTab = line.costSource === "Bulk tab";
+
+  if (line.customPart && line.costSource !== "Manual" && !fromBulkTab)
     return mk(
       "no_cost",
       "A typed-in part has no Fishbowl record to price from. Set Cost source to Manual and enter the cost.",
     );
 
-  if (!line.fpCode && !line.customPart && line.costSource !== "Manual")
+  if (
+    !line.fpCode &&
+    !line.customPart &&
+    line.costSource !== "Manual" &&
+    !fromBulkTab
+  )
     return mk("unassigned", "No component chosen yet.");
 
   const qty = num(line.qtyPerUnit);
@@ -671,7 +692,11 @@ export function resolveLine(line: BomLine): {
 
   // A UOM we cannot convert poisons BOTH Fishbowl sources, so it is checked
   // before the source switch. Manual sidesteps it — that is the escape hatch.
-  if (line.costStatus === "uom_unresolved" && line.costSource !== "Manual")
+  if (
+    line.costStatus === "uom_unresolved" &&
+    line.costSource !== "Manual" &&
+    !fromBulkTab
+  )
     return mk(
       "uom_unresolved",
       "Fishbowl prices this in a unit with no per-each conversion. Choose Manual, or set a units-per-purchase-unit override.",
@@ -686,6 +711,11 @@ export function resolveLine(line: BomLine): {
       return mk("no_cost", "The App source is not wired up yet — choose another source.");
     if (line.costSource === "Fish Bowl (Last Order)")
       return mk("no_cost", "No last-order cost in Fishbowl for this part.");
+    if (fromBulkTab)
+      return mk(
+        "no_cost",
+        "No bulk cost yet — price this product on the Bulk tab and Save it there.",
+      );
     return mk("no_cost", "No inventory cost in Fishbowl for this part.");
   }
 
@@ -720,6 +750,8 @@ export function costFromSource(line: BomLine): number | null {
       return num(line.manualCostPerUnit);
     case "Fish Bowl (Last Order)":
       return num(line.lastOrderCostPerUnit);
+    case "Bulk tab":
+      return num(line.bulkTabCostPerUnit);
     case "App":
       // Deliberately unwired, exactly as on the gummy tab.
       return null;

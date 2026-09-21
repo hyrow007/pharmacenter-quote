@@ -1,6 +1,11 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatQuoteNumber, type WorkflowRow } from "@/lib/workflows";
+import {
+  formatQuoteNumber,
+  type PricingSnapshot,
+  type WorkflowRow,
+} from "@/lib/workflows";
+import FinishedProductTabs from "../../../_components/FinishedProductTabs";
 import AppHeader from "../../../_components/AppHeader";
 import BottleCostingBoard, {
   type BoardProduct,
@@ -42,9 +47,19 @@ export default async function BottleCostingPage({ params }: Ctx) {
   // gets sent back rather than shown a form that cannot describe its job.
   const type = String(state.type ?? "");
   const form = String(state.form ?? "");
-  if (type !== "contract-packaging" || form !== "bottles") {
+  // A Finished Product quote with this packaging type uses the same board
+  // as its Packaging tab (bulk priced on the Bulk tab).
+  const isFinishedProduct =
+    type === "finished-product" &&
+    String(state.packagingType ?? "") === "bottles";
+  if (!isFinishedProduct && (type !== "contract-packaging" || form !== "bottles")) {
     redirect(`/workflow/${w.id}`);
   }
+  // Bulk-tab pricing, matched to each product by its uid. The first tab
+  // for a product wins, as on the Bulk tab's own quote document.
+  const pricingTabs = Array.isArray(state.pricing)
+    ? (state.pricing as PricingSnapshot[])
+    : [];
 
   const rawProducts = Array.isArray(state.products)
     ? (state.products as Record<string, unknown>[])
@@ -118,7 +133,11 @@ export default async function BottleCostingPage({ params }: Ctx) {
       i === 0
         ? ((state.bottleCosting as SavedState | undefined) ?? null)
         : (more[i - 1] ?? null);
-    return { name, quantity, spec, initial };
+    const uid = product.uid as string | undefined;
+    const bulkSnapshot = isFinishedProduct
+      ? (pricingTabs.find((t) => uid && t.workflowProductUid === uid) ?? null)
+      : null;
+    return { name, quantity, spec, initial, bulkSnapshot };
   });
 
   return (
@@ -162,7 +181,9 @@ export default async function BottleCostingPage({ params }: Ctx) {
               PharmaCenter · Tools · {formatQuoteNumber(w.quote_number)}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Pricing Calculator · Bottles
+              {isFinishedProduct
+                ? "Pricing Calculator · Finished Product"
+                : "Pricing Calculator · Bottles"}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
               Build the price of one finished bottle from its components, the
@@ -173,7 +194,20 @@ export default async function BottleCostingPage({ params }: Ctx) {
             </p>
           </div>
 
+          {isFinishedProduct ? (
+            <FinishedProductTabs
+              workflowId={w.id}
+              packagingType="bottles"
+              active="packaging"
+            />
+          ) : null}
+
           <BottleCostingBoard
+            finishedProduct={
+              isFinishedProduct
+                ? { dosageForm: (state.form as string | null) ?? null }
+                : null
+            }
             workflowId={w.id}
             quoteNumber={formatQuoteNumber(w.quote_number)}
             customerName={customerName}

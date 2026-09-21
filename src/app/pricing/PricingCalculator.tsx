@@ -1385,6 +1385,53 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
 // The saved PricingSnapshot's `result` object only carries the top-level
 // totals — this function also returns the auto-computed sub-items so the
 // live UI can render the audit breakdown without re-doing the math.
+/**
+ * Finished Product: the Bulk tab's COST per piece, for the packaging board.
+ *
+ * A Finished Product quote prices bulk on this calculator (the Bulk tab) and
+ * packaging on the bottle / blister / pouch board (the Packaging tab). The
+ * board's Bulk row takes the bulk COST from here — landed cost, before this
+ * calculator's margin and commissions — so the packaging margin is applied
+ * exactly once, to the whole finished unit.
+ *
+ * Bulk units are 1,000 pieces (see /start), so per piece = per unit ÷ 1,000.
+ * Null when the tab has no unit cost or quantity yet — the board then blocks
+ * the Bulk row rather than pricing it at $0.
+ */
+export function bulkCostPerPiece(
+  snap: PricingSnapshot,
+  dosageForm: string | null,
+): number | null {
+  const r = computeResults({
+    unitCost: snap.unitCost,
+    quantity: snap.quantity,
+    freight: snap.freight,
+    insurance: snap.insurance,
+    customsBroker: snap.customsBroker,
+    dutiesPct: snap.dutiesPct,
+    handling: snap.handling,
+    testing: snap.testing,
+    margin: snap.margin,
+    marginMode: snap.marginMode,
+    shippingOrigin: snap.shippingOrigin,
+    incoterm: snap.incoterm,
+    shippingMode: snap.shippingMode,
+    otherCosts: snap.otherCosts,
+    deliveryOverride: snap.deliveryOverride,
+    unitWeightG: unitWeightForForm(dosageForm),
+    accessorials: snap.accessorials,
+    hosCommissionPct: snap.hosCommissionPct,
+    repCommissionPct: snap.repCommissionPct,
+  });
+  if (!r.hasInputs) return null;
+  const q = num(snap.quantity);
+  if (!(q > 0)) return null;
+  // Commissions are % of the BULK sale price; the packaging tab charges its
+  // own on the finished unit, so they come out of the cost handed across.
+  const landedBase = r.landedTotal - r.hosCommission - r.repCommission;
+  return landedBase / q / 1000;
+}
+
 function computeResults(input: {
   unitCost: string;
   quantity: string;

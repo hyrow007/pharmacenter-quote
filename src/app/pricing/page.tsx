@@ -9,6 +9,7 @@ import {
 } from "@/lib/workflows";
 import AppHeader from "../_components/AppHeader";
 import PricingCalculator, { type WorkflowProductOption } from "./PricingCalculator";
+import FinishedProductTabs from "../_components/FinishedProductTabs";
 
 // Standalone pricing calculator. Server shell handles auth + (optionally)
 // hydrates the workflow whose products show up in the product dropdown.
@@ -242,6 +243,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
     }
   }
 
+  // Finished Product: this page is the Bulk tab of a two-tab calculator.
+  const isFinishedProduct = workflowState?.type === "finished-product";
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
@@ -281,13 +285,23 @@ export default async function PricingPage({ searchParams }: Ctx) {
               {workflowLabel ? ` · ${workflowLabel}` : ""}
             </p>
             <h1 className="page-header__title" style={{ marginBottom: 6 }}>
-              Pricing Calculator
+              {isFinishedProduct
+                ? "Pricing Calculator · Finished Product"
+                : "Pricing Calculator"}
             </h1>
             <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>
               Start with your unit cost, layer on inbound costs to get a landed
               cost in our warehouse, then add a margin to get a sale price.
             </p>
           </div>
+
+          {isFinishedProduct && from ? (
+            <FinishedProductTabs
+              workflowId={from}
+              packagingType={workflowState?.packagingType ?? null}
+              active="bulk"
+            />
+          ) : null}
 
           <PricingCalculator
             workflowProducts={workflowProducts}
