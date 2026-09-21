@@ -191,7 +191,9 @@ export default async function PricingPage({ searchParams }: Ctx) {
         let label = `Product ${idx + 1}`;
         let sub: string | null = null;
         let stockAvgCost: number | null = null;
-        if (p.pinnedFormula) {
+        // Finished Product: the product is the finished good (its own code);
+        // a pinned formula is just the bulk behind it, shown in the sub-line.
+        if (p.pinnedFormula && w.state.type !== "finished-product") {
           // PC-manufactured gummy: the formula IS the product identity.
           // Label with the formula handle so the dropdown reads the same
           // as the Formula catalog (F0001 · Neurobrocc Pectin Gummies).
@@ -216,6 +218,11 @@ export default async function PricingPage({ searchParams }: Ctx) {
         const firstQty = (p.quantities ?? []).find(
           (q) => q.replace(/,/g, "").trim().length > 0,
         );
+        if (w.state.type === "finished-product" && p.pinnedFormula) {
+          const f = p.pinnedFormula;
+          const fNum = `F${String(f.formulaNumber).padStart(4, "0")}`;
+          sub = `${sub ? `${sub} · ` : ""}bulk ${fNum} · ${f.name}`;
+        }
         // Finished Product: the workflow quantity is FINISHED UNITS (eaches),
         // but this calculator prices bulk in units of 1,000 pieces. Convert
         // through the packaging spec's count per bottle / card / pouch, so

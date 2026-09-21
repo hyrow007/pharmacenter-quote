@@ -503,13 +503,20 @@ function StartWorkflow() {
           .or(`fp_code.ilike.%${term}%,name.ilike.%${term}%`)
           .order("name")
           .limit(PAGE_SIZE);
-        setProductResults((m) => ({ ...m, [p.uid]: (data ?? []) as ProductRow[] }));
+        let rows = (data ?? []) as ProductRow[];
+        // Finished goods carry plain sequential codes (1237); float those
+        // above bulk / component codes (CA-BK-…, PC-UC-…) on FP quotes.
+        if (state.type === "finished-product") {
+          const fg = (r: ProductRow) => (/^\d+$/.test(r.fp_code ?? "") ? 0 : 1);
+          rows = [...rows].sort((a, b) => fg(a) - fg(b));
+        }
+        setProductResults((m) => ({ ...m, [p.uid]: rows }));
       }, 180);
       handles.push(t);
     }
     return () => { for (const h of handles) clearTimeout(h); };
   // We intentionally key on the search-term map and the products' uids/modes only.
-  }, [productSearches, state.products]);
+  }, [productSearches, state.products, state.type]);
 
   // Hydrate product display names from IDs (when coming back from review).
   useEffect(() => {
@@ -578,6 +585,25 @@ function StartWorkflow() {
   //       (the costing-tab production target). We only seed when the tier is
   //       still empty so we don't stomp on a number the rep already typed.
   const pickFormulaFor = (productUid: string, f: FormulaRow) => {
+    // Finished Product: the formula is only the BULK behind a finished good
+    // that has its own identity and eaches quantity — pin it and stop. No
+    // rename, no product reset, no quantity seeded from the batch yield.
+    if (state.type === "finished-product") {
+      setProduct(productUid, (cur) => ({
+        ...cur,
+        pinnedFormula: {
+          formulaId: f.id,
+          versionNum: f.latestVersionNum,
+          formulaNumber: f.formulaNumber,
+          pcBkCode: f.pcBkCode,
+          name: f.name,
+          flavor: f.flavor,
+        },
+      }));
+      setFormulaSearch(productUid, "");
+      setFormulaResults((m) => ({ ...m, [productUid]: [] }));
+      return;
+    }
     setProduct(productUid, (cur) => ({
       ...cur,
       pinnedFormula: {
@@ -693,7 +719,7 @@ function StartWorkflow() {
     // No Fishbowl productId or new-product name_desc required (we auto-fill
     // name_desc from the formula on pick anyway, but the pinned snapshot is
     // the canonical Save gate).
-    if (showFormulaPicker) return !!p.pinnedFormula;
+    if (showFormulaPicker && !isFinished) return !!p.pinnedFormula;
     const productPicked = p.mode === "existing" ? !!p.productId : !!p.newProduct.name_desc.trim();
     return productPicked;
   });
@@ -706,7 +732,7 @@ function StartWorkflow() {
   if (!sourceOk) missing.push("Source");
   if (!productsOk) {
     missing.push(
-      showFormulaPicker
+      showFormulaPicker && !isFinished
         ? "Each product needs a formula and at least one quantity"
         : "Each product needs a name and at least one quantity",
     );
@@ -1079,31 +1105,6 @@ function StartWorkflow() {
           {/* Dosage form / count for Contract Packaging is captured on each
               product's Packaging spec form (Sections A/B), never here. */}
 
-          {/* ----- Packaging type (Finished Product only) -----
-              Finished Product needs the dosage form above AND this. Only
-              the formats with a costing board are offered. */}
-          {isFinished ? (
-            <div style={sectionStyle}>
-              <p style={sectionLabelStyle}>Packaging type</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {FP_PACKAGING_TYPES.map((f) => {
-                  const active = state.packagingType === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() =>
-                        setState((s) => ({ ...s, packagingType: f.id }))
-                      }
-                      style={active ? pillActive : pillBase}
-                    >
-                      {f.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
 
           {/* ----- Source (bulk + gummies only) ----- */}
           {showSourceSection ? (
@@ -1130,6 +1131,31 @@ function StartWorkflow() {
                     >
                       {s.name}
                       {!allowed ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          {/* ----- Packaging type (Finished Product only) -----
+              Finished Product needs the dosage form above AND this. Only
+              the formats with a costing board are offered. */}
+          {isFinished ? (
+            <div style={sectionStyle}>
+              <p style={sectionLabelStyle}>Packaging type</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {FP_PACKAGING_TYPES.map((f) => {
+                  const active = state.packagingType === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() =>
+                        setState((s) => ({ ...s, packagingType: f.id }))
+                      }
+                      style={active ? pillActive : pillBase}
+                    >
+                      {f.name}
                     </button>
                   );
                 })}
@@ -1167,7 +1193,7 @@ function StartWorkflow() {
                     we make it in-house, so neither "purchase" nor
                     "existing stock" applies. sourceMode stays at its
                     default so downstream logic doesn't break. */}
-                {!isContractPackaging && !showFormulaPicker ? (
+                {!isContractPackaging && !isFinished && !showFormulaPicker ? (
                   <div style={{ marginBottom: 12 }}>
                     <span style={labelText}>Source</span>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -1233,7 +1259,11 @@ function StartWorkflow() {
                   </div>
                 ) : null}
 
-                {showFormulaPicker ? (
+                {/* Finished Product: the product IS a finished good with its
+                    own sequential code (e.g. 1237), so it is always picked
+                    (or created) here. For PC-made gummies the bulk formula
+                    is pinned below as well — the Bulk tab imports its cost. */}
+                {showFormulaPicker && !isFinished ? (
                   <FormulaPicker
                     entry={p}
                     results={formulaResults[p.uid] ?? []}
@@ -1256,6 +1286,21 @@ function StartWorkflow() {
                     newProductPlaceholder={newProductPlaceholder}
                   />
                 )}
+                {showFormulaPicker && isFinished ? (
+                  <div style={{ marginTop: 14 }}>
+                    <span style={labelText}>Bulk formula (optional)</span>
+                    <div style={{ marginTop: 6 }}>
+                      <FormulaPicker
+                        entry={p}
+                        results={formulaResults[p.uid] ?? []}
+                        search={formulaSearches[p.uid] ?? ""}
+                        onSearch={(v) => setFormulaSearch(p.uid, v)}
+                        onPick={(f) => pickFormulaFor(p.uid, f)}
+                        onClear={() => clearPinnedFormula(p.uid)}
+                      />
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* Quantities */}
                 <div style={{ marginTop: 14 }}>
