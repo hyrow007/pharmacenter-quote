@@ -187,7 +187,40 @@ if ($LASTEXITCODE -ne 0) {
 }
 $staged = git diff --cached --name-only
 if (-not $staged) {
-    Write-Host "Nothing to commit." -ForegroundColor Yellow
+    # "Nothing to commit" is NOT "nothing to ship". A commit made outside this
+    # script -- by an agent working in the repo, by git on the command line, by
+    # another chat -- leaves the working tree clean while main sits AHEAD of
+    # origin. Exiting 0 here printed a calm yellow "Nothing to commit." while
+    # production kept serving the old build, which is the precise failure this
+    # script exists to prevent. Cost a deploy on 2026-09-20 (the hidden
+    # Meetings tile stayed visible after a "successful" run).
+    # NOTE the ErrorActionPreference dance. git writes progress ("From
+    # https://github.com/...") to STDERR even on success, and under
+    # $ErrorActionPreference = "Stop" a redirected stderr stream from a native
+    # command becomes a terminating NativeCommandError. Redirecting with
+    # `2>$null` is what turns a healthy fetch into a red wall of text -- which
+    # is exactly what the first version of this block did. Suppress the
+    # preference for the duration, then put it back.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    git fetch origin main --quiet 2>&1 | Out-Null
+    $ahead = git rev-list --count origin/main..HEAD 2>&1
+    $ErrorActionPreference = $prevEAP
+    if ($LASTEXITCODE -eq 0 -and [int]$ahead -gt 0) {
+        Write-Host ""
+        Write-Host ("Nothing new to stage, but {0} local commit(s) are not on origin - pushing those." -f $ahead) -ForegroundColor Cyan
+        git log --oneline origin/main..HEAD | ForEach-Object { Write-Host "    $_" }
+        git pull --rebase origin main
+        if ($LASTEXITCODE -ne 0) { Write-Error "git pull --rebase failed - nothing pushed."; exit 1 }
+        git push
+        if ($LASTEXITCODE -ne 0) { Write-Error "git push FAILED - this deploy did not ship."; exit 1 }
+        Write-Host ""
+        Write-Host "Pushed. Vercel is rebuilding - give it ~60s." -ForegroundColor Green
+        Write-Host "A push is not a deployment: check the Vercel dashboard before" -ForegroundColor DarkGray
+        Write-Host "believing this shipped." -ForegroundColor DarkGray
+        exit 0
+    }
+    Write-Host "Nothing to commit, and nothing unpushed." -ForegroundColor Yellow
     exit 0
 }
 
