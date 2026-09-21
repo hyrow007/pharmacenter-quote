@@ -84,6 +84,7 @@ import {
   type QuoteLineItem,
 } from "@/app/pricing/PricingCalculator";
 import type { PricingSnapshot } from "@/lib/workflows";
+import { suggestParts } from "@/lib/suggestParts";
 import {
   fetchFishbowlCosts,
   refreshBomCosts,
@@ -2274,6 +2275,8 @@ export type BoardProduct = {
   /** Finished Product only: this product's saved Bulk-tab pricing, whose
    *  landed cost prices the Bulk row. Null = not priced there yet. */
   bulkSnapshot?: PricingSnapshot | null;
+  /** Bulk tab zeroes inbound costs for stock / PC-formula products. */
+  bulkNoInbound?: boolean;
 };
 
 /** Build the working state for one product: its saved costing hydrated
@@ -2478,7 +2481,11 @@ export default function PouchCostingBoard({
   const bulkTabCost = useMemo(() => {
     const snap = products[activeBaseIdx]?.bulkSnapshot ?? null;
     if (!finishedProduct || !snap) return null;
-    return bulkCostPerPiece(snap, finishedProduct.dosageForm);
+    return bulkCostPerPiece(
+      snap,
+      finishedProduct.dosageForm,
+      Boolean(products[activeBaseIdx]?.bulkNoInbound),
+    );
   }, [finishedProduct, products, activeBaseIdx]);
   // The per-row $/unit readouts call costFromSource on the SAVED line, which
   // never carries the Bulk-tab figure (it is derived, not stored) — so they
@@ -2807,6 +2814,61 @@ export default function PouchCostingBoard({
       setCostRefreshing(false);
     }
   };
+
+  // ---- Default the Fishbowl part on empty rows ----------------------
+  // The product's own name (plus the packaging spec's box size and bulk
+  // code) identifies its customer-specific parts, so an empty row gets the
+  // one part that clearly matches. Only blank rows, only a clear winner,
+  // and every default is labelled until a human confirms it. Unsaved until
+  // Save, like any other edit.
+  const [autoPicked, setAutoPicked] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const empty = st.bom.filter(
+      (l) => !l.fpCode && !l.customPart && !l.notUsed,
+    );
+    if (!empty.length) return;
+    (async () => {
+      const picks = await suggestParts({
+        lines: empty.map((l) => ({
+          id: l.id,
+          slot: l.slot,
+          label: slotKeyOf(l)?.label ?? l.name,
+          isBulk: slotKeyOf(l)?.key === "bulk",
+          suppliedBy: l.suppliedBy === "customer" ? "customer" : "pharmacenter",
+        })),
+        productName,
+        spec,
+      });
+      const codes = Object.values(picks);
+      if (cancelled || !codes.length) return;
+      let rows;
+      try {
+        rows = await fetchFishbowlCosts(codes);
+      } catch {
+        return;
+      }
+      if (cancelled) return;
+      const applied: Record<string, string> = {};
+      setSt((p) => ({
+        ...p,
+        bom: p.bom.map((l) => {
+          const code = picks[l.id];
+          // Re-check at apply time: the user may have picked meanwhile.
+          if (!code || l.fpCode || l.customPart || !rows.has(code)) return l;
+          applied[l.id] = code;
+          return refreshBomCosts([{ ...l, fpCode: code }], rows, () => false).bom[0];
+        }),
+      }));
+      setAutoPicked((m) => ({ ...m, ...applied, ...picks }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once per product tab: re-running on every edit would re-fill a row
+    // the user deliberately cleared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBaseIdx]);
 
   const setLine = (id: string, patch: Partial<BomLine>) =>
     setSt((p) => ({
@@ -4455,6 +4517,18 @@ export default function PouchCostingBoard({
                         })
                       }
                     />
+                  )}
+                  {line.fpCode && autoPicked[line.id] === line.fpCode && (
+                    <div
+                      className="bc-noprint"
+                      style={{
+                        marginTop: 3,
+                        fontSize: 11,
+                        color: "var(--teal-700, #1d6c7b)",
+                      }}
+                    >
+                      Auto-matched from the product — confirm or change
+                    </div>
                   )}
                   {/* Remove replaces the old "Not used" checkbox: now that the
                       spec generates the list, a row that does not belong should

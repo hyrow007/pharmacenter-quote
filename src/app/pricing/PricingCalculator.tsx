@@ -1401,25 +1401,30 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
 export function bulkCostPerPiece(
   snap: PricingSnapshot,
   dosageForm: string | null,
+  /** Stock or PC-manufactured (formula) product: the calculator zeroes every
+   *  inbound cost for these, and so must this — otherwise the saved default
+   *  freight / testing rows inflate the cost the Packaging tab sees. */
+  noInbound = false,
 ): number | null {
+  const z = (v: string | undefined) => (noInbound ? "" : v ?? "");
   const r = computeResults({
     unitCost: snap.unitCost,
     quantity: snap.quantity,
-    freight: snap.freight,
-    insurance: snap.insurance,
-    customsBroker: snap.customsBroker,
-    dutiesPct: snap.dutiesPct,
-    handling: snap.handling,
-    testing: snap.testing,
+    freight: z(snap.freight),
+    insurance: z(snap.insurance),
+    customsBroker: z(snap.customsBroker),
+    dutiesPct: z(snap.dutiesPct),
+    handling: z(snap.handling),
+    testing: z(snap.testing),
     margin: snap.margin,
     marginMode: snap.marginMode,
     shippingOrigin: snap.shippingOrigin,
     incoterm: snap.incoterm,
     shippingMode: snap.shippingMode,
-    otherCosts: snap.otherCosts,
-    deliveryOverride: snap.deliveryOverride,
+    otherCosts: z(snap.otherCosts),
+    deliveryOverride: z(snap.deliveryOverride),
     unitWeightG: unitWeightForForm(dosageForm),
-    accessorials: snap.accessorials,
+    accessorials: z(snap.accessorials),
     hosCommissionPct: snap.hosCommissionPct,
     repCommissionPct: snap.repCommissionPct,
   });

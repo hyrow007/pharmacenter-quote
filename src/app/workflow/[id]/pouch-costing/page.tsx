@@ -138,7 +138,9 @@ export default async function PouchCostingPage({ params }: Ctx) {
     const bulkSnapshot = isFinishedProduct
       ? (pricingTabs.find((t) => uid && t.workflowProductUid === uid) ?? null)
       : null;
-    return { name, quantity, spec, initial, bulkSnapshot };
+    const bulkNoInbound =
+      product.sourceMode === "stock" || Boolean(product.pinnedFormula);
+    return { name, quantity, spec, initial, bulkSnapshot, bulkNoInbound };
   });
 
   return (
