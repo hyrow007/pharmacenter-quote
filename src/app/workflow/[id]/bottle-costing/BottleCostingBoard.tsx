@@ -2370,6 +2370,11 @@ export default function BottleCostingBoard({
     if (!finishedProduct || !snap) return null;
     return bulkCostPerPiece(snap, finishedProduct.dosageForm);
   }, [finishedProduct, products, activeBaseIdx]);
+  // The per-row $/unit readouts call costFromSource on the SAVED line, which
+  // never carries the Bulk-tab figure (it is derived, not stored) — so they
+  // read it through this, exactly as the totals do via \`inputs\`.
+  const withBulkTabCost = (l: BomLine): BomLine =>
+    l.costSource === "Bulk tab" ? { ...l, bulkTabCostPerUnit: bulkTabCost } : l;
 
   const [st, setSt] = useState<SavedState>(
     () => productStatesRef.current![0],
@@ -4246,7 +4251,7 @@ export default function BottleCostingBoard({
                       human says it is genuinely free. */}
                   {!line.notUsed &&
                     line.suppliedBy === "pharmacenter" &&
-                    costFromSource(line) === 0 && (
+                    costFromSource(withBulkTabCost(line)) === 0 && (
                     <label
                       style={{
                         display: "flex",
@@ -4487,7 +4492,7 @@ export default function BottleCostingBoard({
                       : line.suppliedBy === "customer"
                         ? money(0, st.displayDec)
                         : (() => {
-                            const c = costFromSource(line);
+                            const c = costFromSource(withBulkTabCost(line));
                             const q = line.qtyPerUnit;
                             // Mirrors resolveLine's final expression exactly,
                             // waste included, so the column and the total can
@@ -4505,9 +4510,9 @@ export default function BottleCostingBoard({
                       to tell why $3.30 became $0.29. */}
                   {!line.notUsed &&
                     line.suppliedBy === "pharmacenter" &&
-                    costFromSource(line) !== null &&
+                    costFromSource(withBulkTabCost(line)) !== null &&
                     (() => {
-                      const c = costFromSource(line) as number;
+                      const c = costFromSource(withBulkTabCost(line)) as number;
                       const w =
                         typeof line.wastePct === "number" &&
                         Number.isFinite(line.wastePct)

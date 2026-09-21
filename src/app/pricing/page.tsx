@@ -216,11 +216,40 @@ export default async function PricingPage({ searchParams }: Ctx) {
         const firstQty = (p.quantities ?? []).find(
           (q) => q.replace(/,/g, "").trim().length > 0,
         );
+        // Finished Product: the workflow quantity is FINISHED UNITS (eaches),
+        // but this calculator prices bulk in units of 1,000 pieces. Convert
+        // through the packaging spec's count per bottle / card / pouch, so
+        // picking the product seeds the bulk actually needed — never the
+        // finished-unit count read as thousands of pieces.
+        let quantity: string | null = firstQty || null;
+        if (w.state.type === "finished-product") {
+          const pack = w.state.packagingType ?? "";
+          const count = Number(
+            String(
+              pack === "bottles"
+                ? (p.packagingSpec?.bottleCount ?? "")
+                : pack === "blisters"
+                  ? (p.blisterSpec?.cardCount ?? "")
+                  : pack === "pouches"
+                    ? (p.pouchSpec?.pouchCount ?? "")
+                    : "",
+            ).replace(/[^0-9.]/g, ""),
+          );
+          const eaches = Number(String(firstQty ?? "").replace(/[^0-9.]/g, ""));
+          if (count > 0 && eaches > 0) {
+            const units = Math.ceil((eaches * count) / 1000);
+            quantity = units.toLocaleString("en-US");
+            sub = `${sub ? `${sub} · ` : ""}${eaches.toLocaleString("en-US")} finished × ${count} = ${units.toLocaleString("en-US")} bulk units`;
+          } else {
+            quantity = null;
+            sub = `${sub ? `${sub} · ` : ""}set the count per unit on the packaging spec to size the bulk`;
+          }
+        }
         return {
           uid: p.uid,
           label,
           sub,
-          quantity: firstQty || null,
+          quantity,
           // Carry sourceMode through so the calculator can skip inbound
           // costs for products we already have in stock.
           sourceMode: p.sourceMode ?? "purchase",

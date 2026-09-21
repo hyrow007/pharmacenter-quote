@@ -2841,23 +2841,28 @@ export default function PricingCalculator({
           >
             Reset
           </button>
-          <button
-            type="button"
-            onClick={onIssueQuote}
-            title="Generate a customer-facing quote (PDF) with every tab as a line item."
-            style={{
-              background: "var(--teal-700, #1d6c7b)",
-              color: "#fff",
-              border: "1px solid var(--teal-900, #0f4a56)",
-              padding: "8px 14px",
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Issue a Quote
-          </button>
+          {/* Finished Product: this is the Bulk tab, whose price is only half
+              the unit — the quote is issued from the Packaging tab, which
+              carries the finished-unit price. */}
+          {workflowState?.type !== "finished-product" && (
+            <button
+              type="button"
+              onClick={onIssueQuote}
+              title="Generate a customer-facing quote (PDF) with every tab as a line item."
+              style={{
+                background: "var(--teal-700, #1d6c7b)",
+                color: "#fff",
+                border: "1px solid var(--teal-900, #0f4a56)",
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Issue a Quote
+            </button>
+          )}
           {canSave ? (
             <button
               type="button"
