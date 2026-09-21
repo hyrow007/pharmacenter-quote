@@ -224,19 +224,34 @@ export async function POST(request: Request) {
         ? v.last_order_cost_per_unit
         : null;
 
-    // The UOM the cost is denominated in. Fishbowl sends it alongside the
+    // The UOM each cost is denominated in. Fishbowl sends it alongside the
     // cost; fall back to the part's own unit when it doesn't.
+    //
+    // THE TWO COSTS CAN BE DENOMINATED DIFFERENTLY and each is converted by
+    // its OWN factor. The inventory cost comes off the part (usually "un" —
+    // a thousand-count); the last-order cost comes off a purchase-order line,
+    // which may well be written in "ea". Sharing one factor between them
+    // either nulls a perfectly good number or misstates it by 1000x, and the
+    // second failure is the dangerous one: a wrong-but-present cost sails
+    // past the costing model's null guard and quotes confidently.
     const purchaseUom =
       (typeof v.inventory_cost_uom === "string" && v.inventory_cost_uom.trim()
         ? v.inventory_cost_uom
         : v.default_unit) || null;
     const factor = eachesPerPurchaseUom(purchaseUom);
+    const lastOrderUom =
+      (typeof v.last_order_cost_uom === "string" && v.last_order_cost_uom.trim()
+        ? v.last_order_cost_uom
+        : purchaseUom) || null;
+    const lastOrderFactor = eachesPerPurchaseUom(lastOrderUom);
 
     /** Purchase-unit cost -> per-each cost. Null in, null out; and an
      *  unconvertible UOM also yields null, which is the point: a missing
      *  per-each cost blanks the costing line, an invented one poisons it. */
     const perEach = (cost: number | null): number | null =>
       cost === null || factor === null ? null : cost / factor;
+    const perEachLastOrder = (cost: number | null): number | null =>
+      cost === null || lastOrderFactor === null ? null : cost / lastOrderFactor;
 
     records.push({
       fp_code: fpCode,
@@ -250,18 +265,15 @@ export async function POST(request: Request) {
       last_order_cost_per_purchase_unit: isCustomerAsset ? 0 : lastOrder,
       units_per_purchase_unit: factor,
       inventory_cost_per_unit: isCustomerAsset ? 0 : perEach(inventory),
-      last_order_cost_per_unit: isCustomerAsset ? 0 : perEach(lastOrder),
+      last_order_cost_per_unit: isCustomerAsset
+        ? 0
+        : perEachLastOrder(lastOrder),
       inventory_cost_uom: isCustomerAsset
         ? null
         : typeof v.inventory_cost_uom === "string" && v.inventory_cost_uom.trim()
           ? v.inventory_cost_uom.trim()
           : null,
-      last_order_cost_uom: isCustomerAsset
-        ? null
-        : typeof v.last_order_cost_uom === "string" &&
-            v.last_order_cost_uom.trim()
-          ? v.last_order_cost_uom.trim()
-          : null,
+      last_order_cost_uom: isCustomerAsset ? null : lastOrderUom,
       active: v.active === undefined ? true : v.active,
       source: "fishbowl",
       synced_at: now,
