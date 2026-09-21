@@ -1663,6 +1663,8 @@ export default function PricingCalculator({
   // Sales Rep 3% of the sale price, both editable. Other quote types (and
   // scratch calculations outside a workflow) start blank = 0%.
   const isBulkWorkflow = workflowState?.type === "bulk";
+  // Finished Product: this calculator is the Bulk tab, a COST sheet only.
+  const isFinishedProduct = workflowState?.type === "finished-product";
   const commissionSeed = isBulkWorkflow
     ? { hos: DEFAULT_HOS_COMMISSION_PCT, rep: DEFAULT_REP_COMMISSION_PCT }
     : undefined;
@@ -2165,7 +2167,8 @@ export default function PricingCalculator({
         dutiesPct: isStockProduct ? "" : dutiesPct,
         handling: isStockProduct ? "" : handling,
         testing: isStockProduct ? "" : testing,
-        margin,
+        // Finished Product: no margin here — the Packaging tab prices the unit.
+        margin: isFinishedProduct ? "0" : margin,
         marginMode,
         shippingOrigin,
         incoterm,
@@ -2182,8 +2185,8 @@ export default function PricingCalculator({
         // Commissions (task #352) apply to every quote type — they're a
         // % of the sale price, so stock / PC-manufactured products keep
         // them even though inbound costs are zeroed.
-        hosCommissionPct,
-        repCommissionPct,
+        hosCommissionPct: isFinishedProduct ? "0" : hosCommissionPct,
+        repCommissionPct: isFinishedProduct ? "0" : repCommissionPct,
       }),
     [
       unitCost, quantity,
@@ -3887,6 +3890,11 @@ export default function PricingCalculator({
       </section>
       )}
 
+      {/* Finished Product: this tab only COSTS the bulk. Margin and
+          commissions are applied once, to the finished unit, on the
+          Packaging tab — so neither card appears here. */}
+      {!isFinishedProduct && (
+      <>
       <section className="pricing__section">
         <h2 className="pricing__section-title">Pricing</h2>
         <div className="pricing__row">
@@ -3984,6 +3992,8 @@ export default function PricingCalculator({
           them on top of your margin.
         </p>
       </section>
+      </>
+      )}
 
       <section className="pricing__results">
         <div className="pricing__results-header">
@@ -4125,6 +4135,21 @@ export default function PricingCalculator({
               ) : null}
             </div>
 
+            {isFinishedProduct ? (
+              <div className="pricing__highlight">
+                <div className="pricing__highlight-label">
+                  Bulk cost per 1,000 doses
+                </div>
+                <div className="pricing__highlight-value">
+                  {usdFine.format(results.landedPerUnit)}
+                </div>
+                <div className="pricing__highlight-sub">
+                  {usdFine.format(results.landedPerUnit / 1000)} per dose ·
+                  goes to the Packaging tab&apos;s Bulk row when you Save
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="pricing__highlight">
               <div className="pricing__highlight-label">Sale price per unit</div>
               <div className="pricing__highlight-value">
@@ -4147,6 +4172,8 @@ export default function PricingCalculator({
                 emphasis
               />
             </div>
+            </>
+            )}
           </>
         )}
       </section>
