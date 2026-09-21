@@ -1248,6 +1248,76 @@ const numInput: React.CSSProperties = {
   textAlign: "right",
 };
 
+/**
+ * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
+ * which the costing can override without touching the form. Choosing what
+ * the form already says clears the override, so the board goes back to
+ * following the form; the caption always says which of the two is in force.
+ */
+function FormYesNo({
+  on,
+  fromForm,
+  overridden,
+  onChange,
+}: {
+  on: boolean;
+  fromForm: boolean;
+  overridden: boolean;
+  /** null = follow the form again. */
+  onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <>
+      <select
+        value={on ? "yes" : "no"}
+        onChange={(e) => {
+          const v = e.target.value === "yes";
+          onChange(v === fromForm ? null : v);
+        }}
+        style={{ ...numInput, textAlign: "left", cursor: "pointer" }}
+      >
+        <option value="no">No</option>
+        <option value="yes">Yes</option>
+      </select>
+      <div
+        className="bc-noprint"
+        style={{
+          marginTop: 3,
+          fontSize: 11,
+          fontWeight: 500,
+          textTransform: "none",
+          letterSpacing: 0,
+          color: "var(--ink-3, #7b7364)",
+        }}
+      >
+        {!overridden ? (
+          "From packaging form"
+        ) : (
+          <>
+            Changed here — form says {fromForm ? "Yes" : "No"}
+            {" · "}
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "none",
+                font: "inherit",
+                color: "var(--teal-700, #1d6c7b)",
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              use form
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function NumField({
   value,
   onChange,
@@ -1376,11 +1446,20 @@ export type SavedState = {
    * Quantity everywhere on this board is FINISHED UNITS.
    */
   blistersPerUnit: number | null;
-  /** Units per minute PER PERSON on packout. Blank = job has no packout. */
+  /**
+   * Packout (secondary packaging) FOR THIS COSTING. null = follow the
+   * packaging form's "Secondary/retail packaging required?"; true/false =
+   * overridden here, never written back to the form.
+   */
+  packoutRequired: boolean | null;
+  /** Units per minute PER PERSON on packout. Only read when packout is on. */
   packoutSpeed: number | null;
   /** Units per minute PER PERSON on cartoning / carton printing. */
   cartoningSpeed: number | null;
-  /** Units per minute PER PERSON on bundling. */
+  /** Bundling FOR THIS COSTING. null = follow the form's "Bundling
+   *  required?"; true/false = overridden here, never written back. */
+  bundlingRequired: boolean | null;
+  /** Units per minute PER PERSON on bundling. Only read when bundling is on. */
   bundlingSpeed: number | null;
   /**
    * WEB YIELDS — the bridge between how Fishbowl prices the webs and how the
@@ -1717,8 +1796,11 @@ export function blankState(
     blistersPerStroke: null,
     speedPenaltyPct: DEFAULT_SPEED_PENALTY_PCT,
     blistersPerUnit: bpu,
+    // null = follow the packaging form.
+    packoutRequired: null,
     packoutSpeed: null,
     cartoningSpeed: null,
+    bundlingRequired: null,
     bundlingSpeed: null,
     filmBlistersPerUom: null,
     liddingBlistersPerUom: null,
@@ -2219,6 +2301,25 @@ function hydrateSaved(
       displayDec: initial.displayDec ?? blank.displayDec,
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       blistersPerUnit: initial.blistersPerUnit ?? blank.blistersPerUnit,
+      // Costings saved before these questions: follow the form, UNLESS the
+      // job was priced with a speed the form would now switch off — then
+      // keep it on explicitly so the saved total does not move.
+      packoutRequired:
+        initial.packoutRequired !== undefined
+          ? initial.packoutRequired
+          : typeof initial.packoutSpeed === "number" &&
+              initial.packoutSpeed > 0 &&
+              (spec?.retailRequired ?? "") !== "yes"
+            ? true
+            : null,
+      bundlingRequired:
+        initial.bundlingRequired !== undefined
+          ? initial.bundlingRequired
+          : typeof initial.bundlingSpeed === "number" &&
+              initial.bundlingSpeed > 0 &&
+              (spec?.bundlingRequired ?? "") !== "yes"
+            ? true
+            : null,
       packoutLeaders: initial.packoutLeaders ?? blank.packoutLeaders,
       packoutOperators: initial.packoutOperators ?? blank.packoutOperators,
       cartoningLeaders: initial.cartoningLeaders ?? blank.cartoningLeaders,
@@ -2809,6 +2910,13 @@ export default function BlisterCostingBoard({
     st.liddingBlistersPerUom,
   ]);
 
+  // Packout and bundling follow the packaging form unless this costing
+  // overrides them (see SavedState.packoutRequired / bundlingRequired).
+  const packoutFromForm = (spec?.retailRequired ?? "") === "yes";
+  const packoutOn = st.packoutRequired ?? packoutFromForm;
+  const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
+  const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
+
   const inputs: BlisterCostingInputs = useMemo(
     () => ({
       quantity: qty,
@@ -2818,9 +2926,9 @@ export default function BlisterCostingBoard({
         blistersPerStroke: st.blistersPerStroke,
         speedPenaltyPct: st.speedPenaltyPct,
         blistersPerUnit: st.blistersPerUnit,
-        packoutSpeed: st.packoutSpeed,
+        packoutSpeed: packoutOn ? st.packoutSpeed : null,
         cartoningSpeed: st.cartoningSpeed,
-        bundlingSpeed: st.bundlingSpeed,
+        bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
         setup: {
           hours: st.setupHours,
           leaders: st.setupLeaders,
@@ -2902,7 +3010,7 @@ export default function BlisterCostingBoard({
         repCommissionPct: st.repCommissionPct,
       },
     }),
-    [st, qty],
+    [st, qty, packoutOn, bundlingOn],
   );
 
   const r = useMemo(() => computeBlisterCosting(inputs), [inputs]);
@@ -2916,6 +3024,24 @@ export default function BlisterCostingBoard({
   const lb = useMemo(
     () => blisterLaborBreakdown(qty, inputs.labor),
     [qty, inputs.labor],
+  );
+
+  /**
+   * The phases the labour tables DRAW: a station the job does not have
+   * (answered No in Considerations) stays in the model at zero hours but
+   * goes silent here. Crew inputs are keyed by phase LABEL, so a hidden
+   * column cannot shift an edit into its neighbour.
+   */
+  const shownPhases = useMemo(
+    () =>
+      lb
+        ? lb.phases.filter(
+            (p) =>
+              (packoutOn || p.label !== "Packout") &&
+              (bundlingOn || p.label !== "Bundling"),
+          )
+        : [],
+    [lb, packoutOn, bundlingOn],
   );
 
   /**
@@ -3673,24 +3799,46 @@ export default function BlisterCostingBoard({
               straight into the neighbouring label. Wrapping to two lines is
               the fix, not smaller words — "units / min / person" is the unit
               and it stays. */}
-          <ParamBlock label="Packout speed (units / min / person)">
-            <NumField
-              value={st.packoutSpeed}
-              onChange={(v) => set("packoutSpeed", v)}
+          <ParamBlock label="Secondary packaging (packout)?">
+            <FormYesNo
+              on={packoutOn}
+              fromForm={packoutFromForm}
+              overridden={st.packoutRequired !== null}
+              onChange={(v) => set("packoutRequired", v)}
             />
           </ParamBlock>
+          {packoutOn && (
+            <ParamBlock label="Packout speed (units / min / person)">
+              <NumField
+                value={st.packoutSpeed}
+                onChange={(v) => set("packoutSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           <ParamBlock label="Cartoning speed (units / min / person)">
             <NumField
               value={st.cartoningSpeed}
               onChange={(v) => set("cartoningSpeed", v)}
             />
           </ParamBlock>
-          <ParamBlock label="Bundling speed (units / min / person)">
-            <NumField
-              value={st.bundlingSpeed}
-              onChange={(v) => set("bundlingSpeed", v)}
+          <ParamBlock label="Bundling?">
+            <FormYesNo
+              on={bundlingOn}
+              fromForm={bundlingFromForm}
+              overridden={st.bundlingRequired !== null}
+              onChange={(v) => set("bundlingRequired", v)}
             />
           </ParamBlock>
+          {bundlingOn && (
+            <ParamBlock label="Bundling speed (units / min / person)">
+              <NumField
+                value={st.bundlingSpeed}
+                onChange={(v) => set("bundlingSpeed", v)}
+                placeholder="required"
+              />
+            </ParamBlock>
+          )}
           {/* Only when the two differ, so the override is never silent. */}
           {st.quantityOverride !== null &&
             st.quantityOverride !== quantity && (
@@ -4655,7 +4803,7 @@ export default function BlisterCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4666,7 +4814,7 @@ export default function BlisterCostingBoard({
                 <tbody>
                   <tr style={labTotalRow}>
                     <td style={{ ...labTh, textAlign: "left" }}>Total Hours</td>
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <td key={p.label} style={labTd}>
                         {/* Every quantity-driven phase is READ-ONLY. Each is
                             a function of inputs typed in Considerations —
@@ -4721,7 +4869,7 @@ export default function BlisterCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4737,38 +4885,38 @@ export default function BlisterCostingBoard({
                       {
                         label: "QTY of Line Leaders",
                         get: (p: (typeof lb.phases)[number]) => p.leaders,
-                        keys: [
-                          "setupLeaders",
-                          "prodLeaders",
-                          "packoutLeaders",
-                          "cartoningLeaders",
-                          "bundlingLeaders",
-                          "cleaningLeaders",
-                        ],
+                        keys: {
+                          Setup: "setupLeaders",
+                          "Blister Line": "prodLeaders",
+                          Packout: "packoutLeaders",
+                          Cartoning: "cartoningLeaders",
+                          Bundling: "bundlingLeaders",
+                          Cleaning: "cleaningLeaders",
+                        },
                       },
                       {
                         label: "QTY of Line Operators",
                         get: (p: (typeof lb.phases)[number]) => p.operators,
-                        keys: [
-                          "setupOperators",
-                          "prodOperators",
-                          "packoutOperators",
-                          "cartoningOperators",
-                          "bundlingOperators",
-                          "cleaningOperators",
-                        ],
+                        keys: {
+                          Setup: "setupOperators",
+                          "Blister Line": "prodOperators",
+                          Packout: "packoutOperators",
+                          Cartoning: "cartoningOperators",
+                          Bundling: "bundlingOperators",
+                          Cleaning: "cleaningOperators",
+                        },
                       },
                     ] as const
                   ).map((row) => (
                     <tr key={row.label} style={labBodyRow}>
                       <td style={{ ...labTh, textAlign: "left" }}>{row.label}</td>
-                      {lb.phases.map((p, i) => (
+                      {shownPhases.map((p) => (
                         <td key={p.label} style={labTd}>
                           <LabNum
                             value={row.get(p)}
                             onChange={(n) =>
                               set(
-                                row.keys[i],
+                                row.keys[p.label as keyof typeof row.keys],
                                 n === null ? null : Math.max(0, Math.round(n)),
                               )
                             }
@@ -4790,7 +4938,7 @@ export default function BlisterCostingBoard({
                 <thead>
                   <tr style={labHeadRow}>
                     <th style={{ ...labTh, textAlign: "left" }} />
-                    {lb.phases.map((p) => (
+                    {shownPhases.map((p) => (
                       <th key={p.label} style={{ ...labTh, width: 170 }}>
                         {p.label}
                       </th>
@@ -4802,12 +4950,12 @@ export default function BlisterCostingBoard({
                   {[
                     {
                       label: "Line Leaders Man Hours",
-                      per: lb.phases.map((p) => p.leaderManHours),
+                      per: shownPhases.map((p) => p.leaderManHours),
                       total: lb.roles[0].manHours,
                     },
                     {
                       label: "Line Operators Man Hours",
-                      per: lb.phases.map((p) => p.operatorManHours),
+                      per: shownPhases.map((p) => p.operatorManHours),
                       total: lb.roles[1].manHours,
                     },
                   ].map((row) => (
