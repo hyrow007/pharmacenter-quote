@@ -3596,7 +3596,7 @@ export default function PouchCostingBoard({
               </div>
             ) : null}
           </ParamBlock>
-          <ParamBlock label="Pouches / minute (nameplate)" nowrap>
+          <ParamBlock label="Pouches / minute" nowrap>
             <NumField
               value={st.pouchesPerMinute}
               onChange={(v) => set("pouchesPerMinute", v)}
