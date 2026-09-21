@@ -69,6 +69,11 @@ import {
   INDIRECT_HOURS_PER_MONTH,
 } from "@/lib/overheadCosting";
 import { buildQuoteHtml, type QuoteLineItem } from "@/app/pricing/PricingCalculator";
+import {
+  fetchFishbowlCosts,
+  refreshBomCosts,
+  type CostRefreshChange,
+} from "@/lib/refreshCosts";
 
 /**
  * Print rules. Written as a normal single-quoted string, NOT a template
@@ -2468,6 +2473,50 @@ export default function BottleCostingBoard({
   const set = <K extends keyof SavedState>(k: K, v: SavedState[K]) =>
     setSt((p) => ({ ...p, [k]: v }));
 
+
+  // ---- Refresh costs from Fishbowl -------------------------------------
+  //
+  // The picker stores a part's costs on the line when it is picked, so a
+  // board reopened months later shows the numbers it was quoted with. That
+  // is the right default for a quote and the wrong one the day Fishbowl
+  // gains a cost it never had (every last-order cost was null before the
+  // 2026-09-20 sync fix). This button is the deliberate way across: pull
+  // current costs, show what moved, leave it to Save.
+  const [costRefreshing, setCostRefreshing] = useState(false);
+  const [costRefreshNote, setCostRefreshNote] = useState<{
+    changes: CostRefreshChange[];
+    checked: number;
+    missing: string[];
+    error?: string;
+  } | null>(null);
+
+  const refreshFishbowlCostsNow = async () => {
+    setCostRefreshing(true);
+    setCostRefreshNote(null);
+    try {
+      const codes = st.bom
+        .filter((l) => l.fpCode && !l.customPart)
+        .map((l) => l.fpCode as string);
+      const rows = await fetchFishbowlCosts(codes);
+      const res = refreshBomCosts(st.bom, rows, () => false);
+      setSt((p) => ({ ...p, bom: res.bom }));
+      setCostRefreshNote({
+        changes: res.changes,
+        checked: res.checked,
+        missing: res.missing,
+      });
+    } catch (e) {
+      setCostRefreshNote({
+        changes: [],
+        checked: 0,
+        missing: [],
+        error: e instanceof Error ? e.message : "Could not reach Fishbowl.",
+      });
+    } finally {
+      setCostRefreshing(false);
+    }
+  };
+
   const setLine = (id: string, patch: Partial<BomLine>) =>
     setSt((p) => ({
       ...p,
@@ -3431,7 +3480,91 @@ export default function BottleCostingBoard({
 
       {/* ---------- Bill of materials ---------- */}
       <div style={shell} className="bc-materials bc-card">
-        <div style={band}>Material Costs</div>
+        <div
+          style={{
+            ...band,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <span>Material Costs</span>
+          {/* Screen-only: a print sheet is a record of what was quoted, and
+              a button that would change the figures has no place on it. */}
+          <button
+            type="button"
+            className="bc-noprint"
+            onClick={refreshFishbowlCostsNow}
+            disabled={costRefreshing}
+            title="Re-read every picked part's inventory and last-order cost from Fishbowl. Nothing is saved until you press Save."
+            style={{
+              font: "inherit",
+              fontSize: 11,
+              letterSpacing: "0.04em",
+              padding: "4px 10px",
+              borderRadius: 6,
+              border: "1px solid var(--teal-700, #1d6c7b)",
+              background: "#fff",
+              color: "var(--teal-700, #1d6c7b)",
+              cursor: costRefreshing ? "wait" : "pointer",
+              opacity: costRefreshing ? 0.6 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {costRefreshing ? "Refreshing…" : "Refresh costs from Fishbowl"}
+          </button>
+        </div>
+        {costRefreshNote && (
+          <div
+            className="bc-noprint"
+            style={{
+              padding: "8px 16px",
+              fontSize: 12.5,
+              lineHeight: 1.5,
+              borderBottom: "1px solid var(--line, #e3dcc9)",
+              background: costRefreshNote.error ? "#fdf1ef" : "#f4f8f0",
+              color: costRefreshNote.error
+                ? "#a3281f"
+                : "var(--ink-2, #4a4438)",
+            }}
+          >
+            {costRefreshNote.error ? (
+              <>Could not refresh: {costRefreshNote.error}</>
+            ) : costRefreshNote.changes.length === 0 ? (
+              <>
+                {costRefreshNote.checked} Fishbowl line
+                {costRefreshNote.checked === 1 ? "" : "s"} checked — every cost
+                already matches Fishbowl.
+              </>
+            ) : (
+              <>
+                <strong>
+                  {costRefreshNote.changes.length} cost
+                  {costRefreshNote.changes.length === 1 ? "" : "s"} updated
+                </strong>{" "}
+                of {costRefreshNote.checked} line
+                {costRefreshNote.checked === 1 ? "" : "s"} checked — press Save
+                to keep them.
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                  {costRefreshNote.changes.map((c, i) => (
+                    <li key={`${c.fpCode}-${c.field}-${i}`}>
+                      {c.fpCode} {c.field}:{" "}
+                      {c.before === null ? "—" : money(c.before)} →{" "}
+                      {c.after === null ? "—" : money(c.after)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {costRefreshNote.missing.length > 0 && (
+              <div style={{ marginTop: 4, color: "#a3281f" }}>
+                Not found in Fishbowl (left untouched):{" "}
+                {costRefreshNote.missing.join(", ")}
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ padding: 14, display: "grid", gap: 10 }}>
           {/* Column headers — six columns is too many to read unlabelled. */}
           <div

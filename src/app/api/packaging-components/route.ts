@@ -54,6 +54,129 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const slot = (url.searchParams.get("slot") ?? "").trim();
   const q = (url.searchParams.get("q") ?? "").trim();
+  // Exact lookup by part number, used by the costing boards' "Refresh costs
+  // from Fishbowl" button. A picked line stores the part's costs at pick
+  // time, so a part whose costs changed in Fishbowl (or were missing when it
+  // was picked — every last-order cost was null before the 2026-09-20 sync
+  // fix) needs a way to be re-read without re-picking it by hand.
+  //
+  // This is a LOOKUP, not a search: no ranking, no slot preference, no limit
+  // games. Codes that match nothing simply come back absent, and the caller
+  // reports them rather than substituting a near miss.
+  const codesParam = (url.searchParams.get("codes") ?? "").trim();
+  if (codesParam) {
+    const codes = [
+      ...new Set(
+        codesParam
+          .split(",")
+          .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ].slice(0, 200);
+    if (!codes.length) return NextResponse.json({ ok: true, rows: [] });
+
+    // Bulk lives in products (PC-BK / CA-BK), packaging in the costed view,
+    // and one BOM can hold both — so both are queried and merged.
+    const bulkCodes = codes.filter((c) => c.includes("-BK-"));
+    const partCodes = codes.filter((c) => !c.includes("-BK-"));
+
+    const [pkRes, bkRes] = await Promise.all([
+      partCodes.length
+        ? supabase
+            .from("packaging_components_costed")
+            .select(
+              "fp_code, name, category, owner, effective_cost_per_unit, cost_status, last_order_cost_per_purchase_unit, effective_units_per_purchase_unit, inventory_cost_per_purchase_unit, inventory_cost_uom, active",
+            )
+            .in("fp_code", partCodes)
+        : Promise.resolve({ data: [], error: null }),
+      bulkCodes.length
+        ? supabase
+            .from("products")
+            .select("fp_code, name, avg_cost, default_unit, active")
+            .in("fp_code", bulkCodes)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (pkRes.error || bkRes.error) {
+      return NextResponse.json(
+        { ok: false, error: (pkRes.error ?? bkRes.error)?.message },
+        { status: 500 },
+      );
+    }
+
+    type CodeRow = {
+      fp_code: string;
+      name: string;
+      category: string | null;
+      owner: string;
+      effective_cost_per_unit: number | null;
+      cost_status: string;
+      last_order_cost_per_purchase_unit: number | null;
+      effective_units_per_purchase_unit: number | null;
+      inventory_cost_per_purchase_unit: number | null;
+      inventory_cost_uom: string | null;
+      active: boolean | null;
+    };
+
+    // Same division the search path uses, for the same reason (#357): null in,
+    // null out, never a per-1,000 price passed off as per-each.
+    const perEachCode = (r: CodeRow): number | null => {
+      const c = r.last_order_cost_per_purchase_unit;
+      const f = r.effective_units_per_purchase_unit;
+      if (c === null || f === null || f === 0) return null;
+      if (r.owner === "customer") return 0;
+      return c / f;
+    };
+
+    const pkRows = ((pkRes.data ?? []) as CodeRow[]).map((r) => ({
+      fp_code: r.fp_code,
+      name: r.name,
+      category: r.category,
+      owner: r.owner,
+      effective_cost_per_unit: r.effective_cost_per_unit,
+      cost_status: r.cost_status,
+      last_order_cost_per_unit: perEachCode(r),
+      inventory_cost_per_purchase_unit:
+        r.owner === "customer" ? 0 : r.inventory_cost_per_purchase_unit,
+      last_order_cost_per_purchase_unit:
+        r.owner === "customer" ? 0 : r.last_order_cost_per_purchase_unit,
+      inventory_cost_uom: r.inventory_cost_uom,
+      active: r.active,
+    }));
+
+    type BkCodeRow = {
+      fp_code: string;
+      name: string;
+      avg_cost: number | null;
+      default_unit: string | null;
+      active: boolean | null;
+    };
+    // Bulk is stocked per 1,000 eaches (Jairo, 2026-09-05), exactly as the
+    // bulk search branch above assumes.
+    const bkRows = ((bkRes.data ?? []) as BkCodeRow[]).map((r) => {
+      const customer = r.fp_code.toUpperCase().startsWith("CA");
+      const perDose = r.avg_cost !== null ? r.avg_cost / 1000 : null;
+      return {
+        fp_code: r.fp_code,
+        name: r.name,
+        category: null,
+        owner: customer ? "customer" : "pharmacenter",
+        effective_cost_per_unit: customer ? 0 : perDose,
+        cost_status: customer
+          ? "customer_asset"
+          : perDose === null
+            ? "no_cost"
+            : "ok",
+        last_order_cost_per_unit: null,
+        inventory_cost_per_purchase_unit: customer ? 0 : r.avg_cost,
+        last_order_cost_per_purchase_unit: null,
+        inventory_cost_uom: r.default_unit,
+        active: r.active,
+      };
+    });
+
+    return NextResponse.json({ ok: true, rows: [...pkRows, ...bkRows] });
+  }
+
 
   // Bulk mode: bulk is a PRODUCT (PC-BK / CA-BK), not a packaging part, so
   // the packaging_components view has nothing for it — the Fishbowl sync
