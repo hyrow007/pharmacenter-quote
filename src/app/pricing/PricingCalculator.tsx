@@ -4144,7 +4144,13 @@ export default function PricingCalculator({
                   {usdFine.format(results.landedPerUnit)}
                 </div>
                 <div className="pricing__highlight-sub">
-                  {usdFine.format(results.landedPerUnit / 1000)} per dose ·
+                  {(results.landedPerUnit / 1000).toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                    minimumFractionDigits: 4,
+                    maximumFractionDigits: 4,
+                  })}{" "}
+                  per dose ·
                   goes to the Packaging tab&apos;s Bulk row when you Save
                 </div>
               </div>
