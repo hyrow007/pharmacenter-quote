@@ -39,7 +39,8 @@ const GENERIC = new Set([
   "tablet", "tablets", "tabs", "bag", "bags", "pouch", "pouches", "bottle",
   "bottles", "blister", "blisters", "jar", "ct", "count", "pack", "packs",
   "of", "and", "the", "with", "for", "mg", "mcg", "g", "iu", "plus", "llc",
-  "inc", "new", "product",
+  "inc", "new", "product", "test", "sample", "samples", "sachet", "sachets",
+  "stick", "packet", "packets", "roll", "film",
 ]);
 
 /** The words in a product name that identify it (brand, line, variant). */
@@ -126,21 +127,34 @@ export async function suggestParts(args: {
       line.slot === "master_box" ? sizeKey(args.spec?.masterBoxSize) : null;
     const wantOwner = line.suppliedBy === "customer" ? "customer" : "pharmacenter";
 
+    // Whole-word matching: "restorz" must be a word in the part name, not
+    // a fragment of some other word.
+    const has = (hay: string, w: string) =>
+      new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(hay);
+
     const scored = rows
       .map((row) => {
         const hay = row.name.toLowerCase();
-        if (!hay.includes(brand)) return null;
+        if (!has(hay, brand)) return null;
         if (!pattern.test(hay)) return null;
         // "other" rows (bags, film) carry the category "other"; typed
         // slots must match their own shelf.
         if (line.slot !== "other" && row.category !== categoryFor(line.slot))
           return null;
-        let score = words.filter((w) => hay.includes(w)).length * 10;
+        const hits = words.filter((w) => has(hay, w)).length;
+        let score = hits * 10;
+        let sizeMatch = false;
         if (wantSize) {
           const got = sizeKey(row.name);
-          if (got === wantSize) score += 15;
-          else if (got) return null; // a different box size is a different box
+          if (got === wantSize) {
+            score += 15;
+            sizeMatch = true;
+          } else if (got) return null; // a different box size is a different box
         }
+        // One shared word is a coincidence ("Test Roll - Film" for a product
+        // named "TEST …"). Confidence needs two identifying words, or the
+        // brand plus the exact box size the spec asks for.
+        if (hits < 2 && !sizeMatch) return null;
         if (row.owner === wantOwner) score += 2;
         return { code: row.fp_code, score };
       })

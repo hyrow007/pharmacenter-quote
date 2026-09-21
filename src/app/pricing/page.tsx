@@ -245,10 +245,34 @@ export default async function PricingPage({ searchParams }: Ctx) {
             ).replace(/[^0-9.]/g, ""),
           );
           const eaches = Number(String(firstQty ?? "").replace(/[^0-9.]/g, ""));
+          // With secondary / retail packaging one finished unit holds several
+          // bottles / cards / pouches / sachets — the bulk scales with them.
+          const specFor: Record<string, string> | undefined =
+            (pack === "bottles"
+              ? p.packagingSpec
+              : pack === "blisters"
+                ? p.blisterSpec
+                : pack === "pouches"
+                  ? p.pouchSpec
+                  : pack === "sachets"
+                    ? p.sachetSpec
+                    : undefined) as unknown as Record<string, string> | undefined;
+          const perPackRaw =
+            specFor?.retailRequired === "yes"
+              ? Number(
+                  String(
+                    specFor.retailBottlesPerPack ??
+                      specFor.retailBlistersPerPack ??
+                      specFor.retailBagsPerPack ??
+                      "",
+                  ).replace(/[^0-9.]/g, ""),
+                )
+              : 1;
+          const perPack = perPackRaw > 0 ? perPackRaw : 1;
           if (count > 0 && eaches > 0) {
-            const units = Math.ceil((eaches * count) / 1000);
+            const units = Math.ceil((eaches * count * perPack) / 1000);
             quantity = units.toLocaleString("en-US");
-            sub = `${sub ? `${sub} · ` : ""}${eaches.toLocaleString("en-US")} finished × ${count} = ${units.toLocaleString("en-US")} bulk units`;
+            sub = `${sub ? `${sub} · ` : ""}${eaches.toLocaleString("en-US")} finished × ${perPack > 1 ? `${perPack} × ` : ""}${count} = ${units.toLocaleString("en-US")} bulk units`;
           } else {
             quantity = null;
             sub = `${sub ? `${sub} · ` : ""}set the count per unit on the packaging spec to size the bulk`;
