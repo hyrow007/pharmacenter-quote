@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 
 // "Ask AI" chip on each Orders card. The card itself is a <Link> to the SO
 // page, and an <a> cannot nest inside another <a>, so this is a button that
-// stops the card's navigation and goes to the same page with #chat -- which
-// SoChat reads on mount to open its drawer.
+// stops the card's navigation. On the landing it opens the assistant in
+// place (OrdersChatHost); anywhere else it goes to the SO page with #chat.
 
 export default function AskChip({
   so,
@@ -24,6 +24,11 @@ export default function AskChip({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        // On the Orders landing, open the drawer right here over the list.
+        if (document.body.dataset.soChatHost === "1") {
+          window.dispatchEvent(new CustomEvent("pc:so-chat", { detail: { so } }));
+          return;
+        }
         router.push(`/meetings/sales-orders/orders/${encodeURIComponent(so)}#chat`);
       }}
       style={{

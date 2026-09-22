@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../_components/AppHeader";
 import PrintButton from "./PrintButton";
 import AskChip from "./_components/AskChip";
+import OrdersChatHost from "./_components/OrdersChatHost";
 import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
@@ -1117,6 +1118,7 @@ export default async function OrdersLandingPage() {
           )}
         </div>
       </main>
+      <OrdersChatHost lang={lang} />
     </div>
   );
 }

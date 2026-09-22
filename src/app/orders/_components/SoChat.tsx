@@ -76,7 +76,21 @@ function pill(bg: string, fg: string, border: string): React.CSSProperties {
   };
 }
 
-export default function SoChat({ so, lang }: { so: string; lang: Lang }) {
+export default function SoChat({
+  so,
+  lang,
+  initialOpen = false,
+  hideLauncher = false,
+  onClose,
+}: {
+  so: string;
+  lang: Lang;
+  // Used by OrdersChatHost on the landing page: the drawer opens straight
+  // away over the card list and has no launcher of its own.
+  initialOpen?: boolean;
+  hideLauncher?: boolean;
+  onClose?: () => void;
+}) {
   const t = makeT(lang);
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -100,7 +114,7 @@ export default function SoChat({ so, lang }: { so: string; lang: Lang }) {
   const api = `/api/orders/${encodeURIComponent(so)}`;
 
   useEffect(() => {
-    if (window.location.hash === "#chat") setOpen(true);
+    if (initialOpen || window.location.hash === "#chat") setOpen(true);
     const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
     setMicOk(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
   }, []);
@@ -137,6 +151,7 @@ export default function SoChat({ so, lang }: { so: string; lang: Lang }) {
 
   const close = () => {
     setOpen(false);
+    onClose?.();
     if (window.location.hash === "#chat") {
       history.replaceState(null, "", window.location.pathname + window.location.search);
     }
@@ -338,7 +353,7 @@ export default function SoChat({ so, lang }: { so: string; lang: Lang }) {
 
   return (
     <>
-      {!open ? (
+      {!open && !hideLauncher ? (
         <button
           type="button"
           className="meetings-noprint"
