@@ -232,6 +232,8 @@ export default async function SalesOrderDetailPage({
           text_body: string;
           created_at: string;
           creator_name: string | null;
+          // Replies are stored flat, newest first, by /api/sync/monday.
+          kind?: "update" | "reply";
         }>
       | null;
     last_synced_at: string | null;
@@ -714,6 +716,7 @@ export default async function SalesOrderDetailPage({
                         marginBottom: 4,
                       }}
                     >
+                      {u.kind === "reply" ? "↳ " : ""}
                       {u.creator_name ? (
                         <strong style={{ color: "var(--teal-900, #0f4a56)" }}>
                           {u.creator_name}

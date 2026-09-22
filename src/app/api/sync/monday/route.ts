@@ -18,7 +18,7 @@ import { requireSyncAuth } from "@/lib/sync-auth";
 //
 // Data source: Monday GraphQL v2. Requires MONDAY_API_TOKEN in env.
 //
-// Response: { ok, items_synced, updates_synced, elapsed_ms }.
+// Response: { ok, items_synced, updates_synced, replies_synced, elapsed_ms }.
 
 export const runtime = "nodejs"; // service-role + fetch to external API
 
@@ -30,7 +30,14 @@ const MONDAY_API_URL = "https://api.monday.com/v2";
 // Progress" chatter). 30 covers ~2-3 months of typical activity on the
 // busiest SOs while staying well inside Monday's per-query cost budget.
 const UPDATES_PER_ITEM = 30;
-const ITEMS_PER_PAGE = 100;
+// Cap on what we STORE per SO once replies are flattened in (see below).
+// A thread of 30 updates can carry many replies; this keeps the jsonb row
+// bounded while still holding far more than any card or prompt reads.
+const MAX_ENTRIES_PER_ITEM = 60;
+// 50, not 100: nesting replies under every update multiplies Monday's
+// query-complexity cost per page. Smaller pages stay well inside the
+// budget at the price of one extra round trip on a ~64-item board.
+const ITEMS_PER_PAGE = 50;
 
 // Shape of what Monday returns per items_page. Only the fields we care
 // about; other fields are ignored.
@@ -49,7 +56,28 @@ type MondayItem = {
     text_body: string | null;
     created_at: string;
     creator?: { name?: string | null } | null;
+    replies?: Array<{
+      id: string;
+      text_body: string | null;
+      created_at: string;
+      creator?: { name?: string | null } | null;
+    }> | null;
   }>;
+};
+
+// One entry in so_monday_activity.updates. Replies are stored as their own
+// entries (kind "reply", parent_id = the update they answer) rather than
+// nested, so every consumer that sorts by created_at -- the Orders card
+// preview, the SO detail feed, the Spanish translation pass (keyed by id),
+// and the synthesis inputs + freshness check -- sees the newest dialogue
+// without needing to know threads exist.
+type StoredEntry = {
+  id: string;
+  text_body: string;
+  created_at: string;
+  creator_name: string | null;
+  kind: "update" | "reply";
+  parent_id: string | null;
 };
 
 async function mondayGraphql<T>(token: string, query: string): Promise<T> {
@@ -131,6 +159,12 @@ export async function POST(request: Request) {
               text_body
               created_at
               creator { name }
+              replies {
+                id
+                text_body
+                created_at
+                creator { name }
+              }
             }
           }
         }
@@ -182,12 +216,35 @@ export async function POST(request: Request) {
           // ignore malformed value
         }
       }
-      const updates = (it.updates ?? []).map((u) => ({
-        id: u.id,
-        text_body: u.text_body ?? "",
-        created_at: u.created_at,
-        creator_name: u.creator?.name ?? null,
-      }));
+      // Monday's conversation lives mostly in REPLIES: a thread started
+      // in June can carry this week's answer, and `updates` alone only
+      // reports the thread's own created_at. Before 2026-09-21 replies
+      // were not fetched at all, so a card could read "25d ago" while the
+      // item had a reply from 4 days ago. Flatten, newest first.
+      const entries: StoredEntry[] = [];
+      for (const u of it.updates ?? []) {
+        entries.push({
+          id: u.id,
+          text_body: u.text_body ?? "",
+          created_at: u.created_at,
+          creator_name: u.creator?.name ?? null,
+          kind: "update",
+          parent_id: null,
+        });
+        for (const r of u.replies ?? []) {
+          entries.push({
+            id: r.id,
+            text_body: r.text_body ?? "",
+            created_at: r.created_at,
+            creator_name: r.creator?.name ?? null,
+            kind: "reply",
+            parent_id: u.id,
+          });
+        }
+      }
+      const updates = entries
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+        .slice(0, MAX_ENTRIES_PER_ITEM);
       return {
         so_number: it.name.trim(),
         monday_item_id: Number(it.id),
@@ -221,10 +278,17 @@ export async function POST(request: Request) {
   }
 
   const updatesSynced = rows.reduce((n, r) => n + r.updates.length, 0);
+  const repliesSynced = rows.reduce(
+    (n, r) => n + r.updates.filter((u) => u.kind === "reply").length,
+    0,
+  );
   return NextResponse.json({
     ok: true,
     items_synced: rows.length,
+    // Total stored entries (updates + replies). replies_synced is the
+    // evidence the reply fetch is working -- 0 after a sync means it isn't.
     updates_synced: updatesSynced,
+    replies_synced: repliesSynced,
     elapsed_ms: Date.now() - started,
   });
 }

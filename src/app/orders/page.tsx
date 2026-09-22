@@ -184,6 +184,9 @@ export default async function OrdersLandingPage() {
     text_body: string;
     created_at: string;
     creator_name: string | null;
+    // "reply" entries answer an earlier update. Stored flat by
+    // /api/sync/monday so newest-first sorting surfaces them.
+    kind?: "update" | "reply";
   };
   const mondayBy = new Map<
     string,
@@ -210,6 +213,7 @@ export default async function OrdersLandingPage() {
             text_body: string;
             created_at: string;
             creator_name: string | null;
+            kind?: "update" | "reply";
           }>
         | null;
       updates_es:
@@ -250,6 +254,7 @@ export default async function OrdersLandingPage() {
         text_body: es || u.text_body || "",
         created_at: u.created_at ?? "",
         creator_name: u.creator_name ?? null,
+        kind: u.kind,
       };
     });
     mondayBy.set(m.so_number, {
@@ -938,6 +943,7 @@ export default async function OrdersLandingPage() {
                                       fontWeight: 600,
                                     }}
                                   >
+                                    {u.kind === "reply" ? "↳ " : ""}
                                     {u.creator_name ?? "—"}
                                     {u.created_at
                                       ? ` · ${describeFreshness(u.created_at, t, lang).relative}`
