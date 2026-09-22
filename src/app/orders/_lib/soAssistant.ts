@@ -128,7 +128,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "update_key_points",
     description:
-      "Replace this SO's key points (the green callout on its card) with a new headline and 3-5 points, in English and Spanish. Use after corrections change the story, or when the user asks. Lead with what is blocking or time-sensitive. Tag points with source 'monday', 'plaud' or 'correction' where one applies.",
+      "Replace this SO's key points (the green callout on its card) with a new headline and 3-5 points, in English and Spanish. Use after corrections change the story, or when the user asks. Lead with what is blocking or time-sensitive. Describe the order as it stands now -- never mention transcription errors, edits, or what was corrected; that history lives in the chat, not on the card. Tag points with source 'monday', 'plaud' or 'correction' where one applies.",
     input_schema: {
       type: "object",
       properties: {

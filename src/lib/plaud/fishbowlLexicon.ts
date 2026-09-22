@@ -277,7 +277,10 @@ function similarity(candidate: string, canonical: string): number {
   // Strong signal: phonetic keys match.
   const keyA = phoneticKey(a);
   const keyB = phoneticKey(bHead);
-  const phoneticMatch = keyA.length > 0 && keyA === keyB;
+  // A one-consonant key is no evidence at all: "No" and "New" both reduce
+  // to "n", which once rewrote a key point's "No vendor…" into "New
+  // Directions Aromatics vendor…". Require at least two consonants.
+  const phoneticMatch = keyA.length >= 2 && keyA === keyB;
 
   // Edit distance normalized against the longer word length. Anything
   // over 40% edit gets rejected outright.
@@ -361,6 +364,9 @@ export function correctPlaudText(
     // Trim trailing punctuation the regex captured.
     const clean = span.replace(/[.,;:!?)]+$/, "");
     if (!clean) return span;
+    // Sentence-initial short words ("No", "The", "Is") are capitalized
+    // too, and nothing that short is a name worth correcting.
+    if (clean.length < 4) return span;
 
     // Cached decision from earlier in this pass.
     if (seen.has(clean)) {
