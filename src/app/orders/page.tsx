@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../_components/AppHeader";
 import PrintButton from "./PrintButton";
+import AskChip from "./_components/AskChip";
 import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
@@ -100,7 +101,7 @@ export default async function OrdersLandingPage() {
   // Fan out reads in parallel — main SO list, key-points cache, Monday
   // activity, meeting notes, and linked purchase orders. Meeting notes
   // need a per-SO latest so we roll that up in Node after the fetch.
-  const [soRes, synRes, mondayRes, notesRes, poRes] = await Promise.all([
+  const [soRes, synRes, mondayRes, notesRes, poRes, corrRes] = await Promise.all([
     supabase
       .from("fishbowl_sales_orders")
       .select(SO_COLS)
@@ -139,9 +140,34 @@ export default async function OrdersLandingPage() {
       .not("so_numbers", "eq", "{}")
       .order("date_issued", { ascending: false })
       .limit(500),
+    // Verified facts recorded through the SO assistant. Outrank every
+    // synced source, so they sit above the AI key points on the card.
+    supabase
+      .from("so_corrections")
+      .select("so_number, text, text_es, created_by, created_by_name, created_at")
+      .is("retracted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1000),
   ]);
 
   const rows = (soRes.data ?? []) as unknown as SoRow[];
+
+  const correctionsBy = new Map<string, Array<{ text: string; by: string }>>();
+  for (const raw of (corrRes.data ?? []) as unknown[]) {
+    const c = raw as {
+      so_number: string;
+      text: string;
+      text_es: string | null;
+      created_by: string;
+      created_by_name: string | null;
+    };
+    const list = correctionsBy.get(c.so_number) ?? [];
+    list.push({
+      text: lang === "es" && c.text_es ? c.text_es : c.text,
+      by: c.created_by_name ?? c.created_by,
+    });
+    correctionsBy.set(c.so_number, list);
+  }
 
   const synBy = new Map<
     string,
@@ -677,6 +703,11 @@ export default async function OrdersLandingPage() {
                                 {formatMoney(so.total_price)}
                               </span>
                             ) : null}
+                            <AskChip
+                              so={so.so_number}
+                              label={t("soChatOpen")}
+                              pushRight={so.total_price == null}
+                            />
                           </div>
 
                           {/* What was ordered — product lines up top,
@@ -754,6 +785,41 @@ export default async function OrdersLandingPage() {
                               </div>
                             );
                           })()}
+
+                          {(correctionsBy.get(key) ?? []).length > 0 ? (
+                            <div
+                              style={{
+                                background: "#fdf6e3",
+                                border: "1px solid #ecd9a0",
+                                borderRadius: 8,
+                                padding: "6px 10px",
+                                marginBottom: 6,
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                color: "var(--ink-1, #1f2a2d)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "#6b5410",
+                                }}
+                              >
+                                {t("correctionsTitle")}
+                              </div>
+                              {(correctionsBy.get(key) ?? []).slice(0, 3).map((c, i) => (
+                                <div key={i}>
+                                  {c.text}{" "}
+                                  <span style={{ color: "var(--ink-3, #8a9498)", fontSize: 10.5 }}>
+                                    — {c.by}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
 
                           {syn && topPoints.length > 0 ? (
                             <div

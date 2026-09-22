@@ -119,6 +119,9 @@ export type SynthesisInput = {
   fishbowl?: unknown;
   monday?: unknown;
   meetings?: unknown;
+  // Verified facts added through the SO assistant (so_corrections). They
+  // outrank every other source -- see buildSynthesisPrompt.
+  corrections?: unknown;
   existing_synthesis?: { generated_at?: string | null } | null;
 };
 
@@ -135,6 +138,11 @@ export function buildSynthesisPrompt(sos: SynthesisInput[]): string {
     'Tag each point with its source where it has one: "monday" or "plaud".',
     "Fishbowl facts need no tag. Prefix meeting-derived points with the date,",
     'as in "Meeting 9/8: …".',
+    "",
+    "`corrections` are facts a PharmaCenter employee verified and recorded by",
+    "hand. They outrank Fishbowl, Monday and meeting notes: where a correction",
+    "contradicts another source, state the correction and drop the",
+    "contradicted claim. Tag points built on one with source \"correction\".",
     "",
     "Produce BOTH English and Spanish. " + SPANISH_RULE,
     IDENTIFIER_RULE,
@@ -276,6 +284,10 @@ export function trimSynthesisInput(so: SynthesisInput): SynthesisInput {
         }
       : null,
     meetings: meetings.slice(0, 3),
+    // Never trimmed to the recent few like the others: each one is a fact a
+    // person bothered to record, and dropping one would let the nightly
+    // rewrite reintroduce the claim it corrected.
+    corrections: Array.isArray(so.corrections) ? so.corrections.slice(0, 20) : [],
     existing_synthesis: so.existing_synthesis ?? null,
   };
 }
@@ -317,6 +329,12 @@ export function newestInputTime(so: SynthesisInput): number | null {
   if (Array.isArray(so.meetings)) {
     for (const m of so.meetings) {
       if (m && typeof m === "object") push((m as Record<string, unknown>).session_date);
+    }
+  }
+
+  if (Array.isArray(so.corrections)) {
+    for (const c of so.corrections) {
+      if (c && typeof c === "object") push((c as Record<string, unknown>).created_at);
     }
   }
 

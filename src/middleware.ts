@@ -75,6 +75,10 @@ function shouldRewriteToOrders(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
   if (pathname.startsWith("/orders")) return false;
+  // Every SO card on the Orders landing links to the SO detail page, which
+  // lives at /meetings/sales-orders/orders/[so]. Without this carve-out the
+  // orders host rewrote that to /orders/meetings/... and every card 404'd.
+  if (pathname.startsWith("/meetings")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }

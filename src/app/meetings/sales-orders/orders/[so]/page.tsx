@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../../../../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
+import SoChat from "@/app/orders/_components/SoChat";
 import { describeFreshness } from "@/lib/freshness";
 
 // /meetings/sales-orders/orders/[so]
@@ -152,6 +153,26 @@ export default async function SalesOrderDetailPage({
   // AI-synthesized key points — Claude-generated from Fishbowl +
   // Monday + meeting notes by a Cowork scheduled task, stored in
   // public.so_synthesis. Rendered at the top of the page.
+  // Corrections recorded through the SO assistant -- verified facts that
+  // outrank every synced source. Shown above the key points.
+  const { data: corrRaw } = await supabase
+    .from("so_corrections")
+    .select("id, text, text_es, created_by, created_by_name, created_at")
+    .eq("so_number", row.so_number)
+    .is("retracted_at", null)
+    .order("created_at", { ascending: false });
+  const corrections = ((corrRaw ?? []) as unknown as Array<{
+    id: string;
+    text: string;
+    text_es: string | null;
+    created_by: string;
+    created_by_name: string | null;
+    created_at: string;
+  }>).map((c) => ({
+    ...c,
+    text: lang === "es" && c.text_es ? c.text_es : c.text,
+  }));
+
   const { data: synRaw } = await supabase
     .from("so_synthesis")
     .select("headline, points, generated_at")
@@ -288,6 +309,39 @@ export default async function SalesOrderDetailPage({
                 : ""}
             </div>
           </div>
+
+          {corrections.length > 0 ? (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "12px 16px",
+                background: "#fdf6e3",
+                border: "1px solid #ecd9a0",
+                borderRadius: 10,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#6b5410",
+                  marginBottom: 6,
+                }}
+              >
+                {t("correctionsTitle")}
+              </div>
+              {corrections.map((c) => (
+                <div key={c.id} style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 4 }}>
+                  {c.text}{" "}
+                  <span style={{ fontSize: 11, color: "var(--ink-3, #8a9498)" }}>
+                    — {c.created_by_name ?? c.created_by}, {formatDate(c.created_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {/* AI key points — synthesized from Fishbowl + Monday +
               meeting notes. Rendered as a green-tinted callout right
@@ -888,6 +942,7 @@ export default async function SalesOrderDetailPage({
           )}
         </div>
       </main>
+      <SoChat so={row.so_number} lang={lang} />
     </div>
   );
 }

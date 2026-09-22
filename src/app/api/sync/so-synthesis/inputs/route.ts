@@ -81,13 +81,21 @@ export async function GET(request: Request) {
   if (singleSo) {
     soSet.add(singleSo);
   } else {
-    const [mondaySos, meetingSos] = await Promise.all([
+    const [mondaySos, meetingSos, correctionSos] = await Promise.all([
       supabase.from("so_monday_activity").select("so_number").limit(limit),
       supabase
         .from("meeting_so_notes")
         .select("so_number")
         .limit(limit * 3),
+      supabase
+        .from("so_corrections")
+        .select("so_number")
+        .is("retracted_at", null)
+        .limit(limit * 3),
     ]);
+    (correctionSos.data ?? []).forEach((r) =>
+      soSet.add((r as { so_number: string }).so_number),
+    );
     (mondaySos.data ?? []).forEach((r) =>
       soSet.add((r as { so_number: string }).so_number),
     );
@@ -101,7 +109,7 @@ export async function GET(request: Request) {
   }
 
   // Fan out three reads in parallel.
-  const [fbRes, mondayRes, notesRes, synthesisRes] = await Promise.all([
+  const [fbRes, mondayRes, notesRes, synthesisRes, correctionsRes] = await Promise.all([
     supabase
       .from("fishbowl_sales_orders")
       .select(
@@ -125,6 +133,15 @@ export async function GET(request: Request) {
       .from("so_synthesis")
       .select("so_number, generated_at, based_on")
       .in("so_number", soList),
+    // Facts a person verified through the SO assistant. The synthesis prompt
+    // treats these as outranking every other source, so a nightly rewrite of
+    // the key points honours a correction instead of undoing it.
+    supabase
+      .from("so_corrections")
+      .select("so_number, topic, text, supersedes, created_by_name, created_by, created_at")
+      .in("so_number", soList)
+      .is("retracted_at", null)
+      .order("created_at", { ascending: false }),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,11 +226,27 @@ export async function GET(request: Request) {
     });
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const correctionsBy = new Map<string, any[]>();
+  (correctionsRes.data ?? []).forEach((raw) => {
+    const r = raw as Record<string, unknown> & { so_number: string };
+    const arr = correctionsBy.get(r.so_number) ?? [];
+    arr.push({
+      topic: r.topic ?? null,
+      text: r.text ?? null,
+      supersedes: r.supersedes ?? null,
+      by: r.created_by_name ?? r.created_by ?? null,
+      created_at: r.created_at ?? null,
+    });
+    correctionsBy.set(r.so_number, arr);
+  });
+
   const sos = soList.map((so) => ({
     so_number: so,
     fishbowl: fbBy.get(so) ?? null,
     monday: mondayBy.get(so) ?? null,
     meetings: notesBy.get(so) ?? [],
+    corrections: correctionsBy.get(so) ?? [],
     existing_synthesis: synthBy.get(so) ?? null,
   }));
 
