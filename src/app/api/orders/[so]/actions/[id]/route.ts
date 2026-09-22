@@ -156,7 +156,17 @@ export async function POST(request: Request, { params }: Params) {
     if (!nid) return fail("nothing to restore", 500);
     const { error: e } = await g.admin
       .from("meeting_so_notes")
-      .update({ note_md: b.note_md ?? null, note_md_es: b.note_md_es ?? null })
+      .update({
+        note_md: b.note_md ?? null,
+        note_md_es: b.note_md_es ?? null,
+        // Restore the mismatch warnings too, when the edit had cleared them.
+        ...("customer_mismatch" in b
+          ? { customer_mismatch: b.customer_mismatch ?? false, customer_hint: b.customer_hint ?? null }
+          : {}),
+        ...("product_mismatch" in b
+          ? { product_mismatch: b.product_mismatch ?? false, product_hint: b.product_hint ?? null }
+          : {}),
+      })
       .eq("id", nid)
       .eq("so_number", so);
     if (e) return fail(e.message, 500);

@@ -113,6 +113,14 @@ export const TOOLS: ToolDef[] = [
         note_id: { type: "string" },
         note_md: { type: "string", description: "Full corrected note, English." },
         note_md_es: { type: "string", description: "Full corrected note, Spanish." },
+        clear_customer_mismatch: {
+          type: "boolean",
+          description: "Set true when the fix resolves the note's customer-mismatch warning (customer_mismatch=true in context), so the card stops showing it.",
+        },
+        clear_product_mismatch: {
+          type: "boolean",
+          description: "Set true when the fix resolves the note's product-mismatch warning.",
+        },
       },
       required: ["note_id", "note_md", "note_md_es"],
     },
@@ -220,7 +228,10 @@ THE SOURCES (all in the context below) AND HOW MUCH TO TRUST THEM
 CHANGING THINGS -- only when the user states a fact, asks you to fix/add/update something, or confirms a change you offered
 - add_correction: the user tells you something that is new or contradicts a source ("ETA is 10/01, not 9/19", "customer approved the label"). Applies instantly with an Undo button. Write it so a teammate reading the card cold understands it; include the date and who said it when known.
 - edit_meeting_note: fix a garbled or wrong meeting note. Send the whole corrected note in both languages.
-- update_key_points: after a correction changes the story, refresh the key points so the card reflects it -- do this in the same turn without being asked, as long as the change is material.
+- update_key_points: the key points are what people read on the Orders card. After ANY fix in a turn -- a correction OR a meeting-note edit -- re-read key_points in the context: if the headline or any point repeats the wrong claim, relies on it, or is now out of date, rewrite them in the SAME turn without being asked. Fixing the source while the card still shows the old claim leaves the user looking at the mistake -- that is the failure to avoid.
+- When you edit a meeting note that has customer_mismatch or product_mismatch set and your fix resolves it, pass clear_customer_mismatch / clear_product_mismatch so the warning disappears from the card.
+- Keep an edited note in the same format as the original (if it was a markdown bullet, keep it one).
+- Tell the user where each change shows up: meeting notes on the SO page, key points and corrections on the Orders card and the SO page.
 - draft_monday_update: when the user wants the team told or asked something. It is only a draft until they click Send -- say so; never say it was posted.
 - Do not record your own inferences, guesses, or summaries as corrections. If the user is unsure, ask before recording.
 - NEVER say you changed, recorded, updated, or posted anything unless you called the tool for it in THIS turn and it returned ok. If a tool fails, say it failed.
@@ -372,12 +383,31 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
         if (!id || !md) return fail("note_id and note_md are required");
         const { data: existing } = await ctx.admin
           .from("meeting_so_notes")
-          .select("id, so_number, note_md, note_md_es")
+          .select("id, so_number, note_md, note_md_es, customer_mismatch, customer_hint, product_mismatch, product_hint")
           .eq("id", id)
           .maybeSingle();
-        const ex = existing as { so_number: string; note_md: string | null; note_md_es: string | null } | null;
+        const ex = existing as {
+          so_number: string;
+          note_md: string | null;
+          note_md_es: string | null;
+          customer_mismatch: boolean | null;
+          customer_hint: string | null;
+          product_mismatch: boolean | null;
+          product_hint: string | null;
+        } | null;
         if (!ex || ex.so_number !== ctx.so) return fail("no such meeting note on this SO");
-        const next = { note_md: md, note_md_es: str(a.note_md_es, 12000) ?? ex.note_md_es };
+        const next: Record<string, unknown> = {
+          note_md: md,
+          note_md_es: str(a.note_md_es, 12000) ?? ex.note_md_es,
+        };
+        if (a.clear_customer_mismatch === true) {
+          next.customer_mismatch = false;
+          next.customer_hint = null;
+        }
+        if (a.clear_product_mismatch === true) {
+          next.product_mismatch = false;
+          next.product_hint = null;
+        }
         const { error } = await ctx.admin.from("meeting_so_notes").update(next).eq("id", id);
         if (error) return fail(error.message);
         await logAction(ctx, {
@@ -385,7 +415,15 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
           status: "applied",
           summary: md.slice(0, 200),
           payload: { note_id: id, ...next },
-          before: { note_id: id, note_md: ex.note_md, note_md_es: ex.note_md_es },
+          before: {
+            note_id: id,
+            note_md: ex.note_md,
+            note_md_es: ex.note_md_es,
+            customer_mismatch: ex.customer_mismatch,
+            customer_hint: ex.customer_hint,
+            product_mismatch: ex.product_mismatch,
+            product_hint: ex.product_hint,
+          },
         });
         return ok({ ok: true });
       }
