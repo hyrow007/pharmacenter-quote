@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../_components/AppHeader";
+import PrintButton from "./PrintButton";
 import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
@@ -398,17 +399,23 @@ export default async function OrdersLandingPage() {
 
   const totalOpen = rows.filter((r) => (r.status_id ?? 0) !== 10).length;
   const totalEstimate = rows.filter((r) => r.status_id === 10).length;
-  const freshness = describeFreshness(
-    rows.reduce<string | null>(
-      (m, r) =>
-        typeof r.synced_at === "string" && (!m || r.synced_at > m)
-          ? r.synced_at
-          : m,
-      null,
-    ),
-    t,
-    lang,
+  const latestSyncIso = rows.reduce<string | null>(
+    (m, r) =>
+      typeof r.synced_at === "string" && (!m || r.synced_at > m)
+        ? r.synced_at
+        : m,
+    null,
   );
+  const freshness = describeFreshness(latestSyncIso, t, lang);
+  // "Synced 17h ago" means nothing on paper read tomorrow, so the printed
+  // sheet also carries the absolute sync time (Eastern, the office's zone).
+  const latestSyncAbsolute = latestSyncIso
+    ? new Date(latestSyncIso).toLocaleString(lang === "es" ? "es" : "en-US", {
+        timeZone: "America/New_York",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
 
   return (
     <div className="app-shell">
@@ -458,9 +465,15 @@ export default async function OrdersLandingPage() {
                 }}
               >
                 {t("syncedAgo", { rel: freshness.relative })}
+                {latestSyncAbsolute ? (
+                  <span className="orders-print-only">
+                    {` (${latestSyncAbsolute})`}
+                  </span>
+                ) : null}
               </span>
               <Link
                 href="/meetings/sales-orders"
+                className="meetings-noprint"
                 style={{
                   color: "var(--teal-700, #1d6c7b)",
                   textDecoration: "none",
@@ -469,8 +482,33 @@ export default async function OrdersLandingPage() {
               >
                 {t("ordersMeetingsLink")} →
               </Link>
+              <PrintButton label={t("printSavePdf")} />
             </div>
           </div>
+
+          {/* Print rules specific to this page; the shared ones (hide the
+              header nav and .meetings-noprint, white page, letter size)
+              live in globals.css. Keep each SO card whole on one page and
+              keep a customer name with its first card. Status tints and
+              the Monday / key-point boxes print because they carry
+              meaning, not decoration. */}
+          <style>{`
+            .orders-print-only { display: none; }
+            @media print {
+              .orders-print-only { display: inline; }
+              .orders-so-card {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                box-shadow: none !important;
+              }
+              .orders-customer-head {
+                break-after: avoid;
+                page-break-after: avoid;
+              }
+            }
+          `}</style>
 
           {freshness.stale ? (
             <div
@@ -497,6 +535,7 @@ export default async function OrdersLandingPage() {
               {customerGroups.map(({ customer, sos }) => (
                 <section key={customer}>
                   <div
+                    className="orders-customer-head"
                     style={{
                       display: "flex",
                       alignItems: "baseline",
@@ -579,6 +618,7 @@ export default async function OrdersLandingPage() {
                         <Link
                           key={key}
                           href={`/meetings/sales-orders/orders/${key}`}
+                          className="orders-so-card"
                           style={cardStyle(so.status_id, ship)}
                         >
                           <div
