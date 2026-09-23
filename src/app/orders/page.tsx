@@ -160,6 +160,20 @@ export default async function OrdersLandingPage() {
 
   const rows = (soRes.data ?? []) as unknown as SoRow[];
 
+  // When the Plaud ingest last landed a meeting (created_at, not the
+  // meeting's own date -- a Tuesday meeting pulled on Friday is two
+  // different facts, and this line is about the pipeline).
+  const { data: lastSessionRaw } = await supabase
+    .from("meeting_sessions")
+    .select("created_at, session_date")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lastSession = lastSessionRaw as {
+    created_at: string | null;
+    session_date: string | null;
+  } | null;
+
   const correctionsBy = new Map<string, Array<{ text: string; by: string }>>();
   for (const raw of (corrRes.data ?? []) as unknown[]) {
     const c = raw as {
@@ -441,15 +455,61 @@ export default async function OrdersLandingPage() {
     null,
   );
   const freshness = describeFreshness(latestSyncIso, t, lang);
-  // "Synced 17h ago" means nothing on paper read tomorrow, so the printed
-  // sheet also carries the absolute sync time (Eastern, the office's zone).
-  const latestSyncAbsolute = latestSyncIso
-    ? new Date(latestSyncIso).toLocaleString(lang === "es" ? "es" : "en-US", {
-        timeZone: "America/New_York",
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : null;
+
+  // Each feed has its own cadence, so each gets its own threshold and its
+  // own line. One combined "Synced" stamp hid a 24-day-old Monday cache
+  // behind a fresh Fishbowl time for weeks -- see claude/automation.md.
+  const mondaySyncIso = ((mondayRes.data ?? []) as unknown[]).reduce<string | null>(
+    (m, raw) => {
+      const v = (raw as { last_synced_at?: unknown }).last_synced_at;
+      return typeof v === "string" && (!m || v > m) ? v : m;
+    },
+    null,
+  );
+  const plaudSyncIso = lastSession?.created_at ?? null;
+  const absolute = (iso: string | null): string | null =>
+    iso
+      ? new Date(iso).toLocaleString(lang === "es" ? "es" : "en-US", {
+          timeZone: "America/New_York",
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+  const feeds = [
+    {
+      // Nightly Fishbowl sync, ~04:30 ET.
+      key: "fishbowl",
+      label: "Fishbowl",
+      iso: latestSyncIso,
+      staleAfterHours: 26,
+    },
+    {
+      // Vercel cron, daily.
+      key: "monday",
+      label: "Monday",
+      iso: mondaySyncIso,
+      staleAfterHours: 26,
+    },
+    {
+      // Plaud pull runs Tue + Fri; the meeting itself is weekly, so a
+      // gap only means trouble after more than a week.
+      key: "plaud",
+      label: "Plaud",
+      iso: plaudSyncIso,
+      staleAfterHours: 8 * 24,
+    },
+  ].map((f) => {
+    const fr = describeFreshness(f.iso, t, lang);
+    const ageHours = f.iso
+      ? (Date.now() - new Date(f.iso).getTime()) / 3_600_000
+      : null;
+    return {
+      ...f,
+      relative: fr.relative,
+      absolute: absolute(f.iso),
+      stale: ageHours === null || ageHours > f.staleAfterHours,
+    };
+  });
 
   return (
     <div className="app-shell">
@@ -487,24 +547,24 @@ export default async function OrdersLandingPage() {
               <span>
                 {t("ordersCustomerCount", { n: String(customerGroups.length) })}
               </span>
-              {/* H2 remainder, 2026-09-20: this line rendered an age and
-                  nothing else, so the page could read "hace 10h" and stay
-                  silent at ten days. Its inline describeFreshness had no
-                  staleness concept at all. Same red-bold + banner treatment
-                  every other nightly-sync surface already uses. */}
-              <span
-                style={{
-                  color: freshness.stale ? "#8b2f2f" : undefined,
-                  fontWeight: freshness.stale ? 700 : undefined,
-                }}
-              >
-                {t("syncedAgo", { rel: freshness.relative })}
-                {latestSyncAbsolute ? (
-                  <span className="orders-print-only">
-                    {` (${latestSyncAbsolute})`}
-                  </span>
-                ) : null}
-              </span>
+              {/* One stamp per feed. A single combined "Synced" line is
+                  what let Monday sit 24 days stale next to a fresh
+                  Fishbowl time without anyone noticing. Each shows the
+                  exact local time and goes red past its own threshold. */}
+              {feeds.map((f) => (
+                <span
+                  key={f.key}
+                  title={f.absolute ?? undefined}
+                  style={{
+                    color: f.stale ? "#8b2f2f" : undefined,
+                    fontWeight: f.stale ? 700 : undefined,
+                  }}
+                >
+                  <strong style={{ fontWeight: 700 }}>{f.label}</strong>{" "}
+                  {f.absolute ?? t("syncNever")}
+                  {f.absolute ? ` · ${f.relative}` : ""}
+                </span>
+              ))}
               <Link
                 href="/meetings/sales-orders"
                 className="meetings-noprint"
