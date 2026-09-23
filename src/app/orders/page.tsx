@@ -107,6 +107,13 @@ export default async function OrdersLandingPage() {
       .from("fishbowl_sales_orders")
       .select(SO_COLS)
       .in("status_id", OPEN_STATUS_IDS)
+      // Fishbowl decides what is still open. When an SO moves to
+      // Fulfilled / Closed Short / Void it stops appearing in the nightly
+      // sync, whose finalize step then flips is_open=false -- but it never
+      // rewrites status_id, so the row keeps its last-known Issued /
+      // In Progress label. Filtering on status alone left closed orders on
+      // the board indefinitely (17 of them as of 2026-09-23).
+      .eq("is_open", true)
       .order("customer_name", { ascending: true })
       .order("so_number", { ascending: true })
       .limit(500),
