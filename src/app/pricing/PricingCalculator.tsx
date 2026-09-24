@@ -2467,6 +2467,25 @@ export default function PricingCalculator({
   // Take a TabState → PricingSnapshot ready for the workflow PUT. We
   // re-derive `result` from the inputs so each tab (even inactive ones)
   // carries an accurate result snapshot.
+  /**
+   * Do inbound costs apply to the tab pricing this product?
+   *
+   * A fact about the PRODUCT, not about which fields are on screen — this
+   * runs for inactive tabs too, where isStockProduct (which follows the
+   * picked product) would be the wrong answer. Stock and formula products
+   * carry no inbound costs; a stock product Fishbowl shows as empty is a
+   * purchase and does.
+   */
+  function noInboundForUid(uid: string): boolean {
+    const p = workflowProducts.find((x) => x.uid === uid);
+    if (!p) return false;
+    if (p.pinnedFormula) return true;
+    if (p.sourceMode !== "stock") return false;
+    return !(
+      typeof p.stockQtyOnHand === "number" && p.stockQtyOnHand <= 0
+    );
+  }
+
   function snapshotFromTab(t: TabState, fallbackSavedAt: string): PricingSnapshot {
     // Whether inbound costs apply is a fact about the PRODUCT this tab
     // prices, not about which fields the active tab happens to be showing —
@@ -2474,17 +2493,7 @@ export default function PricingCalculator({
     // inbound costs; a stock product with an empty shelf is a purchase and
     // does. Saved with the snapshot so the costing boards read the answer
     // instead of re-deriving it from sourceMode and getting it wrong.
-    const tabProduct = workflowProducts.find(
-      (x) => x.uid === t.workflowProductUid,
-    );
-    const noInbound = tabProduct
-      ? !!tabProduct.pinnedFormula ||
-        (tabProduct.sourceMode === "stock" &&
-          !(
-            typeof tabProduct.stockQtyOnHand === "number" &&
-            tabProduct.stockQtyOnHand <= 0
-          ))
-      : false;
+    const noInbound = noInboundForUid(t.workflowProductUid);
     const z = (v: string) => (noInbound ? "" : v);
     const r = computeResults({
       unitCost: t.unitCost,
@@ -2572,36 +2581,74 @@ export default function PricingCalculator({
     // Snapshot the active tab so its latest in-flight edits show up.
     const current = snapshotCurrentTab();
     const snapshotted = tabs.map((t, i) => (i === activeTabIndex ? current : t));
-    const lineItems: QuoteLineItem[] = snapshotted.map((t, i) => {
+    // A tab with no price does not become a line item. This used to compute
+    // each tab's price here with the inbound costs left in regardless of the
+    // product — so a tab whose Cost per unit was empty (an out-of-stock
+    // product now quoted as a purchase, say) still printed a price built
+    // from nothing but the default freight and testing. A customer-facing
+    // quote is the last place to invent a number.
+    const priced: QuoteLineItem[] = [];
+    const unpriced: string[] = [];
+    snapshotted.forEach((t, i) => {
+      const noInbound = noInboundForUid(t.workflowProductUid);
+      const z = (v: string) => (noInbound ? "" : v);
       const r = computeResults({
         unitCost: t.unitCost,
         quantity: t.quantity,
-        // For stock items the inbound costs don't apply — match what the
-        // calculator UI shows.
-        freight: t.freight,
-        insurance: t.insurance,
-        customsBroker: t.customsBroker,
-        dutiesPct: t.dutiesPct,
-        handling: t.handling,
-        testing: t.testing,
+        // Stock and formula products carry no inbound costs — match what
+        // the calculator UI shows.
+        freight: z(t.freight),
+        insurance: z(t.insurance),
+        customsBroker: z(t.customsBroker),
+        dutiesPct: z(t.dutiesPct),
+        handling: z(t.handling),
+        testing: z(t.testing),
         margin: t.margin,
         marginMode: t.marginMode,
         shippingOrigin: t.shippingOrigin,
         incoterm: t.incoterm,
+        shippingMode: t.shippingMode,
+        otherCosts: z(t.otherCosts),
+        deliveryOverride: z(t.deliveryOverride),
+        unitWeightG,
+        accessorials: z(t.accessorials),
       });
       const product = workflowProducts.find((p) => p.uid === t.workflowProductUid);
       const desc =
         (t.label && t.label.trim().length > 0 && t.label.trim()) ||
         product?.label ||
         `Tab ${i + 1}`;
+      const fullDesc = product?.sub ? `${desc} — ${product.sub}` : desc;
       const qty = num(t.quantity);
-      return {
-        itemRef: `ITEM ${i + 1}`,
-        description: product?.sub ? `${desc} — ${product.sub}` : desc,
+      if (!r.hasInputs || !(r.salePerUnit > 0) || !(qty > 0)) {
+        unpriced.push(fullDesc);
+        return;
+      }
+      priced.push({
+        itemRef: `ITEM ${priced.length + 1}`,
+        description: fullDesc,
         quantity: qty,
         unitPrice: r.salePerUnit,
-      };
+      });
     });
+
+    if (priced.length === 0) {
+      window.alert(
+        unpriced.length === 1
+          ? `Nothing to quote yet — ${unpriced[0]} has no price.\n\nEnter a cost per unit and quantity, then issue the quote.`
+          : "Nothing to quote yet — none of these tabs has a price.\n\nEnter a cost per unit and quantity, then issue the quote.",
+      );
+      return;
+    }
+    if (unpriced.length > 0) {
+      const ok = window.confirm(
+        `${unpriced.length === 1 ? "This item has" : "These items have"} no price and will be LEFT OFF the quote:\n\n` +
+          unpriced.map((d) => `  • ${d}`).join("\n") +
+          `\n\nIssue the quote with the remaining ${priced.length === 1 ? "item" : `${priced.length} items`}?`,
+      );
+      if (!ok) return;
+    }
+    const lineItems: QuoteLineItem[] = priced;
 
     // Build an absolute URL for the in-document Back-to-workflow pill.
     // Blob-URL tabs have a blob: origin, so a relative href would 404 — we
