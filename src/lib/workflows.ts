@@ -870,6 +870,17 @@ export type PricingSnapshot = {
   freightClass?: string;
   accessorials?: string;
 
+  // How this tab's inbound costs were treated when it was saved, decided by
+  // the product rather than by which fields happened to be on screen.
+  //   true  — stock or PC-manufactured: freight/duties/testing/etc. do not
+  //           apply, and the saved result was computed with them zeroed.
+  //   false — a purchase: inbound costs count.
+  // Stock with nothing on hand is a PURCHASE (see the calculator's
+  // stockExhausted), which is why the boards must read this flag instead of
+  // re-deriving it from sourceMode. Optional so pre-flag snapshots parse;
+  // they fall back to sourceMode, which was correct when they were written.
+  noInboundCosts?: boolean;
+
   // Snapshot of computed results at the moment of save. Stored as plain
   // numbers in dollars — useful for the workflow listing summary so it
   // doesn't have to redo arithmetic.

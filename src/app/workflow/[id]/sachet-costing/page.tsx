@@ -137,8 +137,14 @@ export default async function SachetCostingPage({ params }: Ctx) {
     const bulkSnapshot = isFinishedProduct
       ? (pricingTabs.find((t) => uid && t.workflowProductUid === uid) ?? null)
       : null;
+    // Read the answer the calculator saved rather than re-deriving it: a
+    // stock product Fishbowl shows as empty is quoted as a PURCHASE, so its
+    // inbound costs are real and zeroing them here would hand the Bulk row a
+    // cost the Bulk tab never showed. Pre-flag snapshots fall back to
+    // sourceMode, which was correct when they were written.
     const bulkNoInbound =
-      product.sourceMode === "stock" || Boolean(product.pinnedFormula);
+      bulkSnapshot?.noInboundCosts ??
+      (product.sourceMode === "stock" || Boolean(product.pinnedFormula));
     return { name, quantity, spec, initial, bulkSnapshot, bulkNoInbound };
   });
 

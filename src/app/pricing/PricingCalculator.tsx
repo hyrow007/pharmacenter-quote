@@ -1770,8 +1770,25 @@ export default function PricingCalculator({
   // Formula products ride the same rails: their True Cost import already
   // includes labor, overhead, AND lab testing, so surfacing the inbound
   // testing/freight inputs would double-count.
+  // Fishbowl says there is none of this product in the building. An average
+  // cost outlives the last piece, so "existing stock" with an empty shelf is
+  // not a cheap quote — it is a purchase nobody has priced yet. The tab
+  // therefore stops behaving like stock entirely: it switches itself onto the
+  // purchase path below (vendor, shipping origin, inbound costs all return)
+  // and shows no price until someone enters what it will cost to buy.
+  //
+  // Only a real zero does this. A null quantity means the sync has never
+  // reported on this product, which is not the same as reporting none.
+  const stockExhausted =
+    pickedProduct?.sourceMode === "stock" &&
+    !isFormulaProduct &&
+    typeof pickedProduct.stockQtyOnHand === "number" &&
+    pickedProduct.stockQtyOnHand <= 0;
+  // True when the picked product needs no inbound costs. Stock qualifies
+  // only while there is stock; formula products always do.
   const isStockProduct =
-    pickedProduct?.sourceMode === "stock" || isFormulaProduct;
+    (pickedProduct?.sourceMode === "stock" && !stockExhausted) ||
+    isFormulaProduct;
 
 
   // --- Vendor picker --------------------------------------------------
@@ -2148,8 +2165,18 @@ export default function PricingCalculator({
     // as quantity above — picking a product is an explicit action, so
     // stamping the field beats guarding a stale value. The rep can still
     // type over it.
+    //
+    // Skipped when Fishbowl shows none on hand: that average is what the
+    // LAST units cost us, and stamping it into a tab that has become a
+    // purchase would quote new goods at the old price — the precise mistake
+    // the stock check exists to stop.
+    const emptyShelf =
+      product?.sourceMode === "stock" &&
+      typeof product.stockQtyOnHand === "number" &&
+      product.stockQtyOnHand <= 0;
     if (
       product?.sourceMode === "stock" &&
+      !emptyShelf &&
       typeof product.stockAvgCost === "number" &&
       product.stockAvgCost > 0
     ) {
@@ -2172,9 +2199,10 @@ export default function PricingCalculator({
   /**
    * Existing stock, checked against Fishbowl's quantity.
    *
-   * "block"  — Fishbowl says none on hand. There is nothing to sell out of
-   *            stock, so the calculator refuses to produce a price at all
-   *            (the same rule the costing boards use for a missing cost).
+   * There is no "none on hand" level here: that case is handled earlier by
+   * stockExhausted, which takes the tab off the stock path altogether and
+   * quotes it as a purchase. By the time this runs, stock exists.
+   *
    * "short"  — some on hand, but less than the quantity being quoted. The
    *            price still shows: the units may not be identical (Fishbowl
    *            counts in the product's own unit, bulk quotes in thousands),
@@ -2184,16 +2212,30 @@ export default function PricingCalculator({
    */
   const stockCheck = useMemo(() => {
     if (!pickedProduct || pickedProduct.sourceMode !== "stock") return null;
+    // Empty shelf: the tab is on the purchase path now and this section is
+    // not rendered. Bail rather than fall through and report a "shortfall"
+    // against zero.
+    if (stockExhausted) return null;
     const onHand = pickedProduct.stockQtyOnHand;
     if (onHand === null || onHand === undefined)
       return { level: "unknown" as const, onHand: null, needed: null };
     const needed = num(quantity);
-    if (onHand <= 0)
-      return { level: "block" as const, onHand: 0, needed };
     if (needed > 0 && needed > onHand)
       return { level: "short" as const, onHand, needed };
     return { level: "ok" as const, onHand, needed };
-  }, [pickedProduct, quantity]);
+  }, [pickedProduct, quantity, stockExhausted]);
+
+  // A tab saved while the product was in stock still carries Fishbowl's
+  // average cost in Cost per unit. Once the shelf is empty that number is
+  // history, not a quote, and leaving it there would price a purchase at
+  // what the last units cost us. Clear it when the tab flips — but only if
+  // it still holds the average, never a figure someone typed themselves.
+  const stockAvgCost = pickedProduct?.stockAvgCost;
+  useEffect(() => {
+    if (!stockExhausted) return;
+    if (typeof stockAvgCost !== "number" || stockAvgCost <= 0) return;
+    setUnitCost((prev) => (num(prev) === stockAvgCost ? "" : prev));
+  }, [stockExhausted, stockAvgCost, pickedProduct?.uid]);
 
   const stockAsOf = pickedProduct?.stockQtyOnHandAt
     ? new Date(pickedProduct.stockQtyOnHandAt).toLocaleDateString("en-US", {
@@ -2419,15 +2461,33 @@ export default function PricingCalculator({
   // re-derive `result` from the inputs so each tab (even inactive ones)
   // carries an accurate result snapshot.
   function snapshotFromTab(t: TabState, fallbackSavedAt: string): PricingSnapshot {
+    // Whether inbound costs apply is a fact about the PRODUCT this tab
+    // prices, not about which fields the active tab happens to be showing —
+    // this runs for inactive tabs too. Stock and formula products carry no
+    // inbound costs; a stock product with an empty shelf is a purchase and
+    // does. Saved with the snapshot so the costing boards read the answer
+    // instead of re-deriving it from sourceMode and getting it wrong.
+    const tabProduct = workflowProducts.find(
+      (x) => x.uid === t.workflowProductUid,
+    );
+    const noInbound = tabProduct
+      ? !!tabProduct.pinnedFormula ||
+        (tabProduct.sourceMode === "stock" &&
+          !(
+            typeof tabProduct.stockQtyOnHand === "number" &&
+            tabProduct.stockQtyOnHand <= 0
+          ))
+      : false;
+    const z = (v: string) => (noInbound ? "" : v);
     const r = computeResults({
       unitCost: t.unitCost,
       quantity: t.quantity,
-      freight: t.freight,
-      insurance: t.insurance,
-      customsBroker: t.customsBroker,
-      dutiesPct: t.dutiesPct,
-      handling: t.handling,
-      testing: t.testing,
+      freight: z(t.freight),
+      insurance: z(t.insurance),
+      customsBroker: z(t.customsBroker),
+      dutiesPct: z(t.dutiesPct),
+      handling: z(t.handling),
+      testing: z(t.testing),
       margin: t.margin,
       marginMode: t.marginMode,
       shippingOrigin: t.shippingOrigin,
@@ -2435,11 +2495,11 @@ export default function PricingCalculator({
       // v2 fields — the workflow-level dosage form is a constant per
       // calculator instance, so all tabs share the same unitWeightG.
       shippingMode: t.shippingMode,
-      otherCosts: t.otherCosts,
-      deliveryOverride: t.deliveryOverride,
+      otherCosts: z(t.otherCosts),
+      deliveryOverride: z(t.deliveryOverride),
       unitWeightG,
       // Domestic v1 (task #157) — accessorials feeds USA landed cost.
-      accessorials: t.accessorials,
+      accessorials: z(t.accessorials),
       // Commissions (task #352).
       hosCommissionPct: t.hosCommissionPct,
       repCommissionPct: t.repCommissionPct,
@@ -2481,6 +2541,7 @@ export default function PricingCalculator({
       palletCount: t.palletCount,
       freightClass: t.freightClass,
       accessorials: t.accessorials,
+      noInboundCosts: noInbound,
       result: {
         landedTotal: r.landedTotal,
         landedPerUnit: r.landedPerUnit,
@@ -3608,6 +3669,39 @@ export default function PricingCalculator({
       ) : (
       <section className="pricing__section">
         <h2 className="pricing__section-title">Inbound costs</h2>
+        {/* The tab said "existing stock" and Fishbowl says the shelf is
+            empty, so it is being quoted as a purchase instead. Say so where
+            the rep is about to start typing, and say why the old average
+            cost is not the answer. */}
+        {stockExhausted ? (
+          <p
+            className="pricing__hint"
+            style={{
+              color: "#8a5a1f",
+              fontWeight: 500,
+              background: "#fffbeb",
+              border: "1px solid #fcd34d",
+              borderRadius: 8,
+              padding: "10px 12px",
+            }}
+          >
+            <strong>No stock on hand — quoting this as a purchase.</strong>{" "}
+            Fishbowl shows <strong>0 on hand</strong>
+            {stockAsOf ? ` as of ${stockAsOf}` : ""}, so this product was
+            switched off <em>Existing stock</em> and onto{" "}
+            <em>Purchase needed</em>. Enter the vendor&rsquo;s price and the
+            inbound costs below; nothing is priced until you do.
+            {typeof pickedProduct?.stockAvgCost === "number" &&
+            pickedProduct.stockAvgCost > 0 ? (
+              <>
+                {" "}
+                Fishbowl&rsquo;s ${pickedProduct.stockAvgCost.toFixed(2)}{" "}
+                average is what the last units cost us, not what new ones
+                will.
+              </>
+            ) : null}
+          </p>
+        ) : null}
         <div className="pricing__row">
           <div className="pricing__field">
             <span className="pricing__label">Shipping origin</span>
@@ -4096,33 +4190,7 @@ export default function PricingCalculator({
           </div>
         ) : null}
 
-        {/* No stock, no price. Fishbowl says there is none of this product in
-            the building, so any sale price here would be for goods that do
-            not exist — the same reasoning that blanks a costing board when a
-            component cost cannot be resolved. */}
-        {stockCheck?.level === "block" ? (
-          <div
-            style={{
-              padding: 14,
-              border: "1px solid #a3281f",
-              borderRadius: 8,
-              background: "#fdf1ef",
-              color: "#a3281f",
-              fontSize: 14,
-              lineHeight: 1.5,
-            }}
-          >
-            <strong>Not enough stock — nothing priced.</strong>
-            <br />
-            Fishbowl shows <strong>0 on hand</strong>
-            {stockAsOf ? ` as of ${stockAsOf}` : ""} for this product
-            {stockCheck.needed && stockCheck.needed > 0
-              ? `, and this tab quotes ${stockCheck.needed.toLocaleString("en-US")}`
-              : ""}
-            . Switch Source to <strong>Purchase needed</strong> to price it as
-            a buy, or quote it once stock exists.
-          </div>
-        ) : !results.hasInputs ? (
+        {!results.hasInputs ? (
           <p className="pricing__empty">
             Enter a unit cost and quantity to see the math.
           </p>
@@ -4338,7 +4406,9 @@ export default function PricingCalculator({
                     ? "PC-manufactured (True Cost from Formula app)"
                     : isStockProduct
                       ? "Existing stock (landed cost from Fishbowl)"
-                      : "Purchase needed"}
+                      : stockExhausted
+                        ? "Purchase needed (no stock on hand)"
+                        : "Purchase needed"}
                 </td>
               </tr>
             ) : null}
