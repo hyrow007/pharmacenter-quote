@@ -2234,7 +2234,14 @@ export default function PricingCalculator({
   useEffect(() => {
     if (!stockExhausted) return;
     if (typeof stockAvgCost !== "number" || stockAvgCost <= 0) return;
-    setUnitCost((prev) => (num(prev) === stockAvgCost ? "" : prev));
+    // Compare at cent resolution, not exactly: the field was pre-filled with
+    // stockAvgCost.toFixed(2), so a raw average of 16.3612 lands in the box
+    // as "16.36" and an === test would decide the rep typed it.
+    setUnitCost((prev) =>
+      prev.trim() !== "" && Math.abs(num(prev) - stockAvgCost) < 0.005
+        ? ""
+        : prev,
+    );
   }, [stockExhausted, stockAvgCost, pickedProduct?.uid]);
 
   const stockAsOf = pickedProduct?.stockQtyOnHandAt
