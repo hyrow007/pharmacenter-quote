@@ -159,7 +159,13 @@ export default async function PricingPage({ searchParams }: Ctx) {
         .filter((id): id is string => !!id && id !== "new");
       const productNameMap: Record<
         string,
-        { name: string; code: string | null; avgCost: number | null }
+        {
+          name: string;
+          code: string | null;
+          avgCost: number | null;
+          qtyOnHand: number | null;
+          qtyOnHandAt: string | null;
+        }
       > = {};
       if (productIds.length > 0) {
         // avg_cost = Fishbowl inventory average cost (nightly sync via
@@ -168,13 +174,19 @@ export default async function PricingPage({ searchParams }: Ctx) {
         // typed-select fallback tripped Vercel's type check on 2d9c61b).
         const { data: pRows } = await supabase
           .from("products")
-          .select("id, name, fp_code, avg_cost")
+          // qty_on_hand / qty_on_hand_at (pharmacenter-db migration
+          // 20260924120000): what Fishbowl says is physically in stock and
+          // when it said so. Null = never synced, which the calculator shows
+          // as unverified — never as zero.
+          .select("id, name, fp_code, avg_cost, qty_on_hand, qty_on_hand_at")
           .in("id", productIds);
         for (const row of (pRows ?? []) as Array<{
           id: string;
           name: string;
           fp_code: string | null;
           avg_cost?: number | null;
+          qty_on_hand?: number | null;
+          qty_on_hand_at?: string | null;
         }>) {
           productNameMap[row.id] = {
             name: row.name,
@@ -183,6 +195,11 @@ export default async function PricingPage({ searchParams }: Ctx) {
               row.avg_cost === null || row.avg_cost === undefined
                 ? null
                 : Number(row.avg_cost),
+            qtyOnHand:
+              row.qty_on_hand === null || row.qty_on_hand === undefined
+                ? null
+                : Number(row.qty_on_hand),
+            qtyOnHandAt: row.qty_on_hand_at ?? null,
           };
         }
       }
@@ -191,6 +208,8 @@ export default async function PricingPage({ searchParams }: Ctx) {
         let label = `Product ${idx + 1}`;
         let sub: string | null = null;
         let stockAvgCost: number | null = null;
+        let stockQtyOnHand: number | null = null;
+        let stockQtyOnHandAt: string | null = null;
         // Finished Product: the product is the finished good (its own code);
         // a pinned formula is just the bulk behind it, shown in the sub-line.
         if (p.pinnedFormula && w.state.type !== "finished-product") {
@@ -212,6 +231,8 @@ export default async function PricingPage({ searchParams }: Ctx) {
           // pre-fills Cost per unit with it on pick. Purchase products get
           // their cost from the vendor quote, not inventory history.
           stockAvgCost = info.avgCost;
+          stockQtyOnHand = info.qtyOnHand;
+          stockQtyOnHandAt = info.qtyOnHandAt;
         }
         // First non-empty quantity wins — usually a workflow only has one
         // quantity per product anyway, but we accept multiples.
@@ -289,6 +310,8 @@ export default async function PricingPage({ searchParams }: Ctx) {
           // Fishbowl inventory average cost — pre-fills Cost per unit when
           // the product is picked with Source = Existing stock.
           stockAvgCost,
+          stockQtyOnHand,
+          stockQtyOnHandAt,
           // Identity-only formula pin (see PinnedFormula in lib/workflows).
           // The calculator uses this to offer "Import cost from formula",
           // which fetches live costingComputed from /api/formulas/[id] —

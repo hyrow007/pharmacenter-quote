@@ -112,6 +112,14 @@ export type WorkflowProductOption = {
   // it IS the landed cost, which is why stock products skip the entire
   // inbound-costs section. Null = no cost history in Fishbowl yet.
   stockAvgCost?: number | null;
+  /**
+   * Fishbowl on-hand quantity (products.qty_on_hand), in the product's own
+   * unit, and when the sync last said so. An average cost outlives the last
+   * piece, so without this an Existing-stock line prices stock that does not
+   * exist. Null = never synced: shown as unverified, never treated as zero.
+   */
+  stockQtyOnHand?: number | null;
+  stockQtyOnHandAt?: string | null;
 };
 
 // Row shape we get back from the vendors table search. Mirrors the columns
@@ -2161,6 +2169,39 @@ export default function PricingCalculator({
   // stored inputs without duplicating math. For stock products we zero
   // out every inbound cost so the landed total collapses to product cost
   // (which the user enters as the known landed unit cost from Fishbowl).
+  /**
+   * Existing stock, checked against Fishbowl's quantity.
+   *
+   * "block"  — Fishbowl says none on hand. There is nothing to sell out of
+   *            stock, so the calculator refuses to produce a price at all
+   *            (the same rule the costing boards use for a missing cost).
+   * "short"  — some on hand, but less than the quantity being quoted. The
+   *            price still shows: the units may not be identical (Fishbowl
+   *            counts in the product's own unit, bulk quotes in thousands),
+   *            so this states the shortfall and leaves the judgement to the
+   *            rep rather than blanking a number that may be right.
+   * "unknown"— never synced. Say so rather than imply either answer.
+   */
+  const stockCheck = useMemo(() => {
+    if (!pickedProduct || pickedProduct.sourceMode !== "stock") return null;
+    const onHand = pickedProduct.stockQtyOnHand;
+    if (onHand === null || onHand === undefined)
+      return { level: "unknown" as const, onHand: null, needed: null };
+    const needed = num(quantity);
+    if (onHand <= 0)
+      return { level: "block" as const, onHand: 0, needed };
+    if (needed > 0 && needed > onHand)
+      return { level: "short" as const, onHand, needed };
+    return { level: "ok" as const, onHand, needed };
+  }, [pickedProduct, quantity]);
+
+  const stockAsOf = pickedProduct?.stockQtyOnHandAt
+    ? new Date(pickedProduct.stockQtyOnHandAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+
   const results = useMemo(
     () =>
       computeResults({
@@ -3538,6 +3579,31 @@ export default function PricingCalculator({
               </>
             )}
           </p>
+          {stockCheck?.level === "short" ? (
+            <p
+              className="pricing__hint"
+              style={{ color: "#a3281f", fontWeight: 600 }}
+            >
+              Not enough stock: Fishbowl shows{" "}
+              {stockCheck.onHand.toLocaleString("en-US")} on hand
+              {stockAsOf ? ` as of ${stockAsOf}` : ""}, this tab quotes{" "}
+              {stockCheck.needed?.toLocaleString("en-US")}. The price below
+              assumes the rest gets made or bought.
+            </p>
+          ) : null}
+          {stockCheck?.level === "unknown" ? (
+            <p className="pricing__hint" style={{ color: "#8a6d1f" }}>
+              Stock not verified — Fishbowl has not sent an on-hand quantity
+              for this product yet, so the calculator cannot tell whether it
+              is in the building.
+            </p>
+          ) : null}
+          {stockCheck?.level === "ok" ? (
+            <p className="pricing__hint" style={{ color: "#0f766e" }}>
+              Fishbowl shows {stockCheck.onHand.toLocaleString("en-US")} on
+              hand{stockAsOf ? ` as of ${stockAsOf}` : ""}.
+            </p>
+          ) : null}
         </section>
       ) : (
       <section className="pricing__section">
@@ -4030,7 +4096,33 @@ export default function PricingCalculator({
           </div>
         ) : null}
 
-        {!results.hasInputs ? (
+        {/* No stock, no price. Fishbowl says there is none of this product in
+            the building, so any sale price here would be for goods that do
+            not exist — the same reasoning that blanks a costing board when a
+            component cost cannot be resolved. */}
+        {stockCheck?.level === "block" ? (
+          <div
+            style={{
+              padding: 14,
+              border: "1px solid #a3281f",
+              borderRadius: 8,
+              background: "#fdf1ef",
+              color: "#a3281f",
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Not enough stock — nothing priced.</strong>
+            <br />
+            Fishbowl shows <strong>0 on hand</strong>
+            {stockAsOf ? ` as of ${stockAsOf}` : ""} for this product
+            {stockCheck.needed && stockCheck.needed > 0
+              ? `, and this tab quotes ${stockCheck.needed.toLocaleString("en-US")}`
+              : ""}
+            . Switch Source to <strong>Purchase needed</strong> to price it as
+            a buy, or quote it once stock exists.
+          </div>
+        ) : !results.hasInputs ? (
           <p className="pricing__empty">
             Enter a unit cost and quantity to see the math.
           </p>
