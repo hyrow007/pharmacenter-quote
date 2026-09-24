@@ -11,7 +11,6 @@ import PackagingSpecBlistersSection from "./PackagingSpecBlistersSection";
 import PackagingSpecPouchesSection from "./PackagingSpecPouchesSection";
 import PackagingSpecSachetsSection from "./PackagingSpecSachetsSection";
 import type { WorkflowRow, WorkflowState as SharedWorkflowState, ProductEntry as SharedProductEntry, PinnedFormula } from "@/lib/workflows";
-import { useEffectiveAdmin } from "@/lib/access";
 
 // ----- catalogue ----------------------------------------------------------
 
@@ -305,54 +304,27 @@ function StartWorkflow() {
   // they were working on.
   const fresh = searchParams.get("fresh") === "1";
 
-  // Effective-admin gate. Non-admins (and admins in "view as user" mode)
-  // can create Bulk and Contract Packaging workflows in any dosage form
-  // EXCEPT gummies sourced from PharmaCenter. Everything else on the
-  // /start page renders as muted/disabled pills until the admin promotes
-  // the user or flips back to admin view.
-  const { effectiveAdmin } = useEffectiveAdmin();
-
-  // Per-rule helpers — pulled out as functions so the JSX stays readable.
-  function isTypeAllowed(typeId: string): boolean {
-    if (effectiveAdmin) return true;
-    // v70: Contract Packaging unlocked for all users (was admin-only).
-    return typeId === "bulk" || typeId === "contract-packaging";
+  // No admin gate on quote type, dosage form or source any more.
+  //
+  // These three pill rows were held back while each path was being built:
+  // non-admins saw Finished Product and Other greyed out with a padlock,
+  // and gummies sourced from PharmaCenter were blocked at the source step.
+  // Every one of those paths now exists end to end, so the whole /start
+  // form is open to any signed-in @pharmacenterusa.com user. The admins
+  // table still gates what it always gated — the Admin panel, formula and
+  // solution deletion, raw materials, roadmap edits.
+  //
+  // The "clear a now-disallowed selection" effect went with them: nothing
+  // is disallowed, so there is nothing to clear.
+  function isTypeAllowed(_typeId: string): boolean {
+    return true;
   }
   function isFormAllowed(_formId: string): boolean {
-    // All dosage forms are allowed for users — the gummy + PharmaCenter
-    // combo is blocked at the source step instead.
     return true;
   }
-  function isSourceAllowed(sourceId: string, formId: string | null): boolean {
-    if (effectiveAdmin) return true;
-    // The one feature we're holding back from users right now.
-    if (formId === "gummy" && sourceId === "pharmacenter") return false;
+  function isSourceAllowed(_sourceId: string, _formId: string | null): boolean {
     return true;
   }
-
-  // If the user is currently sitting on a now-disallowed selection (e.g.
-  // they had a Contract Packaging draft and we flipped them to user mode),
-  // clear it so the form doesn't carry a hidden disallowed value to submit.
-  useEffect(() => {
-    setState((s) => {
-      const next = { ...s };
-      let touched = false;
-      if (s.type && !isTypeAllowed(s.type)) {
-        next.type = null;
-        next.form = null;
-        next.source = null;
-        touched = true;
-      }
-      if (s.source && !isSourceAllowed(s.source, s.form)) {
-        next.source = null;
-        touched = true;
-      }
-      return touched ? next : s;
-    });
-    // We deliberately exclude isTypeAllowed/isSourceAllowed from deps —
-    // they close over `effectiveAdmin` which IS the dep we care about.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveAdmin]);
 
   // Single source of truth for the workflow form.
   const [state, setState] = useState<WorkflowState>(() => blankState());
@@ -1044,7 +1016,6 @@ function StartWorkflow() {
                     type="button"
                     disabled={!allowed}
                     onClick={() => allowed && pickType(t.id)}
-                    title={allowed ? "" : "Admin only — coming soon for users."}
                     style={
                       !allowed
                         ? pillMuted
@@ -1054,7 +1025,6 @@ function StartWorkflow() {
                     }
                   >
                     {t.name}
-                    {!allowed ? " 🔒" : ""}
                   </button>
                 );
               })}
@@ -1085,7 +1055,6 @@ function StartWorkflow() {
                           source: f.id === "gummy" ? s.source : null,
                         }))
                       }
-                      title={allowed ? "" : "Admin only — coming soon for users."}
                       style={
                         !allowed
                           ? pillMuted
@@ -1095,7 +1064,6 @@ function StartWorkflow() {
                       }
                     >
                       {f.name}
-                      {!allowed ? " 🔒" : ""}
                     </button>
                   );
                 })}
@@ -1121,7 +1089,6 @@ function StartWorkflow() {
                       type="button"
                       disabled={!allowed}
                       onClick={() => allowed && setField("source", s.id)}
-                      title={allowed ? "" : "Admin only — coming soon for users."}
                       style={
                         !allowed
                           ? pillMuted
@@ -1131,7 +1098,6 @@ function StartWorkflow() {
                       }
                     >
                       {s.name}
-                      {!allowed ? " 🔒" : ""}
                     </button>
                   );
                 })}
