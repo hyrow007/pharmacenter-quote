@@ -491,6 +491,9 @@ type Props = {
   // Email of the signed-in operator. Used to gate note edit/delete
   // affordances (only shown on notes the current user authored).
   currentUserEmail: string;
+  /** v85.1: signed-in user is in the admins table. Gates the solution
+   *  library's Remove control only — the API re-checks every DELETE. */
+  isAdmin?: boolean;
   // v54: latest ISSUED version (official number + the internal revision
   // it stamps). Saves cut revisions without bumping the visible number;
   // the Issue button assigns the next issueNum.
@@ -518,6 +521,7 @@ export default function FormulaEditor({
   pcBkProducts,
   initialSavedSolutions = [],
   currentUserEmail,
+  isAdmin = false,
   initialIssue,
   laborRateDefaults,
 }: Props) {
@@ -2099,6 +2103,31 @@ export default function FormulaEditor({
       ...prev,
       ingredientFromSavedSolution(s, phase),
     ]);
+  }
+  // v85.1: retire a library entry. Admin-only in the UI and re-checked by
+  // the route — everyday formulators save solutions, admins prune them.
+  // The row is deactivated, not destroyed, and formulas already using the
+  // solution are untouched: their components were COPIED in when the row
+  // was added (ingredientFromSavedSolution), so nothing here reaches them.
+  async function removeSolutionFromLibrary(
+    s: SavedSolution,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const res = await fetch(`/api/solutions?id=${encodeURIComponent(s.id)}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        return { ok: false, error: json.error || `remove_failed_${res.status}` };
+      }
+      setSavedSolutions((prev) => prev.filter((p) => p.id !== s.id));
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "network_error",
+      };
+    }
   }
   // Persist a solution row's current name + components back to the
   // library. Upserts by name — a second save with the same name
@@ -4451,6 +4480,8 @@ export default function FormulaEditor({
             onAddSolution={() => addSolutionForPhase("pre-cook")}
             onAddSavedSolution={(s) => addSavedSolutionForPhase("pre-cook", s)}
             onSaveSolutionToLibrary={saveSolutionToLibrary}
+            canRemoveSolution={isAdmin}
+            onRemoveSavedSolution={removeSolutionFromLibrary}
             onRemoveRow={removeRow}
             onReorderRow={reorderRow}
             processNote={processNotes["pre-cook"] ?? ""}
@@ -4479,6 +4510,8 @@ export default function FormulaEditor({
             onAddSolution={() => addSolutionForPhase("cooked")}
             onAddSavedSolution={(s) => addSavedSolutionForPhase("cooked", s)}
             onSaveSolutionToLibrary={saveSolutionToLibrary}
+            canRemoveSolution={isAdmin}
+            onRemoveSavedSolution={removeSolutionFromLibrary}
             onRemoveRow={removeRow}
             onReorderRow={reorderRow}
             processNote={processNotes["cooked"] ?? ""}
@@ -11552,6 +11585,8 @@ function BlendSectionCard({
   onAddSolution,
   onAddSavedSolution,
   onSaveSolutionToLibrary,
+  canRemoveSolution,
+  onRemoveSavedSolution,
   onRemoveRow,
   onReorderRow,
   processNote,
@@ -11589,6 +11624,11 @@ function BlendSectionCard({
   onSaveSolutionToLibrary: (
     row: GummyFormulaIngredient,
   ) => Promise<{ ok: true; solution: SavedSolution } | { ok: false; error: string }>;
+  /** v85.1: draw the library's Remove control (admins only). */
+  canRemoveSolution: boolean;
+  onRemoveSavedSolution: (
+    s: SavedSolution,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   onRemoveRow: (id: string) => void;
   /** Drag-and-drop reorder. Fired when the operator drops one row (fromId)
    *  onto another (toId) in ANY subsection of this card — including the
@@ -11670,6 +11710,15 @@ function BlendSectionCard({
   // Solution menu: "+ Add solution ▾" opens a popover with "Empty" +
   // every saved-library entry.
   const [solutionMenuOpen, setSolutionMenuOpen] = useState(false);
+  // v85.1: removing a library entry takes two clicks, not a confirm() — a
+  // modal dialog blocks the page (and any automation driving it). The ×
+  // arms, "Remove?" commits.
+  const [armedSolutionRemovalId, setArmedSolutionRemovalId] = useState<
+    string | null
+  >(null);
+  const [solutionRemoveError, setSolutionRemoveError] = useState<string | null>(
+    null,
+  );
   // Independent menu state for the Final Blend subsection so opening
   // that one doesn't close/toggle the Secondary Blend one.
   const [finalSolutionMenuOpen, setFinalSolutionMenuOpen] = useState(false);
@@ -13664,7 +13713,10 @@ function BlendSectionCard({
                             </li>
                           )}
                           {savedSolutions.map((s) => (
-                            <li key={s.id}>
+                            <li
+                              key={s.id}
+                              style={{ display: "flex", alignItems: "center" }}
+                            >
                               <button
                                 type="button"
                                 role="menuitem"
@@ -13674,7 +13726,8 @@ function BlendSectionCard({
                                 }}
                                 style={{
                                   display: "block",
-                                  width: "100%",
+                                  flex: 1,
+                                  minWidth: 0,
                                   textAlign: "left",
                                   padding: "6px 10px",
                                   background: "transparent",
@@ -13702,8 +13755,83 @@ function BlendSectionCard({
                                   {s.components.length === 1 ? "" : "s"}
                                 </div>
                               </button>
+                              {/* v85.1: admin-only. × arms, "Remove?"
+                                  commits — retiring an entry changes what
+                                  every other formulator sees in this menu,
+                                  so it earns a deliberate second click. */}
+                              {canRemoveSolution ? (
+                                armedSolutionRemovalId === s.id ? (
+                                  <button
+                                    type="button"
+                                    title={`Retire "${s.name}" from the library for everyone`}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setSolutionRemoveError(null);
+                                      const res = await onRemoveSavedSolution(s);
+                                      setArmedSolutionRemovalId(null);
+                                      if (!res.ok) {
+                                        setSolutionRemoveError(
+                                          res.error === "not_admin"
+                                            ? "Admins only."
+                                            : res.error,
+                                        );
+                                      }
+                                    }}
+                                    style={{
+                                      flex: "0 0 auto",
+                                      margin: "0 6px 0 2px",
+                                      padding: "3px 8px",
+                                      borderRadius: 999,
+                                      border: "1px solid #b3261e",
+                                      background: "transparent",
+                                      color: "#b3261e",
+                                      fontSize: 10.5,
+                                      fontWeight: 700,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {tr("Remove?")}
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove ${s.name} from the library`}
+                                    title="Remove from library (admin)"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSolutionRemoveError(null);
+                                      setArmedSolutionRemovalId(s.id);
+                                    }}
+                                    style={{
+                                      flex: "0 0 auto",
+                                      margin: "0 8px 0 2px",
+                                      padding: "0 4px",
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--ink-3, #8a9498)",
+                                      fontSize: 14,
+                                      lineHeight: 1,
+                                      fontWeight: 700,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                )
+                              ) : null}
                             </li>
                           ))}
+                          {solutionRemoveError ? (
+                            <li
+                              style={{
+                                padding: "6px 10px",
+                                fontSize: 10.5,
+                                color: "#b3261e",
+                              }}
+                            >
+                              {solutionRemoveError}
+                            </li>
+                          ) : null}
                         </ul>
                       </>
                     ) : null}

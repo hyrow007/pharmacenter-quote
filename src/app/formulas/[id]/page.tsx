@@ -9,6 +9,7 @@ import FormulaEditor, {
   type PcBkProductOption,
   type RawMaterialOption,
 } from "./FormulaEditor";
+import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import {
   recordFromRow,
   versionFromRow,
@@ -227,6 +228,13 @@ export default async function FormulaEditorPage({
   // Saved solutions library. Ignore errors quietly — if the table hasn't
   // been created yet (SQL migration not run), the editor still works, the
   // library dropdown just shows empty.
+  // v85.1: the solution library's Remove control is admin-only, so the
+  // editor needs to know. Read it here rather than from the client — an
+  // admins-table lookup from the browser would be both a round trip and a
+  // claim the client could lie about. The API re-checks on every DELETE;
+  // this flag only decides whether the control is drawn.
+  const userIsAdmin = await checkIsAdmin(supabase, user.email);
+
   const savedSolutions: SavedSolution[] = (solRes?.data ?? []).map(
     (row: Record<string, unknown>) => ({
       id: String(row.id),
@@ -358,6 +366,7 @@ export default async function FormulaEditorPage({
               rawMaterials={rawMaterials}
               pcBkProducts={pcBkProducts}
               initialSavedSolutions={savedSolutions}
+              isAdmin={userIsAdmin}
               currentUserEmail={user.email!}
               initialIssue={issue}
               laborRateDefaults={laborRateDefaults}

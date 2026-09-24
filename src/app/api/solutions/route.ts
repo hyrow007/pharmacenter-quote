@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { SavedSolution, SolutionComponent } from "@/lib/formulas";
+import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 
-// GET  /api/solutions          — list active saved solutions
-// POST /api/solutions          — save (upsert by name) a solution to the library
+// GET    /api/solutions              — list active saved solutions
+// POST   /api/solutions              — save (upsert by name) a solution to the library
+// DELETE /api/solutions?id=<uuid>    — ADMIN ONLY: retire a library entry
 //
 // A "solution" is a reusable pre-mixed compound (name + component
 // percentages). Solutions live in public.gummy_solutions and can be
@@ -35,6 +37,20 @@ async function gatedClient(): Promise<GateResult> {
     };
   }
   return { supabase, user: { email: user.email } };
+}
+
+// v85.1: DELETE is admin-only, unlike GET/POST which any @pharmacenterusa.com
+// signer can call. Saving a solution is everyday formulation work; removing
+// one changes what every other formulator sees in the picker.
+async function gatedAdmin(): Promise<GateResult> {
+  const gated = await gatedClient();
+  if (gated.error) return gated;
+  if (!(await checkIsAdmin(gated.supabase, gated.user.email))) {
+    return {
+      error: NextResponse.json({ ok: false, error: "not_admin" }, { status: 403 }),
+    };
+  }
+  return gated;
 }
 
 function rowToSavedSolution(row: Record<string, unknown>): SavedSolution {
@@ -164,4 +180,51 @@ export async function POST(request: Request) {
     { ok: true, solution: rowToSavedSolution(data) },
     { status: 201 },
   );
+}
+
+// --- DELETE ------------------------------------------------------------------
+//
+// /api/solutions?id=<uuid> — retire a library entry. Admin only.
+//
+// This DEACTIVATES (active = false) rather than destroying the row. Two
+// reasons: the list is a picker, not a record — GET already filters on
+// active, so a retired entry vanishes from every "+ Add solution" menu the
+// moment this returns; and the audit trail (who authored it, when) is worth
+// more than the row is worth deleting. Formulas that already used the
+// solution are untouched either way: ingredientFromSavedSolution COPIES the
+// components into the formula row, so nothing downstream depends on this row
+// still existing.
+//
+// Re-saving a solution with the same name revives it — the POST upsert above
+// sets active: true. That is the intended "undelete", and it is why the name
+// lookup there does NOT filter on active.
+
+export async function DELETE(request: Request) {
+  const gated = await gatedAdmin();
+  if (gated.error) return gated.error;
+  const { supabase, user } = gated;
+
+  const id = new URL(request.url).searchParams.get("id")?.trim();
+  if (!id) {
+    return NextResponse.json({ ok: false, error: "missing_id" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("gummy_solutions")
+    .update({
+      active: false,
+      updated_by_email: user.email,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("id, name")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, id: String(data.id), name: String(data.name) });
 }

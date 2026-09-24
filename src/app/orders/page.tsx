@@ -174,6 +174,22 @@ export default async function OrdersLandingPage() {
     session_date: string | null;
   } | null;
 
+  // Did the Plaud ingest RUN, and did it work? Separate question from how old
+  // the last meeting is: on 2026-09-22 the job ran on time, could not reach
+  // Plaud, and the page still read a calm "Plaud 2d ago" all day.
+  const { data: beatRaw } = await supabase
+    .from("sync_heartbeats")
+    .select("ran_at, status, detail")
+    .eq("source", "plaud")
+    .maybeSingle();
+  const plaudBeat = beatRaw as {
+    ran_at: string | null;
+    status: string | null;
+    detail: string | null;
+  } | null;
+  // Outcomes that mean "working"; anything else is a failure worth shouting.
+  const PLAUD_OK = ["INGESTED", "NOTHING", "ALREADY_INGESTED", "DRY_RUN"];
+
   const correctionsBy = new Map<string, Array<{ text: string; by: string }>>();
   for (const raw of (corrRes.data ?? []) as unknown[]) {
     const c = raw as {
@@ -491,23 +507,34 @@ export default async function OrdersLandingPage() {
       staleAfterHours: 26,
     },
     {
-      // Plaud pull runs Tue + Fri; the meeting itself is weekly, so a
-      // gap only means trouble after more than a week.
+      // The ingest runs Tue + Fri, so a gap past ~4 days means a run was
+      // missed entirely. When the job has reported in, show ITS clock and
+      // status; fall back to the last ingested meeting for the stretch
+      // before heartbeats existed.
       key: "plaud",
       label: "Plaud",
-      iso: plaudSyncIso,
-      staleAfterHours: 8 * 24,
+      iso: plaudBeat?.ran_at ?? plaudSyncIso,
+      staleAfterHours: 4 * 24,
+      status:
+        plaudBeat?.status && !PLAUD_OK.includes(plaudBeat.status)
+          ? plaudBeat.status
+          : null,
+      detail: plaudBeat?.detail ?? null,
     },
   ].map((f) => {
     const fr = describeFreshness(f.iso, t, lang);
     const ageHours = f.iso
       ? (Date.now() - new Date(f.iso).getTime()) / 3_600_000
       : null;
+    const failing = "status" in f && typeof f.status === "string";
     return {
       ...f,
       relative: fr.relative,
       absolute: absolute(f.iso),
-      stale: ageHours === null || ageHours > f.staleAfterHours,
+      // A failed run is red even when it happened five minutes ago.
+      stale: failing || ageHours === null || ageHours > f.staleAfterHours,
+      failure: failing ? (f.status as string) : null,
+      failureDetail: "detail" in f ? ((f.detail as string | null) ?? null) : null,
     };
   });
 
@@ -554,7 +581,9 @@ export default async function OrdersLandingPage() {
               {feeds.map((f) => (
                 <span
                   key={f.key}
-                  title={f.absolute ?? undefined}
+                  title={
+                    f.failureDetail ?? f.absolute ?? undefined
+                  }
                   style={{
                     color: f.stale ? "#8b2f2f" : undefined,
                     fontWeight: f.stale ? 700 : undefined,
@@ -563,6 +592,7 @@ export default async function OrdersLandingPage() {
                   <strong style={{ fontWeight: 700 }}>{f.label}</strong>{" "}
                   {f.absolute ?? t("syncNever")}
                   {f.absolute ? ` · ${f.relative}` : ""}
+                  {f.failure ? ` · ${f.failure}` : ""}
                 </span>
               ))}
               <Link
