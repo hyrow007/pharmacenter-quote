@@ -2443,14 +2443,41 @@ export default function PricingCalculator({
     }
   }
 
-  // Update just the active tab's label (used by the inline tab-rename UI).
-  function setActiveTabLabel(next: string) {
+  // Set any tab's label. Blank clears it, which drops the tab back to its
+  // auto-derived name (the picked product, else "Tab N") rather than
+  // leaving it nameless.
+  function setTabLabel(index: number, next: string) {
     const trimmed = next.trim();
     setTabs((prev) =>
       prev.map((t, i) =>
-        i === activeTabIndex ? { ...t, label: trimmed.length === 0 ? null : trimmed } : t,
+        i === index ? { ...t, label: trimmed.length === 0 ? null : trimmed } : t,
       ),
     );
+  }
+
+  // Update just the active tab's label (the "Tab label" field below).
+  function setActiveTabLabel(next: string) {
+    setTabLabel(activeTabIndex, next);
+  }
+
+  // Rename-in-place on the tab strip. Three tabs all reading "90ct Creatine
+  // monohydrate pouch" are indistinguishable, and the Tab label field is a
+  // scroll away inside the active tab — the name should be editable where
+  // it is read. null = nobody is renaming.
+  const [renamingTab, setRenamingTab] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  function beginRename(index: number, currentDisplay: string) {
+    // Seed with the tab's OWN label when it has one, otherwise the derived
+    // name — so the first keystroke edits what the user can see rather than
+    // an empty box.
+    setRenameDraft(tabs[index]?.label?.trim() || currentDisplay);
+    setRenamingTab(index);
+  }
+  function commitRename() {
+    if (renamingTab === null) return;
+    setTabLabel(renamingTab, renameDraft);
+    setRenamingTab(null);
   }
 
   // Display labels for the tab bar. Falls back to picked-product name, then
@@ -3133,7 +3160,72 @@ export default function PricingCalculator({
                   </button>
                 </>
               ) : null}
-              <span>{label}</span>
+              {renamingTab === i ? (
+                <input
+                  type="text"
+                  autoFocus
+                  value={renameDraft}
+                  maxLength={48}
+                  aria-label={`Rename ${label}`}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitRename();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setRenamingTab(null); // leave the label as it was
+                    }
+                  }}
+                  style={{
+                    font: "inherit",
+                    color: "#0f172a",
+                    border: "1px solid #94a3b8",
+                    borderRadius: 4,
+                    padding: "1px 4px",
+                    width: Math.max(10, renameDraft.length + 2) + "ch",
+                    maxWidth: 280,
+                  }}
+                />
+              ) : (
+                <span
+                  title="Double-click to rename"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    beginRename(i, label);
+                  }}
+                >
+                  {label}
+                </span>
+              )}
+              {/* Rename affordance. Only on the active tab — a pencil on
+                  every tab turns the strip into a row of icons, and a
+                  double-click alone is too well hidden to count as
+                  "editable". */}
+              {active && renamingTab !== i ? (
+                <button
+                  type="button"
+                  aria-label={`Rename ${label}`}
+                  title="Rename this tab"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    beginRename(i, label);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    lineHeight: 1,
+                    padding: "0 2px",
+                  }}
+                >
+                  ✎
+                </button>
+              ) : null}
               {tabs.length > 1 ? (
                 <button
                   type="button"

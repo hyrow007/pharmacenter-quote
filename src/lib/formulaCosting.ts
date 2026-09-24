@@ -157,7 +157,17 @@ export {
 /** Whole-shift rounding rule (FormulaEditor 877–878): fractions of .25
  *  and up round up to an additional shift; .24 and below round down. */
 export function roundDays(x: number): number {
-  return x <= 0 ? 0 : Math.floor(x) + (x - Math.floor(x) > 0.24 ? 1 : 0);
+  // v84.5, copied from FormulaEditor: keep the FRACTION when it is real
+  // work (a computed 4.37 shifts stays 4.37) and only snap UP to the next
+  // whole shift once the fraction reaches .80.
+  //
+  // This mirror was still on the pre-v84.5 rule — whole shifts only,
+  // rounding up above .24 — which is why the quote side saw 3 production
+  // shifts + 1 cleaning shift where the formula app saw 3.01 + 0.75. Every
+  // figure downstream of shift count (labor hours, overhead batch-days)
+  // differed as a result.
+  if (x <= 0) return 0;
+  return x - Math.floor(x) >= 0.8 ? Math.ceil(x) : Math.round(x * 100) / 100;
 }
 
 // -----------------------------------------------------------------------------
@@ -356,6 +366,23 @@ export function computeCostingComputed(params: {
   const overheadRent = costing.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY;
   const overheadIndirect = costing.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS;
   const overheadOther = costing.overheadOther ?? OVERHEAD_OTHER_DEFAULTS;
+  // v73 pool-model rates stamped on the version at save time. The editor
+  // also falls back to TODAY's plant rates from /api/overhead; there is no
+  // such fallback here on purpose — a stamped version reproduces what it
+  // was costed with, and an unstamped one uses the row-and-share sum
+  // rather than silently re-costing against rates it never saw.
+  const leasePerBatchDay = costing.leasePerBatchDay ?? null;
+  const indirectPerBatchDay = costing.indirectPerBatchDay ?? null;
+  const otherPerBatchDay = costing.otherPerBatchDay ?? null;
+  const poolRatePerBatchDay =
+    leasePerBatchDay !== null &&
+    leasePerBatchDay > 0 &&
+    indirectPerBatchDay !== null &&
+    indirectPerBatchDay > 0 &&
+    otherPerBatchDay !== null &&
+    otherPerBatchDay > 0
+      ? leasePerBatchDay + indirectPerBatchDay + otherPerBatchDay
+      : null;
   const labTestingRm = costing.labTestingRm ?? null;
   const labTestingFp = costing.labTestingFp ?? null;
   const topDec = costing.topDec ?? 4;
@@ -548,14 +575,19 @@ export function computeCostingComputed(params: {
     const hours = [setupHours ?? 8, productionHours ?? 8, cleaningHours ?? 8];
     const phaseHours = shifts.map((s, i) => s * hours[i]);
     const roles = [
+      // Crew defaults are the EDITOR's (1 leader per phase; 4/5/5
+      // operators), not zero. Defaulting a missing crew count to nobody
+      // made this whole figure $0.0000 on the quote side whenever a
+      // Costing tab had not typed its crew in explicitly, while the
+      // formula card showed real money for the same version.
       {
-        crew: [setupLeaders ?? 0, productionLeaders ?? 0, cleaningLeaders ?? 0],
+        crew: [setupLeaders ?? 1, productionLeaders ?? 1, cleaningLeaders ?? 1],
         base: leaderRate ?? laborRateDefaults.leader ?? 0,
         tax: leaderTaxPct ?? 8.5,
         wc: leaderWcPct ?? 4,
       },
       {
-        crew: [setupOperators ?? 0, productionOperators ?? 0, cleaningOperators ?? 0],
+        crew: [setupOperators ?? 4, productionOperators ?? 5, cleaningOperators ?? 5],
         base: operatorRate ?? laborRateDefaults.operator ?? 0,
         tax: operatorTaxPct ?? 8.5,
         wc: operatorWcPct ?? 4,
@@ -599,6 +631,18 @@ export function computeCostingComputed(params: {
     const batchDays =
       (setupDays ?? 1) + prodShifts + (cleaningDays ?? roundDays(prodShifts / 4));
     const workDays = workingDaysPerMonth ?? 21;
+    // v73 pool model, mirroring FormulaEditor 2628-2683: when the version
+    // was stamped with all three $/batch-day pool rates, THAT is the
+    // overhead — the row-and-share sum below is the pre-migration
+    // fallback. This side only ever ran the fallback, so a version costed
+    // under the pool model reported one overhead in the formula app and a
+    // different one in the quote app.
+    if (
+      poolRatePerBatchDay !== null &&
+      targetYieldUnits > 0
+    ) {
+      return (poolRatePerBatchDay * batchDays) / targetYieldUnits;
+    }
     return workDays > 0 && targetYieldUnits > 0
       ? ((totalMonthly / workDays) * batchDays) / targetYieldUnits
       : null;
