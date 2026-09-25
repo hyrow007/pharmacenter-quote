@@ -2422,26 +2422,41 @@ export default function PricingCalculator({
   // `activeTabIndex` so the currently-selected tab stays selected after
   // the swap. We snapshot the active tab's in-flight edits first so a tab
   // the user was typing into doesn't lose data when its position changes.
-  function moveTab(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= tabs.length) return;
+  /** Move the tab at `index` to sit at `target`, carrying the active
+   *  selection with it. The arrows and the drag both come through here so
+   *  there is one reordering rule, not two that can disagree. */
+  function reorderTab(index: number, target: number) {
+    if (index === target || target < 0 || target >= tabs.length) return;
     const snap = snapshotCurrentTab();
     setTabs((prev) => {
       // Apply the latest in-flight edits to the previously-active tab so
-      // its position-swap doesn't fork from what the user sees.
+      // its move doesn't fork from what the user sees.
       const withSnap = prev.map((t, i) => (i === activeTabIndex ? snap : t));
       const next = withSnap.slice();
       const [tab] = next.splice(index, 1);
       next.splice(target, 0, tab);
       return next;
     });
-    // Track the active index across the swap.
+    // Follow the active tab to wherever it ended up. A neighbour swap moves
+    // one slot; a longer drag shifts everything it jumped over by one.
     if (activeTabIndex === index) {
       setActiveTabIndex(target);
-    } else if (activeTabIndex === target) {
-      setActiveTabIndex(index);
+    } else if (index < activeTabIndex && target >= activeTabIndex) {
+      setActiveTabIndex(activeTabIndex - 1);
+    } else if (index > activeTabIndex && target <= activeTabIndex) {
+      setActiveTabIndex(activeTabIndex + 1);
     }
   }
+
+  function moveTab(index: number, direction: -1 | 1) {
+    reorderTab(index, index + direction);
+  }
+
+  // Drag-to-reorder. `dragTab` is the tab being carried, `dropTab` the slot
+  // it would land in — kept apart so the strip can show where it will go
+  // before the mouse comes up.
+  const [dragTab, setDragTab] = useState<number | null>(null);
+  const [dropTab, setDropTab] = useState<number | null>(null);
 
   // Set any tab's label. Blank clears it, which drops the tab back to its
   // auto-derived name (the picked product, else "Tab N") rather than
@@ -3093,6 +3108,31 @@ export default function PricingCalculator({
               role="tab"
               aria-selected={active}
               onClick={() => switchTab(i)}
+              // Not draggable mid-rename: the browser would drag the tab
+              // instead of letting you select text in the input.
+              draggable={renamingTab !== i}
+              onDragStart={(e) => {
+                setDragTab(i);
+                e.dataTransfer.effectAllowed = "move";
+                // Firefox refuses to start a drag without payload.
+                e.dataTransfer.setData("text/plain", String(i));
+              }}
+              onDragOver={(e) => {
+                if (dragTab === null) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dropTab !== i) setDropTab(i);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragTab !== null) reorderTab(dragTab, i);
+                setDragTab(null);
+                setDropTab(null);
+              }}
+              onDragEnd={() => {
+                setDragTab(null);
+                setDropTab(null);
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -3103,12 +3143,23 @@ export default function PricingCalculator({
                 border: "1px solid #e2e8f0",
                 borderBottom: active ? "1px solid #fff" : "1px solid #e2e8f0",
                 background: active ? "#fff" : "#f1f5f9",
-                cursor: active ? "default" : "pointer",
+                cursor:
+                  renamingTab === i ? "default" : active ? "grab" : "pointer",
                 fontSize: 14,
                 fontWeight: active ? 600 : 500,
                 color: active ? "#0f172a" : "#475569",
                 marginBottom: -1,
                 whiteSpace: "nowrap",
+                // The tab being carried fades; the slot it would land in
+                // gets a line on the edge the drop will push it toward, so
+                // the result is visible before the mouse comes up.
+                opacity: dragTab === i ? 0.4 : 1,
+                boxShadow:
+                  dropTab === i && dragTab !== null && dragTab !== i
+                    ? dragTab < i
+                      ? "inset -2px 0 0 0 #0f766e"
+                      : "inset 2px 0 0 0 #0f766e"
+                    : undefined,
               }}
             >
               {/* Reorder arrows. Hidden when there's only one tab. Each
