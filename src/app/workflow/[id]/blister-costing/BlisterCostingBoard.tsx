@@ -2434,12 +2434,20 @@ export default function BlisterCostingBoard({
   workflowId,
   quoteNumber,
   customerName,
+  customerAddress = null,
+  customerContact = null,
+  customerEmail = null,
   products,
   finishedProduct = null,
 }: {
   workflowId: string;
   quoteNumber: string;
   customerName: string;
+  /** Contact block for the customer-facing quote — ship-to from the
+   *  customers row, contact + email from a new customer typed on /start. */
+  customerAddress?: string | null;
+  customerContact?: string | null;
+  customerEmail?: string | null;
   products: BoardProduct[];
   /** Set on a Finished Product quote, where this board is the Packaging
    *  tab and the Bulk row is priced from the Bulk tab. */
@@ -3385,9 +3393,9 @@ export default function BlisterCostingBoard({
         : null;
     const html = buildQuoteHtml({
       customerName,
-      customerAddress: null,
-      customerContact: null,
-      customerEmail: null,
+      customerAddress,
+      customerContact,
+      customerEmail,
       workflowLabel: quoteNumber,
       preparerName: "",
       preparerEmail: "",

@@ -292,6 +292,10 @@ export function buildQuoteHtml(args: {
   // Empty array means "fresh popup — synthesise a single Version 1 tab
   // from lineItems above". Each tab carries a full sheet HTML snapshot.
   initialTabs: IssuedQuoteTab[];
+  /** Which of initialTabs to open on. Absent = the first one. Lets a caller
+   *  outside the calculator (the workflow page's Issued quotes list) open
+   *  straight to the version that was clicked. */
+  startTabId?: string;
   // Whether the popup's Save button should be active. False = no workflow
   // context, so we render a disabled, explanatory pill instead.
   saveEnabled: boolean;
@@ -340,6 +344,7 @@ export function buildQuoteHtml(args: {
   // We escape forward slash and ampersands so the script tag terminator
   // (</script>) and < cannot appear inside the JSON payload. The popup's
   // bootstrap script reads this from the inline JSON script tag.
+  const startTabIdJson = JSON.stringify(args.startTabId ?? null);
   const initialTabsJson = JSON.stringify(args.initialTabs)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
@@ -766,6 +771,7 @@ export function buildQuoteHtml(args: {
     <button type="button" class="q-tabs__save" id="q-tabs-save"${args.saveEnabled ? "" : " disabled"} title="${args.saveEnabled ? "Save all versions to this workflow" : "Open from a workflow to save versions"}">Save versions</button>
   </div>
   <script type="application/json" id="q-initial-tabs-json">${initialTabsJson}</script>
+  <script type="application/json" id="q-start-tab-json">${startTabIdJson}</script>
   <div class="q-stage">
     <div class="q-sheet">
 
@@ -1011,11 +1017,24 @@ Davie, FL 33331
         // First time opening — capture the default sheet as Version 1.
         versions.push({ id: newId(), label: "Version 1", sheetHtml: sheetEl.innerHTML, savedAt: "" });
       }
-      activeId = versions[0] ? versions[0].id : null;
-      // If we hydrated from saved tabs, replace the default sheet with the
-      // first saved tab's content so what the user sees matches.
-      if (sheetEl && versions[0]) {
-        sheetEl.innerHTML = versions[0].sheetHtml;
+      // Open on the requested version when the caller named one and it is
+      // actually here; otherwise the first, as before.
+      var startId = null;
+      try {
+        var startRaw = document.getElementById("q-start-tab-json");
+        startId = startRaw ? JSON.parse(startRaw.textContent || "null") : null;
+      } catch (e) { /* ignore — first tab */ }
+      var startIdx = 0;
+      if (startId) {
+        for (var si = 0; si < versions.length; si++) {
+          if (versions[si].id === startId) { startIdx = si; break; }
+        }
+      }
+      activeId = versions[startIdx] ? versions[startIdx].id : null;
+      // If we hydrated from saved tabs, replace the default sheet with that
+      // tab's content so what the user sees matches.
+      if (sheetEl && versions[startIdx]) {
+        sheetEl.innerHTML = versions[startIdx].sheetHtml;
         bindSheetHandlers();
       }
 

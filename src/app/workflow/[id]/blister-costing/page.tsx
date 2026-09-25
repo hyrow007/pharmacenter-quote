@@ -75,14 +75,29 @@ export default async function BlisterCostingPage({ params }: Ctx) {
   let customerName =
     (state.customerName as string) ??
     ((state.newCustomer as Record<string, string> | undefined)?.name ?? "—");
+  // Contact block for the customer-facing quote. A quote issued from this
+  // board used to carry the company name and nothing else, while the same
+  // quote issued from the pricing calculator carried the contact and email
+  // too — the information was on the workflow either way.
+  const newCustomer = state.newCustomer as
+    | Record<string, string>
+    | undefined;
+  let customerContact = newCustomer?.contact?.trim() || null;
+  let customerEmail = newCustomer?.email?.trim() || null;
+  let customerAddress: string | null = null;
   const customerId = state.customerId as string | undefined;
   if (customerId) {
     const { data: c } = await supabase
       .from("customers")
-      .select("name")
+      .select("name, default_ship_to")
       .eq("id", customerId)
       .maybeSingle();
     if (c?.name) customerName = c.name;
+    customerAddress = (c?.default_ship_to as string | undefined) ?? null;
+    // An existing customer's contact lives on the customers row, not on
+    // the workflow — the typed-in pair belongs to "new customer" mode.
+    customerContact = null;
+    customerEmail = null;
   }
 
   // Same story for the products: an existing pick is an ID into products,
@@ -279,6 +294,9 @@ export default async function BlisterCostingPage({ params }: Ctx) {
             workflowId={w.id}
             quoteNumber={formatQuoteNumber(w.quote_number)}
             customerName={customerName}
+            customerAddress={customerAddress}
+            customerContact={customerContact}
+            customerEmail={customerEmail}
             products={products}
           />
         </div>

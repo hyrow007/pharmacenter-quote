@@ -9,12 +9,14 @@ import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
 import { useRouter } from "next/navigation";
 import {
   WORKFLOW_STATUS_LABELS,
+  formatQuoteNumber,
   type MondayMaterialRow,
   type SalesOrder,
   type WorkflowRow,
   type WorkflowStatus,
 } from "@/lib/workflows";
 import { type Customer } from "@/lib/supabase/rows";
+import { buildQuoteHtml } from "@/app/pricing/PricingCalculator";
 
 // Draft row used by the inline Won form. Both fields are strings until we
 // validate-and-coerce on save (numbers via parseFloat). Keeps controlled
@@ -180,6 +182,52 @@ export default function WorkflowActions({
   autoDescription,
 }: Props) {
   const router = useRouter();
+
+  // Customer-facing quotes already saved on this workflow by the pricing
+  // calculator. Newest first — the last thing sent is the thing you are
+  // usually looking for.
+  const issuedQuotes = [...(workflow.state?.issuedQuotes ?? [])].sort((a, b) =>
+    (b.savedAt ?? "").localeCompare(a.savedAt ?? ""),
+  );
+
+  /**
+   * Reopen the saved quotes in the same popup the calculator uses, with
+   * `startTabId` selected. Passing the saved tabs in makes buildQuoteHtml
+   * render THEM rather than synthesise a fresh sheet, so there are no line
+   * items to hand it. Saving is off: this is a record of what went out, and
+   * a re-issue belongs in the calculator where the numbers live.
+   */
+  function openIssuedQuote(startTabId: string) {
+    const html = buildQuoteHtml({
+      customerName: customer?.name ?? null,
+      customerAddress: null,
+      customerContact: null,
+      customerEmail: null,
+      workflowLabel: formatQuoteNumber(workflow.quote_number),
+      preparerName: "",
+      preparerEmail: "",
+      lineItems: [],
+      backUrl:
+        typeof window !== "undefined"
+          ? `${window.location.origin}/workflow/${workflow.id}`
+          : null,
+      backLabel: "Back to workflow",
+      initialTabs: issuedQuotes,
+      startTabId,
+      saveEnabled: false,
+    });
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const w = window.open(url, "_blank");
+    if (!w) {
+      setToast(
+        "Couldn't open the quote — allow popups for this site and try again.",
+      );
+      URL.revokeObjectURL(url);
+      return;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -1124,6 +1172,82 @@ export default function WorkflowActions({
           </a>
         )}
       </div>
+
+      {/* ---------- Issued quotes ----------
+          Every customer-facing quote saved from the calculator, newest
+          first. They were already being persisted on the workflow; there
+          was just nowhere outside the calculator to see that a quote had
+          ever gone out, let alone read the one that did. */}
+      {issuedQuotes.length > 0 ? (
+        <div style={{ marginBottom: 28 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: "var(--ink-3)",
+              marginBottom: 10,
+            }}
+          >
+            Issued quotes
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {issuedQuotes.map((q) => (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => openIssuedQuote(q.id)}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  alignItems: "flex-start",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1.5px solid #e3dcc9",
+                  background: "#fffdf8",
+                  color: "var(--teal-900)",
+                  fontFamily: "inherit",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <span>{q.label}</span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 400,
+                    color: "var(--ink-3)",
+                  }}
+                >
+                  {q.savedAt
+                    ? new Date(q.savedAt).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "—"}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p
+            style={{
+              fontSize: 12,
+              color: "var(--ink-3)",
+              margin: "8px 0 0",
+            }}
+          >
+            Opens read-only. To change a quote or issue a new version, go
+            through the pricing calculator.
+          </p>
+        </div>
+      ) : null}
 
       {/* Delete workflow lives on its own row, separated from the everyday
           actions above so an accidental click is less likely. Only the
