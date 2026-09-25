@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   formatQuoteNumber,
   type BulkTabOption,
+  type IssuedQuoteTab,
   type PricingSnapshot,
   type WorkflowRow,
 } from "@/lib/workflows";
@@ -60,6 +61,20 @@ export default async function SachetCostingPage({ params }: Ctx) {
   // for a product wins, as on the Bulk tab's own quote document.
   const pricingTabs = Array.isArray(state.pricing)
     ? (state.pricing as PricingSnapshot[])
+    : [];
+
+  // Quotes already issued on this workflow, so one issued from this board
+  // joins that history rather than replacing it.
+  const initialIssuedQuotes: IssuedQuoteTab[] = Array.isArray(
+    state.issuedQuotes,
+  )
+    ? (state.issuedQuotes as IssuedQuoteTab[]).filter(
+        (t) =>
+          !!t &&
+          typeof t.id === "string" &&
+          typeof t.label === "string" &&
+          typeof t.sheetHtml === "string",
+      )
     : [];
 
   const rawProducts = Array.isArray(state.products)
@@ -298,6 +313,7 @@ export default async function SachetCostingPage({ params }: Ctx) {
             customerAddress={customerAddress}
             customerContact={customerContact}
             customerEmail={customerEmail}
+            initialIssuedQuotes={initialIssuedQuotes}
             products={products}
           />
         </div>

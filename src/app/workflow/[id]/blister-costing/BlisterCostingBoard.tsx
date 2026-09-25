@@ -82,7 +82,11 @@ import {
   bulkCostPerPiece,
   type QuoteLineItem,
 } from "@/app/pricing/PricingCalculator";
-import type { BulkTabOption, PricingSnapshot } from "@/lib/workflows";
+import type {
+  BulkTabOption,
+  IssuedQuoteTab,
+  PricingSnapshot,
+} from "@/lib/workflows";
 import { suggestParts } from "@/lib/suggestParts";
 import {
   fetchFishbowlCosts,
@@ -2437,6 +2441,7 @@ export default function BlisterCostingBoard({
   customerAddress = null,
   customerContact = null,
   customerEmail = null,
+  initialIssuedQuotes = [],
   products,
   finishedProduct = null,
 }: {
@@ -2448,6 +2453,10 @@ export default function BlisterCostingBoard({
   customerAddress?: string | null;
   customerContact?: string | null;
   customerEmail?: string | null;
+  /** Quotes already issued on this workflow. Passed through so a quote
+   *  issued here joins the same history the calculator writes, instead of
+   *  replacing it. */
+  initialIssuedQuotes?: IssuedQuoteTab[];
   products: BoardProduct[];
   /** Set on a Finished Product quote, where this board is the Packaging
    *  tab and the Bulk row is priced from the Bulk tab. */
@@ -3361,6 +3370,82 @@ export default function BlisterCostingBoard({
     otherRateEff,
   ]);
 
+
+  // ---- Issued quotes -------------------------------------------------
+  // A quote issued from this board is a quote that went to a customer, and
+  // it was the one kind the workflow never recorded: the popup was opened
+  // with saving switched off, so its Save button sat greyed out and there
+  // was no way to keep it. Same plumbing the pricing calculator uses.
+  const [issuedQuotes, setIssuedQuotes] = useState<IssuedQuoteTab[]>(
+    initialIssuedQuotes,
+  );
+  const issuedQuotesRef = useRef<IssuedQuoteTab[]>(issuedQuotes);
+  useEffect(() => {
+    issuedQuotesRef.current = issuedQuotes;
+  }, [issuedQuotes]);
+  const quotePopupRef = useRef<Window | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onMessage(event: MessageEvent) {
+      const w = quotePopupRef.current;
+      // The popup is a Blob URL, so its origin is "null" — identity is the
+      // only trustworthy check.
+      if (!w || event.source !== w) return;
+      const data = event.data as
+        | { type: "issued-quotes-save"; tabs: IssuedQuoteTab[] }
+        | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "issued-quotes-save" || !Array.isArray(data.tabs))
+        return;
+      const cleanTabs: IssuedQuoteTab[] = data.tabs
+        .filter(
+          (t): t is IssuedQuoteTab =>
+            !!t &&
+            typeof t === "object" &&
+            typeof t.id === "string" &&
+            typeof t.label === "string" &&
+            typeof t.sheetHtml === "string",
+        )
+        .map((t) => ({
+          id: t.id,
+          label: t.label,
+          sheetHtml: t.sheetHtml,
+          savedAt: t.savedAt || new Date().toISOString(),
+        }));
+      (async () => {
+        try {
+          // A partial state is enough: PUT merges shallowly, so this
+          // cannot clobber the costing this board is in the middle of.
+          const res = await fetch(`/api/workflows/${workflowId}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ state: { issuedQuotes: cleanTabs } }),
+          });
+          if (!res.ok) throw new Error(`http_${res.status}`);
+          setIssuedQuotes(cleanTabs);
+          try {
+            w.postMessage({ type: "issued-quotes-saved", ok: true }, "*");
+          } catch { /* popup closed */ }
+        } catch (err) {
+          try {
+            w.postMessage(
+              {
+                type: "issued-quotes-saved",
+                ok: false,
+                error: err instanceof Error ? err.message : "save_failed",
+              },
+              "*",
+            );
+          } catch { /* popup closed */ }
+        }
+      })();
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId]);
+
   /**
    * Issue a Quote — same customer-facing document the pricing calculator
    * produces, so a bottles quote and a bulk quote are indistinguishable to
@@ -3402,14 +3487,16 @@ export default function BlisterCostingBoard({
       lineItems,
       backUrl,
       backLabel: `Back to workflow (${quoteNumber})`,
-      initialTabs: [],
-      saveEnabled: false,
+      initialTabs: issuedQuotesRef.current,
+      issuingNew: true,
+      saveEnabled: !!workflowId,
       quoteKind: finishedProduct
         ? "Finished Product Quote"
         : "Contract Packaging Quote (Blisters)",
     });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");
+    quotePopupRef.current = w;
     if (!w) {
       window.alert(
         "Couldn't open the quote window — please allow popups for this site and try again.",
@@ -3418,7 +3505,18 @@ export default function BlisterCostingBoard({
       return;
     }
     setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }, [r, productName, qty, workflowId, customerName, quoteNumber]);
+  }, [
+    r,
+    productName,
+    qty,
+    workflowId,
+    customerName,
+    quoteNumber,
+    customerAddress,
+    customerContact,
+    customerEmail,
+    finishedProduct,
+  ]);
 
   /**
    * Same endpoint the pricing calculator and gummy formula save through.

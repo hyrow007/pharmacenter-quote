@@ -292,6 +292,12 @@ export function buildQuoteHtml(args: {
   // Empty array means "fresh popup — synthesise a single Version 1 tab
   // from lineItems above". Each tab carries a full sheet HTML snapshot.
   initialTabs: IssuedQuoteTab[];
+  /** True when this popup is ISSUING a quote — the sheet it was built with
+   *  is a new version, not a reopening of history. With saved versions
+   *  present the popup used to show those and silently discard the sheet it
+   *  had just built, which is why a second quote could never be recorded.
+   *  Now it appends the new sheet as the next version and opens on it. */
+  issuingNew?: boolean;
   /** Which of initialTabs to open on. Absent = the first one. Lets a caller
    *  outside the calculator (the workflow page's Issued quotes list) open
    *  straight to the version that was clicked. */
@@ -350,6 +356,7 @@ export function buildQuoteHtml(args: {
   // (</script>) and < cannot appear inside the JSON payload. The popup's
   // bootstrap script reads this from the inline JSON script tag.
   const startTabIdJson = JSON.stringify(args.startTabId ?? null);
+  const issuingNewJson = args.issuingNew ? "true" : "false";
   const initialTabsJson = JSON.stringify(args.initialTabs)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
@@ -999,6 +1006,7 @@ Davie, FL 33331
       var tabsStatusEl = document.getElementById("q-tabs-status");
 
       var saveEnabled = ${args.saveEnabled ? "true" : "false"};
+      var issuingNew = ${issuingNewJson};
       var versions = [];
       var activeId = null;
       var rawJson = document.getElementById("q-initial-tabs-json");
@@ -1019,12 +1027,27 @@ Davie, FL 33331
         return "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
       }
 
-      // True when this popup built the sheet itself rather than hydrating
-      // saved versions — i.e. a quote is being issued right now.
+      // The sheet this popup was built with, captured before any saved
+      // version can overwrite it.
+      var freshSheetHtml = sheetEl ? sheetEl.innerHTML : "";
+      // True when a new version was created just now — either the first one
+      // this workflow has, or a new one appended alongside its history.
       var synthesizedFresh = false;
+      var appendedIdx = -1;
       if (versions.length === 0 && sheetEl) {
         // First time opening — capture the default sheet as Version 1.
-        versions.push({ id: newId(), label: "Version 1", sheetHtml: sheetEl.innerHTML, savedAt: "" });
+        versions.push({ id: newId(), label: "Version 1", sheetHtml: freshSheetHtml, savedAt: "" });
+        synthesizedFresh = true;
+      } else if (issuingNew && sheetEl) {
+        // History exists AND a quote is being issued: the new sheet becomes
+        // the next version rather than being thrown away.
+        versions.push({
+          id: newId(),
+          label: "Version " + (versions.length + 1),
+          sheetHtml: freshSheetHtml,
+          savedAt: "",
+        });
+        appendedIdx = versions.length - 1;
         synthesizedFresh = true;
       }
       // Open on the requested version when the caller named one and it is
@@ -1034,7 +1057,7 @@ Davie, FL 33331
         var startRaw = document.getElementById("q-start-tab-json");
         startId = startRaw ? JSON.parse(startRaw.textContent || "null") : null;
       } catch (e) { /* ignore — first tab */ }
-      var startIdx = 0;
+      var startIdx = appendedIdx >= 0 ? appendedIdx : 0;
       if (startId) {
         for (var si = 0; si < versions.length; si++) {
           if (versions[si].id === startId) { startIdx = si; break; }
@@ -2791,6 +2814,7 @@ export default function PricingCalculator({
       backUrl,
       backLabel,
       initialTabs: initialTabsForPopup,
+      issuingNew: true,
       saveEnabled,
       quoteKind: isFinishedProduct
         ? "Finished Product Quote"
