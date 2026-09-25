@@ -809,6 +809,13 @@ export type BulkTabOption = {
   /** How that tab treated inbound costs, so the cost read here is the cost
    *  the tab displayed. */
   noInbound: boolean;
+  /** The bulk itself, as a Fishbowl part: the pinned formula's PC-BK code
+   *  for a PC-manufactured bulk, else the picked Fishbowl product's own
+   *  code. Null when the tab prices something with no part yet (a new
+   *  product typed by name). Seeds the board's Bulk row so nobody
+   *  re-picks a part the quote already knows. */
+  partFpCode: string | null;
+  partName: string | null;
 };
 
 export type PricingSnapshot = {

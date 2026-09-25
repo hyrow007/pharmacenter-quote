@@ -93,13 +93,17 @@ export default async function SachetCostingPage({ params }: Ctx) {
     .map((p) => p.productId as string | undefined)
     .filter((id): id is string => Boolean(id) && id !== "new");
   const namesById = new Map<string, string>();
+  const codesById = new Map<string, string>();
   if (pickedIds.length > 0) {
     const { data: rows } = await supabase
       .from("products")
-      .select("id, name")
+      .select("id, name, fp_code")
       .in("id", pickedIds);
     for (const r of rows ?? []) {
       if (r?.id && r?.name) namesById.set(String(r.id), String(r.name));
+      // The bulk's own Fishbowl code, so the Bulk row on a Finished
+      // Product board can name the part instead of asking for it again.
+      if (r?.id && r?.fp_code) codesById.set(String(r.id), String(r.fp_code));
     }
   }
 
@@ -115,6 +119,7 @@ export default async function SachetCostingPage({ params }: Ctx) {
   // quote carries two bulk tabs that could each feed this packaging board.
   const nameByUid = new Map<string, string>();
   const noInboundByUid = new Map<string, boolean>();
+  const partByUid = new Map<string, { fpCode: string; name: string }>();
   for (const row of productRows) {
     const uid = row.uid as string | undefined;
     if (!uid) continue;
@@ -131,6 +136,25 @@ export default async function SachetCostingPage({ params }: Ctx) {
       uid,
       row.sourceMode === "stock" || Boolean(row.pinnedFormula),
     );
+    // What the bulk IS, as a part. A PC-manufactured bulk is its pinned
+    // formula's PC-BK code; anything else is the Fishbowl product picked
+    // on the workflow. A product typed in by name has neither, and the
+    // Bulk row keeps asking — correctly, because nothing knows the answer.
+    const pinned = row.pinnedFormula as
+      | { pcBkCode?: string | null; name?: string | null }
+      | undefined;
+    const pinnedCode = pinned?.pcBkCode?.trim() || null;
+    if (pinnedCode) {
+      partByUid.set(uid, {
+        fpCode: pinnedCode,
+        name: (pinned?.name || nm || pinnedCode) as string,
+      });
+    } else if (pid && pid !== "new" && codesById.get(pid)) {
+      partByUid.set(uid, {
+        fpCode: codesById.get(pid)!,
+        name: (nm || codesById.get(pid)) as string,
+      });
+    }
   }
   const bulkTabs: BulkTabOption[] = isFinishedProduct
     ? pricingTabs.map((t, i) => ({
@@ -142,6 +166,8 @@ export default async function SachetCostingPage({ params }: Ctx) {
         snapshot: t,
         noInbound:
           t.noInboundCosts ?? (noInboundByUid.get(t.workflowProductUid) ?? false),
+        partFpCode: partByUid.get(t.workflowProductUid)?.fpCode ?? null,
+        partName: partByUid.get(t.workflowProductUid)?.name ?? null,
       }))
     : [];
 

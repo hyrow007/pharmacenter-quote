@@ -2182,6 +2182,27 @@ function seedBulkFromBulkTab(
   };
 }
 
+/** Name the Bulk row's part from the bulk itself — the pinned formula's
+ *  PC-BK code, or the Fishbowl product the quote is packaging. Only fills a
+ *  BLANK row, so it is safe on a saved board and never argues with a part
+ *  someone chose by hand. A hand-typed (custom) row is left alone. */
+function seedBulkPart(
+  state: SavedState,
+  part: { fpCode: string; name: string } | null,
+): SavedState {
+  if (!part) return state;
+  let changed = false;
+  // This board identifies its Bulk row by id, the same way
+  // seedBulkFromBulkTab above does — it has no slotKeyOf.
+  const bom = state.bom.map((l) => {
+    if (!l.id.includes("-bulk-")) return l;
+    if (l.customPart || l.fpCode) return l;
+    changed = true;
+    return { ...l, fpCode: part.fpCode, name: part.name };
+  });
+  return changed ? { ...state, bom } : state;
+}
+
 export type BoardProduct = {
   name: string;
   quantity: number | null;
@@ -2355,11 +2376,26 @@ export default function BottleCostingBoard({
   const [activeBaseIdx, setActiveBaseIdx] = useState(0);
   const productStatesRef = useRef<SavedState[] | null>(null);
   if (productStatesRef.current === null)
-    productStatesRef.current = products.map((p) =>
-      finishedProduct && !p.initial
-        ? seedBulkFromBulkTab(hydrateSaved(p.initial, p.spec), p.spec)
-        : hydrateSaved(p.initial, p.spec),
-    );
+    productStatesRef.current = products.map((p) => {
+      const base = hydrateSaved(p.initial, p.spec);
+      if (!finishedProduct) return base;
+      // A fresh Finished Product costing also gets its Bulk row pointed at
+      // the Bulk tab; a saved one keeps whatever it chose.
+      const seeded = p.initial ? base : seedBulkFromBulkTab(base, p.spec);
+      const matched =
+        (p.bulkTabs ?? []).find((o) => o.tabId === p.bulkSnapshot?.tabId) ??
+        (p.bulkTabs ?? [])[0] ??
+        null;
+      return seedBulkPart(
+        seeded,
+        matched?.partFpCode
+          ? {
+              fpCode: matched.partFpCode,
+              name: matched.partName ?? matched.partFpCode,
+            }
+          : null,
+      );
+    });
   // Ref edits (rename / delete on an INACTIVE product's pills) don't
   // re-render on their own — this ticks the strip after one.
   const [, forcePillRefresh] = useState(0);
@@ -4486,11 +4522,30 @@ export default function BottleCostingBoard({
                       bulkTabOptions.length > 1 ? (
                         <select
                           value={line.bulkTabId ?? defaultBulkTabId ?? ""}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const next = e.target.value || null;
+                            const opt = bulkTabOptions.find(
+                              (o) => o.tabId === next,
+                            );
+                            // The part follows the tab — but only when the
+                            // row is still carrying an auto-filled part (or
+                            // none). A part someone picked by hand stays.
+                            const autoFilled =
+                              !line.customPart &&
+                              (!line.fpCode ||
+                                bulkTabOptions.some(
+                                  (o) => o.partFpCode === line.fpCode,
+                                ));
                             setLine(line.id, {
-                              bulkTabId: e.target.value || null,
-                            })
-                          }
+                              bulkTabId: next,
+                              ...(autoFilled && opt?.partFpCode
+                                ? {
+                                    fpCode: opt.partFpCode,
+                                    name: opt.partName ?? opt.partFpCode,
+                                  }
+                                : {}),
+                            });
+                          }}
                           title="Which Bulk tab this row prices from"
                           style={{
                             width: "100%",
