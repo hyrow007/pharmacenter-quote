@@ -3429,6 +3429,9 @@ export default function PouchCostingBoard({
       backLabel: `Back to workflow (${quoteNumber})`,
       initialTabs: [],
       saveEnabled: false,
+      quoteKind: finishedProduct
+        ? "Finished Product Quote"
+        : "Contract Packaging Quote (Pouches)",
     });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");

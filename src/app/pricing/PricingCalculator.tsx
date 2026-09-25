@@ -299,6 +299,11 @@ export function buildQuoteHtml(args: {
   // Whether the popup's Save button should be active. False = no workflow
   // context, so we render a disabled, explanatory pill instead.
   saveEnabled: boolean;
+  /** The line under the PharmaCenter wordmark. It was hardcoded "Bulk
+   *  Quote", so a Contract Packaging or Finished Product quote went to the
+   *  customer describing itself as bulk. Defaults to "Quote" rather than
+   *  guessing when a caller has not said. */
+  quoteKind?: string;
 }): string {
   const today = new Date();
   const validUntil = new Date(today);
@@ -778,7 +783,7 @@ export function buildQuoteHtml(args: {
       <header class="q-lh">
         <div class="q-lh__brand">
           <div class="q-lh__co">PharmaCenter</div>
-          <div class="q-lh__tag">Bulk Quote</div>
+          <div class="q-lh__tag">${htmlEscape(args.quoteKind || "Quote")}</div>
         </div>
         <div class="q-lh__info">
           <div class="q-lh__addr-label">PharmaCenter, LLC</div>
@@ -993,6 +998,7 @@ Davie, FL 33331
       var tabsSaveBtn = document.getElementById("q-tabs-save");
       var tabsStatusEl = document.getElementById("q-tabs-status");
 
+      var saveEnabled = ${args.saveEnabled ? "true" : "false"};
       var versions = [];
       var activeId = null;
       var rawJson = document.getElementById("q-initial-tabs-json");
@@ -1013,9 +1019,13 @@ Davie, FL 33331
         return "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
       }
 
+      // True when this popup built the sheet itself rather than hydrating
+      // saved versions — i.e. a quote is being issued right now.
+      var synthesizedFresh = false;
       if (versions.length === 0 && sheetEl) {
         // First time opening — capture the default sheet as Version 1.
         versions.push({ id: newId(), label: "Version 1", sheetHtml: sheetEl.innerHTML, savedAt: "" });
+        synthesizedFresh = true;
       }
       // Open on the requested version when the caller named one and it is
       // actually here; otherwise the first, as before.
@@ -1195,6 +1205,43 @@ Davie, FL 33331
             tabsSaveBtn.disabled = false;
           }
         });
+      }
+
+      // Record a freshly issued quote without being asked.
+      //
+      // Saving was a button nobody pressed: of 17 workflows carrying
+      // issued quotes' worth of work, exactly one had a saved version. A
+      // quote that went to a customer and left no trace is the failure
+      // this record exists to prevent, so issuing one now saves it.
+      //
+      // Only on a brand-new sheet (synthesizedFresh). Reopening saved
+      // versions — from the workflow page, or from the calculator once this
+      // workflow has history — hydrates them instead of synthesising, so
+      // nothing re-saves and no duplicate versions pile up.
+      //
+      // The limit that follows from that: this captures the FIRST quote a
+      // workflow issues. A later revision still needs the Save button,
+      // because the popup shows saved history in preference to the sheet it
+      // just built. Worth revisiting — the fix is for the popup to offer
+      // both rather than choose.
+      if (synthesizedFresh && saveEnabled && window.opener && !window.opener.closed) {
+        setTimeout(function () {
+          snapshotActiveTab();
+          var autoTabs = versions.map(function (v) {
+            return {
+              id: v.id,
+              label: v.label,
+              sheetHtml: v.sheetHtml,
+              savedAt: new Date().toISOString(),
+            };
+          });
+          try {
+            window.opener.postMessage(
+              { type: "issued-quotes-save", tabs: autoTabs, auto: true },
+              "*"
+            );
+          } catch (err) { /* the Save button is still there */ }
+        }, 400);
       }
     })();
   </script>
@@ -2745,6 +2792,11 @@ export default function PricingCalculator({
       backLabel,
       initialTabs: initialTabsForPopup,
       saveEnabled,
+      quoteKind: isFinishedProduct
+        ? "Finished Product Quote"
+        : isBulkWorkflow
+          ? "Bulk Quote"
+          : "Contract Packaging Quote",
     });
 
     // Use a Blob URL instead of document.write. Two reasons:

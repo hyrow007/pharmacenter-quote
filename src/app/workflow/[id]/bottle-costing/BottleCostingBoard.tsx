@@ -3309,6 +3309,9 @@ export default function BottleCostingBoard({
       backLabel: `Back to workflow (${quoteNumber})`,
       initialTabs: [],
       saveEnabled: false,
+      quoteKind: finishedProduct
+        ? "Finished Product Quote"
+        : "Contract Packaging Quote (Bottles)",
     });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");

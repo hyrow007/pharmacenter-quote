@@ -1178,7 +1178,7 @@ export default function WorkflowActions({
           first. They were already being persisted on the workflow; there
           was just nowhere outside the calculator to see that a quote had
           ever gone out, let alone read the one that did. */}
-      {issuedQuotes.length > 0 ? (
+      {(
         <div style={{ marginBottom: 28 }}>
           <div
             style={{
@@ -1192,6 +1192,12 @@ export default function WorkflowActions({
           >
             Issued quotes
           </div>
+          {issuedQuotes.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--ink-3)", margin: 0 }}>
+              None yet. A quote issued from the pricing calculator is
+              recorded here.
+            </p>
+          ) : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {issuedQuotes.map((q) => (
               <button
@@ -1236,18 +1242,20 @@ export default function WorkflowActions({
               </button>
             ))}
           </div>
-          <p
-            style={{
-              fontSize: 12,
-              color: "var(--ink-3)",
-              margin: "8px 0 0",
-            }}
-          >
-            Opens read-only. To change a quote or issue a new version, go
-            through the pricing calculator.
-          </p>
+          {issuedQuotes.length > 0 ? (
+            <p
+              style={{
+                fontSize: 12,
+                color: "var(--ink-3)",
+                margin: "8px 0 0",
+              }}
+            >
+              Opens read-only. To change a quote or issue a new version, go
+              through the pricing calculator.
+            </p>
+          ) : null}
         </div>
-      ) : null}
+      )}
 
       {/* Delete workflow lives on its own row, separated from the everyday
           actions above so an accidental click is less likely. Only the
