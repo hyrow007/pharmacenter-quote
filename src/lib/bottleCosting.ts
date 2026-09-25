@@ -693,7 +693,14 @@ export function resolveLine(line: BomLine): {
     line.costSource !== "Manual" &&
     !fromBulkTab
   )
-    return mk("unassigned", "No component chosen yet.");
+    return mk(
+      "unassigned",
+      // Names the escape hatch rather than only the problem. A part
+      // Fishbowl has never heard of is the common case on a new
+      // package, and a blocked line with no way out reads like the
+      // quote cannot be done until someone else does data entry.
+      "No component chosen yet — pick one, or type a description to use a placeholder.",
+    );
 
   const qty = num(line.qtyPerUnit);
   if (qty === null || qty <= 0)

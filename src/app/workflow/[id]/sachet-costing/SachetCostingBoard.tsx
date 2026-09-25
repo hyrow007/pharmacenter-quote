@@ -2110,7 +2110,9 @@ function ComponentPicker({
               autoFocus
               value={q}
               placeholder={
-                suggested ? `Suggested: ${suggested}` : "Search code or name…"
+                suggested
+                  ? `Suggested: ${suggested}`
+                  : "Search code or name — or type any description"
               }
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
