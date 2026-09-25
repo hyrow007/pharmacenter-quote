@@ -795,6 +795,22 @@ export function blankPackagingSpecSachets(): PackagingSpecSachets {
 // All money/percent inputs are stored as their string representation (matches
 // what the calculator UI uses) so re-hydration is lossless. Results are also
 // included so the workflow detail view can summarise without re-doing math.
+/**
+ * One selectable Bulk tab, as a costing board's Bulk row sees it. Built by
+ * the board's page from the workflow's saved pricing tabs so the row can be
+ * pointed at a specific tab instead of only ever the uid match.
+ */
+export type BulkTabOption = {
+  tabId: string;
+  /** What the calculator's tab strip calls it: the tab's own label, else
+   *  the product it prices, else "Tab N". */
+  label: string;
+  snapshot: PricingSnapshot;
+  /** How that tab treated inbound costs, so the cost read here is the cost
+   *  the tab displayed. */
+  noInbound: boolean;
+};
+
 export type PricingSnapshot = {
   // Stable id for this tab — generated client-side, never reused.
   tabId: string;

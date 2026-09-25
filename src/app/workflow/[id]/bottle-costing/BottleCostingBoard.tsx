@@ -73,7 +73,7 @@ import {
   bulkCostPerPiece,
   type QuoteLineItem,
 } from "@/app/pricing/PricingCalculator";
-import type { PricingSnapshot } from "@/lib/workflows";
+import type { BulkTabOption, PricingSnapshot } from "@/lib/workflows";
 import { suggestParts } from "@/lib/suggestParts";
 import {
   fetchFishbowlCosts,
@@ -2192,6 +2192,9 @@ export type BoardProduct = {
   bulkSnapshot?: PricingSnapshot | null;
   /** Bulk tab zeroes inbound costs for stock / PC-formula products. */
   bulkNoInbound?: boolean;
+  /** Every Bulk tab on the quote, so the Bulk row can be pointed at one
+   *  other than the uid-matched default. */
+  bulkTabs?: BulkTabOption[];
 };
 
 /** Build the working state for one product: its saved costing hydrated
@@ -2380,8 +2383,34 @@ export default function BottleCostingBoard({
   // The per-row $/unit readouts call costFromSource on the SAVED line, which
   // never carries the Bulk-tab figure (it is derived, not stored) — so they
   // read it through this, exactly as the totals do via \`inputs\`.
+  // Which Bulk tabs this row may read from, and what each one costs. The
+  // uid match above stays the default; a row that names a tab wins.
+  const bulkTabOptions = products[activeBaseIdx]?.bulkTabs ?? [];
+  const defaultBulkTabId =
+    products[activeBaseIdx]?.bulkSnapshot?.tabId ?? null;
+  const bulkCostByTabId = useMemo(() => {
+    const m = new Map<string, number | null>();
+    if (!finishedProduct) return m;
+    for (const o of bulkTabOptions) {
+      m.set(
+        o.tabId,
+        bulkCostPerPiece(o.snapshot, finishedProduct.dosageForm, o.noInbound),
+      );
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishedProduct, products, activeBaseIdx]);
+  /** The bulk cost for ONE row — its chosen tab, else the matched one. */
+  const bulkCostOf = (l: BomLine): number | null => {
+    const id = l.bulkTabId ?? defaultBulkTabId;
+    if (id && bulkCostByTabId.has(id)) return bulkCostByTabId.get(id) ?? null;
+    return bulkTabCost;
+  };
+
   const withBulkTabCost = (l: BomLine): BomLine =>
-    l.costSource === "Bulk tab" ? { ...l, bulkTabCostPerUnit: bulkTabCost } : l;
+    l.costSource === "Bulk tab"
+      ? { ...l, bulkTabCostPerUnit: bulkCostOf(l) }
+      : l;
 
   const [st, setSt] = useState<SavedState>(
     () => productStatesRef.current![0],
@@ -2952,7 +2981,7 @@ export default function BottleCostingBoard({
       bom: finishedProduct
         ? st.bom.map((l) =>
             l.costSource === "Bulk tab"
-              ? { ...l, bulkTabCostPerUnit: bulkTabCost }
+              ? { ...l, bulkTabCostPerUnit: bulkCostOf(l) }
               : l,
           )
         : st.bom,
@@ -4444,11 +4473,43 @@ export default function BottleCostingBoard({
                             color: "var(--ink-3, #7b7364)",
                           }}
                         >
-                          {bulkTabCost !== null
-                            ? `${money(bulkTabCost * 1000, 2)} / 1,000 doses from the Bulk tab`
-                            : "Not priced on the Bulk tab yet"}
+                          {bulkCostOf(line) !== null
+                            ? `${money(bulkCostOf(line)! * 1000, 2)} / 1,000 doses`
+                            : "Not priced on that Bulk tab yet"}
                         </div>
                       )}
+                      {/* Which Bulk tab. Only worth asking once there is
+                          more than one to choose from — a single-bulk
+                          quote has exactly one right answer and a select
+                          with one option is just clutter. */}
+                      {line.costSource === "Bulk tab" &&
+                      bulkTabOptions.length > 1 ? (
+                        <select
+                          value={line.bulkTabId ?? defaultBulkTabId ?? ""}
+                          onChange={(e) =>
+                            setLine(line.id, {
+                              bulkTabId: e.target.value || null,
+                            })
+                          }
+                          title="Which Bulk tab this row prices from"
+                          style={{
+                            width: "100%",
+                            marginTop: 4,
+                            padding: "4px 6px",
+                            border: "1px solid var(--line, #e3dcc9)",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            background: "#fff",
+                          }}
+                        >
+                          {bulkTabOptions.map((o) => (
+                            <option key={o.tabId} value={o.tabId}>
+                              {o.label}
+                              {o.tabId === defaultBulkTabId ? " (matched)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
                       {line.costSource === "Manual" && (
                         <div style={{ marginTop: 4 }}>
                           {/* Bulk is bought per 1,000 doses (house rule), so

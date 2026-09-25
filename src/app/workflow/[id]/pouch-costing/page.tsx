@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatQuoteNumber,
+  type BulkTabOption,
   type PricingSnapshot,
   type WorkflowRow,
 } from "@/lib/workflows";
@@ -109,6 +110,42 @@ export default async function PouchCostingPage({ params }: Ctx) {
   const more = Array.isArray(state.pouchCostingMore)
     ? (state.pouchCostingMore as (SavedState | null)[])
     : [];
+  // Every Bulk tab on this quote, offered to the board's Bulk row so it can
+  // be pointed at one explicitly. The uid match below still decides the
+  // DEFAULT; this only makes the other tabs reachable, which matters once a
+  // quote carries two bulk tabs that could each feed this packaging board.
+  const nameByUid = new Map<string, string>();
+  const noInboundByUid = new Map<string, boolean>();
+  for (const row of productRows) {
+    const uid = row.uid as string | undefined;
+    if (!uid) continue;
+    const pid = row.productId as string | undefined;
+    const nm =
+      (pid && pid !== "new" ? namesById.get(pid) : undefined) ??
+      ((row.newProduct as Record<string, string> | undefined)?.name_desc ||
+        null) ??
+      (row.productName as string) ??
+      (row.name as string) ??
+      null;
+    if (nm) nameByUid.set(uid, nm);
+    noInboundByUid.set(
+      uid,
+      row.sourceMode === "stock" || Boolean(row.pinnedFormula),
+    );
+  }
+  const bulkTabs: BulkTabOption[] = isFinishedProduct
+    ? pricingTabs.map((t, i) => ({
+        tabId: t.tabId,
+        label:
+          (t.label && t.label.trim()) ||
+          nameByUid.get(t.workflowProductUid) ||
+          `Tab ${i + 1}`,
+        snapshot: t,
+        noInbound:
+          t.noInboundCosts ?? (noInboundByUid.get(t.workflowProductUid) ?? false),
+      }))
+    : [];
+
   const products: BoardProduct[] = productRows.map((product, i) => {
     const spec =
       (product.pouchSpec as Record<string, string> | undefined) ?? null;
@@ -146,7 +183,7 @@ export default async function PouchCostingPage({ params }: Ctx) {
     const bulkNoInbound =
       bulkSnapshot?.noInboundCosts ??
       (product.sourceMode === "stock" || Boolean(product.pinnedFormula));
-    return { name, quantity, spec, initial, bulkSnapshot, bulkNoInbound };
+    return { name, quantity, spec, initial, bulkSnapshot, bulkNoInbound, bulkTabs };
   });
 
   return (

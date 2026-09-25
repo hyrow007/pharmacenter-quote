@@ -154,6 +154,15 @@ export type BomLine = {
    * whole finished unit.
    */
   bulkTabCostPerUnit?: number | null;
+  /**
+   * Finished Product only: WHICH Bulk tab this row prices from, by tabId.
+   * Null/absent = the tab the quote matched to this product by uid, which
+   * is the right answer until a quote has two bulk tabs that could both
+   * feed one packaging board (a reformulation being compared, the same
+   * dose bought two ways). The cost itself still never persists — only the
+   * choice of where to read it from does.
+   */
+  bulkTabId?: string | null;
 
   /**
    * Scrap rate for this component, as a percentage of what we BUY.
