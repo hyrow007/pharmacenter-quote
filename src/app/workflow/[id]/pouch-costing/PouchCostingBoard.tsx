@@ -3140,114 +3140,132 @@ export default function PouchCostingBoard({
   const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
   const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
 
-  const inputs: PouchCostingInputs = useMemo(
-    () => ({
-      quantity: qty,
+  /**
+   * Costing inputs for ANY scenario's state, not only the one on screen.
+   *
+   * This lived inline in a useMemo over `st`, so the board could only ever
+   * price what it was displaying — which is why a quote issued from here
+   * carried the active scenario alone. Same arithmetic, now callable for a
+   * scenario the user is not looking at.
+   *
+   * Pure: reads nothing but its argument and the props above it.
+   */
+  function inputsForState(s: SavedState): PouchCostingInputs {
+    const q = s.quantityOverride ?? quantity;
+    const packoutOn = s.packoutRequired ?? packoutFromForm;
+    const bundlingOn = s.bundlingRequired ?? bundlingFromForm;
+    return {
+      quantity: q,
       // The Bulk-tab cost is derived on read, never stored on the line.
       bom: finishedProduct
-        ? st.bom.map((l) =>
+        ? s.bom.map((l) =>
             l.costSource === "Bulk tab"
               ? { ...l, bulkTabCostPerUnit: bulkCostOf(l) }
               : l,
           )
-        : st.bom,
+        : s.bom,
       labor: {
-        pouchesPerMinute: st.pouchesPerMinute,
-        speedPenaltyPct: st.speedPenaltyPct,
-        pouchesPerUnit: st.pouchesPerUnit,
+        pouchesPerMinute: s.pouchesPerMinute,
+        speedPenaltyPct: s.speedPenaltyPct,
+        pouchesPerUnit: s.pouchesPerUnit,
         // No off-line printing = no printing hours, whatever speed is
         // stored from an earlier Yes.
-        printingSpeed: st.printingOffLine ? st.printingSpeed : null,
-        packoutSpeed: packoutOn ? st.packoutSpeed : null,
-        cartoningSpeed: st.cartoningSpeed,
-        bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
+        printingSpeed: s.printingOffLine ? s.printingSpeed : null,
+        packoutSpeed: packoutOn ? s.packoutSpeed : null,
+        cartoningSpeed: s.cartoningSpeed,
+        bundlingSpeed: bundlingOn ? s.bundlingSpeed : null,
         setup: {
-          hours: st.setupHours,
-          leaders: st.setupLeaders,
-          operators: st.setupOperators,
+          hours: s.setupHours,
+          leaders: s.setupLeaders,
+          operators: s.setupOperators,
         },
         // Every quantity-driven phase passes null hours: the speed-and-crew
         // derivation is the only source, so a stale stored figure can never
         // outrank the inputs the user can actually see.
         line: {
           hours: null,
-          leaders: st.prodLeaders,
-          operators: st.prodOperators,
+          leaders: s.prodLeaders,
+          operators: s.prodOperators,
         },
         printing: {
           hours: null,
-          leaders: st.printingLeaders,
-          operators: st.printingOperators,
+          leaders: s.printingLeaders,
+          operators: s.printingOperators,
         },
         packout: {
           hours: null,
-          leaders: st.packoutLeaders,
-          operators: st.packoutOperators,
+          leaders: s.packoutLeaders,
+          operators: s.packoutOperators,
         },
         cartoning: {
           hours: null,
-          leaders: st.cartoningLeaders,
-          operators: st.cartoningOperators,
+          leaders: s.cartoningLeaders,
+          operators: s.cartoningOperators,
         },
         bundling: {
           hours: null,
-          leaders: st.bundlingLeaders,
-          operators: st.bundlingOperators,
+          leaders: s.bundlingLeaders,
+          operators: s.bundlingOperators,
         },
         cleaning: {
-          hours: st.cleaningHours,
-          leaders: st.cleaningLeaders,
-          operators: st.cleaningOperators,
+          hours: s.cleaningHours,
+          leaders: s.cleaningLeaders,
+          operators: s.cleaningOperators,
         },
-        leaderRate: st.leaderRate,
-        operatorRate: st.operatorRate,
+        leaderRate: s.leaderRate,
+        operatorRate: s.operatorRate,
         // These were in SavedState and on the Pay Rates card from the start,
         // but never made it into this mapping — so the tax and workers'-comp
         // cells were editable and inert, and every burdened rate quietly used
         // the 8.5 / 4 defaults no matter what was typed. Caught while chasing
         // an unrelated build failure.
-        leaderTaxPct: st.leaderTaxPct,
-        leaderWcPct: st.leaderWcPct,
-        operatorTaxPct: st.operatorTaxPct,
-        operatorWcPct: st.operatorWcPct,
+        leaderTaxPct: s.leaderTaxPct,
+        leaderWcPct: s.leaderWcPct,
+        operatorTaxPct: s.operatorTaxPct,
+        operatorWcPct: s.operatorWcPct,
       },
       overhead: {
-        rentLease: st.overheadRent,
-        indirectLabor: st.overheadIndirect,
-        other: st.overheadOther,
-        workingDaysPerMonth: st.workingDaysPerMonth,
+        rentLease: s.overheadRent,
+        indirectLabor: s.overheadIndirect,
+        other: s.overheadOther,
+        workingDaysPerMonth: s.workingDaysPerMonth,
         // v74.1: the SAVED rate wins over the live plant rate, exactly as the
         // saved overhead rows win over the plant defaults. A costing that has
         // been saved was priced against a particular rate and has to keep
         // reproducing it; re-pricing somebody's saved job because a rent band
         // stepped is the thing the snapshot exists to prevent.
         //
-        // st.leasePerRunDay is seeded from the fetch on a job that has none, so
+        // s.leasePerRunDay is seeded from the fetch on a job that has none, so
         // on a fresh board this is the live rate and on a saved one it is the
         // rate that job was costed with.
-        leasePerRunDay: st.leasePerRunDay ?? overheadMeta?.leasePerRunDay ?? null,
+        leasePerRunDay: s.leasePerRunDay ?? overheadMeta?.leasePerRunDay ?? null,
         indirectPerRunDay:
-          st.indirectPerRunDay ?? overheadMeta?.indirectPerRunDay ?? null,
+          s.indirectPerRunDay ?? overheadMeta?.indirectPerRunDay ?? null,
         otherPerRunDay:
-          st.otherPerRunDay ?? overheadMeta?.otherPerRunDay ?? null,
+          s.otherPerRunDay ?? overheadMeta?.otherPerRunDay ?? null,
       },
       // Toggled off, the model sees empty lists — the job carries no testing
       // dollars. The typed rows stay in state so switching back on restores
       // them instead of punishing a mis-click with retyping.
-      labTesting: st.labTestingEnabled
+      labTesting: s.labTestingEnabled
         ? {
-            rawMaterials: st.labTestRm,
-            finishedProduct: st.labTestFp,
+            rawMaterials: s.labTestRm,
+            finishedProduct: s.labTestFp,
           }
         : { rawMaterials: [], finishedProduct: [] },
       pricing: {
-        marginPct: st.marginPct,
-        marginMode: st.marginMode,
-        hosCommissionPct: st.hosCommissionPct,
-        repCommissionPct: st.repCommissionPct,
+        marginPct: s.marginPct,
+        marginMode: s.marginMode,
+        hosCommissionPct: s.hosCommissionPct,
+        repCommissionPct: s.repCommissionPct,
       },
-    }),
-    [st, qty, packoutOn, bundlingOn, finishedProduct, bulkTabCost],
+    };
+  }
+
+  const inputs: PouchCostingInputs = useMemo(
+    () => inputsForState(st),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [st, qty, packoutOn, bundlingOn, finishedProduct, bulkTabCost, quantity],
   );
 
   const r = useMemo(() => computePouchCosting(inputs), [inputs]);
@@ -3489,6 +3507,101 @@ export default function PouchCostingBoard({
       );
       return;
     }
+    const backUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/workflow/${workflowId}`
+        : null;
+    const common = {
+      customerName,
+      customerAddress,
+      customerContact,
+      customerEmail,
+      workflowLabel: quoteNumber,
+      preparerName: "",
+      preparerEmail: "",
+      backUrl,
+      backLabel: `Back to workflow (${quoteNumber})`,
+      quoteKind: finishedProduct
+        ? "Finished Product Quote"
+        : "Contract Packaging Quote (Pouches)",
+    };
+
+    // Every scenario on this product becomes its own version, because a
+    // quote with one volume on it makes the customer ask for the other two.
+    // Base first, then the scenarios in the order the pills show them.
+    //
+    // The state to price is the SAVED one for every scenario except the one
+    // on screen, whose live edits are in `st` — composeActive() is what
+    // reconciles those two, and reusing it here means the quote and the
+    // board can never disagree about what a scenario currently says.
+    const bundle = composeActive();
+    const baseState: SavedState = {
+      ...(bundle as SavedState),
+      scenarios: [],
+    };
+    const scenarioStates: { name: string; state: SavedState }[] = [
+      { name: bundle.baseName ?? "Base", state: baseState },
+      ...(bundle.scenarios ?? []).map((sc) => ({
+        name: sc.name,
+        state: { ...(sc.state as SavedState), scenarios: [] },
+      })),
+    ];
+
+    // Render one sheet per scenario and lift its .q-sheet out, which is
+    // exactly the shape a saved version holds.
+    const parser = new DOMParser();
+    const scenarioTabs: IssuedQuoteTab[] = [];
+    const skipped: string[] = [];
+    for (const sc of scenarioStates) {
+      const res = computePouchCosting(inputsForState(sc.state));
+      const scQty = sc.state.quantityOverride ?? quantity ?? 0;
+      if (res.salePerUnit === null || !(scQty > 0)) {
+        // A scenario that cannot be priced is left off rather than shown at
+        // zero — the same rule the totals follow.
+        skipped.push(sc.name);
+        continue;
+      }
+      const sheetHtml = buildQuoteHtml({
+        ...common,
+        lineItems: [
+          {
+            itemRef: "ITEM 1",
+            description: productName,
+            quantity: scQty,
+            unitPrice: res.salePerUnit,
+          },
+        ],
+        initialTabs: [],
+        saveEnabled: false,
+      });
+      const doc = parser.parseFromString(sheetHtml, "text/html");
+      const sheet = doc.querySelector(".q-sheet");
+      if (!sheet) continue;
+      scenarioTabs.push({
+        id:
+          "v-" +
+          Date.now().toString(36) +
+          "-" +
+          Math.random().toString(36).slice(2, 7),
+        label: `${sc.name} — ${scQty.toLocaleString("en-US")}`,
+        sheetHtml: sheet.innerHTML,
+        savedAt: "",
+      });
+    }
+    if (scenarioTabs.length === 0) {
+      window.alert(
+        "No scenario has a price yet — nothing to quote.",
+      );
+      return;
+    }
+    if (skipped.length > 0) {
+      const ok = window.confirm(
+        `${skipped.length === 1 ? "This scenario has" : "These scenarios have"} no price and will be left off the quote:\n\n` +
+          skipped.map((n) => `  • ${n}`).join("\n") +
+          `\n\nIssue the quote with the other ${scenarioTabs.length}?`,
+      );
+      if (!ok) return;
+    }
     const lineItems: QuoteLineItem[] = [
       {
         itemRef: "ITEM 1",
@@ -3497,27 +3610,15 @@ export default function PouchCostingBoard({
         unitPrice: r.salePerUnit,
       },
     ];
-    const backUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/workflow/${workflowId}`
-        : null;
     const html = buildQuoteHtml({
-      customerName,
-      customerAddress,
-      customerContact,
-      customerEmail,
-      workflowLabel: quoteNumber,
-      preparerName: "",
-      preparerEmail: "",
+      ...common,
       lineItems,
-      backUrl,
-      backLabel: `Back to workflow (${quoteNumber})`,
-      initialTabs: issuedQuotesRef.current,
-      issuingNew: true,
+      // The versions are supplied ready-made, so the popup must not append
+      // the sheet it was built with on top of them.
+      initialTabs: [...issuedQuotesRef.current, ...scenarioTabs],
+      startTabId: scenarioTabs[0].id,
+      autoSaveOnOpen: true,
       saveEnabled: !!workflowId,
-      quoteKind: finishedProduct
-        ? "Finished Product Quote"
-        : "Contract Packaging Quote (Pouches)",
     });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");
@@ -3530,8 +3631,16 @@ export default function PouchCostingBoard({
       return;
     }
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+    // st and activeScenarioId matter because the quote now prices EVERY
+    // scenario through composeActive(): without them a rename or a
+    // scenario edit that leaves the active price unchanged would be
+    // quoted from a stale closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     r,
+    st,
+    activeScenarioId,
+    quantity,
     productName,
     qty,
     workflowId,

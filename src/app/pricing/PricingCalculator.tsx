@@ -292,6 +292,11 @@ export function buildQuoteHtml(args: {
   // Empty array means "fresh popup — synthesise a single Version 1 tab
   // from lineItems above". Each tab carries a full sheet HTML snapshot.
   initialTabs: IssuedQuoteTab[];
+  /** Save the versions as soon as the popup opens, without waiting for a
+   *  click. Used when the caller supplied the versions itself (a costing
+   *  board turning each scenario into one) — there is nothing for the user
+   *  to do first, and an unrecorded quote is the failure being fixed. */
+  autoSaveOnOpen?: boolean;
   /** True when this popup is ISSUING a quote — the sheet it was built with
    *  is a new version, not a reopening of history. With saved versions
    *  present the popup used to show those and silently discard the sheet it
@@ -1007,6 +1012,7 @@ Davie, FL 33331
 
       var saveEnabled = ${args.saveEnabled ? "true" : "false"};
       var issuingNew = ${issuingNewJson};
+      var autoSaveOnOpen = ${args.autoSaveOnOpen ? "true" : "false"};
       var versions = [];
       var activeId = null;
       var rawJson = document.getElementById("q-initial-tabs-json");
@@ -1247,7 +1253,7 @@ Davie, FL 33331
       // because the popup shows saved history in preference to the sheet it
       // just built. Worth revisiting — the fix is for the popup to offer
       // both rather than choose.
-      if (synthesizedFresh && saveEnabled && window.opener && !window.opener.closed) {
+      if ((synthesizedFresh || autoSaveOnOpen) && saveEnabled && window.opener && !window.opener.closed) {
         setTimeout(function () {
           snapshotActiveTab();
           var autoTabs = versions.map(function (v) {
