@@ -17,6 +17,7 @@ import {
 } from "@/lib/workflows";
 import { type Customer } from "@/lib/supabase/rows";
 import { buildQuoteHtml } from "@/app/pricing/PricingCalculator";
+import QuoteChat from "./_components/QuoteChat";
 
 // Draft row used by the inline Won form. Both fields are strings until we
 // validate-and-coerce on save (numbers via parseFloat). Keeps controlled
@@ -1172,6 +1173,14 @@ export default function WorkflowActions({
           </a>
         )}
       </div>
+
+      {/* ---------- Quote assistant ----------
+          Sits with the record of the quote rather than with the actions:
+          it reads and explains, it does not do anything to the workflow. */}
+      <QuoteChat
+        workflowId={workflow.id}
+        quoteNumber={formatQuoteNumber(workflow.quote_number)}
+      />
 
       {/* ---------- Issued quotes ----------
           Every customer-facing quote saved from the calculator, newest
