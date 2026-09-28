@@ -531,7 +531,21 @@ export function buildQuoteHtml(args: {
     border-bottom: 1px solid var(--line-2);
     vertical-align: top;
   }
-  .q-items__item { width: 80px; font-weight: 700; color: var(--teal-700); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  /* The Items cell holds a part number, and 80px broke "PC-BK-0175" over
+     two lines — a browser will break at the hyphens when the column is too
+     narrow. 120px fits a PC-XX-0000 code with room to spare, and because
+     the table is auto-layout this is a floor rather than a cap: a longer
+     hand-typed label widens the column, and only wraps once Description
+     has no more room to give. */
+  .q-items__item {
+    width: 120px;
+    min-width: 120px;
+    font-weight: 700;
+    color: var(--teal-700);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
   .q-items__desc { color: var(--ink); }
   .q-items__qty { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
   .q-items__price { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
