@@ -2749,6 +2749,16 @@ export default function PricingCalculator({
         deliveryOverride: z(t.deliveryOverride),
         unitWeightG,
         accessorials: z(t.accessorials),
+        // Commissions are part of the landed cost: the sale price is solved
+        // so it covers them on top of the margin. Leaving them out here
+        // quoted a price BELOW the one the calculator displayed — Q0039's
+        // 500-unit tab showed $60.41 on screen and printed $57.76, which is
+        // exactly $23,105 / 500 / 0.8 with the 0.5% + 3% commissions
+        // dropped. The issue path has always omitted them; it recomputes
+        // rather than reading the figures already on screen, so every field
+        // it forgets is a silent discount.
+        hosCommissionPct: t.hosCommissionPct,
+        repCommissionPct: t.repCommissionPct,
       });
       const product = workflowProducts.find((p) => p.uid === t.workflowProductUid);
       const desc =
