@@ -6,6 +6,7 @@ import AppHeader from "../../../../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 import SoChat from "@/app/orders/_components/SoChat";
+import { loadBoardOrder, neighbours } from "@/app/orders/_lib/boardOrder";
 import { describeFreshness } from "@/lib/freshness";
 
 // /meetings/sales-orders/orders/[so]
@@ -260,6 +261,101 @@ export default async function SalesOrderDetailPage({
     last_synced_at: string | null;
   } | null;
 
+  // Previous / Next walk the Orders board's own sequence (customer A-Z, then
+  // SO number) so the weekly meeting can work straight down the list without
+  // going back to the board between orders. A closed SO is not in that
+  // sequence, so it simply gets no arrows.
+  const boardOrder = await loadBoardOrder(supabase);
+  const nav = neighbours(boardOrder, row.so_number as string);
+  const navLink = (
+    target: { so_number: string; customer_name: string | null } | null,
+    direction: "prev" | "next",
+  ) =>
+    target ? (
+      <Link
+        href={`/meetings/sales-orders/orders/${encodeURIComponent(target.so_number)}`}
+        className="meetings-noprint"
+        style={{
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: 6,
+          padding: "7px 14px",
+          borderRadius: 999,
+          border: "1px solid var(--stone, #e3dcc9)",
+          background: "var(--paper, #fffdf8)",
+          color: "var(--teal-900, #0f4a56)",
+          textDecoration: "none",
+          fontSize: 13,
+          fontWeight: 700,
+          maxWidth: "48%",
+        }}
+      >
+        {direction === "prev" ? <span aria-hidden="true">&larr;</span> : null}
+        <span>
+          {direction === "prev" ? t("soNavPrev") : t("soNavNext")}
+          <span
+            style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontWeight: 600,
+              color: "var(--ink-2, #415056)",
+            }}
+          >
+            {` · ${target.so_number}`}
+          </span>
+          {target.customer_name ? (
+            <span
+              style={{
+                fontWeight: 400,
+                color: "var(--ink-3, #8a9498)",
+                fontSize: 12,
+              }}
+            >
+              {` ${target.customer_name}`}
+            </span>
+          ) : null}
+        </span>
+        {direction === "next" ? <span aria-hidden="true">&rarr;</span> : null}
+      </Link>
+    ) : (
+      <span
+        className="meetings-noprint"
+        style={{ fontSize: 12, color: "var(--ink-3, #8a9498)", padding: "7px 0" }}
+      >
+        {direction === "prev" ? t("soNavStart") : t("soNavEnd")}
+      </span>
+    );
+
+  const soNav =
+    nav.index < 0 ? null : (
+      <div
+        className="meetings-noprint"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          margin: "14px 0 4px",
+        }}
+      >
+        {navLink(nav.prev, "prev")}
+        <span
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--ink-3, #8a9498)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("soNavPosition", {
+            n: String(nav.index + 1),
+            total: String(nav.total),
+          })}
+        </span>
+        {navLink(nav.next, "next")}
+      </div>
+    );
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} appContext="meetings" />
@@ -272,6 +368,7 @@ export default async function SalesOrderDetailPage({
           >
             <span aria-hidden="true">&larr;</span> {t("openOrdersTitle")}
           </Link>
+          {soNav}
 
           <div style={{ marginBottom: 6 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
@@ -940,6 +1037,7 @@ export default async function SalesOrderDetailPage({
               })}
             </div>
           )}
+          {soNav}
         </div>
       </main>
       <SoChat so={row.so_number} lang={lang} />

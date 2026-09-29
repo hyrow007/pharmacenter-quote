@@ -6,6 +6,7 @@ import AppHeader from "../_components/AppHeader";
 import PrintButton from "./PrintButton";
 import AskChip from "./_components/AskChip";
 import OrdersChatHost from "./_components/OrdersChatHost";
+import { compareSoNumbers } from "./_lib/boardOrder";
 import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
@@ -439,25 +440,9 @@ export default async function OrdersLandingPage() {
       // ONLY the leading digit run so 14746-1 stays 14746 (not 147461,
       // which would sort after 14870); tiebreak on the raw string so
       // 14746, 14746-1, 14746-2 land in order.
-      sos: sos.sort((a, b) => {
-        const aStr = String(a.so_number);
-        const bStr = String(b.so_number);
-        const aLead = aStr.match(/^\d+/);
-        const bLead = bStr.match(/^\d+/);
-        const aNum = aLead ? parseInt(aLead[0], 10) : NaN;
-        const bNum = bLead ? parseInt(bLead[0], 10) : NaN;
-        // Purely-numeric SOs group first, alpha-prefixed ("M-*") after.
-        if (Number.isFinite(aNum) && !Number.isFinite(bNum)) return -1;
-        if (!Number.isFinite(aNum) && Number.isFinite(bNum)) return 1;
-        if (
-          Number.isFinite(aNum) &&
-          Number.isFinite(bNum) &&
-          aNum !== bNum
-        ) {
-          return aNum - bNum;
-        }
-        return aStr.localeCompare(bStr);
-      }),
+      // Shared with the SO page's Previous / Next buttons so the two
+      // sequences cannot drift -- see _lib/boardOrder.ts.
+      sos: sos.sort((a, b) => compareSoNumbers(a.so_number, b.so_number)),
     }))
     .sort((a, b) => a.customer.localeCompare(b.customer));
 

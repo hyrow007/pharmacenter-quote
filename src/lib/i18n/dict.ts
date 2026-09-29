@@ -346,6 +346,11 @@ const en = {
   rmShippedOn: "Shipped {date}",
   rmSaveError: "Couldn't save: {msg}",
   rmLoadError: "Couldn't load the roadmap: {msg}",
+  soNavPrev: "Previous sales order",
+  soNavNext: "Next sales order",
+  soNavPosition: "{n} of {total}",
+  soNavEnd: "End of the list",
+  soNavStart: "Start of the list",
   // ---- SO assistant (Orders) ----
   soChatOpen: "Ask AI",
   soChatTitle: "SO {so} assistant",
@@ -693,6 +698,11 @@ const es: typeof en = {
   rmShippedOn: "Lanzado {date}",
   rmSaveError: "No se pudo guardar: {msg}",
   rmLoadError: "No se pudo cargar la hoja de ruta: {msg}",
+  soNavPrev: "Orden anterior",
+  soNavNext: "Siguiente orden",
+  soNavPosition: "{n} de {total}",
+  soNavEnd: "Fin de la lista",
+  soNavStart: "Inicio de la lista",
   // ---- SO assistant (Orders) ----
   soChatOpen: "Preguntar a la IA",
   soChatTitle: "Asistente de la orden {so}",
