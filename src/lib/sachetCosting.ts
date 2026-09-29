@@ -25,6 +25,20 @@
 //                 SACHETS (quantity × sachetsPerUnit); everything else runs
 //                 on units.
 //
+//   MACHINES      PharmaCenter runs up to four sachet machines, and a job can
+//                 be split across them. They fill in parallel, so the LINE
+//                 finishes in 1/N of the time and the job holds the floor for
+//                 fewer days — which is the whole reason for splitting it.
+//                 Crew does NOT divide with it: one leader walks the floor
+//                 however many machines run (leaders are entered as the
+//                 total), but each machine needs its own operators, so the
+//                 operator head count on the three phases that happen AT the
+//                 machines — setup, the line, cleaning — is multiplied by the
+//                 machine count. Net effect: line operator man-hours are flat
+//                 (half the time, twice the people), leader man-hours and
+//                 floor days fall, and setup and cleaning cost more because
+//                 every machine has to be set up and cleaned down.
+//
 //   HAND STATIONS Printing (lot/EXP on the bag), packout, cartoning and
 //                 bundling are hand work alongside the line, each derived
 //                 from a per-person units/min speed exactly like blister
@@ -75,9 +89,19 @@ const num = (v: number | null | undefined): number | null =>
  */
 export const DEFAULT_SACHET_SPEED_PENALTY_PCT = 20;
 
+/** PharmaCenter's sachet machine count. Four on the floor today; the board
+ *  offers 1–4 and the model refuses to believe in a fifth. */
+export const MAX_SACHET_MACHINES = 4;
+
 export type SachetLaborInputs = {
-  /** Machine sachets per minute — the nameplate figure. */
+  /** Machine sachets per minute — the nameplate figure, PER MACHINE. */
   sachetsPerMinute: number | null;
+  /**
+   * How many sachet machines run this job, 1–MAX_SACHET_MACHINES.
+   * Null/absent reads as one, which is what every costing saved before the
+   * question existed was priced at.
+   */
+  machines?: number | null;
   /** % knocked off the nameplate speed. Null reads as the 20% house figure. */
   speedPenaltyPct?: number | null;
   /**
@@ -122,6 +146,21 @@ export type SachetCostingInputs = {
 };
 
 /**
+ * Machines on the job, clamped to 1–MAX_SACHET_MACHINES.
+ *
+ * Anything missing, fractional or out of range reads as ONE. A bad count
+ * must never make a job look cheaper than a single machine would, and
+ * floor(4.9) = 4 rather than rounding up to a machine that does not exist.
+ */
+export function machineCount(
+  labor: Pick<SachetLaborInputs, "machines">,
+): number {
+  const m = num(labor.machines);
+  if (m === null || m < 1) return 1;
+  return Math.min(Math.floor(m), MAX_SACHET_MACHINES);
+}
+
+/**
  * The planning line speed in sachets per minute:
  *
  *   nameplate PPM × (1 − penalty/100)
@@ -141,10 +180,15 @@ export function effectiveSachetsPerMinute(
 }
 
 /**
- * Line time in hours. The line fills SACHETS, not finished units, so the
- * quantity is multiplied out first:
+ * ELAPSED line time in hours. The line fills SACHETS, not finished units, so
+ * the quantity is multiplied out first, and N machines filling in parallel
+ * get through it in 1/N of the time:
  *
- *   hours = (units × sachets per unit) ÷ (effective sachets/min × 60)
+ *   hours = (units × sachets per unit) ÷ (effective sachets/min × 60 × machines)
+ *
+ * This is wall-clock, not man-hours. The crew is applied separately in
+ * sachetLaborBreakdown, where the operator count — not the hours — is what
+ * scales with the machines.
  */
 export function sachetProductionHours(
   quantity: number | null,
@@ -153,8 +197,9 @@ export function sachetProductionHours(
   const q = num(quantity);
   const ppu = num(labor.sachetsPerUnit) ?? 1;
   const eff = effectiveSachetsPerMinute(labor);
+  const machines = machineCount(labor);
   if (q === null || q <= 0 || ppu <= 0 || eff === null || eff <= 0) return null;
-  return (q * ppu) / (eff * 60);
+  return (q * ppu) / (eff * 60 * machines);
 }
 
 /**
@@ -171,9 +216,23 @@ export function sachetLaborBreakdown(
   labor: SachetLaborInputs,
 ): LaborBreakdown | null {
   const q = num(quantity);
+  const machines = machineCount(labor);
 
   const setupHours = num(labor.setup.hours) ?? DEFAULT_SETUP_HOURS;
   const cleanHours = num(labor.cleaning.hours) ?? DEFAULT_CLEANING_HOURS;
+
+  /**
+   * Operators AT THE MACHINES: one to two per machine, so the head count
+   * entered on the phase is per machine and the floor carries that many
+   * times the machine count. Leaders are NOT multiplied — one leader walks
+   * the bank of machines, so the number entered is already the total.
+   *
+   * Only setup, the line and cleaning happen at the machines. The hand
+   * stations downstream work on finished units and are unaffected by how
+   * many machines fed them.
+   */
+  const machineOperators = (n: number | null | undefined) =>
+    (num(n) ?? 0) * machines;
 
   const handHours = (phase: LaborPhase, speed: number | null | undefined) => {
     const typed = num(phase.hours);
@@ -216,8 +275,18 @@ export function sachetLaborBreakdown(
   // stations print, pack out, carton and bundle what comes off it; then
   // clean down.
   const phases = [
-    mk("Setup", setupHours, labor.setup.leaders, labor.setup.operators),
-    mk("Sachet Line", lineHours, labor.line.leaders, labor.line.operators),
+    mk(
+      "Setup",
+      setupHours,
+      labor.setup.leaders,
+      machineOperators(labor.setup.operators),
+    ),
+    mk(
+      "Sachet Line",
+      lineHours,
+      labor.line.leaders,
+      machineOperators(labor.line.operators),
+    ),
     mk(
       "Printing",
       printingHours,
@@ -237,7 +306,12 @@ export function sachetLaborBreakdown(
       labor.bundling.leaders,
       labor.bundling.operators,
     ),
-    mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
+    mk(
+      "Cleaning",
+      cleanHours,
+      labor.cleaning.leaders,
+      machineOperators(labor.cleaning.operators),
+    ),
   ];
 
   const role = (

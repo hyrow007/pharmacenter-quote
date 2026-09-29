@@ -34,6 +34,8 @@ import {
   computeSachetCosting,
   sachetLaborBreakdown,
   effectiveSachetsPerMinute,
+  machineCount,
+  MAX_SACHET_MACHINES,
   DEFAULT_SACHET_SPEED_PENALTY_PCT,
   DEFAULT_LEADER_RATE,
   DEFAULT_OPERATOR_RATE,
@@ -1470,8 +1472,18 @@ export type SavedState = {
    *  pills). GLOBAL like the scenarios list — never swapped by tab loads;
    *  older saves lack it and render as "Base". */
   baseName?: string;
-  /** Machine sachets per minute — the nameplate figure. */
+  /** Machine sachets per minute — the nameplate figure, PER MACHINE. */
   sachetsPerMinute: number | null;
+  /**
+   * How many of the four sachet machines run this job.
+   *
+   * They fill in parallel: the line finishes in 1/N of the time and the job
+   * holds the floor for fewer days, which is what makes splitting a big run
+   * worth doing. Crew does not divide with it — see sachetCosting's MACHINES
+   * note. Null reads as one, which is how every costing saved before this
+   * question existed was priced.
+   */
+  machines: number | null;
   /** % knocked off the nameplate speed. Default 20 — see sachetCosting. */
   speedPenaltyPct: number | null;
   /**
@@ -1860,6 +1872,9 @@ export function blankState(
     scenarios: [],
     baseName: "Base",
     sachetsPerMinute: null,
+    // One machine unless someone says otherwise: the conservative reading,
+    // and the only one that matches how sachet jobs have been quoted so far.
+    machines: 1,
     speedPenaltyPct: DEFAULT_SACHET_SPEED_PENALTY_PCT,
     sachetsPerUnit: bpu,
     dosesPerSachet,
@@ -2435,6 +2450,10 @@ function hydrateSaved(
         ),
       displayDec: initial.displayDec ?? blank.displayDec,
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
+      // Costings (and scenarios) saved before the question have no count.
+      // `??` lands them on one machine, which is exactly what they were
+      // priced at, so reopening one cannot move its total.
+      machines: initial.machines ?? blank.machines,
       sachetsPerUnit: initial.sachetsPerUnit ?? blank.sachetsPerUnit,
       dosesPerSachet: backfillDosesPerSachet(initial).dosesPerSachet,
       // Scenarios are loaded raw by selectTab — they never pass through this
@@ -3112,6 +3131,10 @@ export default function SachetCostingBoard({
     [st.sachetsPerMinute, st.speedPenaltyPct],
   );
 
+  /** Machines on this job, clamped the same way the model clamps it, so the
+   *  readouts and the price can never disagree about how many are running. */
+  const machines = machineCount({ machines: st.machines });
+
   /**
    * Bottles in one master box.
    *
@@ -3213,6 +3236,7 @@ export default function SachetCostingBoard({
         : st.bom,
       labor: {
         sachetsPerMinute: st.sachetsPerMinute,
+        machines: st.machines,
         speedPenaltyPct: st.speedPenaltyPct,
         sachetsPerUnit: st.sachetsPerUnit,
         // No off-line printing = no printing hours, whatever speed is
@@ -4130,6 +4154,58 @@ export default function SachetCostingBoard({
               placeholder="20"
             />
           </ParamBlock>
+          {/* Up to four machines fill in parallel. More machines = the same
+              sachets in a fraction of the time and fewer floor days, at the
+              cost of setting up and cleaning every machine and staffing each
+              one. See the MACHINES note in lib/sachetCosting. */}
+          <ParamBlock
+            label="Machines"
+            nowrap
+            hint="How many sachet machines run this job. They fill in parallel, so the line finishes sooner and the job holds the floor for fewer days. Operators are per machine; the leader count is the total on the floor."
+          >
+            <select
+              value={machines}
+              onChange={(e) => set("machines", Number(e.target.value))}
+              style={{
+                ...numInput,
+                textAlign: "left",
+                // A select renders its own chevron; the 33px box keeps it on
+                // the same baseline as the number inputs beside it.
+                height: 33,
+                padding: "0 6px",
+                fontSize: 14,
+              }}
+            >
+              {Array.from({ length: MAX_SACHET_MACHINES }, (_, i) => i + 1).map(
+                (n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "1 machine" : `${n} machines`}
+                  </option>
+                ),
+              )}
+            </select>
+            {/* Overhead is charged on how long the job holds the floor, so
+                the machine count moves it. Shown HERE, at the decision, so a
+                quote that got cheaper because someone picked four machines
+                says so out loud instead of only moving a total further down
+                the page. */}
+            {jobDays !== null ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "var(--ink-3, #7b7364)",
+                  marginTop: 3,
+                }}
+              >
+                ≈{" "}
+                {jobDays.toLocaleString("en-US", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                floor {jobDays === 1 ? "day" : "days"}
+              </div>
+            ) : null}
+          </ParamBlock>
           <ParamBlock label="Line speed (sachets / minute)">
             {/* Boxed like the inputs around it, so the derived figure sits on
                 the same baseline instead of floating — but visibly read-only:
@@ -4152,10 +4228,31 @@ export default function SachetCostingBoard({
                 justifyContent: "flex-end",
               }}
             >
+              {/* The floor's TOTAL output, because that is the number that
+                  sets the run length. The per-machine figure is spelled out
+                  underneath rather than hidden, so nobody has to work out
+                  which of the two they are looking at. */}
               {effBpm !== null
-                ? effBpm.toLocaleString("en-US", { maximumFractionDigits: 1 })
+                ? (effBpm * machines).toLocaleString("en-US", {
+                    maximumFractionDigits: 1,
+                  })
                 : "—"}
             </div>
+            {effBpm !== null && machines > 1 ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "var(--ink-3, #7b7364)",
+                  marginTop: 3,
+                  textAlign: "right",
+                }}
+              >
+                {machines} ×{" "}
+                {effBpm.toLocaleString("en-US", { maximumFractionDigits: 1 })}{" "}
+                per machine
+              </div>
+            ) : null}
           </ParamBlock>
           {/* How many doses go in ONE sachet — the packaging form's
               "Count (doses per sachet)". Together with the field beside it
@@ -5333,10 +5430,11 @@ export default function SachetCostingBoard({
                 }}
               >
                 Setup and cleaning default to 2 hours. The line runs
-                (units × sachets per unit) ÷ line speed; printing, packout,
-                cartoning and bundling follow their per-person speeds and
-                crews — change those inputs in Considerations, not these
-                cells.
+                (units × sachets per unit) ÷ line speed, and line speed is
+                the whole floor — {machines === 1 ? "one machine" : `${machines} machines`}{" "}
+                filling in parallel; printing, packout, cartoning and
+                bundling follow their per-person speeds and crews — change
+                those inputs in Considerations, not these cells.
               </div>
             </div>
 
@@ -5362,7 +5460,6 @@ export default function SachetCostingBoard({
                     [
                       {
                         label: "QTY of Line Leaders",
-                        get: (p: (typeof lb.phases)[number]) => p.leaders,
                         keys: {
                           Setup: "setupLeaders",
                           "Sachet Line": "prodLeaders",
@@ -5374,8 +5471,11 @@ export default function SachetCostingBoard({
                         },
                       },
                       {
+                        // Entered PER MACHINE on setup, the line and cleaning
+                        // — one to two operators each. The floor total is
+                        // this times the machine count, and it is the Man
+                        // Hours table below that shows it.
                         label: "QTY of Line Operators",
-                        get: (p: (typeof lb.phases)[number]) => p.operators,
                         keys: {
                           Setup: "setupOperators",
                           "Sachet Line": "prodOperators",
@@ -5393,7 +5493,18 @@ export default function SachetCostingBoard({
                       {shownPhases.map((p) => (
                         <td key={p.label} style={labTd}>
                           <LabNum
-                            value={row.get(p)}
+                            // The STORED head count, never the breakdown's:
+                            // that one carries the machine multiplier, and
+                            // feeding it back into the input it is derived
+                            // from multiplies it again on every edit.
+                            // `?? 0` matches what the breakdown used to hand
+                            // this cell: an unset head count renders as 0,
+                            // not as an empty box.
+                            value={
+                              (st[
+                                row.keys[p.label as keyof typeof row.keys]
+                              ] as number | null) ?? 0
+                            }
                             onChange={(n) =>
                               set(
                                 row.keys[p.label as keyof typeof row.keys],
@@ -5409,6 +5520,20 @@ export default function SachetCostingBoard({
                   ))}
                 </tbody>
               </table>
+              {machines > 1 ? (
+                <div
+                  style={{
+                    padding: "0 14px 10px",
+                    fontSize: 11.5,
+                    color: "var(--ink-3, #7b7364)",
+                  }}
+                >
+                  Operators are per machine on Setup, Sachet Line and
+                  Cleaning, so this job puts {machines}× these numbers on the
+                  floor — the Man Hours table below has the totals. Leaders
+                  are the total on the floor and are not multiplied.
+                </div>
+              ) : null}
             </div>
 
             {/* ---- Man Hours (computed) ---- */}
