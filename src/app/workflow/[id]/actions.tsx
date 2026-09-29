@@ -5,11 +5,18 @@
 // server component can do `auth.getUser()` + Supabase fetches without dragging
 // the whole page over the client boundary.
 
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   WORKFLOW_STATUS_LABELS,
   formatQuoteNumber,
+  type IssuedQuoteTab,
   type MondayMaterialRow,
   type SalesOrder,
   type WorkflowRow,
@@ -191,12 +198,82 @@ export default function WorkflowActions({
     (b.savedAt ?? "").localeCompare(a.savedAt ?? ""),
   );
 
+  // The popup we last opened, so the save listener can tell a message from
+  // OUR quote window apart from anything else on the page. The popup is a
+  // Blob URL, so its origin is "null" — identity is the only real check.
+  const quotePopupRef = useRef<Window | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onMessage(event: MessageEvent) {
+      const w = quotePopupRef.current;
+      if (!w || event.source !== w) return;
+      const data = event.data as
+        | { type: "issued-quotes-save"; tabs: IssuedQuoteTab[] }
+        | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "issued-quotes-save" || !Array.isArray(data.tabs))
+        return;
+      const cleanTabs: IssuedQuoteTab[] = data.tabs
+        .filter(
+          (t): t is IssuedQuoteTab =>
+            !!t &&
+            typeof t === "object" &&
+            typeof t.id === "string" &&
+            typeof t.label === "string" &&
+            typeof t.sheetHtml === "string",
+        )
+        .map((t) => ({
+          id: t.id,
+          label: t.label,
+          sheetHtml: t.sheetHtml,
+          savedAt: t.savedAt || new Date().toISOString(),
+        }));
+      (async () => {
+        try {
+          // Partial state: the PUT merges shallowly, so this touches the
+          // issued quotes and nothing else on the workflow.
+          const res = await fetch(`/api/workflows/${workflow.id}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ state: { issuedQuotes: cleanTabs } }),
+          });
+          if (!res.ok) throw new Error(`http_${res.status}`);
+          try {
+            w.postMessage({ type: "issued-quotes-saved", ok: true }, "*");
+          } catch { /* popup closed */ }
+          router.refresh();
+        } catch (err) {
+          try {
+            w.postMessage(
+              {
+                type: "issued-quotes-saved",
+                ok: false,
+                error: err instanceof Error ? err.message : "save_failed",
+              },
+              "*",
+            );
+          } catch { /* popup closed */ }
+        }
+      })();
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflow.id]);
+
   /**
    * Reopen the saved quotes in the same popup the calculator uses, with
    * `startTabId` selected. Passing the saved tabs in makes buildQuoteHtml
    * render THEM rather than synthesise a fresh sheet, so there are no line
-   * items to hand it. Saving is off: this is a record of what went out, and
-   * a re-issue belongs in the calculator where the numbers live.
+   * items to hand it.
+   *
+   * Saving is ON. It was off at first, on the reasoning that this is a
+   * record of what went out and a re-issue belongs in the calculator — but
+   * renaming a version, or fixing a typo in one, is not re-issuing. It is
+   * curating the record, and the record lives here. `issuingNew` stays
+   * unset, so the popup shows the saved versions and adds nothing: what
+   * comes back is the same set of quotes, edited.
    */
   function openIssuedQuote(startTabId: string) {
     const html = buildQuoteHtml({
@@ -215,10 +292,11 @@ export default function WorkflowActions({
       backLabel: "Back to workflow",
       initialTabs: issuedQuotes,
       startTabId,
-      saveEnabled: false,
+      saveEnabled: true,
     });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");
+    quotePopupRef.current = w;
     if (!w) {
       setToast(
         "Couldn't open the quote — allow popups for this site and try again.",
@@ -1259,8 +1337,9 @@ export default function WorkflowActions({
                 margin: "8px 0 0",
               }}
             >
-              Opens read-only. To change a quote or issue a new version, go
-              through the pricing calculator.
+                Rename or edit a version here and press Save versions. To
+              issue a NEW version, go through the pricing calculator — the
+              numbers live there.
             </p>
           ) : null}
         </div>
