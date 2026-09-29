@@ -1478,6 +1478,18 @@ export type SavedState = {
    */
   pouchesPerUnit: number | null;
   /**
+   * Doses in ONE pouch — the packaging form's
+   * "Count (doses per pouch)".
+   *
+   * The Bulk row's quantity is this times pouchesPerUnit, recomputed whenever
+   * either moves. It lives here rather than only on the row because a job
+   * that changes its carton count has to reprice its bulk with it: a row
+   * holding "2 doses per unit" cannot tell 2-in-1-pouch from 2-in-30, so
+   * the bulk silently under-charges by the carton count.
+   * Null = nobody has said yet, and the Bulk row blocks the total.
+   */
+  dosesPerPouch: number | null;
+  /**
    * Does this job print lot/EXP OFF the line, as a separate hand station?
    * Asked in Considerations. No = the printing speed is hidden, the phase
    * drops out of the labour tables and contributes nothing; the speed and
@@ -1801,8 +1813,8 @@ export function blankState(
   // one unit. Null until the form states a pouch count — a customer-supplied
   // bulk resolves at $0 regardless, so the blank only gates PC-supplied bulk.
   const cardRaw = Number(spec?.pouchCount ?? "");
-  const dosesPerUnit =
-    Number.isFinite(cardRaw) && cardRaw > 0 ? cardRaw * bpu : null;
+  const dosesPerPouch = Number.isFinite(cardRaw) && cardRaw > 0 ? cardRaw : null;
+  const dosesPerUnit = dosesPerPouch !== null ? dosesPerPouch * bpu : null;
   return {
     // The list is generated FROM THE SPEC, not fixed. A job with no retail
     // carton simply has no carton row to explain away.
@@ -1847,6 +1859,7 @@ export function blankState(
     pouchesPerMinute: null,
     speedPenaltyPct: DEFAULT_POUCH_SPEED_PENALTY_PCT,
     pouchesPerUnit: bpu,
+    dosesPerPouch,
     // Most jobs code on the line or not at all, so a new costing starts
     // with no off-line printing step. It is a question, not a default to
     // discover — answering Yes is what reveals the speed.
@@ -2307,6 +2320,26 @@ export type BoardProduct = {
   bulkTabs?: BulkTabOption[];
 };
 
+/**
+ * Back-fill `dosesPerPouch` on a costing saved before the question was asked.
+ * Those saves carried doses per FINISHED UNIT on the Bulk row and nothing
+ * else, so the per-pouch figure is that number divided by the
+ * pouchesPerUnit it was saved with. Dividing it back out reprices the row to
+ * exactly the quantity it already held — a migration must never move a
+ * saved total, and this one is arithmetically incapable of it.
+ *
+ * `!== undefined` and not `??`: a deliberate null (someone cleared the
+ * field) is an answer, and re-deriving over it would resurrect a number
+ * they removed on purpose.
+ */
+function backfillDosesPerPouch<T extends Omit<SavedState, "scenarios">>(s: T): T {
+  if ((s as { dosesPerPouch?: number | null }).dosesPerPouch !== undefined) return s;
+  const bpu = s.pouchesPerUnit && s.pouchesPerUnit > 0 ? s.pouchesPerUnit : 1;
+  const bulk = (s.bom ?? []).find((l) => slotKeyOf(l)?.key === "bulk");
+  const q = bulk?.qtyPerUnit ?? null;
+  return { ...s, dosesPerPouch: q !== null && q > 0 ? q / bpu : null };
+}
+
 /** Build the working state for one product: its saved costing hydrated
  *  over a spec-seeded blank, with every pre-list save shape migrated.
  *  Extracted verbatim from the old useState initializer when the board
@@ -2397,6 +2430,14 @@ function hydrateSaved(
       displayDec: initial.displayDec ?? blank.displayDec,
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       pouchesPerUnit: initial.pouchesPerUnit ?? blank.pouchesPerUnit,
+      dosesPerPouch: backfillDosesPerPouch(initial).dosesPerPouch,
+      // Scenarios are loaded raw by selectTab — they never pass through this
+      // function again — so each one is migrated HERE or not at all.
+      scenarios: (initial.scenarios ?? blank.scenarios).map((sc) =>
+        sc && sc.state
+          ? { ...sc, state: backfillDosesPerPouch(sc.state) }
+          : sc,
+      ),
       // Costings saved before the question existed: one that had a printing
       // speed typed was priced WITH a printing station, so it comes back Yes
       // and its total does not move; anything else comes back No. `??` keeps
@@ -3115,6 +3156,21 @@ export default function PouchCostingBoard({
         // once took a roll-stock "film yield" too; PharmaCenter only runs
         // preformed bags, so that input and its per-UOM pricing are gone.)
         const def = slotKeyOf(l);
+        // Bulk is doses per FINISHED UNIT = doses per pouch x pouchesPerUnit, so
+        // it has to move with pouchesPerUnit for exactly the reason the preformed-bag
+        // row does. Left behind, it under-charges the bulk by the whole carton
+        // count and raises no flag, because the row still holds a perfectly
+        // plausible number.
+        //
+        // A null doses-per-pouch leaves the row ALONE rather than clearing
+        // it: an old scenario state that predates the field would otherwise
+        // have its saved bulk quantity wiped the moment it is opened.
+        if (def?.key === "bulk") {
+          const dps = st.dosesPerPouch;
+          if (dps === null || dps === undefined) return l;
+          const per = st.pouchesPerUnit && st.pouchesPerUnit > 0 ? st.pouchesPerUnit : 1;
+          return { ...l, qtyPerUnit: dps > 0 ? dps * per : null };
+        }
         if (def?.perPouch) {
           return {
             ...l,
@@ -3131,6 +3187,7 @@ export default function PouchCostingBoard({
     bottlesPerMasterBoxEffective,
     st.bottlesPerInnerPack,
     st.pouchesPerUnit,
+    st.dosesPerPouch,
   ]);
 
   // Packout follows the packaging form's secondary-packaging answer unless
@@ -4205,6 +4262,21 @@ export default function PouchCostingBoard({
                 : "—"}
             </div>
           </ParamBlock>
+          {/* How many doses go in ONE pouch — the packaging form's
+              "Count (doses per pouch)". Together with the field beside it this is what the
+              Bulk row is priced on; neither number alone says how much bulk
+              a finished unit holds. */}
+          <ParamBlock
+            label="Doses / pouch"
+            nowrap
+            hint="Doses in one pouch. Bulk quantity = this x pouches per finished unit."
+          >
+            <NumField
+              value={st.dosesPerPouch}
+              onChange={(v) => set("dosesPerPouch", v)}
+              placeholder="required"
+            />
+          </ParamBlock>
           {/* Several pouches can go into one carton — the FINISHED UNIT
               everything on this board is priced per. Seeded from the
               packaging form's bags-per-pack answer. */}
@@ -4647,14 +4719,53 @@ export default function PouchCostingBoard({
                           )}
                       </div>
                     )}
-                  {/* Safety seal and bulk: an editable per-unit COUNT —
-                      2 seals per unit, 56 doses per carton. Unlike the
-                      shared containers this is a straight multiplier, so it
-                      writes qtyPerUnit directly rather than 1/n. Seeded from
-                      the packaging form (seals per unit; pouch count times
-                      pouches per unit for the bulk). */}
-                  {(slotKeyOf(line)?.key === "safety_seal" ||
-                    slotKeyOf(line)?.key === "bulk") &&
+                  {/* Bulk is DERIVED from the two Considerations fields, so
+                      it is shown here rather than typed — a second place to
+                      enter the same number is how two numbers learn to
+                      disagree, the same rule the preformed-bag row follows. */}
+                  {slotKeyOf(line)?.key === "bulk" && !line.notUsed && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        color: "var(--ink-3, #7b7364)",
+                        marginTop: 2,
+                      }}
+                    >
+                      {line.qtyPerUnit !== null && line.qtyPerUnit > 0 ? (
+                        <>
+                          {line.qtyPerUnit.toLocaleString("en-US", {
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          doses per unit
+                          {st.dosesPerPouch && st.dosesPerPouch > 0 ? (
+                            <span style={{ opacity: 0.8 }}>
+                              {" \u00b7 "}
+                              {st.dosesPerPouch.toLocaleString("en-US", {
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              per pouch ×{" "}
+                              {(st.pouchesPerUnit && st.pouchesPerUnit > 0
+                                ? st.pouchesPerUnit
+                                : 1
+                              ).toLocaleString("en-US")}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span style={{ fontStyle: "italic" }}>
+                          set “Doses / pouch” in Considerations
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* Safety seal: an editable per-unit COUNT — 2 seals per
+                      unit. Unlike the shared containers this is a straight
+                      multiplier, so it writes qtyPerUnit directly rather
+                      than 1/n. Seeded from the packaging form. */}
+                  {slotKeyOf(line)?.key === "safety_seal" &&
                     !line.notUsed && (
                     <div
                       style={{
@@ -4705,9 +4816,7 @@ export default function PouchCostingBoard({
                           background: "#fff",
                         }}
                       />
-                      {slotKeyOf(line)?.key === "bulk"
-                        ? "doses per unit"
-                        : "seals per unit"}
+                      seals per unit
                     </div>
                   )}
                 </div>

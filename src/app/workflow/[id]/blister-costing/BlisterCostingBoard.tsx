@@ -1480,6 +1480,18 @@ export type SavedState = {
    */
   blistersPerUnit: number | null;
   /**
+   * Doses in ONE blister card — the packaging form's
+   * "Count (doses per card)".
+   *
+   * The Bulk row's quantity is this times blistersPerUnit, recomputed whenever
+   * either moves. It lives here rather than only on the row because a job
+   * that changes its carton count has to reprice its bulk with it: a row
+   * holding "2 doses per unit" cannot tell 2-in-1-blister from 2-in-30, so
+   * the bulk silently under-charges by the carton count.
+   * Null = nobody has said yet, and the Bulk row blocks the total.
+   */
+  dosesPerBlister: number | null;
+  /**
    * Packout (secondary packaging) FOR THIS COSTING. null = follow the
    * packaging form's "Secondary/retail packaging required?"; true/false =
    * overridden here, never written back to the form.
@@ -1781,8 +1793,8 @@ export function blankState(
   // one unit. Null until the form states a card count — a customer-supplied
   // bulk resolves at $0 regardless, so the blank only gates PC-supplied bulk.
   const cardRaw = Number(spec?.cardCount ?? "");
-  const dosesPerUnit =
-    Number.isFinite(cardRaw) && cardRaw > 0 ? cardRaw * bpu : null;
+  const dosesPerBlister = Number.isFinite(cardRaw) && cardRaw > 0 ? cardRaw : null;
+  const dosesPerUnit = dosesPerBlister !== null ? dosesPerBlister * bpu : null;
   return {
     // The list is generated FROM THE SPEC, not fixed. A job with no retail
     // carton simply has no carton row to explain away.
@@ -1829,6 +1841,7 @@ export function blankState(
     blistersPerStroke: null,
     speedPenaltyPct: DEFAULT_SPEED_PENALTY_PCT,
     blistersPerUnit: bpu,
+    dosesPerBlister,
     // null = follow the packaging form.
     packoutRequired: null,
     packoutSpeed: null,
@@ -2286,6 +2299,26 @@ export type BoardProduct = {
   bulkTabs?: BulkTabOption[];
 };
 
+/**
+ * Back-fill `dosesPerBlister` on a costing saved before the question was asked.
+ * Those saves carried doses per FINISHED UNIT on the Bulk row and nothing
+ * else, so the per-blister figure is that number divided by the
+ * blistersPerUnit it was saved with. Dividing it back out reprices the row to
+ * exactly the quantity it already held — a migration must never move a
+ * saved total, and this one is arithmetically incapable of it.
+ *
+ * `!== undefined` and not `??`: a deliberate null (someone cleared the
+ * field) is an answer, and re-deriving over it would resurrect a number
+ * they removed on purpose.
+ */
+function backfillDosesPerBlister<T extends Omit<SavedState, "scenarios">>(s: T): T {
+  if ((s as { dosesPerBlister?: number | null }).dosesPerBlister !== undefined) return s;
+  const bpu = s.blistersPerUnit && s.blistersPerUnit > 0 ? s.blistersPerUnit : 1;
+  const bulk = (s.bom ?? []).find((l) => slotKeyOf(l)?.key === "bulk");
+  const q = bulk?.qtyPerUnit ?? null;
+  return { ...s, dosesPerBlister: q !== null && q > 0 ? q / bpu : null };
+}
+
 /** Build the working state for one product: its saved costing hydrated
  *  over a spec-seeded blank, with every pre-list save shape migrated.
  *  Extracted verbatim from the old useState initializer when the board
@@ -2376,6 +2409,14 @@ function hydrateSaved(
       displayDec: initial.displayDec ?? blank.displayDec,
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       blistersPerUnit: initial.blistersPerUnit ?? blank.blistersPerUnit,
+      dosesPerBlister: backfillDosesPerBlister(initial).dosesPerBlister,
+      // Scenarios are loaded raw by selectTab — they never pass through this
+      // function again — so each one is migrated HERE or not at all.
+      scenarios: (initial.scenarios ?? blank.scenarios).map((sc) =>
+        sc && sc.state
+          ? { ...sc, state: backfillDosesPerBlister(sc.state) }
+          : sc,
+      ),
       // Costings saved before these questions: follow the form, UNLESS the
       // job was priced with a speed the form would now switch off — then
       // keep it on explicitly so the saved total does not move.
@@ -3092,6 +3133,22 @@ export default function BlisterCostingBoard({
         //   qty per unit = blisters per unit / blisters per UOM.
         // Missing yield leaves the line null (blocked), never a guess.
         const def = slotKeyOf(l);
+        // Bulk is doses per FINISHED UNIT = doses per card x blistersPerUnit,
+        // so
+        // it has to move with blistersPerUnit for exactly the reason the film
+        // and lidding rows do. Left behind, it under-charges the bulk by the whole carton
+        // count and raises no flag, because the row still holds a perfectly
+        // plausible number.
+        //
+        // A null doses-per-blister leaves the row ALONE rather than clearing
+        // it: an old scenario state that predates the field would otherwise
+        // have its saved bulk quantity wiped the moment it is opened.
+        if (def?.key === "bulk") {
+          const dps = st.dosesPerBlister;
+          if (dps === null || dps === undefined) return l;
+          const per = st.blistersPerUnit && st.blistersPerUnit > 0 ? st.blistersPerUnit : 1;
+          return { ...l, qtyPerUnit: dps > 0 ? dps * per : null };
+        }
         if (def?.perBlister) {
           const yieldPerUom =
             def.key === "film"
@@ -3116,6 +3173,7 @@ export default function BlisterCostingBoard({
     st.blistersPerUnit,
     st.filmBlistersPerUom,
     st.liddingBlistersPerUom,
+    st.dosesPerBlister,
   ]);
 
   // Packout and bundling follow the packaging form unless this costing
@@ -4077,6 +4135,21 @@ export default function BlisterCostingBoard({
                 : "—"}
             </div>
           </ParamBlock>
+          {/* How many doses go in ONE blister card — the packaging form's
+              "Count (doses per card)". Together with the field beside it this is what the
+              Bulk row is priced on; neither number alone says how much bulk
+              a finished unit holds. */}
+          <ParamBlock
+            label="Doses / blister"
+            nowrap
+            hint="Doses in one blister card. Bulk quantity = this x blisters per finished unit."
+          >
+            <NumField
+              value={st.dosesPerBlister}
+              onChange={(v) => set("dosesPerBlister", v)}
+              placeholder="required"
+            />
+          </ParamBlock>
           {/* Several blisters usually go into one carton — the FINISHED UNIT
               everything on this board is priced per. Seeded from the
               packaging form's blisters-per-pack answer. */}
@@ -4545,14 +4618,53 @@ export default function BlisterCostingBoard({
                       </div>
                     );
                   })()}
-                  {/* Safety seal and bulk: an editable per-unit COUNT —
-                      2 seals per unit, 56 doses per carton. Unlike the
-                      shared containers this is a straight multiplier, so it
-                      writes qtyPerUnit directly rather than 1/n. Seeded from
-                      the packaging form (seals per unit; card count times
-                      blisters per unit for the bulk). */}
-                  {(slotKeyOf(line)?.key === "safety_seal" ||
-                    slotKeyOf(line)?.key === "bulk") &&
+                  {/* Bulk is DERIVED from the two Considerations fields, so
+                      it is shown here rather than typed — a second place to
+                      enter the same number is how two numbers learn to
+                      disagree, the same rule the film and lidding rows follow. */}
+                  {slotKeyOf(line)?.key === "bulk" && !line.notUsed && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        color: "var(--ink-3, #7b7364)",
+                        marginTop: 2,
+                      }}
+                    >
+                      {line.qtyPerUnit !== null && line.qtyPerUnit > 0 ? (
+                        <>
+                          {line.qtyPerUnit.toLocaleString("en-US", {
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          doses per unit
+                          {st.dosesPerBlister && st.dosesPerBlister > 0 ? (
+                            <span style={{ opacity: 0.8 }}>
+                              {" \u00b7 "}
+                              {st.dosesPerBlister.toLocaleString("en-US", {
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              per blister ×{" "}
+                              {(st.blistersPerUnit && st.blistersPerUnit > 0
+                                ? st.blistersPerUnit
+                                : 1
+                              ).toLocaleString("en-US")}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span style={{ fontStyle: "italic" }}>
+                          set “Doses / blister” in Considerations
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* Safety seal: an editable per-unit COUNT — 2 seals per
+                      unit. Unlike the shared containers this is a straight
+                      multiplier, so it writes qtyPerUnit directly rather
+                      than 1/n. Seeded from the packaging form. */}
+                  {slotKeyOf(line)?.key === "safety_seal" &&
                     !line.notUsed && (
                     <div
                       style={{
@@ -4603,9 +4715,7 @@ export default function BlisterCostingBoard({
                           background: "#fff",
                         }}
                       />
-                      {slotKeyOf(line)?.key === "bulk"
-                        ? "doses per unit"
-                        : "seals per unit"}
+                      seals per unit
                     </div>
                   )}
                 </div>
