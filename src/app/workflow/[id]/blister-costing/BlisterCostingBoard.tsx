@@ -1273,6 +1273,60 @@ const yesNoSelect: React.CSSProperties = {
 };
 
 /**
+ * A field in Considerations with a caption hanging under it.
+ *
+ * metricGrid bottom-aligns its cells, so a caption placed IN FLOW under a
+ * field lifts that whole cell — label, input and all — by the caption's
+ * height, and the cell stops lining up with the rest of the row. The fix is
+ * the one FormYesNo already uses: take the caption out of flow and hang it
+ * below. This wrapper supplies both the relative parent and the absolute
+ * note, so no caller has to remember either half.
+ *
+ * Every note under a Considerations field goes through here.
+ */
+function FieldNote({
+  note,
+  tone = "muted",
+  wrap,
+  children,
+}: {
+  /** Null/false renders no caption. */
+  note?: React.ReactNode;
+  tone?: "muted" | "warn";
+  /** Long captions that cannot fit one line. They grow into the row gap, so
+   *  only the rare ones worth the space set this. */
+  wrap?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      {children}
+      {note ? (
+        <div
+          className="bc-noprint"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            whiteSpace: wrap ? "normal" : "nowrap",
+            lineHeight: "14px",
+            marginTop: 2,
+            fontSize: 11,
+            fontWeight: tone === "warn" ? 600 : 500,
+            textTransform: "none",
+            letterSpacing: 0,
+            color: tone === "warn" ? "#8a5a00" : "var(--ink-3, #7b7364)",
+          }}
+        >
+          {note}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
  * which the costing can override without touching the form. Choosing what
  * the form already says clears the override, so the board goes back to
@@ -4166,23 +4220,19 @@ export default function BlisterCostingBoard({
               here reveals the field rather than stranding it. */}
           {packoutOn || (st.blistersPerUnit ?? 1) !== 1 ? (
             <ParamBlock label="Blisters / finished unit" nowrap>
-              <NumField
-                value={st.blistersPerUnit}
-                onChange={(v) => set("blistersPerUnit", v)}
-                placeholder="1"
-              />
-              {!packoutOn ? (
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#8a5a00",
-                    marginTop: 3,
-                  }}
-                >
-                  No secondary packaging on this job — should this be 1?
-                </div>
-              ) : null}
+              <FieldNote
+                tone="warn"
+                wrap
+                note={
+                  !packoutOn ? "No secondary packaging — should this be 1?" : null
+                }
+              >
+                <NumField
+                  value={st.blistersPerUnit}
+                  onChange={(v) => set("blistersPerUnit", v)}
+                  placeholder="1"
+                />
+              </FieldNote>
             </ParamBlock>
           ) : null}
           {/* Web yields: Fishbowl prices film and foil per UOM (a roll, a kg,

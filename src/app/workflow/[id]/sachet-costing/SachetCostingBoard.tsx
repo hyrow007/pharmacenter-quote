@@ -1279,6 +1279,60 @@ const yesNoSelect: React.CSSProperties = {
 };
 
 /**
+ * A field in Considerations with a caption hanging under it.
+ *
+ * metricGrid bottom-aligns its cells, so a caption placed IN FLOW under a
+ * field lifts that whole cell — label, input and all — by the caption's
+ * height, and the cell stops lining up with the rest of the row. The fix is
+ * the one FormYesNo already uses: take the caption out of flow and hang it
+ * below. This wrapper supplies both the relative parent and the absolute
+ * note, so no caller has to remember either half.
+ *
+ * Every note under a Considerations field goes through here.
+ */
+function FieldNote({
+  note,
+  tone = "muted",
+  wrap,
+  children,
+}: {
+  /** Null/false renders no caption and no wrapper cost. */
+  note?: React.ReactNode;
+  tone?: "muted" | "warn";
+  /** Long captions that cannot fit one line. They grow into the row gap, so
+   *  only the rare ones worth the space set this. */
+  wrap?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      {children}
+      {note ? (
+        <div
+          className="bc-noprint"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            whiteSpace: wrap ? "normal" : "nowrap",
+            lineHeight: "14px",
+            marginTop: 2,
+            fontSize: 11,
+            fontWeight: tone === "warn" ? 600 : 500,
+            textTransform: "none",
+            letterSpacing: 0,
+            color: tone === "warn" ? "#8a5a00" : "var(--ink-3, #7b7364)",
+          }}
+        >
+          {note}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
  * which the costing can override without touching the form. Choosing what
  * the form already says clears the override, so the board goes back to
@@ -4163,6 +4217,19 @@ export default function SachetCostingBoard({
             nowrap
             hint="How many sachet machines run this job. They fill in parallel, so the line finishes sooner and the job holds the floor for fewer days. Operators are per machine; the leader count is the total on the floor."
           >
+            <FieldNote
+              note={
+                jobDays !== null ? (
+                  <>
+                    ≈{" "}
+                    {jobDays.toLocaleString("en-US", {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    floor {jobDays === 1 ? "day" : "days"}
+                  </>
+                ) : null
+              }
+            >
             <select
               value={machines}
               onChange={(e) => set("machines", Number(e.target.value))}
@@ -4184,32 +4251,25 @@ export default function SachetCostingBoard({
                 ),
               )}
             </select>
-            {/* Overhead is charged on how long the job holds the floor, so
-                the machine count moves it. Shown HERE, at the decision, so a
-                quote that got cheaper because someone picked four machines
-                says so out loud instead of only moving a total further down
-                the page. */}
-            {jobDays !== null ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  color: "var(--ink-3, #7b7364)",
-                  marginTop: 3,
-                }}
-              >
-                ≈{" "}
-                {jobDays.toLocaleString("en-US", {
-                  maximumFractionDigits: 1,
-                })}{" "}
-                floor {jobDays === 1 ? "day" : "days"}
-              </div>
-            ) : null}
+            </FieldNote>
           </ParamBlock>
           <ParamBlock label="Line speed (sachets / minute)">
             {/* Boxed like the inputs around it, so the derived figure sits on
                 the same baseline instead of floating — but visibly read-only:
                 dashed border, muted paper. */}
+            <FieldNote
+              note={
+                effBpm !== null && machines > 1 ? (
+                  <span style={{ display: "block", textAlign: "right" }}>
+                    {machines} ×{" "}
+                    {effBpm.toLocaleString("en-US", {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    per machine
+                  </span>
+                ) : null
+              }
+            >
             <div
               style={{
                 ...numInput,
@@ -4238,21 +4298,7 @@ export default function SachetCostingBoard({
                   })
                 : "—"}
             </div>
-            {effBpm !== null && machines > 1 ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  color: "var(--ink-3, #7b7364)",
-                  marginTop: 3,
-                  textAlign: "right",
-                }}
-              >
-                {machines} ×{" "}
-                {effBpm.toLocaleString("en-US", { maximumFractionDigits: 1 })}{" "}
-                per machine
-              </div>
-            ) : null}
+            </FieldNote>
           </ParamBlock>
           {/* How many doses go in ONE sachet — the packaging form's
               "Count (doses per sachet)". Together with the field beside it
@@ -4285,23 +4331,19 @@ export default function SachetCostingBoard({
               here reveals the field rather than stranding it. */}
           {packoutOn || (st.sachetsPerUnit ?? 1) !== 1 ? (
             <ParamBlock label="Sachets / finished unit" nowrap>
-              <NumField
-                value={st.sachetsPerUnit}
-                onChange={(v) => set("sachetsPerUnit", v)}
-                placeholder="1"
-              />
-              {!packoutOn ? (
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#8a5a00",
-                    marginTop: 3,
-                  }}
-                >
-                  No secondary packaging on this job — should this be 1?
-                </div>
-              ) : null}
+              <FieldNote
+                tone="warn"
+                wrap
+                note={
+                  !packoutOn ? "No secondary packaging — should this be 1?" : null
+                }
+              >
+                <NumField
+                  value={st.sachetsPerUnit}
+                  onChange={(v) => set("sachetsPerUnit", v)}
+                  placeholder="1"
+                />
+              </FieldNote>
             </ParamBlock>
           ) : null}
           {/* Per PERSON, unlike the line speed. The hand stations scale with
