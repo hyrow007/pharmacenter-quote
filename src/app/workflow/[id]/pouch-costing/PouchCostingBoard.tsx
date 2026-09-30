@@ -4277,16 +4277,41 @@ export default function PouchCostingBoard({
               placeholder="required"
             />
           </ParamBlock>
-          {/* Several pouches can go into one carton — the FINISHED UNIT
-              everything on this board is priced per. Seeded from the
-              packaging form's bags-per-pack answer. */}
-          <ParamBlock label="Pouches / finished unit" nowrap>
-            <NumField
-              value={st.pouchesPerUnit}
-              onChange={(v) => set("pouchesPerUnit", v)}
-              placeholder="1"
-            />
-          </ParamBlock>
+          {/* Only asked when there IS secondary packaging. Without it a bare
+              pouch IS the finished unit, so the answer can only be 1 and a
+              field that can only hold one value is noise.
+
+              The guard also tests the stored value, and that is the load-
+              bearing half: hiding a count that is NOT 1 would leave a number
+              nobody can see driving the price. A costing whose packout was
+              overridden off here, or whose form answer changed after it was
+              saved, keeps the field on screen with a note saying so. Hiding
+              is therefore incapable of moving a total — it only ever happens
+              when the value is already the 1 the model would use anyway.
+
+              packoutOn, not the raw form answer, so overriding packout ON
+              here reveals the field rather than stranding it. */}
+          {packoutOn || (st.pouchesPerUnit ?? 1) !== 1 ? (
+            <ParamBlock label="Pouches / finished unit" nowrap>
+              <NumField
+                value={st.pouchesPerUnit}
+                onChange={(v) => set("pouchesPerUnit", v)}
+                placeholder="1"
+              />
+              {!packoutOn ? (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#8a5a00",
+                    marginTop: 3,
+                  }}
+                >
+                  No secondary packaging on this job — should this be 1?
+                </div>
+              ) : null}
+            </ParamBlock>
+          ) : null}
           {/* Per PERSON, unlike the line speed. The hand stations scale with
               headcount: two people pack twice as fast, whereas the line runs
               at its own pace whoever is watching it. Blank = the job skips
@@ -4740,7 +4765,13 @@ export default function PouchCostingBoard({
                             maximumFractionDigits: 2,
                           })}{" "}
                           doses per unit
-                          {st.dosesPerPouch && st.dosesPerPouch > 0 ? (
+                          {/* The x-times breakdown only earns its place
+                              when there is a multiplier to explain. With one
+                              pouch per unit the doses-per-unit figure IS the
+                              doses-per-pouch figure, and "x 1" is noise. */}
+                          {st.dosesPerPouch &&
+                          st.dosesPerPouch > 0 &&
+                          (st.pouchesPerUnit ?? 1) > 1 ? (
                             <span style={{ opacity: 0.8 }}>
                               {" \u00b7 "}
                               {st.dosesPerPouch.toLocaleString("en-US", {

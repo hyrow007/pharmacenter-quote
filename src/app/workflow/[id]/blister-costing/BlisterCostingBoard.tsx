@@ -4150,16 +4150,41 @@ export default function BlisterCostingBoard({
               placeholder="required"
             />
           </ParamBlock>
-          {/* Several blisters usually go into one carton — the FINISHED UNIT
-              everything on this board is priced per. Seeded from the
-              packaging form's blisters-per-pack answer. */}
-          <ParamBlock label="Blisters / finished unit" nowrap>
-            <NumField
-              value={st.blistersPerUnit}
-              onChange={(v) => set("blistersPerUnit", v)}
-              placeholder="1"
-            />
-          </ParamBlock>
+          {/* Only asked when there IS secondary packaging. Without it a bare
+              blister card IS the finished unit, so the answer can only be 1 and a
+              field that can only hold one value is noise.
+
+              The guard also tests the stored value, and that is the load-
+              bearing half: hiding a count that is NOT 1 would leave a number
+              nobody can see driving the price. A costing whose packout was
+              overridden off here, or whose form answer changed after it was
+              saved, keeps the field on screen with a note saying so. Hiding
+              is therefore incapable of moving a total — it only ever happens
+              when the value is already the 1 the model would use anyway.
+
+              packoutOn, not the raw form answer, so overriding packout ON
+              here reveals the field rather than stranding it. */}
+          {packoutOn || (st.blistersPerUnit ?? 1) !== 1 ? (
+            <ParamBlock label="Blisters / finished unit" nowrap>
+              <NumField
+                value={st.blistersPerUnit}
+                onChange={(v) => set("blistersPerUnit", v)}
+                placeholder="1"
+              />
+              {!packoutOn ? (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#8a5a00",
+                    marginTop: 3,
+                  }}
+                >
+                  No secondary packaging on this job — should this be 1?
+                </div>
+              ) : null}
+            </ParamBlock>
+          ) : null}
           {/* Web yields: Fishbowl prices film and foil per UOM (a roll, a kg,
               a foot — whatever the part is stocked in), and these convert
               that price to per-blister. Required before the film and foil
@@ -4639,7 +4664,13 @@ export default function BlisterCostingBoard({
                             maximumFractionDigits: 2,
                           })}{" "}
                           doses per unit
-                          {st.dosesPerBlister && st.dosesPerBlister > 0 ? (
+                          {/* The x-times breakdown only earns its place
+                              when there is a multiplier to explain. With one
+                              blister per unit the doses-per-unit figure IS the
+                              doses-per-blister figure, and "x 1" is noise. */}
+                          {st.dosesPerBlister &&
+                          st.dosesPerBlister > 0 &&
+                          (st.blistersPerUnit ?? 1) > 1 ? (
                             <span style={{ opacity: 0.8 }}>
                               {" \u00b7 "}
                               {st.dosesPerBlister.toLocaleString("en-US", {
