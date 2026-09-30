@@ -1248,7 +1248,7 @@ function ReadOnly({ children }: { children: React.ReactNode }) {
 
 const numInput: React.CSSProperties = {
   width: "100%",
-  padding: "7px 9px",
+  padding: "0 9px",
   border: "1px solid var(--teal-700, #1d6c7b)",
   borderRadius: 6,
   background: "var(--paper, #fffdf8)",
@@ -1257,6 +1257,14 @@ const numInput: React.CSSProperties = {
   color: "var(--teal-900, #0f4a56)",
   fontVariantNumeric: "tabular-nums",
   textAlign: "right",
+  // 33px border-box, stated rather than left to the browser. The selects and
+  // the read-only derived boxes beside these inputs already pin themselves to
+  // 33 (see yesNoSelect); an input left to size itself from padding and
+  // line-height lands a pixel or two taller, which reads as a wobble along a
+  // row of five boxes. One number, one height, everywhere.
+  height: 33,
+  boxSizing: "border-box",
+  lineHeight: "31px",
 };
 
 /**
