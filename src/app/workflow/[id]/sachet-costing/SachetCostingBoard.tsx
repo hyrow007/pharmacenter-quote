@@ -3442,7 +3442,41 @@ export default function SachetCostingBoard({
    * overcharge it by half. Null when there is no labour estimate at all —
    * the same rule as everywhere else.
    */
+  // The same driver computeSachetCosting bills on — read through the same
+  // fallback so the caption and the price can never disagree about it.
   const jobDays = useMemo(
+    () => (lb === null ? null : (lb.overheadHours ?? lb.occupancyHours) / 8),
+    [lb],
+  );
+  /**
+   * The hand station holding the floor after the line is done, if any.
+   * Named rather than just measured, because "packout" tells the planner
+   * what to put a second person on and "21.3 hours" does not.
+   */
+  const handBottleneck = useMemo(() => {
+    if (lb === null) return null;
+    const line =
+      lb.phases.find((p) => p.label === "Sachet Line")?.totalHours ?? 0;
+    let worst: { label: string; totalHours: number } | null = null;
+    for (const p of lb.phases) {
+      if (!["Printing", "Packout", "Cartoning", "Bundling"].includes(p.label))
+        continue;
+      if (
+        p.totalHours > line &&
+        (worst === null || p.totalHours > worst.totalHours)
+      )
+        worst = { label: p.label, totalHours: p.totalHours };
+    }
+    return worst;
+  }, [lb]);
+  /**
+   * How long the floor is actually busy, which is NO LONGER what overhead is
+   * charged on. Kept because the gap is worth seeing: when a hand station
+   * outlasts the line, the job occupies the building for longer than the
+   * days it pays for, and the person scheduling it needs the bigger number
+   * even though the person pricing it needs the smaller one.
+   */
+  const floorDays = useMemo(
     () => (lb === null ? null : lb.occupancyHours / 8),
     [lb],
   );
@@ -4223,7 +4257,7 @@ export default function SachetCostingBoard({
           <ParamBlock
             label="Machines"
             nowrap
-            hint="How many sachet machines run this job. They fill in parallel, so the line finishes sooner and the job holds the floor for fewer days. Operators are per machine; the leader count is the total on the floor."
+            hint="How many sachet machines run this job. They fill in parallel, so the line finishes sooner and the job absorbs fewer machine days of overhead. Operators are per machine; the leader count is the total on the floor."
           >
             <FieldNote
               note={
@@ -4233,7 +4267,7 @@ export default function SachetCostingBoard({
                     {jobDays.toLocaleString("en-US", {
                       maximumFractionDigits: 1,
                     })}{" "}
-                    floor {jobDays === 1 ? "day" : "days"}
+                    machine {jobDays === 1 ? "day" : "days"}
                   </>
                 ) : null
               }
@@ -5516,6 +5550,25 @@ export default function SachetCostingBoard({
                 filling in parallel; printing, packout, cartoning and
                 bundling follow their per-person speeds and crews — change
                 those inputs in Considerations, not these cells.
+                {handBottleneck && floorDays !== null && jobDays !== null ? (
+                  <>
+                    {" "}
+                    <strong>{handBottleneck.label} outlasts the line</strong>,
+                    so the job sits on the floor about{" "}
+                    {floorDays.toLocaleString("en-US", {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    days while overhead is charged on{" "}
+                    {jobDays.toLocaleString("en-US", {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    machine days — the bench is shared across jobs, so it
+                    takes no run-day from anyone, and its hours are already
+                    paid for above as direct labour. Another person on{" "}
+                    {handBottleneck.label.toLowerCase()} shortens the
+                    calendar, not the cost.
+                  </>
+                ) : null}
               </div>
             </div>
 

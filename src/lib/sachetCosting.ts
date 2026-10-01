@@ -361,6 +361,17 @@ export function sachetLaborBreakdown(
         cartoningHours,
         bundlingHours,
       ),
+    // Overhead rides the MACHINE, not the floor. The pools are divided by
+    // line run-days, and a hand station is not a line: the packout bench is
+    // shared across several jobs at once, so hours spent there take no
+    // run-day from anybody. They are charged in full as direct labour
+    // already — counting them here as well charges them twice.
+    //
+    // lineHours is ELAPSED, so it already carries the machine count: three
+    // machines finish in a third of the time and the job absorbs a third of
+    // the overhead. Setup and cleaning stay in, because the machines really
+    // are tied up for those.
+    overheadHours: setupHours + cleanHours + lineHours,
     roles,
     grandTotal,
     perUnit: q !== null && q > 0 ? grandTotal / q : null,
@@ -390,7 +401,9 @@ export function computeSachetCosting(
   const lab = lb?.perUnit ?? null;
 
   const jobDays =
-    lb === null ? null : lb.occupancyHours / DEFAULT_HOURS_PER_DAY;
+    lb === null
+      ? null
+      : (lb.overheadHours ?? lb.occupancyHours) / DEFAULT_HOURS_PER_DAY;
 
   const ovh = overheadPerUnit(q, input.overhead, jobDays);
 

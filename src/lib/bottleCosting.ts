@@ -869,6 +869,21 @@ export type LaborBreakdown = {
    * lease charges by elapsed time.
    */
   occupancyHours: number;
+  /**
+   * The hours OVERHEAD is charged on, when they differ from occupancy.
+   *
+   * occupancyHours answers "how long is the floor busy", which is the right
+   * question for scheduling and the wrong one for absorption: the overhead
+   * pools are divided by run-days of the LINES ("67.2 run-days, all lines"),
+   * and the hand stations are not lines. A packout bench is shared across
+   * several jobs at once, so the hours a job spends there do not take a
+   * run-day away from anyone — and that labour is already charged in full
+   * as direct labour, so counting it again here charges it twice.
+   *
+   * Undefined = this model has no separate driver and occupancyHours is
+   * used, which is every board except sachets today.
+   */
+  overheadHours?: number;
   roles: LaborRoleBreakdown[];
   grandTotal: number;
   /** grandTotal / quantity. Null when the quantity is unknown. */
