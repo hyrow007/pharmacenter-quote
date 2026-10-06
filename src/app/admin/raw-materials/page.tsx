@@ -4,6 +4,7 @@ import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import AppHeader from "../../_components/AppHeader";
 import RawMaterialsBoard, { type RawMaterialRow } from "./RawMaterialsBoard";
 import { describeFreshness } from "@/lib/freshness";
+import SyncNowButton from "../../_components/SyncNowButton";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 
@@ -105,6 +106,13 @@ export default async function AdminRawMaterialsPage() {
             >
               {t("syncedAgo", { rel: freshness.relative })}
             </p>
+            {/* Admin-only: queues a run on the office server. Deliberately
+                next to the freshness line -- the number it refreshes. */}
+            {admin ? (
+              <p style={{ marginTop: 8, marginBottom: 0 }}>
+                <SyncNowButton lang={lang} />
+              </p>
+            ) : null}
           </div>
 
           {freshness.stale ? (
