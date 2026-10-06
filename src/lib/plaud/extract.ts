@@ -141,6 +141,96 @@ export function findSoMentions(
   return out;
 }
 
+// ---- bare SO numbers ----------------------------------------------------
+
+// The regex above requires a literal "SO" or "Sales Order" in front of the
+// number. Plaud's own summaries rarely oblige: the 2026-09-29 meeting covered
+// about twenty orders and wrote exactly two of them as "SO 14328" -- the rest
+// read "**14901:**", "orden 14733", "14656-3 (CUNSA granel Omega 3)". The
+// 2026-10-06 summary, written in Spanish, never says "SO" at all, so nothing
+// was extracted from it. Both meetings landed on the hub as other business
+// instead of attached to the orders they were about.
+//
+// Matching bare numbers is normally how an extractor starts hallucinating --
+// years, dollar amounts, quantities and tracking numbers are all 4-6 digits.
+// So nothing here decides on its own: a bare candidate survives ONLY if that
+// number is a real row in fishbowl_sales_orders. The database does the
+// filtering the regex cannot, which means a loose pattern is safe.
+//
+// Lookarounds drop the obvious non-starters early (a digit group inside
+// "250,000" or "1.038.000", anything glued to a word or a "$") purely to keep
+// the candidate list short.
+// The trailing guard rejects a group that CONTINUES into a bigger number
+// ("1.038.000", "250,000") but not one that merely ends a clause
+// ("orden 14733, con carga") -- the first version dropped exactly the
+// mentions this change exists to catch.
+const BARE_SO_RE = /(?<![\w$.,-])(M-?)?(\d{4,6})(-\d{1,2})?(?!\d|[.,]\d)/gi;
+
+// A summary full of dates and part numbers can throw off a lot of candidates.
+// They cost one IN() query between them, but cap it anyway.
+const MAX_BARE_CANDIDATES = 120;
+
+/** Candidate SO numbers written without an "SO" prefix. Unvalidated. */
+export function findBareSoCandidates(
+  text: string,
+): Array<{ so_number: string; index: number; matched: string }> {
+  const out: Array<{ so_number: string; index: number; matched: string }> = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(BARE_SO_RE)) {
+    if (out.length >= MAX_BARE_CANDIDATES) break;
+    const mPrefix = m[1] ? m[1].replace("-", "").toUpperCase() : "";
+    const canonical = `${mPrefix ? `${mPrefix}-` : ""}${m[2]}${m[3] ?? ""}`;
+    const key = `${canonical}@${m.index}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ so_number: canonical, index: m.index ?? 0, matched: m[0] });
+  }
+  return out;
+}
+
+/**
+ * Of these candidate numbers, which are actually sales orders?
+ *
+ * One query for the whole set, including the "M-"/"M" and dash-suffix
+ * spellings resolveSoAgainstFishbowl would try, so a candidate is kept when
+ * ANY of its forms exists. Returns the canonical candidates that survived.
+ */
+export async function keepRealSoNumbers(
+  supabase: AnySupabase,
+  candidates: string[],
+): Promise<Set<string>> {
+  const kept = new Set<string>();
+  if (candidates.length === 0) return kept;
+
+  const variantsOf = (raw: string): string[] => {
+    const v = new Set<string>([raw]);
+    if (raw.startsWith("M-")) v.add(raw.replace("M-", "M"));
+    if (raw.startsWith("M") && !raw.startsWith("M-"))
+      v.add(raw.replace(/^M/, "M-"));
+    return Array.from(v);
+  };
+
+  const byVariant = new Map<string, string[]>();
+  for (const c of candidates) {
+    for (const v of variantsOf(c)) {
+      const arr = byVariant.get(v) ?? [];
+      arr.push(c);
+      byVariant.set(v, arr);
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("fishbowl_sales_orders")
+    .select("so_number")
+    .in("so_number", Array.from(byVariant.keys()));
+  if (error) return kept;
+
+  for (const row of (data ?? []) as Array<{ so_number: string }>) {
+    for (const c of byVariant.get(row.so_number) ?? []) kept.add(c);
+  }
+  return kept;
+}
+
 /**
  * Given an SO number extracted from Plaud, resolve it against Fishbowl.
  * Tries the canonical form first, then a couple of common alternatives
@@ -377,7 +467,18 @@ export async function extractMentionsFromSummary(
   supabase: AnySupabase,
   summary_md: string,
 ): Promise<SoMention[]> {
-  const raw = findSoMentions(summary_md);
+  // Explicit "SO 14328" references are trusted as written, whether or not
+  // Fishbowl knows the number -- an unknown SO is a signal worth keeping.
+  // Bare numbers have to earn their place by existing in Fishbowl.
+  const explicit = findSoMentions(summary_md);
+  const bare = findBareSoCandidates(summary_md);
+  const real = await keepRealSoNumbers(
+    supabase,
+    Array.from(new Set(bare.map((b) => b.so_number))),
+  );
+  const raw = [...explicit, ...bare.filter((b) => real.has(b.so_number))].sort(
+    (a, b) => a.index - b.index,
+  );
   // Collapse repeats — keep the first occurrence's index for paragraph
   // carving, discard duplicates.
   const seen = new Set<string>();
