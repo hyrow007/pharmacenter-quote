@@ -369,7 +369,7 @@ h1 {
   opacity: 0.75;
 }
 
-/* Running: the ring turns, so a two-minute wait looks like progress rather
+/* Running: the mark pulses, so a two-minute wait looks like progress rather
    than a dead button. */
 .app-nav__sync.is-running {
   color: var(--sage-700, #5f8e3a);
@@ -377,17 +377,33 @@ h1 {
   opacity: 1;
 }
 
-.app-nav__sync-spin {
-  animation: app-nav-sync-spin 1.1s linear infinite;
+/* The Fishbowl mark: sits back a touch at rest so the band stays calm, comes
+   to full strength on hover and while a sync is in flight. */
+.app-nav__sync-mark {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.85;
   transform-origin: 50% 50%;
 }
 
-@keyframes app-nav-sync-spin {
-  to { transform: rotate(360deg); }
+.app-nav__sync:hover:not(:disabled) .app-nav__sync-mark,
+.app-nav__sync.is-running .app-nav__sync-mark {
+  opacity: 1;
+}
+
+.app-nav__sync.is-running .app-nav__sync-mark {
+  animation: app-nav-sync-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes app-nav-sync-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.78); opacity: 0.5; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-nav__sync-spin { animation: none; }
+  .app-nav__sync.is-running .app-nav__sync-mark { animation: none; }
 }
 
 /* On a phone the band is already tight: keep the icon, drop the word. */
