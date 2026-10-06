@@ -122,7 +122,10 @@ export type SynthesisInput = {
   // Verified facts added through the SO assistant (so_corrections). They
   // outrank every other source -- see buildSynthesisPrompt.
   corrections?: unknown;
-  existing_synthesis?: { generated_at?: string | null } | null;
+  existing_synthesis?: {
+    generated_at?: string | null;
+    based_on?: Record<string, unknown> | null;
+  } | null;
 };
 
 export function buildSynthesisPrompt(sos: SynthesisInput[]): string {
@@ -318,7 +321,10 @@ export function newestInputTime(so: SynthesisInput): number | null {
   const md = so.monday as Record<string, unknown> | null | undefined;
   if (md) {
     push(md.item_updated_at);
-    push(md.last_synced_at);
+    // NOT last_synced_at. That stamp moves on every Monday sync whether or not
+    // anything changed, so including it made every Monday-touched SO look
+    // permanently stale -- 60-odd orders competing for a 24-slot queue, which
+    // is how SO 14733 went 16 days without a rewrite.
     if (Array.isArray(md.updates)) {
       for (const u of md.updates) {
         if (u && typeof u === "object") push((u as Record<string, unknown>).created_at);
@@ -342,9 +348,52 @@ export function newestInputTime(so: SynthesisInput): number | null {
 }
 
 /**
+ * A stable signature of everything this synthesis is derived from.
+ *
+ * Timestamps alone cannot see a BACKFILL: when the Monday sync started
+ * flattening in `replies`, a dozen comments written in early September landed
+ * in the database weeks later carrying their original dates. Every one of them
+ * was older than the synthesis that had never seen them, so `generated >=
+ * newest` called the key points fresh and they stayed wrong. SO 14733 still
+ * read "Sept 6 is arrival, not departure" three weeks after Rosie corrected it
+ * in a reply.
+ *
+ * Counting the inputs catches that: content that arrives late still changes
+ * the count, whatever date it carries.
+ */
+export function inputFingerprint(so: SynthesisInput): string {
+  const parts: string[] = [];
+
+  const md = so.monday as Record<string, unknown> | null | undefined;
+  const updates = md && Array.isArray(md.updates) ? md.updates : [];
+  const ids = updates
+    .map((u) =>
+      u && typeof u === "object"
+        ? String((u as Record<string, unknown>).id ?? "")
+        : "",
+    )
+    .filter(Boolean)
+    .sort();
+  parts.push(`m${updates.length}`);
+  if (ids.length) parts.push(`mi${ids[ids.length - 1]}`);
+
+  const meetings = Array.isArray(so.meetings) ? so.meetings : [];
+  parts.push(`p${meetings.length}`);
+
+  const corrections = Array.isArray(so.corrections) ? so.corrections : [];
+  parts.push(`c${corrections.length}`);
+
+  const fb = so.fishbowl as Record<string, unknown> | null | undefined;
+  const note = fb && typeof fb.note === "string" ? fb.note : "";
+  parts.push(`f${note.length}`);
+
+  return parts.join(".");
+}
+
+/**
  * True when this SO's synthesis already reflects everything feeding it.
  *
- * The inputs endpoint returns every SO with any activity, synthesized or not —
+ * The inputs endpoint returns every SO with any activity, synthesized or not --
  * its own docs say the caller is responsible for skipping fresh ones. Without
  * this, a loop re-synthesizes the same orders forever: the backlog never
  * shrinks, and each pass costs a full set of model calls to rewrite bullets
@@ -358,6 +407,12 @@ export function isFresh(so: SynthesisInput): boolean {
   const generated = Date.parse(generatedAt);
   if (Number.isNaN(generated)) return false;
 
+  // A synthesis written before fingerprints existed carries none. Rewrite it
+  // once -- that run stamps a fingerprint and it settles from then on.
+  const stamped = so.existing_synthesis?.based_on?.fingerprint;
+  if (typeof stamped !== "string") return false;
+  if (stamped !== inputFingerprint(so)) return false;
+
   const newest = newestInputTime(so);
   // Nothing dated to compare against, but a synthesis exists: treat it as
   // fresh. Redoing it every run is the failure mode this guards.
@@ -366,6 +421,21 @@ export function isFresh(so: SynthesisInput): boolean {
   return generated >= newest;
 }
 
+/**
+ * Stale orders, oldest synthesis first.
+ *
+ * The daily run takes the first MAX_SOS of this list. Returned in the
+ * database's order, the same orders sat at the front of the queue every day
+ * and the tail never came up at all. Oldest-first makes the queue a rotation:
+ * whatever waited longest goes next, and a never-synthesized order (no
+ * generated_at) goes ahead of everything.
+ */
 export function selectStale(sos: SynthesisInput[]): SynthesisInput[] {
-  return sos.filter((so) => !isFresh(so));
+  const age = (so: SynthesisInput): number => {
+    const g = so.existing_synthesis?.generated_at;
+    if (typeof g !== "string") return -Infinity;
+    const t = Date.parse(g);
+    return Number.isNaN(t) ? -Infinity : t;
+  };
+  return sos.filter((so) => !isFresh(so)).sort((a, b) => age(a) - age(b));
 }

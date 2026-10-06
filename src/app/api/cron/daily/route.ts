@@ -11,6 +11,7 @@ import {
   trimSynthesisInput,
   chunk,
   selectStale,
+  inputFingerprint,
   type PendingSession,
   type PendingNote,
   type SynthesisInput,
@@ -216,6 +217,12 @@ async function synthesis(
   // filter existed.
   const stale = selectStale(all);
 
+  // Signature of the inputs each SO was summarized from, captured BEFORE the
+  // trim so a reply that gets trimmed out of the prompt still counts. Written
+  // back with the bullets; isFresh compares against it next run.
+  const fingerprints = new Map<string, string>();
+  for (const so of all) fingerprints.set(String(so.so_number), inputFingerprint(so));
+
   if (stale.length === 0) {
     return {
       ok: true,
@@ -255,7 +262,19 @@ async function synthesis(
     const items = keepKnownSoNumbers(
       out.items,
       group.map((g) => String(g.so_number)),
-    );
+    ).map((item) => {
+      const so = String((item as { so_number: string }).so_number);
+      const prev = (item as { based_on?: Record<string, unknown> | null })
+        .based_on;
+      return {
+        ...(item as Record<string, unknown>),
+        based_on: {
+          ...(prev && typeof prev === "object" ? prev : {}),
+          fingerprint: fingerprints.get(so) ?? null,
+          synthesized_at: new Date().toISOString(),
+        },
+      };
+    });
     if (items.length === 0) {
       errors.push("no_usable_items");
       continue;
