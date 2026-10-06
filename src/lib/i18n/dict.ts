@@ -347,7 +347,8 @@ const en = {
   rmSaveError: "Couldn't save: {msg}",
   rmLoadError: "Couldn't load the roadmap: {msg}",
   // Sync now (admin, beside a freshness line).
-  syncNow: "Sync now",
+  syncNow: "Sync",
+  syncNowHint: "Pull the latest from Fishbowl - about 2 minutes.",
   syncNowRunning: "Syncing...",
   syncNowQueued: "{who} asked the office server to sync - about 2 minutes.",
   syncNowDone: "Synced.",
@@ -707,7 +708,8 @@ const es: typeof en = {
   rmSaveError: "No se pudo guardar: {msg}",
   rmLoadError: "No se pudo cargar la hoja de ruta: {msg}",
   // Sincronizar ahora (admin).
-  syncNow: "Sincronizar ahora",
+  syncNow: "Sincronizar",
+  syncNowHint: "Traer lo ultimo de Fishbowl - unos 2 minutos.",
   syncNowRunning: "Sincronizando...",
   syncNowQueued: "{who} pidio una sincronizacion al servidor - unos 2 minutos.",
   syncNowDone: "Sincronizado.",

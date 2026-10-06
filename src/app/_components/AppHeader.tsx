@@ -7,6 +7,7 @@ import { SignOutButton } from "../auth-buttons";
 import AdminToggle from "./AdminToggle";
 import NavLinks from "./NavLinks";
 import LangToggle from "./LangToggle";
+import SyncNowButton from "./SyncNowButton";
 import { getLangFromCookie } from "@/lib/i18n/server";
 
 // Top navigation bar — sits flush on every signed-in page. Mirrors the look
@@ -154,6 +155,11 @@ export default async function AppHeader({ user, appContext }: Props) {
 
         <div className="app-nav__user">
           {/* v50: EN/ES pill — same placement as the packing list. */}
+          {/* Fishbowl sync: every app, every signed-in user. The data behind
+              every one of these screens comes from one nightly job, so the
+              control that re-runs it belongs in the chrome they all share,
+              not on one admin page. */}
+          <SyncNowButton lang={lang} />
           <LangToggle lang={lang} />
           {admin ? <AdminToggle /> : null}
           <span className="app-nav__email" title={user.email}>

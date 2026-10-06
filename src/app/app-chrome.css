@@ -332,3 +332,66 @@ h1 {
   line-height: 1.5;
   margin-top: 0;
 }
+
+/* Fishbowl "Sync" in the header band. Quiet until it has something to say:
+   the apps are read-mostly and this is a maintenance control, not the point
+   of any page. It sits left of the language pill in the user row. */
+.app-nav__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--teal-700, #1d6c7b);
+  background: transparent;
+  border: 1px solid var(--stone, #e3dcc9);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.app-nav__sync:hover:not(:disabled) {
+  background: var(--cream, #f6efe3);
+  border-color: var(--teal-500, #3a8d9c);
+}
+
+.app-nav__sync:focus-visible {
+  outline: 2px solid var(--teal-700, #1d6c7b);
+  outline-offset: 2px;
+}
+
+.app-nav__sync:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+/* Running: the ring turns, so a two-minute wait looks like progress rather
+   than a dead button. */
+.app-nav__sync.is-running {
+  color: var(--sage-700, #5f8e3a);
+  border-color: var(--sage-300, #bcd596);
+  opacity: 1;
+}
+
+.app-nav__sync-spin {
+  animation: app-nav-sync-spin 1.1s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes app-nav-sync-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav__sync-spin { animation: none; }
+}
+
+/* On a phone the band is already tight: keep the icon, drop the word. */
+@media (max-width: 640px) {
+  .app-nav__sync span { display: none; }
+  .app-nav__sync { padding: 4px 7px; }
+}

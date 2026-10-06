@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { isAdmin } from "@/lib/workflows";
 
 // "Sync now" — the app half.
 //
@@ -11,6 +10,11 @@ import { isAdmin } from "@/lib/workflows";
 // Vercel cannot reach the office LAN, so this does not start anything. It
 // writes a row the server picks up within ~2 minutes (see /api/sync/queue).
 // The honest latency is minutes, not instant, and the UI says so.
+//
+// Open to any signed-in @pharmacenterusa.com account, not only admins: the
+// people who notice stale data are the ones using it. Two guards keep that
+// from turning the office server into a toy -- one run at a time, and a
+// cooldown after a completed one.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,20 +32,24 @@ function serviceClient() {
   return createServiceClient(url, key, { auth: { persistSession: false } });
 }
 
-async function adminEmail(): Promise<string | null> {
+// A completed run this recent makes another one pointless: the data is
+// already from the last couple of minutes. Short enough that someone who just
+// typed a part into Fishbowl is not locked out for long.
+const COOLDOWN_MIN = 3;
+
+async function staffEmail(): Promise<string | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user?.email || !user.email.endsWith("@pharmacenterusa.com")) return null;
-  if (!(await isAdmin(supabase, user.email))) return null;
   return user.email;
 }
 
 export async function POST() {
-  const email = await adminEmail();
+  const email = await staffEmail();
   if (!email) {
-    return NextResponse.json({ ok: false, error: "not_admin" }, { status: 403 });
+    return NextResponse.json({ ok: false, error: "not_signed_in" }, { status: 403 });
   }
   const svc = serviceClient();
   if (!svc) {
@@ -58,6 +66,18 @@ export async function POST() {
     .limit(1);
   if (open && open.length > 0) {
     return NextResponse.json({ ok: true, deduped: true, request: open[0] });
+  }
+
+  // Cooldown: a run that finished moments ago already carries today's data.
+  const { data: recent } = await svc
+    .from("sync_requests")
+    .select("id, requested_by, requested_at, status, finished_at")
+    .eq("status", "done")
+    .order("finished_at", { ascending: false })
+    .limit(1);
+  const lastFinished = recent?.[0]?.finished_at;
+  if (lastFinished && Date.now() - Date.parse(lastFinished) < COOLDOWN_MIN * 60_000) {
+    return NextResponse.json({ ok: true, deduped: true, cooldown: true, request: recent[0] });
   }
 
   const { data, error } = await svc

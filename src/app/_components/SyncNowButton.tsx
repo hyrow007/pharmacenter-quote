@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { makeT, type Lang } from "@/lib/i18n/dict";
 
-// "Sync now" — admin-only, rendered beside a freshness line.
+// "Sync now" — in the header band, on every app, for anyone signed in.
 //
 // What it does NOT do is start a sync. Vercel cannot reach the office LAN, so
 // this queues a request; a task on the office server picks it up within about
@@ -14,7 +14,16 @@ import { makeT, type Lang } from "@/lib/i18n/dict";
 //
 // One button, not one per app: a sync is global. It re-reads Fishbowl and
 // pushes customers, products, raw materials, packaging, sales orders,
-// purchase orders and product costs in one pass, whichever page asked.
+// purchase orders and product costs in one pass, whichever app asked.
+//
+// Open to every signed-in PharmaCenter account, not just admins: the people
+// who notice stale data are the ones using it, and making them find an admin
+// is how you get a workaround instead of a fix. Abuse is bounded by the API
+// -- one request at a time, and a cooldown after a completed run.
+//
+// In the band it is compact: an icon and a word. The detail (who asked, how
+// it went) lives in the title attribute rather than taking horizontal space
+// from a header that already carries a wordmark, nav, language and email.
 
 type RequestRow = {
   id: string;
@@ -106,42 +115,38 @@ export default function SyncNowButton({ lang }: { lang: Lang }) {
   const inFlight =
     request && (request.status === "pending" || request.status === "running");
 
+  // Everything the wide version said in prose, folded into one hover string.
+  let title = t("syncNowHint");
+  if (error) title = error;
+  else if (inFlight) title = t("syncNowQueued", { who: localPart(request.requested_by) });
+  else if (request?.status === "done") title = t("syncNowDone");
+  else if (request?.status === "failed") title = `${t("syncNowFailed")} ${request.detail ?? ""}`.trim();
+  else if (request?.status === "abandoned") title = t("syncNowAbandoned");
+
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <button
-        type="button"
-        className="btn-chrome"
-        onClick={onClick}
-        disabled={busy || !!inFlight}
-        style={{ fontSize: 12, padding: "4px 10px" }}
+    <button
+      type="button"
+      className={`app-nav__sync${inFlight ? " is-running" : ""}`}
+      onClick={onClick}
+      disabled={busy || !!inFlight}
+      title={title}
+      aria-live="polite"
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        aria-hidden="true"
+        className={inFlight ? "app-nav__sync-spin" : undefined}
       >
-        {inFlight ? t("syncNowRunning") : t("syncNow")}
-      </button>
-      {inFlight ? (
-        <span style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}>
-          {t("syncNowQueued", { who: localPart(request.requested_by) })}
-        </span>
-      ) : null}
-      {!inFlight && request?.status === "done" ? (
-        <span style={{ fontSize: 12, color: "var(--sage-700, #5f8e3a)" }}>
-          {t("syncNowDone")}
-        </span>
-      ) : null}
-      {!inFlight && request?.status === "failed" ? (
-        <span style={{ fontSize: 12, color: "#8b2f2f", fontWeight: 600 }} title={request.detail ?? undefined}>
-          {t("syncNowFailed")}
-        </span>
-      ) : null}
-      {!inFlight && request?.status === "abandoned" ? (
-        <span style={{ fontSize: 12, color: "#8b2f2f", fontWeight: 600 }}>
-          {t("syncNowAbandoned")}
-        </span>
-      ) : null}
-      {error ? (
-        <span role="alert" style={{ fontSize: 12, color: "#8b2f2f" }}>
-          {error}
-        </span>
-      ) : null}
-    </span>
+        <path d="M20 11a8 8 0 1 0-.6 4.1" />
+        <path d="M20 4.5V11h-6.2" />
+      </svg>
+      <span>{inFlight ? t("syncNowRunning") : t("syncNow")}</span>
+    </button>
   );
 }
