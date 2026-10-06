@@ -3,7 +3,8 @@
 You are the engineering chat for PharmaCenter's FORMULA app
 (formula.pharmacenter.app, alias formulas.…). Work autonomously, verify
 everything live on the deployed site. Keep this file current as the app
-evolves — future chats bootstrap from it.
+evolves — future chats bootstrap from it. (Revised 2026-09-21: repo
+is the source of truth, C:\q retired, lib is Master's.)
 
 ## The system
 
@@ -16,35 +17,42 @@ CLAUDE.md at the repo root for the whole map.
 
 ## Your lane (files you own)
 
-`src/app/formulas/**` (catalog, editor page, FormulaEditor.tsx ~15k
-lines, FilesCard), `src/app/api/formulas/**` (versions, issue,
-duplicate, notes, audit, files, panel-chat), `src/lib/formulas.ts`,
-`src/lib/labelPanel.ts`, `sql/gummy_formula_*.sql`, and the
-raw-materials block of `public/dev/fishbowl-sync.mjs`.
+`src/app/formulas/**` (catalog, editor page, FormulaEditor.tsx ~17k
+lines, FilesCard) and `src/app/api/formulas/**` (versions, issue,
+duplicate, notes, audit, files, panel-chat).
 
-A separate QUOTING chat owns everything else in the repo (quote
-workflows, meetings/orders pages, most sync routes, i18n dict). Don't
-edit its lane without relaying through the user; it consumes formulas
-via `/api/formulas/[id]` (costingComputed).
+Read `claude/working-agreement.md` and `claude/ecosystem-registry.md` in
+the Pharmacenter.app project first — they override this file where they
+disagree. Since 2026-09-20 **`src/lib/**` (incl. `formulas.ts`,
+`labelPanel.ts`, `formulaCosting.ts`), i18n dicts, schema and
+`deploy.ps1` are Master's**: say what you need there instead of editing
+it. Formula-only types can live in FormulaEditor.tsx (v85.0 did). The
+Quote / Orders chats edit this SAME repo; the server-side
+`costingComputed` (quote side) reads only the top-level costing fields.
 
-## Working folder & deploy loop
+## Repo & deploy loop (C:\q is RETIRED — don't use it or push-quote.bat)
 
-- Ask for folder access to `C:\q`
-  (→ C:\Users\jairo\Documents\packing-list\quote).
-- Deploy: put `C:\q\push-quote.bat` on the clipboard and open the Run
-  dialog; the user pastes+Enters and says "pushed". Robocopy →
-  C:\code\pharmacenter-quote → git push → Vercel builds ~40-60s
-  (project pharma-center-s-projects/pharmacenter-quote).
-- TWO-WRITER HAZARD: the quoting chat edits the SAME folder and
-  robocopy ships the whole tree. Check file mtimes before pushing;
-  never push while the other chat is mid-edit (half-saved files have
-  broken builds); if a build fails in a file outside your lane, suspect
-  its in-flight work before "fixing" (a surgical one-line compile fix
-  that preserves its intent is fine — comment it).
-- Verify every change on the LIVE site afterward via Chrome: fresh tab,
-  hard-reload (stale bundles are a recurring trap). Never leave test
-  edits saved on real formulas — exercise the UI, then revert/discard;
-  clean up any test rows you write.
+- Folder access: `C:\code\pharmacenter-quote` — the git checkout IS the
+  source of truth. `C:\q` was retired 2026-09-19; anything written there
+  never reaches production, and running its `push-quote.bat` would
+  robocopy stale files OVER the repo.
+- Before editing: the tree must be clean — a dirty tree means another
+  chat is mid-edit. From the Cowork VM use READ-ONLY git only, always
+  `git --no-optional-locks status|diff|log|show`. Plain `git status`
+  there rewrites the index and leaves `.git/index.lock` behind (the VM
+  can't unlink in a connected folder), which silently breaks the next
+  Windows-side commit. If one appears: `mv` it aside, never leave it.
+- Typecheck before handing over: copy `src`, `tsconfig.json`,
+  `next-env.d.ts` to a VM scratch dir, symlink the repo's `node_modules`,
+  run `node node_modules/typescript/bin/tsc --noEmit -p . --incremental false`.
+- Deploy: the user runs, in PowerShell in the repo,
+  `.\deploy.ps1 "formula: <what changed>"` (typecheck gate → commit →
+  rebase → push; `-FullBuild` when route props / package.json /
+  next.config change). Vercel builds ~60s. Next 15 now.
+- A push is not a deployment. Verify every change on the LIVE site via
+  Chrome: fresh tab, hard-reload (stale bundles are a recurring trap).
+  Never leave test edits saved on real formulas — exercise the UI, then
+  revert/discard; clean up any test rows you write.
 
 ## Data & auth
 
@@ -84,6 +92,14 @@ via `/api/formulas/[id]` (costingComputed).
   $80, RM tests default = active count); scenario pills (right-click
   rename, hover ×, qty set on the Considerations card); crew defaults
   leaders 1/1/1, operators 4/5/5; batches/day default 3.
+  SCENARIOS OWN THEIR PARAMETERS (v85.0): swap model — the costing
+  useStates always hold the ACTIVE pill's params; `selectCostScenario`
+  stashes the outgoing pill (Base → `costBaseStash`, a scenario → its
+  `params`) and loads the incoming one. Top-level costing fields are
+  always Base's; each scenario carries `params` (pre-v85 scenarios start
+  as a copy of Base). Decimal pickers, the label panel and scenario
+  names/list stay shared. `normCostParams` is the single shape for both
+  costingPayload and seedCore.
   PERSISTENCE RULE: the costing jsonb uses null = "use default rule";
   `costingPayload` and `seedCore` must keep IDENTICAL literal key order
   or formulas mount dirty. New CostTab props must be destructured
@@ -114,18 +130,37 @@ via `/api/formulas/[id]` (costingComputed).
 - Also: Files card, Notes, Audit timeline, catalog Duplicate; saves
   create revisions but only the Issue button assigns issue numbers.
 
-## Fishbowl costs (you own the RM block)
+## Fishbowl costs
 
-Office server 10.114.50.100 (RDP; saved connection) runs
-`C:\pharmacenter-sync\Run-FishbowlSync.ps1` nightly ~04:00 ET; it
-re-downloads the agent from
-https://quote.pharmacenter.app/dev/fishbowl-sync.mjs — that file in
-`public/dev/` IS the agent. Its raw-materials block sends
-`inventory_cost_per_kg` (partcost.avgCost, UOM→kg converted) +
-`last_order_cost_per_kg` (newest poitem). The receiving route
-`/api/sync/raw-materials` never overwrites stored costs with nulls.
+The agent lives in its OWN repo, `pharmacenter-sync`, checked out at
+`C:\pharmacenter-sync` on office server 10.114.50.100 (RDP; saved
+connection). Deploy = `git pull` there, then `.\Run-FishbowlSync.ps1`.
+Windows Task Scheduler task `PharmacenterFishbowlSync` runs it daily
+~04:30 ET.
+
+**`public/dev/fishbowl-sync.mjs` in THIS repo is a dead copy.** It was
+auto-downloaded over production once; that updater was removed
+2026-09-19 (it would have swapped in a version missing three sync
+endpoints — see claude/cohesion-findings.md, C4). Editing it changes
+nothing in production. Read the real one in `pharmacenter-sync`, and
+treat the paths in the dead copy's header as wrong: the backups are at
+`C:\Users\Administrator\Documents\Backups\FB\` as `Pharmacenter_*.sql`,
+NOT `D:\fb-backup` (that machine has no D: drive).
+
+The agent parses the NEWEST dump — it does not read Fishbowl live. So a
+part added during the day cannot sync until the next dump exists, and
+re-running the agent re-reads the same file and still reports success.
+That is the most common "the sync ran but my part isn't there" (2026-10-06,
+PC-BK-0550). On-demand sync is specced in claude/fishbowl-sync-on-demand.md.
+
+Its raw-materials block sends `inventory_cost_per_kg` (partcost.avgCost,
+UOM→kg converted) + `last_order_cost_per_kg` (newest poitem). The
+receiving route `/api/sync/raw-materials` never overwrites stored costs
+with nulls. PC-BK / PC-RW *products* land in `products` via the PACKING
+app's `/api/sync/products` (upsert keyed on `external_id` = `fb:<id>`),
+which is what the formula Product Code picker reads.
 If Costing shows "—" everywhere: check `raw_materials` cost columns
-first, then the agent log via RDP.
+first, then `C:\pharmacenter-sync\logs\run-<date>.log` via RDP.
 
 ## Style
 

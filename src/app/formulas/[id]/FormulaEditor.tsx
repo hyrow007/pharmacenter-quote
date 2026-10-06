@@ -145,6 +145,144 @@ const BUILTIN_INGREDIENTS: RawMaterialOption[] = [
 // the carry-over UI rendering and the Bench Top card's Primary Blend
 // (cooked) total so they always agree. Water is intentionally NOT
 // included here — its behavior is defined by a separate rule.
+// v85.0: per-scenario costing parameters. Every Costing pill — Base and
+// each scenario — owns its own labor / overhead / lab / cost-source inputs;
+// editing one pill must never re-price another (before v85 they all shared
+// the Base's, so tweaking crew on "Scenario 2" silently re-priced Base and
+// every other scenario). The top-level costing fields stay the BASE's —
+// that's all the server-side costingComputed reads. Types live here, not
+// in lib/formulas (Master's territory); the jsonb just grows a key.
+// These helpers are the ONE place that shapes a params blob, so
+// costingPayload (what Save writes) and seedCore (what the dirty check
+// compares against) produce byte-identical JSON — same literal key order,
+// same null rules — and a formula doesn't mount dirty.
+type CostScenarioParams = {
+  sources: Record<string, string>;
+  manualCosts: Record<string, number>;
+  setupDays: number | null;
+  productionDays: number | null;
+  cleaningDays: number | null;
+  setupHours: number | null;
+  productionHours: number | null;
+  cleaningHours: number | null;
+  setupLeaders: number | null;
+  productionLeaders: number | null;
+  cleaningLeaders: number | null;
+  setupOperators: number | null;
+  productionOperators: number | null;
+  cleaningOperators: number | null;
+  leaderRate: number | null;
+  operatorRate: number | null;
+  leaderTaxPct: number | null;
+  operatorTaxPct: number | null;
+  leaderWcPct: number | null;
+  operatorWcPct: number | null;
+  workingDaysPerMonth: number | null;
+  overheadRent: OverheadItem[];
+  overheadIndirect: OverheadItem[];
+  overheadOther: OverheadItem[];
+  leasePerBatchDay: number | null;
+  indirectPerBatchDay: number | null;
+  otherPerBatchDay: number | null;
+  labTestingRm: LabTestItem[] | null;
+  labTestingFp: LabTestItem[] | null;
+};
+/** A saved scenario plus its own params. Null/absent params (scenarios
+ *  saved before v85) = start from a copy of the Base's. */
+type CostScenarioP = CostScenario & { params?: CostScenarioParams | null };
+function normCostParams(p: CostScenarioParams): CostScenarioParams {
+  // Default-source entries dropped, same as the top-level `sources` —
+  // an untouched table stays clean.
+  const sources: Record<string, string> = {};
+  for (const [k, v] of Object.entries(p.sources ?? {})) {
+    if (v !== "Fish Bowl (Inventory)") sources[k] = v;
+  }
+  return {
+    sources,
+    manualCosts: { ...(p.manualCosts ?? {}) },
+    setupDays: p.setupDays ?? null,
+    productionDays: p.productionDays ?? null,
+    cleaningDays: p.cleaningDays ?? null,
+    setupHours: p.setupHours ?? null,
+    productionHours: p.productionHours ?? null,
+    cleaningHours: p.cleaningHours ?? null,
+    setupLeaders: p.setupLeaders ?? null,
+    productionLeaders: p.productionLeaders ?? null,
+    cleaningLeaders: p.cleaningLeaders ?? null,
+    setupOperators: p.setupOperators ?? null,
+    productionOperators: p.productionOperators ?? null,
+    cleaningOperators: p.cleaningOperators ?? null,
+    leaderRate: p.leaderRate ?? null,
+    operatorRate: p.operatorRate ?? null,
+    leaderTaxPct: p.leaderTaxPct ?? null,
+    operatorTaxPct: p.operatorTaxPct ?? null,
+    leaderWcPct: p.leaderWcPct ?? null,
+    operatorWcPct: p.operatorWcPct ?? null,
+    workingDaysPerMonth: p.workingDaysPerMonth ?? null,
+    overheadRent: p.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
+    overheadIndirect: p.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
+    overheadOther: p.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
+    leasePerBatchDay: p.leasePerBatchDay ?? null,
+    indirectPerBatchDay: p.indirectPerBatchDay ?? null,
+    otherPerBatchDay: p.otherPerBatchDay ?? null,
+    labTestingRm: p.labTestingRm ?? null,
+    labTestingFp: p.labTestingFp ?? null,
+  };
+}
+/** Base pill's params straight off a saved costing blob, with the SAME
+ *  seed semantics as the editor's useState initializers (`|| null` treats
+ *  a stray saved 0 as "use default"; overhead lists fall back to the
+ *  plant constants). */
+function baseCostParamsFromCosting(
+  c: GummyFormulaVersion["costing"],
+): CostScenarioParams {
+  return normCostParams({
+    sources: c?.sources ?? {},
+    manualCosts: c?.manualCosts ?? {},
+    setupDays: c?.setupDays || null,
+    productionDays: c?.productionDays || null,
+    cleaningDays: c?.cleaningDays || null,
+    setupHours: c?.setupHours || null,
+    productionHours: c?.productionHours || null,
+    cleaningHours: c?.cleaningHours || null,
+    setupLeaders: c?.setupLeaders || null,
+    productionLeaders: c?.productionLeaders || null,
+    cleaningLeaders: c?.cleaningLeaders || null,
+    setupOperators: c?.setupOperators || null,
+    productionOperators: c?.productionOperators || null,
+    cleaningOperators: c?.cleaningOperators || null,
+    leaderRate: c?.leaderRate || null,
+    operatorRate: c?.operatorRate || null,
+    leaderTaxPct: c?.leaderTaxPct || null,
+    operatorTaxPct: c?.operatorTaxPct || null,
+    leaderWcPct: c?.leaderWcPct || null,
+    operatorWcPct: c?.operatorWcPct || null,
+    workingDaysPerMonth: c?.workingDaysPerMonth || null,
+    overheadRent: c?.overheadRent ?? OVERHEAD_RENT_DEFAULTS_GUMMY,
+    overheadIndirect: c?.overheadIndirect ?? OVERHEAD_INDIRECT_DEFAULTS,
+    overheadOther: c?.overheadOther ?? OVERHEAD_OTHER_DEFAULTS,
+    leasePerBatchDay: c?.leasePerBatchDay ?? null,
+    indirectPerBatchDay: c?.indirectPerBatchDay ?? null,
+    otherPerBatchDay: c?.otherPerBatchDay ?? null,
+    labTestingRm: c?.labTestingRm ?? null,
+    labTestingFp: c?.labTestingFp ?? null,
+  });
+}
+/** A scenario with its params materialized. Pre-v85 scenarios (no
+ *  params) start as a copy of the Base — which is exactly what they
+ *  were costing against before, so nothing re-prices on upgrade. */
+function normCostScenario(
+  s: CostScenarioP,
+  base: CostScenarioParams,
+): CostScenarioP {
+  return {
+    id: s.id,
+    name: s.name,
+    qty: s.qty,
+    params: normCostParams({ ...base, ...(s.params ?? {}) }),
+  };
+}
+
 function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   const fp = (r.rawMaterialFpCode ?? "").toUpperCase();
   if (fp === "PC-RW-0010") return 0; // Pectin Classic CS 502
@@ -862,9 +1000,14 @@ export default function FormulaEditor({
   // v69: costing scenarios — what-if quantities. The active scenario is
   // screen-local (never persisted); the scenario LIST saves with the
   // formula. Null active = the base Scale-up yield.
-  const [costScenarios, setCostScenarios] = useState<CostScenario[]>(
-    () => seedVersion.costing?.scenarios ?? [],
-  );
+  const [costScenarios, setCostScenarios] = useState<CostScenarioP[]>(() => {
+    // v85.0: materialize each scenario's own params up front (pre-v85
+    // ones inherit a copy of Base) — seedCore does the same, so clean.
+    const base = baseCostParamsFromCosting(seedVersion.costing);
+    return (seedVersion.costing?.scenarios ?? []).map((s) =>
+      normCostScenario(s, base),
+    );
+  });
   // v80: the Base pill is renamable too (right-click), same as scenarios.
   const [costBaseName, setCostBaseName] = useState<string>(
     () => seedVersion.costing?.baseName ?? "Base",
@@ -1081,6 +1224,151 @@ export default function FormulaEditor({
     () => seedVersion.costing?.otherPerBatchDay ?? null,
   );
 
+  // v85.0: per-scenario costing parameters — SWAP model. The costing
+  // useStates above always hold the ACTIVE pill's parameters, so none of
+  // the Costing cards had to learn about scenarios. Switching pills stashes
+  // the outgoing pill's snapshot (Base → costBaseStash, a scenario → its
+  // own `params`) and loads the incoming one into live state. costingPayload
+  // reassembles the same blob whichever pill is showing, so flipping pills
+  // never dirties the formula. costBaseStash is null while Base is showing.
+  const [costBaseStash, setCostBaseStash] =
+    useState<CostScenarioParams | null>(null);
+  const liveCostParams = useMemo<CostScenarioParams>(
+    () =>
+      normCostParams({
+        sources: costSourceByKey,
+        manualCosts: manualCostByKey,
+        setupDays,
+        productionDays,
+        cleaningDays,
+        setupHours,
+        productionHours,
+        cleaningHours,
+        setupLeaders,
+        productionLeaders,
+        cleaningLeaders,
+        setupOperators,
+        productionOperators,
+        cleaningOperators,
+        leaderRate,
+        operatorRate,
+        leaderTaxPct,
+        operatorTaxPct,
+        leaderWcPct,
+        operatorWcPct,
+        workingDaysPerMonth,
+        overheadRent,
+        overheadIndirect,
+        overheadOther,
+        leasePerBatchDay,
+        indirectPerBatchDay,
+        otherPerBatchDay,
+        labTestingRm,
+        labTestingFp,
+      }),
+    [
+    costSourceByKey,
+    manualCostByKey,
+    setupDays,
+    productionDays,
+    cleaningDays,
+    setupHours,
+    productionHours,
+    cleaningHours,
+    setupLeaders,
+    productionLeaders,
+    cleaningLeaders,
+    setupOperators,
+    productionOperators,
+    cleaningOperators,
+    leaderRate,
+    operatorRate,
+    leaderTaxPct,
+    operatorTaxPct,
+    leaderWcPct,
+    operatorWcPct,
+    workingDaysPerMonth,
+    overheadRent,
+    overheadIndirect,
+    overheadOther,
+    leasePerBatchDay,
+    indirectPerBatchDay,
+    otherPerBatchDay,
+    labTestingRm,
+    labTestingFp,
+    ],
+  );
+  function applyCostParams(p: CostScenarioParams) {
+    setCostSourceByKey({ ...p.sources });
+    setManualCostByKey({ ...p.manualCosts });
+    setSetupDays(p.setupDays);
+    setProductionDays(p.productionDays);
+    setCleaningDays(p.cleaningDays);
+    setSetupHours(p.setupHours);
+    setProductionHours(p.productionHours);
+    setCleaningHours(p.cleaningHours);
+    setSetupLeaders(p.setupLeaders);
+    setProductionLeaders(p.productionLeaders);
+    setCleaningLeaders(p.cleaningLeaders);
+    setSetupOperators(p.setupOperators);
+    setProductionOperators(p.productionOperators);
+    setCleaningOperators(p.cleaningOperators);
+    setLeaderRate(p.leaderRate);
+    setOperatorRate(p.operatorRate);
+    setLeaderTaxPct(p.leaderTaxPct);
+    setOperatorTaxPct(p.operatorTaxPct);
+    setLeaderWcPct(p.leaderWcPct);
+    setOperatorWcPct(p.operatorWcPct);
+    setWorkingDaysPerMonth(p.workingDaysPerMonth);
+    // Fresh copies — a pill's snapshot must never share an array with
+    // the live state another pill is about to edit.
+    setOverheadRent(p.overheadRent.map((x) => ({ ...x })));
+    setOverheadIndirect(p.overheadIndirect.map((x) => ({ ...x })));
+    setOverheadOther(p.overheadOther.map((x) => ({ ...x })));
+    setLeasePerBatchDay(p.leasePerBatchDay);
+    setIndirectPerBatchDay(p.indirectPerBatchDay);
+    setOtherPerBatchDay(p.otherPerBatchDay);
+    setLabTestingRm(p.labTestingRm ? p.labTestingRm.map((x) => ({ ...x })) : null);
+    setLabTestingFp(p.labTestingFp ? p.labTestingFp.map((x) => ({ ...x })) : null);
+  }
+  /** Switch Costing pills (null = Base). `discardActive` skips saving the
+   *  outgoing scenario — used when that scenario is being deleted. */
+  function selectCostScenario(
+    nextId: string | null,
+    opts?: { discardActive?: boolean },
+  ) {
+    if (nextId === activeScenarioId) return;
+    const cur = liveCostParams;
+    let base = costBaseStash;
+    if (activeScenarioId === null) {
+      base = cur;
+    } else if (!opts?.discardActive) {
+      const leaving = activeScenarioId;
+      setCostScenarios((prev) =>
+        prev.map((s) => (s.id === leaving ? { ...s, params: cur } : s)),
+      );
+    }
+    const next =
+      nextId === null
+        ? base
+        : (costScenarios.find((s) => s.id === nextId)?.params ?? base);
+    if (next) applyCostParams(next);
+    setCostBaseStash(nextId === null ? null : base);
+    setActiveScenarioId(nextId);
+  }
+  /** "+ Scenario": the new pill starts as a copy of the pill you're on,
+   *  then diverges independently. */
+  function addCostScenario(id: string, label: string) {
+    const cur = liveCostParams;
+    const leaving = activeScenarioId;
+    if (leaving === null) setCostBaseStash(cur);
+    setCostScenarios((prev) => [
+      ...prev.map((s) => (s.id === leaving ? { ...s, params: cur } : s)),
+      { id, name: `${label} ${prev.length + 1}`, qty: targetYieldUnits, params: cur },
+    ]);
+    setActiveScenarioId(id);
+  }
+
   // v73: plant overhead comes from the shared reference tables, not constants.
   //
   // The three states above seed from lib/overheadCosting.ts, which is now a
@@ -1147,6 +1435,21 @@ export default function FormulaEditor({
           setIndirectPerBatchDay((v) => v ?? json.indirectPools.perRunDay);
         if (json.otherPools?.perRunDay)
           setOtherPerBatchDay((v) => v ?? json.otherPools.perRunDay);
+        // v85.0: the setters above land on whichever pill is SHOWING;
+        // the stashed Base and every scenario snapshot adopt the same
+        // rates under the same null-only rule.
+        const adoptPools = (p: CostScenarioParams): CostScenarioParams => ({
+          ...p,
+          leasePerBatchDay: p.leasePerBatchDay ?? json.lease?.perRunDay ?? null,
+          indirectPerBatchDay:
+            p.indirectPerBatchDay ?? json.indirectPools?.perRunDay ?? null,
+          otherPerBatchDay:
+            p.otherPerBatchDay ?? json.otherPools?.perRunDay ?? null,
+        });
+        setCostBaseStash((b) => (b ? adoptPools(b) : b));
+        setCostScenarios((prev) =>
+          prev.map((s) => (s.params ? { ...s, params: adoptPools(s.params) } : s)),
+        );
         if (!usingPlantDefaults.current) return;
         // Flip the guard BEFORE setting state so a slow response cannot land
         // twice and overwrite an edit made in between.
@@ -1154,6 +1457,18 @@ export default function FormulaEditor({
         if (json.rent) setOverheadRent(json.rent);
         if (json.indirect) setOverheadIndirect(json.indirect);
         if (json.other) setOverheadOther(json.other);
+        // v85.0: this version never saved overhead rows, so every pill's
+        // lists are the same fallback constants — swap them all.
+        const adoptLists = (p: CostScenarioParams): CostScenarioParams => ({
+          ...p,
+          overheadRent: json.rent ?? p.overheadRent,
+          overheadIndirect: json.indirect ?? p.overheadIndirect,
+          overheadOther: json.other ?? p.overheadOther,
+        });
+        setCostBaseStash((b) => (b ? adoptLists(b) : b));
+        setCostScenarios((prev) =>
+          prev.map((s) => (s.params ? { ...s, params: adoptLists(s.params) } : s)),
+        );
       } catch {
         // Offline or the route is missing. The constants already rendered are
         // a complete answer — a costing sheet that cannot reach the network
@@ -1230,85 +1545,67 @@ export default function FormulaEditor({
   ]);
 
   const costingPayload = useMemo(() => {
-    const sources: Record<string, string> = {};
-    for (const [k, v] of Object.entries(costSourceByKey)) {
-      if (v !== "Fish Bowl (Inventory)") sources[k] = v;
-    }
+    // v85.0: top-level parameter fields are ALWAYS the Base pill's (that's
+    // what the server-side costingComputed / quote side reads), whichever
+    // pill is showing; each scenario carries its own `params`. Literal key
+    // order is unchanged from v84 — seedCore mirrors it.
+    const bp =
+      activeScenarioId === null
+        ? liveCostParams
+        : (costBaseStash ?? liveCostParams);
     return {
       dec: costingDec,
-      sources,
-      manualCosts: manualCostByKey,
-      setupDays,
-      productionDays,
-      cleaningDays,
-      setupHours,
-      productionHours,
-      cleaningHours,
-      setupLeaders,
-      productionLeaders,
-      cleaningLeaders,
-      setupOperators,
-      productionOperators,
-      cleaningOperators,
-      leaderRate,
-      operatorRate,
-      leaderTaxPct,
-      operatorTaxPct,
-      leaderWcPct,
-      operatorWcPct,
+      sources: bp.sources,
+      manualCosts: bp.manualCosts,
+      setupDays: bp.setupDays,
+      productionDays: bp.productionDays,
+      cleaningDays: bp.cleaningDays,
+      setupHours: bp.setupHours,
+      productionHours: bp.productionHours,
+      cleaningHours: bp.cleaningHours,
+      setupLeaders: bp.setupLeaders,
+      productionLeaders: bp.productionLeaders,
+      cleaningLeaders: bp.cleaningLeaders,
+      setupOperators: bp.setupOperators,
+      productionOperators: bp.productionOperators,
+      cleaningOperators: bp.cleaningOperators,
+      leaderRate: bp.leaderRate,
+      operatorRate: bp.operatorRate,
+      leaderTaxPct: bp.leaderTaxPct,
+      operatorTaxPct: bp.operatorTaxPct,
+      leaderWcPct: bp.leaderWcPct,
+      operatorWcPct: bp.operatorWcPct,
       monthlyOverhead,
-      workingDaysPerMonth,
-      overheadRent,
-      overheadIndirect,
-      overheadOther,
-      leasePerBatchDay,
-      indirectPerBatchDay,
-      otherPerBatchDay,
+      workingDaysPerMonth: bp.workingDaysPerMonth,
+      overheadRent: bp.overheadRent,
+      overheadIndirect: bp.overheadIndirect,
+      overheadOther: bp.overheadOther,
+      leasePerBatchDay: bp.leasePerBatchDay,
+      indirectPerBatchDay: bp.indirectPerBatchDay,
+      otherPerBatchDay: bp.otherPerBatchDay,
       laborDec,
       overheadDec,
       topDec,
-      labTestingRm,
-      labTestingFp,
+      labTestingRm: bp.labTestingRm,
+      labTestingFp: bp.labTestingFp,
       labDec,
-      scenarios: costScenarios,
+      scenarios: costScenarios.map((s) =>
+        s.id === activeScenarioId
+          ? { id: s.id, name: s.name, qty: s.qty, params: liveCostParams }
+          : normCostScenario(s, bp),
+      ),
       baseName: costBaseName,
       labelPanel: labelPanelPayload,
     };
   }, [
     costingDec,
-    costSourceByKey,
-    manualCostByKey,
-    setupDays,
-    productionDays,
-    cleaningDays,
-    setupHours,
-    productionHours,
-    cleaningHours,
-    setupLeaders,
-    productionLeaders,
-    cleaningLeaders,
-    setupOperators,
-    productionOperators,
-    cleaningOperators,
-    leaderRate,
-    operatorRate,
-    leaderTaxPct,
-    operatorTaxPct,
-    leaderWcPct,
-    operatorWcPct,
+    liveCostParams,
+    costBaseStash,
+    activeScenarioId,
     monthlyOverhead,
-    workingDaysPerMonth,
-    overheadRent,
-    overheadIndirect,
-    overheadOther,
-    leasePerBatchDay,
-    indirectPerBatchDay,
-    otherPerBatchDay,
     laborDec,
     overheadDec,
     topDec,
-    labTestingRm,
-    labTestingFp,
     labDec,
     costScenarios,
     costBaseName,
@@ -1434,7 +1731,11 @@ export default function FormulaEditor({
               labTestingRm: seed.costing.labTestingRm ?? null,
               labTestingFp: seed.costing.labTestingFp ?? null,
               labDec: seed.costing.labDec ?? 2,
-              scenarios: seed.costing.scenarios ?? [],
+              // v85.0: materialized exactly like the costScenarios seed.
+              scenarios: (seed.costing.scenarios ?? []).map(
+                (sc: CostScenarioP) =>
+                  normCostScenario(sc, baseCostParamsFromCosting(seed.costing)),
+              ),
               baseName: seed.costing.baseName ?? "Base",
               // Rebuilt in labelPanelPayload's literal key order, with
               // nutrition hydrated, so panels saved before v81.2 don't
@@ -2453,13 +2754,33 @@ export default function FormulaEditor({
   // (dedup ingredient entries, solutions expanded, Water merged; QTYs
   // scaled by the batch counts; costs resolved per selected source).
   const costingModel = (() => {
+    // v85.2: material QTYs now carry the process loss. Until now this
+    // table costed a perfect run — every kg deposited became a saleable
+    // gummy — while the SAME screen's Scale up tab told the operator the
+    // line yields (300 kg - 20 kg) / 300 kg a day. Labor felt that loss
+    // (it stretches Production shifts via Daily Yield) and materials did
+    // not, so a wasteful process looked cheap on the biggest cost line.
+    //
+    // The factor is the Effective daily yield already shown on Scale up —
+    // deliberately the same number from the same inputs (batchKg x
+    // batchesPerDay - fixedLossKgPerDay), so the operator can tie the two
+    // screens together rather than wondering which loss is which. Zero
+    // fixed loss = factor 1 = v85.1 behaviour exactly.
+    //
+    // It divides the BATCH COUNT, not the per-batch recipe: you run more
+    // batches to ship the target, you don't overcharge each batch.
+    const dailyKg = Math.max(0.0001, batchKg * batchesPerDay);
+    const materialYieldFactor = Math.min(
+      1,
+      Math.max(0.0001, (dailyKg - fixedLossKgPerDay) / dailyKg),
+    );
     const qtyPrimaryBatches =
       scaleUpGummiesOf(scaleUp.carryKg) > 0
-        ? costYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
+        ? costYieldUnits / scaleUpGummiesOf(scaleUp.carryKg) / materialYieldFactor
         : 0;
     const qtyCfaBatches =
       scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
-        ? costYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
+        ? costYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg) / materialYieldFactor
         : 0;
     const preKgOf = (grams: number) =>
       scaleUp.totalPrimaryG > 0 ? (grams * batchKg) / scaleUp.totalPrimaryG : 0;
@@ -2581,6 +2902,8 @@ export default function FormulaEditor({
     return {
       qtyPrimaryBatches,
       qtyCfaBatches,
+      // v85.2: surfaced so the card can say which loss is baked in.
+      materialYieldFactor,
       byKey,
       order,
       resolveCostPerKg,
@@ -4769,7 +5092,9 @@ export default function FormulaEditor({
       {/* v69: scenario sub-tabs — cost out what-if quantities. The pill
           strip swaps the yield the whole Costing tab computes against;
           Base is the Scale-up Target Yield. Scenario list saves with
-          the formula; the selection is screen-local. */}
+          the formula; the selection is screen-local.
+          v85.0: each pill also owns its labor / overhead / lab /
+          cost-source parameters — see selectCostScenario. */}
       {tab === "cost" && !printing ? (
         <div
           style={{
@@ -4833,7 +5158,7 @@ export default function FormulaEditor({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setActiveScenarioId(null)}
+                    onClick={() => selectCostScenario(null)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setRenamingScenarioId("__base__");
@@ -4885,7 +5210,7 @@ export default function FormulaEditor({
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setActiveScenarioId(s.id)}
+                      onClick={() => selectCostScenario(s.id)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setRenamingScenarioId(s.id);
@@ -4903,11 +5228,13 @@ export default function FormulaEditor({
                           aria-label="Delete scenario"
                           onClick={(e) => {
                             e.stopPropagation();
+                            // v85.0: deleting the pill you're on drops its
+                            // params and restores Base's stashed ones.
+                            if (activeScenarioId === s.id)
+                              selectCostScenario(null, { discardActive: true });
                             setCostScenarios((prev) =>
                               prev.filter((x) => x.id !== s.id),
                             );
-                            if (activeScenarioId === s.id)
-                              setActiveScenarioId(null);
                             setHoveredScenarioId(null);
                           }}
                           style={{
@@ -4928,16 +5255,10 @@ export default function FormulaEditor({
           <button
             type="button"
             onClick={() => {
-              const id = "sc_" + Math.random().toString(36).slice(2, 9);
-              setCostScenarios((prev) => [
-                ...prev,
-                {
-                  id,
-                  name: `${tr("Scenario")} ${prev.length + 1}`,
-                  qty: targetYieldUnits,
-                },
-              ]);
-              setActiveScenarioId(id);
+              addCostScenario(
+                "sc_" + Math.random().toString(36).slice(2, 9),
+                tr("Scenario"),
+              );
             }}
             style={{
               padding: "6px 12px",
@@ -6911,6 +7232,28 @@ export default function FormulaEditor({
           >
             {tr("Material Costs")}
           </div>
+          {/* v85.2: name the loss that is in these numbers. An operator
+              reading a QTY has to be able to tell whether it is the
+              theoretical recipe or what the line actually draws. */}
+          {costingModel.materialYieldFactor < 1 ? (
+            <div
+              style={{
+                padding: "8px 16px",
+                fontSize: 11.5,
+                lineHeight: 1.45,
+                color: "var(--ink-3, #8a9498)",
+                background: "var(--paper, #fffdf8)",
+                borderBottom: "1px solid var(--line-2, #efe9da)",
+              }}
+            >
+              {tr("Quantities include process loss")} —{" "}
+              {Format.pct((1 - costingModel.materialYieldFactor) * 100)}%{" "}
+              {tr("from the fixed loss on Scale up")} (
+              {fixedLossKgPerDay.toLocaleString("en-US")} kg/
+              {tr("day")} ÷ {(batchKg * batchesPerDay).toLocaleString("en-US")}{" "}
+              kg/{tr("day")}).
+            </div>
+          ) : null}
           {(() => {
             // v57.6: quantities + costs come from the shared costingModel
             // (built once in the component body; the top card's Material

@@ -22,6 +22,7 @@
 //   resolveRowName ............................ FormulaEditor.tsx 404–415
 //   BUILTIN_INGREDIENTS (Water) + dedup ....... FormulaEditor.tsx 138–149, 550–559
 //   costingModel (material $) ................. FormulaEditor.tsx 1948–2080
+//   materialYieldFactor (v85.2) ............... FormulaEditor.tsx costingModel
 //   materialCostPerGummy null rule ............ FormulaEditor.tsx 4163–4166
 //   laborCostPerGummy ......................... FormulaEditor.tsx 2084–2117
 //   overheadCostPerGummy ...................... FormulaEditor.tsx 2121–2153
@@ -433,13 +434,21 @@ export function computeCostingComputed(params: {
   // Dedup ingredient entries (solutions expanded, Water merged), QTYs
   // scaled by batch counts, costs resolved per the saved Cost Source.
   const { materialUsdPerPieceRaw, materials } = (() => {
+    // v85.2: mirrors the editor's materialYieldFactor — the batch count
+    // carries the fixed daily loss, so quote-side material cost matches
+    // what the Costing tab shows. Zero fixed loss = factor 1 = unchanged.
+    const dailyKg = Math.max(0.0001, batchKg * batchesPerDay);
+    const materialYieldFactor = Math.min(
+      1,
+      Math.max(0.0001, (dailyKg - fixedLossKgPerDay) / dailyKg),
+    );
     const qtyPrimaryBatches =
       scaleUpGummiesOf(scaleUp.carryKg) > 0
-        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg)
+        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.carryKg) / materialYieldFactor
         : 0;
     const qtyCfaBatches =
       scaleUpGummiesOf(scaleUp.grandCfaKg) > 0
-        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg)
+        ? targetYieldUnits / scaleUpGummiesOf(scaleUp.grandCfaKg) / materialYieldFactor
         : 0;
     const preKgOf = (grams: number) =>
       scaleUp.totalPrimaryG > 0 ? (grams * batchKg) / scaleUp.totalPrimaryG : 0;
