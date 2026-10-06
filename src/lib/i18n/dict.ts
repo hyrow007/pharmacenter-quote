@@ -22,6 +22,7 @@ const en = {
   navFormulas: "Formulas",
   navLists: "Lists",
   navFeedback: "Feedback",
+  navMenu: "Menu",
   navAdmin: "Admin",
 
   // ---- Formulas catalog ----
@@ -401,6 +402,7 @@ const es: typeof en = {
   navFormulas: "Fórmulas",
   navLists: "Listas",
   navFeedback: "Comentarios",
+  navMenu: "Menú",
   navAdmin: "Admin",
 
   // ---- Formulas catalog ----

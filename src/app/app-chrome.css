@@ -406,8 +406,120 @@ h1 {
   .app-nav__sync.is-running .app-nav__sync-mark { animation: none; }
 }
 
-/* On a phone the band is already tight: keep the icon, drop the word. */
-@media (max-width: 640px) {
-  .app-nav__sync span { display: none; }
-  .app-nav__sync { padding: 4px 7px; }
+/* The sync button now lives inside the header menu, where there is room for
+   the word at every width -- so no phone rule hiding the label. */
+
+/* ============================================================
+   Header menu (the three-line button on the right of the band)
+   ============================================================
+   The band used to carry nav links, sync, the admin-view pill, the email and
+   sign-out all at once -- eight controls in a row on the packing list, which
+   read as clutter rather than as capability. The band now keeps the identity
+   and the language toggle; everything else is one click away in here. */
+
+.app-nav__menu {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.app-nav__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font: inherit;
+  color: var(--teal-900, #0f4a56);
+  background: transparent;
+  border: 1px solid var(--stone, #e3dcc9);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.app-nav__menu-btn:hover {
+  background: var(--cream, #f6efe3);
+  border-color: var(--teal-500, #3a8d9c);
+}
+
+.app-nav__menu-btn:focus-visible {
+  outline: 2px solid var(--teal-700, #1d6c7b);
+  outline-offset: 2px;
+}
+
+.app-nav__menu-btn.is-open {
+  background: var(--cream, #f6efe3);
+  border-color: var(--teal-500, #3a8d9c);
+}
+
+.app-nav__menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 232px;
+  max-width: min(300px, calc(100vw - 32px));
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--stone, #e3dcc9);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 74, 86, 0.14);
+}
+
+/* The nav is a row in the band and a stack in here. The active-link
+   underline is a horizontal rule hung off the bottom of the band, which makes
+   no sense in a column, so it becomes a left bar instead. */
+.app-nav__menu-panel .app-nav__links {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+}
+
+.app-nav__menu-panel .app-nav__link {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.app-nav__menu-panel .app-nav__link:hover {
+  background: var(--cream, #f6efe3);
+}
+
+.app-nav__menu-panel .app-nav__link--active {
+  background: var(--cream, #f6efe3);
+}
+
+.app-nav__menu-panel .app-nav__link--active::after {
+  left: 0;
+  right: auto;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  height: auto;
+}
+
+/* Full-width rows read as a menu; a pill floating mid-panel does not. */
+.app-nav__menu-panel .app-nav__sync {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 7px 10px;
+}
+
+.app-nav__menu-panel .app-nav__email {
+  max-width: 100%;
+  padding: 0 10px;
+}
+
+.app-nav__menu-sep {
+  width: 100%;
+  height: 1px;
+  margin: 1px 0;
+  background: var(--stone, #e3dcc9);
 }

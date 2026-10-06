@@ -8,7 +8,9 @@ import AdminToggle from "./AdminToggle";
 import NavLinks from "./NavLinks";
 import LangToggle from "./LangToggle";
 import SyncNowButton from "./SyncNowButton";
+import HeaderMenu from "./HeaderMenu";
 import { getLangFromCookie } from "@/lib/i18n/server";
+import { makeT } from "@/lib/i18n/dict";
 
 // Top navigation bar — sits flush on every signed-in page. Mirrors the look
 // of the sister Packing List app: real PharmaCenter wordmark on the left,
@@ -59,6 +61,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   const bare = host.split(":")[0].replace(/^www\./, "");
   const onApexHost = HUB_HOSTS.has(bare);
   const lang = await getLangFromCookie();
+  const t = makeT(lang);
 
   // Effective identity: explicit context from the page wins, otherwise
   // derived from the host. Orders host wins over meetings when both a
@@ -145,27 +148,36 @@ export default async function AppHeader({ user, appContext }: Props) {
           )}
         </Link>
 
-        <NavLinks
-          onFormulaHost={onFormulaHost}
-          onMeetingHost={onMeetingHost}
-          onOrderHost={onOrderHost}
-          appContext={ctx}
-          lang={lang}
-        />
-
+        {/* The band keeps two things: who you are looking at (the wordmark
+            and product name) and the one control that changes what you can
+            read (EN/ES). Everything else -- navigation, Fishbowl sync, the
+            admin-view pill, the signed-in email, sign-out -- moved behind the
+            menu on 2026-10-06. Eight controls in a row read as clutter, and
+            the nav links were the least of it. */}
         <div className="app-nav__user">
           {/* v50: EN/ES pill — same placement as the packing list. */}
-          {/* Fishbowl sync: every app, every signed-in user. The data behind
-              every one of these screens comes from one nightly job, so the
-              control that re-runs it belongs in the chrome they all share,
-              not on one admin page. */}
-          <SyncNowButton lang={lang} />
           <LangToggle lang={lang} />
-          {admin ? <AdminToggle /> : null}
-          <span className="app-nav__email" title={user.email}>
-            {user.email}
-          </span>
-          <SignOutButton />
+          <HeaderMenu label={t("navMenu")}>
+            <NavLinks
+              onFormulaHost={onFormulaHost}
+              onMeetingHost={onMeetingHost}
+              onOrderHost={onOrderHost}
+              appContext={ctx}
+              lang={lang}
+            />
+            <div className="app-nav__menu-sep" />
+            {/* Fishbowl sync: every app, every signed-in user. The data behind
+                every one of these screens comes from one nightly job, so the
+                control that re-runs it belongs in the chrome they all share,
+                not on one admin page. */}
+            <SyncNowButton lang={lang} />
+            {admin ? <AdminToggle /> : null}
+            <div className="app-nav__menu-sep" />
+            <span className="app-nav__email" title={user.email}>
+              {user.email}
+            </span>
+            <SignOutButton />
+          </HeaderMenu>
         </div>
       </div>
     </header>
