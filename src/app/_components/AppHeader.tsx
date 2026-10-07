@@ -9,6 +9,7 @@ import NavLinks from "./NavLinks";
 import LangToggle from "./LangToggle";
 import SyncNowButton from "./SyncNowButton";
 import HeaderMenu from "./HeaderMenu";
+import HubLink from "./HubLink";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 
@@ -158,6 +159,15 @@ export default async function AppHeader({ user, appContext }: Props) {
           {/* v50: EN/ES pill — same placement as the packing list. */}
           <LangToggle lang={lang} />
           <HeaderMenu label={t("navMenu")}>
+            {/* The way back to the apex. First entry, every app, same place --
+                and not on the hub itself, where it would point at the page you
+                are already on. */}
+            {ctx === "hub" ? null : (
+              <>
+                <HubLink host={host} label={t("hubTitle")} />
+                <div className="app-nav__menu-sep" />
+              </>
+            )}
             <NavLinks
               onFormulaHost={onFormulaHost}
               onMeetingHost={onMeetingHost}

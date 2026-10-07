@@ -22,6 +22,11 @@ import { makeT, type DictKey } from "@/lib/i18n/dict";
 // there. Standing alone in a list of five tools it is not, which is exactly
 // what went wrong the first time this page was written.
 
+// The apex inherited the root layout's title, so every hub tab read "Quotes".
+// Deliberately not translated: the other per-route titles are not either, and
+// this one is the company name.
+export const metadata = { title: "PharmaCenter" };
+
 export const dynamic = "force-dynamic";
 
 type Tool = {

@@ -505,6 +505,17 @@ h1 {
   height: auto;
 }
 
+/* The hub link is a direct child of the panel rather than part of the nav --
+   it is the way OUT of this app, not one of its pages -- so it needs the
+   stretch the nav gets for free. */
+.app-nav__menu-panel > .app-nav__link {
+  width: 100%;
+}
+
+.app-nav__link--hub {
+  color: var(--teal-700, #1d6c7b);
+}
+
 /* Full-width rows read as a menu; a pill floating mid-panel does not. */
 .app-nav__menu-panel .app-nav__sync {
   width: 100%;
