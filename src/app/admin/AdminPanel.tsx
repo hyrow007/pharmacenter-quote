@@ -15,25 +15,22 @@ export type AdminPanelUser = {
   email: string;
   displayName: string | null;
   isAdmin: boolean;
-};
-
-type Stats = {
-  workflows: number;
-  customers: number;
-  vendors: number;
-  feedback: number;
+  // Activity, from the admin_list_users RPC. Optional because the fallback
+  // path (user_directory + admins) cannot supply it, and a page that renders
+  // the directory without activity is far better than one that renders
+  // nothing because an RPC was unavailable.
+  lastSeenAt?: string | null;
+  listsPrepared?: number | null;
 };
 
 type Props = {
   currentUserEmail: string;
   initialUsers: AdminPanelUser[];
-  stats: Stats;
 };
 
 export default function AdminPanel({
   currentUserEmail,
   initialUsers,
-  stats,
 }: Props) {
   const [users, setUsers] = useState<AdminPanelUser[]>(initialUsers);
   const [newEmail, setNewEmail] = useState("");
@@ -133,27 +130,23 @@ export default function AdminPanel({
       .join(" ");
   }
 
-  const adminCount = users.filter((u) => u.isAdmin).length;
-  const userCount = users.length;
+  function activityFor(u: AdminPanelUser): string | null {
+    const bits: string[] = [];
+    if (typeof u.listsPrepared === "number") {
+      bits.push(`${u.listsPrepared} ${u.listsPrepared === 1 ? "list" : "lists"}`);
+    }
+    if (u.lastSeenAt) {
+      try {
+        bits.push(`last seen ${new Date(u.lastSeenAt).toLocaleDateString()}`);
+      } catch {
+        /* an unparseable timestamp is not worth breaking the row over */
+      }
+    }
+    return bits.length ? bits.join(" \u00b7 ") : null;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Stats row -------------------------------------------------- */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-          gap: 10,
-        }}
-      >
-        <StatCard label="Admins" value={adminCount} />
-        <StatCard label="Users" value={userCount} />
-        <StatCard label="Workflows" value={stats.workflows} />
-        <StatCard label="Customers" value={stats.customers} />
-        <StatCard label="Vendors" value={stats.vendors} />
-        <StatCard label="Feedback" value={stats.feedback} />
-      </div>
-
       {/* Add admin form -------------------------------------------- */}
       <section
         style={{
@@ -283,6 +276,17 @@ export default function AdminPanel({
                     >
                       {u.email}
                     </div>
+                    {activityFor(u) ? (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--ink-3, #8a9498)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {activityFor(u)}
+                      </div>
+                    ) : null}
                   </div>
                   {u.isAdmin ? (
                     <span
@@ -347,42 +351,6 @@ export default function AdminPanel({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div
-      style={{
-        background: "var(--paper, #fffdf8)",
-        border: "1px solid var(--line, #e3dcc9)",
-        borderRadius: 10,
-        padding: "12px 14px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8a9498)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: "var(--teal-900, #0f4a56)",
-          marginTop: 2,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {value.toLocaleString("en-US")}
-      </div>
     </div>
   );
 }

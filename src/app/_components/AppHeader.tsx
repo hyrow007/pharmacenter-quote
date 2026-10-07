@@ -10,6 +10,7 @@ import LangToggle from "./LangToggle";
 import SyncNowButton from "./SyncNowButton";
 import HeaderMenu from "./HeaderMenu";
 import HubLink from "./HubLink";
+import { hubHrefForHost } from "@/lib/hub-href";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
 
@@ -169,6 +170,7 @@ export default async function AppHeader({ user, appContext }: Props) {
               </>
             )}
             <NavLinks
+              adminHref={`${hubHrefForHost(host)}admin`}
               onFormulaHost={onFormulaHost}
               onMeetingHost={onMeetingHost}
               onOrderHost={onOrderHost}

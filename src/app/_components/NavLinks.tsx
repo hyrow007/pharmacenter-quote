@@ -23,12 +23,17 @@ import { makeT, type Lang } from "@/lib/i18n/dict";
 // The formula site hides the Workflows link, the quote site hides the
 // Formulas link — each subdomain presents as its own product.
 export default function NavLinks({
+  adminHref,
   onFormulaHost,
   onMeetingHost,
   onOrderHost,
   appContext,
   lang,
 }: {
+  /** Absolute URL of the hub's /admin, resolved server-side so it stays on
+   *  whichever hub domain the visitor is signed in to. Admin is one screen
+   *  for the whole ecosystem now; it used to be per-host. */
+  adminHref: string;
   onFormulaHost: boolean;
   onMeetingHost: boolean;
   onOrderHost?: boolean;
@@ -134,12 +139,8 @@ export default function NavLinks({
         </Link>
       ) : null}
       {effectiveAdmin ? (
-        <Link
-          href={
-            onFormulaHost || onMeetingHost
-              ? "https://quote.pharmacenter.app/admin"
-              : "/admin"
-          }
+        <a
+          href={adminHref}
           className={`app-nav__link${isAdmin ? " app-nav__link--active" : ""}`}
         >
           <svg
@@ -153,7 +154,7 @@ export default function NavLinks({
             <path d="M12 2l2.9 6.9L22 10l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.2L2 10l7.1-1.1L12 2z" />
           </svg>
           {t("navAdmin")}
-        </Link>
+        </a>
       ) : null}
     </nav>
   );
