@@ -109,6 +109,30 @@ export default async function FormulasPage() {
     });
   }
 
+  // v85.3: Generator column — who created the formula. Resolved through
+  // user_directory the same way the editor's meta strip resolves "updated
+  // by", so one person reads the same on both screens. One query for the
+  // distinct emails on the page; the client falls back to the email handle
+  // for anyone the directory doesn't know (contractors, service accounts).
+  const generatorEmails = Array.from(
+    new Set(
+      initialFormulas
+        .map((f) => f.createdByEmail)
+        .filter((e): e is string => !!e),
+    ),
+  );
+  const generatorsByEmail: Record<string, string> = {};
+  if (generatorEmails.length > 0) {
+    const { data: dirRows } = await supabase
+      .from("user_directory")
+      .select("email, display_name")
+      .in("email", generatorEmails);
+    (dirRows ?? []).forEach((row) => {
+      if (row.email && row.display_name)
+        generatorsByEmail[row.email] = row.display_name;
+    });
+  }
+
   return (
     <div className="app-shell">
       <AppHeader user={{ email: user.email! }} />
@@ -150,6 +174,7 @@ export default async function FormulasPage() {
             <FormulasCatalog
               initialFormulas={initialFormulas}
               customersById={customersById}
+              generatorsByEmail={generatorsByEmail}
               isAdmin={admin}
             />
           </I18nProvider>

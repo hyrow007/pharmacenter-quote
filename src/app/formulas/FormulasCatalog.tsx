@@ -27,6 +27,10 @@ type Props = {
   initialFormulas: GummyFormulaRecord[];
   /** id → name lookup used to render the Customer column. */
   customersById: Record<string, string>;
+  /** v85.3: email → display name, for the Generator column. Resolved
+   *  server-side from user_directory; missing entries fall back to the
+   *  email handle. */
+  generatorsByEmail: Record<string, string>;
   /** Admins see a Delete affordance per row; everyone else sees data only. */
   isAdmin: boolean;
 };
@@ -42,6 +46,7 @@ type SortKey =
   | "customer"
   | "shape"
   | "flavor"
+  | "generator"
   | "latestVersionNum"
   | "updatedAt";
 type SortDir = "asc" | "desc";
@@ -59,6 +64,7 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 export default function FormulasCatalog({
   initialFormulas,
   customersById,
+  generatorsByEmail,
   isAdmin,
 }: Props) {
   const router = useRouter();
@@ -133,6 +139,15 @@ export default function FormulasCatalog({
     return at > 0 ? email.slice(0, at) : email;
   }
 
+  // v85.3: who generated the formula. Display name when the directory
+  // knows the address, otherwise the handle — never a blank cell when we
+  // do have an email, since "someone, unknown" is still worth seeing.
+  function generatorName(f: GummyFormulaRecord): string {
+    const email = (f.createdByEmail ?? "").trim();
+    if (!email) return "";
+    return generatorsByEmail[email] ?? preparerHandle(f);
+  }
+
   function customerName(f: GummyFormulaRecord): string {
     if (f.customerId && customersById[f.customerId]) {
       return customersById[f.customerId];
@@ -156,12 +171,13 @@ export default function FormulasCatalog({
         customerName(f),
         f.flavor ?? "",
         preparerHandle(f),
+        generatorName(f),
       ]
         .join("\n")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [formulas, query, shapeFilter, customersById]);
+  }, [formulas, query, shapeFilter, customersById, generatorsByEmail]);
 
   // Sort — pure comparator over the filtered slice. String columns
   // compare case-insensitively; the numeric columns (formulaNumber,
@@ -188,6 +204,8 @@ export default function FormulasCatalog({
           return f.shape;
         case "flavor":
           return f.flavor ?? "";
+        case "generator":
+          return generatorName(f);
         case "latestVersionNum":
           return f.latestVersionNum;
         case "updatedAt":
@@ -209,7 +227,7 @@ export default function FormulasCatalog({
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     return rows;
-  }, [filtered, sortKey, sortDir, customersById]);
+  }, [filtered, sortKey, sortDir, customersById, generatorsByEmail]);
 
   // Pagination — clamp to a valid page whenever the filtered/sorted
   // list shrinks (e.g. after a search that returns fewer pages than
@@ -285,6 +303,7 @@ export default function FormulasCatalog({
     { key: "customer", label: "Customer", width: 135 },
     { key: "shape", label: "Shape", width: 65 },
     { key: "flavor", label: "Flavor", width: 80 },
+    { key: "generator", label: "Generator", width: 115 },
     { key: "latestVersionNum", label: "Version", align: "right", width: 85 },
     { key: "updatedAt", label: "Updated", width: 100 },
   ];
@@ -507,6 +526,9 @@ export default function FormulasCatalog({
                   </span>
                 </Td>
                 <Td>{f.flavor || <em style={{ color: "#8a9498" }}>—</em>}</Td>
+                <Td style={{ color: "var(--ink-2, #4a5558)" }}>
+                  {generatorName(f) || <em style={{ color: "#8a9498" }}>—</em>}
+                </Td>
                 <Td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                   {f.latestVersionNum > 0 ? `v${f.latestVersionNum}` : "—"}
                 </Td>
