@@ -65,6 +65,52 @@ type Props = {
   rows: WorkflowDisplayRow[];
 };
 
+/** Which column the table is ordered by. */
+type SortKey =
+  | "customer"
+  | "quote"
+  | "type"
+  | "description"
+  | "submitter"
+  | "updated"
+  | "status";
+type SortDir = "asc" | "desc";
+
+/**
+ * The direction a column takes when you FIRST click it.
+ *
+ * Newest-first is what anyone wants from a date, and A-Z is what anyone
+ * wants from a name; making every column start ascending would mean two
+ * clicks to get the obvious answer out of the one column people sort by
+ * most. Clicking the already-active column flips it from here.
+ */
+const DEFAULT_DIR: Record<SortKey, SortDir> = {
+  customer: "asc",
+  quote: "asc",
+  type: "asc",
+  description: "asc",
+  submitter: "asc",
+  updated: "desc",
+  status: "asc",
+};
+
+/**
+ * Status is ranked by where a quote sits in its life, not by the spelling
+ * of its label — alphabetical would read in progress, lost, won, which puts
+ * the dead ones in the middle and means something different in Spanish.
+ */
+const STATUS_RANK: Record<WorkflowStatus, number> = {
+  in_progress: 0,
+  won: 1,
+  lost: 2,
+};
+
+/** Numbers inside names compared as numbers: Q0009 before Q0010. */
+const collator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
 // Per-row local edit state for the description editor. We track the live
 // input value separately from the committed baseline so blur-save can
 // short-circuit no-op edits and so we can roll back on a server error.
@@ -74,6 +120,20 @@ export default function WorkflowTable({ rows }: Props) {
   const router = useRouter();
   const t = makeT(useLang());
   const [search, setSearch] = useState("");
+  // Matches the order the server sends (updated_at desc), so the first
+  // paint is identical whether or not anyone touches a header.
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
+    key: "updated",
+    dir: "desc",
+  });
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: DEFAULT_DIR[key] },
+    );
+  }, []);
 
   // Local state map keyed by row id. Seeded lazily on first edit per row so
   // we don't allocate state for rows the user never touches.
@@ -116,6 +176,60 @@ export default function WorkflowTable({ rows }: Props) {
       return hay.includes(q);
     });
   }, [visibleRows, search, drafts]);
+
+  /**
+   * Sorted AFTER filtering, and over a copy — `filtered` can be the same
+   * array object the parent handed us when the search box is empty, and
+   * sorting in place would mutate a prop.
+   *
+   * An empty cell sorts last in BOTH directions rather than being treated
+   * as the smallest string. Reversing a column to find the biggest value
+   * and landing on a screenful of blanks is not a sort anyone asked for.
+   */
+  const sorted = useMemo(() => {
+    const { key, dir } = sort;
+    const text = (r: WorkflowDisplayRow): string => {
+      switch (key) {
+        case "customer":
+          return r.customerName;
+        case "quote":
+          return r.quoteNumberLabel;
+        case "type":
+          return r.typeLabel;
+        case "description": {
+          // The live value, so a row re-sorts to where the user can see it
+          // lands rather than to whatever the server last stored.
+          const draft = drafts[r.id];
+          const typed = draft ? draft.value : r.descriptionOverride;
+          return typed || r.autoDescription;
+        }
+        case "submitter":
+          return r.submitterFull || r.submitterShort;
+        default:
+          return "";
+      }
+    };
+    const sign = dir === "asc" ? 1 : -1;
+    const out = [...filtered];
+    out.sort((a, b) => {
+      if (key === "updated") return sign * (a.updatedSort - b.updatedSort);
+      if (key === "status")
+        return (
+          sign * (STATUS_RANK[a.status] - STATUS_RANK[b.status]) ||
+          b.updatedSort - a.updatedSort
+        );
+      const av = text(a).trim();
+      const bv = text(b).trim();
+      if (av === "" || bv === "") {
+        if (av === bv) return b.updatedSort - a.updatedSort;
+        return av === "" ? 1 : -1;
+      }
+      // Most recent first inside a tie, so equal names keep a stable and
+      // useful order instead of whatever the fetch happened to return.
+      return sign * collator.compare(av, bv) || b.updatedSort - a.updatedSort;
+    });
+    return out;
+  }, [filtered, sort, drafts]);
 
   const setDraftValue = useCallback((id: string, baseline: string, value: string) => {
     setDrafts((prev) => ({
@@ -248,20 +362,57 @@ export default function WorkflowTable({ rows }: Props) {
       ) : (
         <div className="table">
           <div className="table__head">
-            <div className="table__head-cell">{t("colCustomer")}</div>
-            <div className="table__head-cell">{t("colQuoteNumber")}</div>
-            <div className="table__head-cell">{t("colQuoteType")}</div>
-            <div className="table__head-cell">{t("colDescription")}</div>
-            <div className="table__head-cell">{t("colSubmitter")}</div>
-            <div className="table__head-cell">{t("colUpdated")} &#x25BC;</div>
-            <div className="table__head-cell">{t("colStatus")}</div>
+            {(
+              [
+                ["customer", "colCustomer"],
+                ["quote", "colQuoteNumber"],
+                ["type", "colQuoteType"],
+                ["description", "colDescription"],
+                ["submitter", "colSubmitter"],
+                ["updated", "colUpdated"],
+                ["status", "colStatus"],
+              ] as [SortKey, DictKey][]
+            ).map(([key, dictKey]) => {
+              const active = sort.key === key;
+              const label = t(dictKey);
+              return (
+                <div className="table__head-cell" key={key}>
+                  <button
+                    type="button"
+                    className="table__sort"
+                    onClick={() => toggleSort(key)}
+                    title={t("sortByColumn", { col: label })}
+                    aria-label={t("sortByColumn", { col: label })}
+                    aria-sort={
+                      active
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                  >
+                    {label}
+                    <span
+                      aria-hidden="true"
+                      className={`table__sort-caret${
+                        active ? "" : " table__sort-caret--idle"
+                      }`}
+                    >
+                      {(active ? sort.dir : DEFAULT_DIR[key]) === "asc"
+                        ? "\u25B2"
+                        : "\u25BC"}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <div className="table__empty">
               <div style={{ fontSize: 14 }}>{t("noWorkflowsMatch", { q: search })}</div>
             </div>
           ) : (
-            filtered.map((row) => {
+            sorted.map((row) => {
               const draft = drafts[row.id];
               const value = draft ? draft.value : row.descriptionOverride;
               const baseline = draft ? draft.baseline : row.descriptionOverride;

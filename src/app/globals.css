@@ -229,6 +229,49 @@ html, body {
   color: var(--ink-3);
 }
 
+/* Sortable header. A real <button> inside the grid cell rather than a
+   clickable div, so the column is reachable by keyboard and announces
+   itself; it inherits every type property from the cell so the header row
+   looks exactly as it did before anything became clickable. */
+.table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.table__sort:hover {
+  color: var(--teal-700, #1d6c7b);
+}
+.table__sort:focus-visible {
+  outline: 2px solid var(--teal-700, #1d6c7b);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.table__sort-caret {
+  font-size: 8px;
+  line-height: 1;
+}
+/* The inactive columns keep a caret in the layout but hold it invisible,
+   and reveal it on hover. Without it nothing says the headers are
+   clickable; with it always visible, seven carets compete with the one
+   that means something. */
+.table__sort-caret--idle {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.table__sort:hover .table__sort-caret--idle {
+  opacity: 0.45;
+}
+
 .table__row {
   display: grid;
   grid-template-columns: 1.6fr 80px 1.1fr 1.4fr 1fr 0.8fr 0.7fr;
