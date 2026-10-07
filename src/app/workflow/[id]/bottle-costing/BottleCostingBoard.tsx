@@ -242,6 +242,15 @@ function ParamBlock({
 }: {
   label: string;
   children: React.ReactNode;
+  /**
+   * Keep the label on one line.
+   *
+   * Only for labels that FIT. A grid track is as narrow as 200px, and a
+   * label too long for one line does not clip or scroll — it runs over the
+   * label in the next column and both become unreadable. Anything past
+   * roughly twenty-five characters wraps instead; the grid bottom-aligns,
+   * so a two-line label grows upward and the inputs stay on one baseline.
+   */
   nowrap?: boolean;
   /** Hover explainer — shown as a native tooltip on the label, marked by a
    *  small ⓘ so the affordance is discoverable. Used to disambiguate the
@@ -3939,7 +3948,7 @@ export default function BottleCostingBoard({
               </div>
             ) : null}
           </ParamBlock>
-          <ParamBlock label="Line speed (bottles / minute)" nowrap>
+          <ParamBlock label="Line speed (bottles / minute)">
             <NumField
               value={st.bottlesPerMinute}
               onChange={(v) => set("bottlesPerMinute", v)}
@@ -3949,7 +3958,13 @@ export default function BottleCostingBoard({
           {/* Per PERSON, unlike the line speed. Kitting is hand work: two
               people kit twice as fast, whereas the line runs at its own pace
               whoever is watching it. */}
-          <ParamBlock label="Kitting speed (bottles / min / person)" nowrap>
+          {/* No `nowrap`: this is the longest label on the board and a
+              forced single line runs straight out of its grid track and
+              over the label beside it. Two lines is the fix — the grid
+              bottom-aligns, so a taller label grows upward and every input
+              in the row stays on one baseline. Same reasoning as the four
+              hand-station labels on the sachet board. */}
+          <ParamBlock label="Kitting speed (bottles / min / person)">
             <NumField
               value={st.kittingSpeed}
               onChange={(v) => set("kittingSpeed", v)}

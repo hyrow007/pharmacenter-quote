@@ -252,6 +252,15 @@ function ParamBlock({
 }: {
   label: string;
   children: React.ReactNode;
+  /**
+   * Keep the label on one line.
+   *
+   * Only for labels that FIT. A grid track is as narrow as 200px, and a
+   * label too long for one line does not clip or scroll — it runs over the
+   * label in the next column and both become unreadable. Anything past
+   * roughly twenty-five characters wraps instead; the grid bottom-aligns,
+   * so a two-line label grows upward and the inputs stay on one baseline.
+   */
   nowrap?: boolean;
   /** Hover explainer — shown as a native tooltip on the label, marked by a
    *  small ⓘ so the affordance is discoverable. Used to disambiguate the
