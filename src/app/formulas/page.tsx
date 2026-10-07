@@ -138,8 +138,15 @@ export default async function FormulasPage() {
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
         <div className="page__inner--narrow">
+          {/* v85.4: this pill used to point at /workflows, which does not
+              exist on the formula subdomain — the middleware rewrites "/"
+              to /formulas here, and /workflows lands nowhere. The apex hub
+              IS the way back out of an app now, and nothing inside any app
+              linked to it, so this is the one exit. Absolute URL on
+              purpose, same as NavLinks' cross-host links: the hub is served
+              on pharmacenter.app, not on this subdomain. */}
           <a
-            href="/workflows"
+            href="https://pharmacenter.app/"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -156,7 +163,7 @@ export default async function FormulasPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <span aria-hidden="true">&larr;</span> {t("backToWorkflows").replace("← ", "")}
+            <span aria-hidden="true">&larr;</span> {t("hubTitle")}
           </a>
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
