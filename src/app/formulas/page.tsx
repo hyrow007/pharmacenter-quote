@@ -138,33 +138,10 @@ export default async function FormulasPage() {
       <AppHeader user={{ email: user.email! }} />
       <main className="page">
         <div className="page__inner--narrow">
-          {/* v85.4: this pill used to point at /workflows, which does not
-              exist on the formula subdomain — the middleware rewrites "/"
-              to /formulas here, and /workflows lands nowhere. The apex hub
-              IS the way back out of an app now, and nothing inside any app
-              linked to it, so this is the one exit. Absolute URL on
-              purpose, same as NavLinks' cross-host links: the hub is served
-              on pharmacenter.app, not on this subdomain. */}
-          <a
-            href="https://pharmacenter.app/"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 14px",
-              background: "var(--paper, #fffdf8)",
-              border: "1px solid var(--line, #e3dcc9)",
-              borderRadius: 999,
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--teal-900, #0f4a56)",
-              textDecoration: "none",
-              marginBottom: 16,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <span aria-hidden="true">&larr;</span> {t("hubTitle")}
-          </a>
+          {/* v85.5: the page-level back pill is gone. Master put a hub link
+              in the shared header menu (HubLink, 2026-10-07), so this page
+              had two controls doing the same job — and only this app had the
+              second one. One way back, in the chrome every app shares. */}
           <div style={{ marginBottom: 18 }}>
             <p className="eyebrow" style={{ marginBottom: 6 }}>
               PharmaCenter · Formulas
