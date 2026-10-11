@@ -779,6 +779,25 @@ export default async function OrdersLandingPage() {
                       const topPoints = (syn?.points ?? []).slice(0, 2);
                       const linkedPos = posBySo.get(key) ?? [];
                       const linkedWos = wosBySo.get(key) ?? [];
+                      // The card shows work in flight, not production
+                      // history. Matching by finished good links an SO to
+                      // every work order that ever made that part: SO 14793
+                      // picked up seven, six of them fulfilled between June
+                      // and September. Those belong on the SO page, not in a
+                      // row of pills you have to read past. When nothing is
+                      // open, the most recently finished one still earns its
+                      // place -- "it ran on Sep 18" is the answer to the
+                      // question the card is being asked.
+                      const openWos = linkedWos.filter((w) => w.is_open);
+                      const lastFinished = [...linkedWos]
+                        .filter((w) => !w.is_open)
+                        .sort((a, b) =>
+                          (b.date_finished ?? b.date_scheduled ?? "").localeCompare(
+                            a.date_finished ?? a.date_scheduled ?? "",
+                          ),
+                        )
+                        .slice(0, 1);
+                      const cardWos = openWos.length ? openWos : lastFinished;
 
                       return (
                         <Link
@@ -1139,7 +1158,7 @@ export default async function OrdersLandingPage() {
                               as "nothing scheduled", which the inferred link
                               cannot support. A bulk sub-assembly made to
                               stock legitimately matches nothing. */}
-                          {linkedWos.length > 0 ? (
+                          {cardWos.length > 0 ? (
                             <div
                               style={{
                                 display: "flex",
@@ -1160,7 +1179,7 @@ export default async function OrdersLandingPage() {
                               >
                                 {t("workOrdersTitle")}
                               </span>
-                              {linkedWos.map((wo) => (
+                              {cardWos.map((wo) => (
                                 <span
                                   key={wo.wo_number}
                                   title={
