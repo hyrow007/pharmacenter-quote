@@ -103,7 +103,8 @@ export default async function OrdersLandingPage() {
   // Fan out reads in parallel — main SO list, key-points cache, Monday
   // activity, meeting notes, and linked purchase orders. Meeting notes
   // need a per-SO latest so we roll that up in Node after the fetch.
-  const [soRes, synRes, mondayRes, notesRes, poRes, corrRes] = await Promise.all([
+  const [soRes, synRes, mondayRes, notesRes, poRes, woRes, corrRes] =
+    await Promise.all([
     supabase
       .from("fishbowl_sales_orders")
       .select(SO_COLS)
@@ -148,6 +149,22 @@ export default async function OrdersLandingPage() {
       )
       .not("so_numbers", "eq", "{}")
       .order("date_issued", { ascending: false })
+      .limit(500),
+    // Work orders, linked to SOs the same way POs are. The link here is
+    // INFERRED, not joined: PharmaCenter leaves Fishbowl's mo.soId and
+    // moitem.soItemId empty (13 of 4,651 rows, all 2019-2020), so the sync
+    // matches each MO's finished good against open sales-order lines. An SO
+    // with no work order therefore means "none found", never a proven
+    // "nothing is scheduled" -- see claude/fishbowl-work-orders.md.
+    supabase
+      .from("fishbowl_work_orders")
+      .select(
+        "wo_number, mo_number, status_name, is_open, product_num, " +
+          "product_description, qty_ordered, date_scheduled, " +
+          "date_scheduled_to_start, date_finished, so_numbers, so_link_method",
+      )
+      .not("so_numbers", "eq", "{}")
+      .order("date_scheduled", { ascending: true })
       .limit(500),
     // Verified facts recorded through the SO assistant. Outrank every
     // synced source, so they sit above the AI key points on the card.
@@ -422,6 +439,45 @@ export default async function OrdersLandingPage() {
         date_created: p.date_created,
       });
       posBySo.set(soNum, arr);
+    }
+  }
+
+  // Work orders indexed by every SO number they reference. Many-to-many in
+  // both directions: one part sits on several open SO lines, and one SO line
+  // can be covered by several MOs (SO 14871's single line for part 1400 is
+  // three of them), so a work order shows on every order it matched.
+  type CardWorkOrder = {
+    wo_number: string;
+    mo_number: string | null;
+    status_name: string | null;
+    is_open: boolean;
+    product_num: string | null;
+    qty_ordered: number | null;
+    date_scheduled: string | null;
+    date_scheduled_to_start: string | null;
+    date_finished: string | null;
+    so_link_method: string | null;
+  };
+  const wosBySo = new Map<string, CardWorkOrder[]>();
+  for (const raw of (woRes.data ?? []) as unknown[]) {
+    const w = raw as CardWorkOrder & { so_numbers: string[] | null };
+    if (!Array.isArray(w.so_numbers)) continue;
+    for (const soNum of w.so_numbers) {
+      if (!soNum) continue;
+      const arr = wosBySo.get(soNum) ?? [];
+      arr.push({
+        wo_number: w.wo_number,
+        mo_number: w.mo_number,
+        status_name: w.status_name,
+        is_open: w.is_open,
+        product_num: w.product_num,
+        qty_ordered: w.qty_ordered,
+        date_scheduled: w.date_scheduled,
+        date_scheduled_to_start: w.date_scheduled_to_start,
+        date_finished: w.date_finished,
+        so_link_method: w.so_link_method,
+      });
+      wosBySo.set(soNum, arr);
     }
   }
 
@@ -722,6 +778,7 @@ export default async function OrdersLandingPage() {
 
                       const topPoints = (syn?.points ?? []).slice(0, 2);
                       const linkedPos = posBySo.get(key) ?? [];
+                      const linkedWos = wosBySo.get(key) ?? [];
 
                       return (
                         <Link
@@ -1068,6 +1125,96 @@ export default async function OrdersLandingPage() {
                                       ·{" "}
                                       {formatShort(
                                         po.date_issued ?? po.date_created,
+                                        lang,
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {/* Production. Shown only when this order actually
+                              matched a work order: an empty block would read
+                              as "nothing scheduled", which the inferred link
+                              cannot support. A bulk sub-assembly made to
+                              stock legitimately matches nothing. */}
+                          {linkedWos.length > 0 ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 6,
+                                marginBottom: 6,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "var(--teal-700, #1d6c7b)",
+                                  alignSelf: "center",
+                                }}
+                              >
+                                {t("workOrdersTitle")}
+                              </span>
+                              {linkedWos.map((wo) => (
+                                <span
+                                  key={wo.wo_number}
+                                  title={
+                                    wo.so_link_method === "product_match"
+                                      ? `${t("woInferredLink")}${
+                                          wo.product_num
+                                            ? ` (${wo.product_num})`
+                                            : ""
+                                        }`
+                                      : undefined
+                                  }
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    background: wo.is_open
+                                      ? "#dceaf0"
+                                      : "var(--stone-2, #efe9da)",
+                                    border: "1px solid var(--stone, #e3dcc9)",
+                                    color: "var(--ink-1, #1f2a2d)",
+                                    display: "inline-flex",
+                                    gap: 6,
+                                    alignItems: "baseline",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontFamily:
+                                        "'IBM Plex Mono', ui-monospace, monospace",
+                                      fontWeight: 700,
+                                      color: "var(--teal-900, #0f4a56)",
+                                    }}
+                                  >
+                                    {t("woPrefix")} {wo.wo_number}
+                                  </span>
+                                  {wo.product_num ? (
+                                    <span>{wo.product_num}</span>
+                                  ) : null}
+                                  {wo.status_name ? (
+                                    <span
+                                      style={{ color: "var(--ink-3, #8a9498)" }}
+                                    >
+                                      · {translateStatus(wo.status_name, t)}
+                                    </span>
+                                  ) : null}
+                                  {wo.date_scheduled ??
+                                  wo.date_scheduled_to_start ? (
+                                    <span
+                                      style={{ color: "var(--ink-3, #8a9498)" }}
+                                    >
+                                      ·{" "}
+                                      {formatShort(
+                                        wo.date_scheduled ??
+                                          wo.date_scheduled_to_start,
                                         lang,
                                       )}
                                     </span>

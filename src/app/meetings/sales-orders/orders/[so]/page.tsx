@@ -197,6 +197,40 @@ export default async function SalesOrderDetailPage({
     )
     .contains("so_numbers", [row.so_number])
     .order("date_issued", { ascending: false });
+  // Work orders for this SO. Unlike the PO link above, this one is
+  // INFERRED: PharmaCenter does not fill Fishbowl's mo.soId or
+  // moitem.soItemId (13 populated rows in 4,651, none since 2020), so the
+  // sync matches each MO's finished good against open sales-order lines and
+  // records which method it used in so_link_method. An order with no work
+  // order here means none was found -- not that nothing is scheduled.
+  const { data: workOrdersRaw } = await supabase
+    .from("fishbowl_work_orders")
+    .select(
+      "fb_wo_id, wo_number, mo_number, status_name, is_open, mo_status_name, " +
+        "product_num, product_description, qty_ordered, qty_target, " +
+        "date_scheduled, date_scheduled_to_start, date_started, " +
+        "date_finished, so_link_method",
+    )
+    .contains("so_numbers", [row.so_number])
+    .order("date_scheduled", { ascending: true });
+  const workOrdersForSo = (workOrdersRaw ?? []) as unknown as Array<{
+    fb_wo_id: number;
+    wo_number: string;
+    mo_number: string | null;
+    status_name: string | null;
+    is_open: boolean;
+    mo_status_name: string | null;
+    product_num: string | null;
+    product_description: string | null;
+    qty_ordered: number | null;
+    qty_target: number | null;
+    date_scheduled: string | null;
+    date_scheduled_to_start: string | null;
+    date_started: string | null;
+    date_finished: string | null;
+    so_link_method: string | null;
+  }>;
+
   const purchaseOrders = (purchaseOrdersRaw ?? []) as unknown as Array<{
     fb_po_id: number;
     po_number: string;
@@ -666,6 +700,99 @@ export default async function SalesOrderDetailPage({
               </tbody>
             </table>
           )}
+
+          {/* Work orders covering this SO. Listed before purchase orders
+              because "is it being made" comes before "what did we buy for
+              it". Absent block means no work order matched, which is not
+              the same as nothing being scheduled -- the link is inferred
+              from the finished good, and a sub-assembly made to stock
+              matches nothing by design. */}
+          {workOrdersForSo.length > 0 ? (
+            <>
+              <h2 style={{ ...sectionTitle(), marginTop: 26 }}>
+                {t("workOrdersTitle")}
+              </h2>
+              <div style={{ display: "grid", gap: 10, marginBottom: 4 }}>
+                {workOrdersForSo.map((wo) => (
+                  <div
+                    key={wo.fb_wo_id}
+                    style={{
+                      background: "var(--paper, #fffdf8)",
+                      border: "1px solid var(--stone, #e3dcc9)",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 14,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily:
+                          "'IBM Plex Mono', ui-monospace, monospace",
+                        fontWeight: 800,
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                    >
+                      {t("woPrefix")} {wo.wo_number}
+                    </span>
+                    {wo.status_name ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: wo.is_open
+                            ? "#dceaf0"
+                            : "var(--stone-2, #efe9da)",
+                          border: "1px solid var(--stone, #e3dcc9)",
+                        }}
+                      >
+                        {wo.status_name}
+                      </span>
+                    ) : null}
+                    {wo.product_num ? (
+                      <span style={{ fontSize: 13 }}>
+                        {wo.product_num}
+                        {wo.qty_ordered != null
+                          ? ` × ${Number(wo.qty_ordered).toLocaleString()}`
+                          : ""}
+                      </span>
+                    ) : null}
+                    {wo.date_scheduled ?? wo.date_scheduled_to_start ? (
+                      <span
+                        style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}
+                      >
+                        {formatDate(
+                          wo.date_scheduled ?? wo.date_scheduled_to_start,
+                        )}
+                      </span>
+                    ) : null}
+                    {wo.date_finished ? (
+                      <span
+                        style={{ fontSize: 12, color: "var(--ink-3, #8a9498)" }}
+                      >
+                        ✓ {formatDate(wo.date_finished)}
+                      </span>
+                    ) : null}
+                    {wo.so_link_method === "product_match" ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "var(--ink-3, #8a9498)",
+                          marginLeft: "auto",
+                        }}
+                      >
+                        {t("woInferredLink")}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {/* Purchase orders placed for this SO — one card per PO,
               showing the vendor we bought from, when we placed the
