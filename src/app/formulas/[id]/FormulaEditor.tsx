@@ -14930,19 +14930,13 @@ function CustomerSection(props: {
                   fontStyle: "italic",
                 }}
               >
-                {/* v85.8: the old text sent people to /start to "add the
-                    customer". /start does not create one either — it
-                    carries the typed name into the quote and the monday
-                    item. Nothing in these apps writes to `customers`;
-                    the table is filled by the nightly Fishbowl sync
-                    (upsert keyed on Fishbowl's own id). So the only way
-                    to make a company pickable here is to create it in
-                    Fishbowl. Saying that plainly beats sending someone
-                    to a screen that cannot help. */}
-                These fields are not saved yet. Customers come from the
-                nightly Fishbowl sync — add the company in Fishbowl, then
-                pick it under Existing once it syncs. A formula saves
-                fine without a customer.
+                {/* v85.9: this text has to track what the form actually
+                    does. It said "not saved yet" through v85.8, which was
+                    true then and became a lie the moment the field started
+                    persisting — a stale reassurance is worse than none. */}
+                Saved on this formula only — it does not create a Fishbowl
+                customer. When the company reaches Fishbowl, switch to
+                Existing and pick it; the typed name clears itself.
               </p>
             </div>
           )}
