@@ -58,7 +58,7 @@ export default async function FormulaEditorPage({
     supabase
       .from("gummy_formulas")
       .select(
-        "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+        "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
       )
       .eq("id", id)
       .maybeSingle(),
