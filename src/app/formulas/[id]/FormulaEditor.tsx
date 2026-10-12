@@ -7395,7 +7395,7 @@ export default function FormulaEditor({
               <table
                 style={{
                   width: "100%",
-                  minWidth: 1190,
+                  minWidth: 1198,
                   borderCollapse: "collapse",
                   tableLayout: "fixed",
                 }}
@@ -7438,7 +7438,7 @@ export default function FormulaEditor({
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
-                    <th style={{ ...qth, width: 36 }} />
+                    <th style={{ ...qth, width: 44 }} />
                   </tr>
                 </thead>
                 <tbody>
