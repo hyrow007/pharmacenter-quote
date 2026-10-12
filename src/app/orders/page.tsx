@@ -1370,9 +1370,17 @@ export default async function OrdersLandingPage() {
                                     {c.part_num}
                                   </span>
                                   <span>
-                                    {c.qty_available.toLocaleString(undefined, {
-                                      maximumFractionDigits: 2,
-                                    })}
+                                    {/* A part short by 0.004 of a box rounds
+                                        to "-0", which reads as a bug rather
+                                        than a shortage. Keep enough decimals
+                                        that the sign always means
+                                        something. */}
+                                    {Math.abs(c.qty_available) < 0.01
+                                      ? c.qty_available.toFixed(4)
+                                      : c.qty_available.toLocaleString(
+                                          undefined,
+                                          { maximumFractionDigits: 2 },
+                                        )}
                                   </span>
                                   {c.qty_on_order ? (
                                     <span style={{ color: "#8a6a4a" }}>
