@@ -7323,7 +7323,11 @@ export default function FormulaEditor({
                 case "cost":
                   return resolveCostPerKg(e);
                 case "batch":
-                case "gummy": {
+                case "gummy":
+                // v85.7: % of cost is Batch Total over the card total, so it
+                // ranks identically to Batch Total — same comparator, no
+                // second code path to drift.
+                case "pct": {
                   const c = resolveCostPerKg(e);
                   return c === null ? null : (pre + cfa) * c;
                 }
@@ -7386,6 +7390,11 @@ export default function FormulaEditor({
                     {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
                     {sortableTh(tr("Batch Total"), "batch", { ...qth, width: 120 })}
+                    {/* v85.7: % of Cost = this row's Batch Total ÷ the card
+                        total. Which line is eating the material cost is the
+                        question the dollar columns make you do in your head
+                        on a 12-row formula. */}
+                    {sortableTh(tr("% of Cost"), "pct", { ...qth, width: 90 })}
                     {/* Cost per Gummy = Batch Total ÷ Target Yield. */}
                     {sortableTh(tr("Cost per Gummy"), "gummy", { ...qth, width: 110 })}
                     {/* Trailing utility column — hosts the decimal
@@ -7551,6 +7560,20 @@ export default function FormulaEditor({
                               : "—";
                           })()}
                         </td>
+                        {/* v85.7: share of the card's material total. Blank
+                            when ANY row is missing a cost: the denominator is
+                            then incomplete, and a percentage of a partial
+                            total reads as fact while overstating every row. */}
+                        <td style={{ ...qtd, padding: "6px 8px" }}>
+                          {(() => {
+                            const c = resolveCostPerKg(e);
+                            if (c === null || costingModel.costMissing) return "—";
+                            if (!(costingModel.costSum > 0)) return "—";
+                            return `${Format.pct(
+                              (((pre + cfa) * c) / costingModel.costSum) * 100,
+                            )}%`;
+                          })()}
+                        </td>
                         {/* Price per Gummy = this ingredient's Batch Total
                             ÷ Target Yield. Same "—" carry-through. */}
                         <td style={{ ...qtd, padding: "6px 8px" }}>
@@ -7618,6 +7641,12 @@ export default function FormulaEditor({
                             if any row shows it. */}
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
                           {costMissing ? "—" : fmtUsd(costSum)}
+                        </td>
+                        {/* v85.7: the column sums to 100% by construction —
+                            printed rather than omitted so a column that does
+                            NOT add up is visible at a glance. */}
+                        <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)", padding: "6px 8px" }}>
+                          {costMissing || !(costSum > 0) ? "—" : "100.00%"}
                         </td>
                         {/* Price per Gummy total = Batch Total sum ÷
                             Target Yield, same line rule. */}
