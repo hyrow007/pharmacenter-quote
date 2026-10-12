@@ -7323,6 +7323,10 @@ export default function FormulaEditor({
                   return pre;
                 case "cfa":
                   return cfa;
+                // v85.10: Waste QTY is Total QTY x a constant factor, so
+                // it ranks identically to Total QTY -- one comparator, no
+                // second code path to drift.
+                case "waste":
                 case "total":
                   return pre + cfa;
                 case "source":
@@ -7393,6 +7397,14 @@ export default function FormulaEditor({
                     {sortableTh(tr("Pre-cook Blend QTY"), "pre", { ...qth, width: 130 })}
                     {sortableTh(tr("CFA Batch Addition QTY"), "cfa", { ...qth, width: 130 })}
                     {sortableTh(tr("Total QTY"), "total", { ...qth, width: 130 })}
+                    {/* v85.10: the kg of this ingredient inside Total QTY
+                        that is there only to cover the fixed process loss.
+                        Hidden entirely when no loss is modelled -- a column
+                        of zeros reads as "no waste" when it really means
+                        "nothing entered on Scale up". */}
+                    {costingModel.materialYieldFactor < 1
+                      ? sortableTh(tr("Waste QTY"), "waste", { ...qth, width: 110 })
+                      : null}
                     {sortableTh(tr("Cost Source"), "source", { ...qth, width: 150 })}
                     {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
@@ -7451,6 +7463,31 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, color: "var(--teal-900, #0f4a56)", fontWeight: 700 }}>
                           {fmtQtyKg(pre + cfa)}
                         </td>
+                        {/* v85.10: Waste QTY = Total QTY x (1 - yield
+                            factor) -- the portion of the line attributable
+                            to the fixed loss, in the same kg as the column
+                            beside it. Tooltip carries the dollar value when
+                            the row has a cost. */}
+                        {costingModel.materialYieldFactor < 1 ? (
+                          <td
+                            style={{ ...qtd, fontWeight: 500, color: "var(--ink-3, #8a9498)" }}
+                            title={(() => {
+                              const w =
+                                (pre + cfa) *
+                                (1 - costingModel.materialYieldFactor);
+                              const c = resolveCostPerKg(e);
+                              const head = `${fmtQtyKg(w)} of ${e.name} covers process loss`;
+                              return c !== null
+                                ? `${head} — ${fmtUsd(w * c)}`
+                                : head;
+                            })()}
+                          >
+                            {fmtQtyKg(
+                              (pre + cfa) *
+                                (1 - costingModel.materialYieldFactor),
+                            )}
+                          </td>
+                        ) : null}
                         {/* Cost Source — where this ingredient's $/kg
                             comes from. */}
                         <td style={{ ...qtd, whiteSpace: "normal", padding: "6px 8px" }}>
@@ -7642,6 +7679,27 @@ export default function FormulaEditor({
                         <td style={{ ...qtd, fontWeight: 700, color: "var(--teal-900, #0f4a56)" }}>
                           {fmtQtyKg(preSum + cfaSum)}
                         </td>
+                        {/* v85.10: total kg covering process loss, and in
+                            the tooltip what that costs -- same "—" carry
+                            through as Batch Total when a row has no cost. */}
+                        {costingModel.materialYieldFactor < 1 ? (
+                          <td
+                            style={{ ...qtd, fontWeight: 700, color: "var(--ink-3, #8a9498)" }}
+                            title={
+                              costMissing
+                                ? undefined
+                                : `${fmtUsd(
+                                    costSum *
+                                      (1 - costingModel.materialYieldFactor),
+                                  )} of material cost covers process loss`
+                            }
+                          >
+                            {fmtQtyKg(
+                              (preSum + cfaSum) *
+                                (1 - costingModel.materialYieldFactor),
+                            )}
+                          </td>
+                        ) : null}
                         <td style={qtd} />
                         <td style={qtd} />
                         {/* Batch Total sum — the "—" line carries through
