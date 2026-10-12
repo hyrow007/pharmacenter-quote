@@ -7384,9 +7384,18 @@ export default function FormulaEditor({
               </th>
             );
             return (
+              // v85.12: every fixed-width column takes its width out of
+              // Ingredient, which is the one column with no width of its
+              // own -- at 1,300px of window that left it 114px and names
+              // like "Regenerative Organic Certified(R) Ashwagandha Root
+              // Extract" stacked one word per line. minWidth gives
+              // Ingredient a floor (~250px) and the card scrolls sideways
+              // below that instead of squeezing the names.
+              <div style={{ overflowX: "auto" }}>
               <table
                 style={{
                   width: "100%",
+                  minWidth: 1190,
                   borderCollapse: "collapse",
                   tableLayout: "fixed",
                 }}
@@ -7394,9 +7403,9 @@ export default function FormulaEditor({
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid var(--teal-700, #1d6c7b)" }}>
                     {sortableTh(tr("Ingredient"), "name", { ...qth, textAlign: "left" })}
-                    {sortableTh(tr("Pre-cook Blend QTY"), "pre", { ...qth, width: 130 })}
-                    {sortableTh(tr("CFA Batch Addition QTY"), "cfa", { ...qth, width: 130 })}
-                    {sortableTh(tr("Total QTY"), "total", { ...qth, width: 130 })}
+                    {sortableTh(tr("Pre-cook Blend QTY"), "pre", { ...qth, width: 104 })}
+                    {sortableTh(tr("CFA Batch Addition QTY"), "cfa", { ...qth, width: 104 })}
+                    {sortableTh(tr("Total QTY"), "total", { ...qth, width: 104 })}
                     {/* v85.10: the kg of this ingredient inside Total QTY
                         that is there only to cover the fixed process loss.
                         Hidden entirely when no loss is modelled -- a column
@@ -7412,24 +7421,24 @@ export default function FormulaEditor({
                             (1 - costingModel.materialYieldFactor) * 100,
                           )}%)`,
                           "waste",
-                          { ...qth, width: 110 },
+                          { ...qth, width: 96 },
                         )
                       : null}
-                    {sortableTh(tr("Cost Source"), "source", { ...qth, width: 150 })}
-                    {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
+                    {sortableTh(tr("Cost Source"), "source", { ...qth, width: 134 })}
+                    {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 96 })}
                     {/* Batch Total = Total QTY × Cost ($/kg). */}
-                    {sortableTh(tr("Batch Total"), "batch", { ...qth, width: 120 })}
+                    {sortableTh(tr("Batch Total"), "batch", { ...qth, width: 104 })}
                     {/* v85.7: % of Cost = this row's Batch Total ÷ the card
                         total. Which line is eating the material cost is the
                         question the dollar columns make you do in your head
                         on a 12-row formula. */}
-                    {sortableTh(tr("% of Cost"), "pct", { ...qth, width: 90 })}
+                    {sortableTh(tr("% of Cost"), "pct", { ...qth, width: 76 })}
                     {/* Cost per Gummy = Batch Total ÷ Target Yield. */}
-                    {sortableTh(tr("Cost per Gummy"), "gummy", { ...qth, width: 110 })}
+                    {sortableTh(tr("Cost per Gummy"), "gummy", { ...qth, width: 96 })}
                     {/* Trailing utility column — hosts the decimal
                         chevrons in the totals row, same placement as the
                         bench/scale-up cards. */}
-                    <th style={{ ...qth, width: 44 }} />
+                    <th style={{ ...qth, width: 36 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -7738,6 +7747,7 @@ export default function FormulaEditor({
                   })()}
                 </tbody>
               </table>
+              </div>
             );
           })()}
         </div>
