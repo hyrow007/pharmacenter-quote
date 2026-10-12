@@ -7403,7 +7403,17 @@ export default function FormulaEditor({
                         of zeros reads as "no waste" when it really means
                         "nothing entered on Scale up". */}
                     {costingModel.materialYieldFactor < 1
-                      ? sortableTh(tr("Waste QTY"), "waste", { ...qth, width: 110 })
+                      ? sortableTh(
+                          // v85.11: the loss rate is the same on every row,
+                          // so it belongs in the header once rather than in
+                          // 12 cells -- and it answers "waste against what?"
+                          // where the operator is already looking.
+                          `${tr("Waste QTY")} (${Format.pct(
+                            (1 - costingModel.materialYieldFactor) * 100,
+                          )}%)`,
+                          "waste",
+                          { ...qth, width: 110 },
+                        )
                       : null}
                     {sortableTh(tr("Cost Source"), "source", { ...qth, width: 150 })}
                     {sortableTh(tr("Cost ($/kg)"), "cost", { ...qth, width: 110 })}
