@@ -103,7 +103,7 @@ export default async function OrdersLandingPage() {
   // Fan out reads in parallel — main SO list, key-points cache, Monday
   // activity, meeting notes, and linked purchase orders. Meeting notes
   // need a per-SO latest so we roll that up in Node after the fetch.
-  const [soRes, synRes, mondayRes, notesRes, poRes, woRes, corrRes] =
+  const [soRes, synRes, mondayRes, notesRes, poRes, woRes, invRes, corrRes] =
     await Promise.all([
     supabase
       .from("fishbowl_sales_orders")
@@ -161,11 +161,22 @@ export default async function OrdersLandingPage() {
       .select(
         "wo_number, mo_number, status_name, is_open, product_num, " +
           "product_description, qty_ordered, date_scheduled, " +
-          "date_scheduled_to_start, date_finished, so_numbers, so_link_method",
+          "date_scheduled_to_start, date_finished, so_numbers, " +
+          "so_link_method, items",
       )
       .not("so_numbers", "eq", "{}")
       .order("date_scheduled", { ascending: true })
       .limit(500),
+    // What Fishbowl says is actually in the building. 728 rows, so the whole
+    // table comes across and the lookup happens in memory.
+    //
+    // qty_available is SIGNED: on_hand - allocated - not_available, computed
+    // in the sync agent. Negative means Fishbowl has promised more than it
+    // holds, which is the entire point -- 127 parts are negative today.
+    supabase
+      .from("fishbowl_part_inventory")
+      .select("part_num, uom, qty_on_hand, qty_allocated, qty_available, qty_on_order")
+      .limit(2000),
     // Verified facts recorded through the SO assistant. Outrank every
     // synced source, so they sit above the AI key points on the card.
     supabase
@@ -457,6 +468,7 @@ export default async function OrdersLandingPage() {
     date_scheduled_to_start: string | null;
     date_finished: string | null;
     so_link_method: string | null;
+    items?: Array<{ type_id?: number; part_num?: string }> | null;
   };
   const wosBySo = new Map<string, CardWorkOrder[]>();
   for (const raw of (woRes.data ?? []) as unknown[]) {
@@ -476,8 +488,72 @@ export default async function OrdersLandingPage() {
         date_scheduled_to_start: w.date_scheduled_to_start,
         date_finished: w.date_finished,
         so_link_method: w.so_link_method,
+        items: Array.isArray(w.items) ? w.items : [],
       });
       wosBySo.set(soNum, arr);
+    }
+  }
+
+  // Component shortages per SO.
+  //
+  // The rule is NOT "required vs on hand". Fishbowl's qty_allocated already
+  // includes the demand from these very work orders -- it spans sales,
+  // transfer and manufacture orders -- so subtracting the requirement again
+  // would count this order's own needs twice and invent shortages that are
+  // not there. qty_available already has it netted out: below zero means
+  // Fishbowl has promised more of that part than it holds, to someone.
+  //
+  // Only type 20 lines ("Add <part>") are components. Type 10 is the
+  // finished good being produced; counting it is how an early probe decided
+  // PC-BK-0534 needed 600,000 units of itself.
+  type Shortage = {
+    part_num: string;
+    qty_available: number;
+    qty_on_order: number | null;
+    uom: string | null;
+  };
+  const invByPart = new Map<
+    string,
+    { qty_available: number | null; qty_on_order: number | null; uom: string | null }
+  >();
+  for (const raw of (invRes.data ?? []) as unknown[]) {
+    const r = raw as {
+      part_num: string;
+      uom: string | null;
+      qty_available: number | null;
+      qty_on_order: number | null;
+    };
+    if (r.part_num) invByPart.set(r.part_num, r);
+  }
+
+  const shortagesBySo = new Map<string, Shortage[]>();
+  if (invByPart.size > 0) {
+    for (const [soNum, wos] of wosBySo) {
+      const seen = new Set<string>();
+      const short: Shortage[] = [];
+      for (const wo of wos) {
+        if (!wo.is_open) continue;
+        for (const it of wo.items ?? []) {
+          if (it?.type_id !== 20) continue;
+          const part = typeof it.part_num === "string" ? it.part_num : null;
+          if (!part || seen.has(part)) continue;
+          seen.add(part);
+          const inv = invByPart.get(part);
+          if (!inv || inv.qty_available == null) continue;
+          if (inv.qty_available < 0)
+            short.push({
+              part_num: part,
+              qty_available: inv.qty_available,
+              qty_on_order: inv.qty_on_order,
+              uom: inv.uom,
+            });
+        }
+      }
+      if (short.length)
+        shortagesBySo.set(
+          soNum,
+          short.sort((a, b) => a.qty_available - b.qty_available),
+        );
     }
   }
 
@@ -798,6 +874,7 @@ export default async function OrdersLandingPage() {
                         )
                         .slice(0, 1);
                       const cardWos = openWos.length ? openWos : lastFinished;
+                      const shortComponents = shortagesBySo.get(key) ?? [];
 
                       return (
                         <Link
@@ -1240,6 +1317,77 @@ export default async function OrdersLandingPage() {
                                   ) : null}
                                 </span>
                               ))}
+                            </div>
+                          ) : null}
+
+                          {/* Components Fishbowl has promised more of than
+                              it holds. Shown only for parts this order's open
+                              work orders actually consume, so it is specific
+                              rather than a global shortage list. */}
+                          {shortComponents.length > 0 ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 6,
+                                marginBottom: 6,
+                                alignItems: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.14em",
+                                  textTransform: "uppercase",
+                                  color: "#8a4b1d",
+                                }}
+                              >
+                                {t("shortComponentsTitle")}
+                              </span>
+                              {shortComponents.slice(0, 3).map((c) => (
+                                <span
+                                  key={c.part_num}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    background: "#fdf0e3",
+                                    border: "1px solid #e8c9a4",
+                                    color: "#6b3a12",
+                                    display: "inline-flex",
+                                    gap: 6,
+                                    alignItems: "baseline",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontFamily:
+                                        "'IBM Plex Mono', ui-monospace, monospace",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {c.part_num}
+                                  </span>
+                                  <span>
+                                    {c.qty_available.toLocaleString(undefined, {
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                  {c.qty_on_order ? (
+                                    <span style={{ color: "#8a6a4a" }}>
+                                      · {t("onOrderShort")}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ))}
+                              {shortComponents.length > 3 ? (
+                                <span
+                                  style={{ fontSize: 11, color: "#8a6a4a" }}
+                                >
+                                  +{shortComponents.length - 3}
+                                </span>
+                              ) : null}
                             </div>
                           ) : null}
 
