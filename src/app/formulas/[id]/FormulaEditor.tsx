@@ -288,9 +288,19 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   if (fp === "PC-RW-0010") return 0; // Pectin Classic CS 502
   if (fp === "PC-RW-0012") return 0; // Regular white granulated sugar
   if (fp === "PC-RW-0108") return 20; // Corn Syrup (NON GMO)
+  // v85.6: tapioca syrup is 80% solids as purchased, so a fifth of what
+  // goes in the kettle boils off. House standard, same figure as the corn
+  // syrup above — operators were typing it on every pectin formula, and a
+  // blank read as "loses nothing", which quietly understated the water
+  // leaving the batch.
+  if (fp === "PC-RW-0063") return 20; // Tapioca DE 43 (Conventional)
+  if (fp === "PC-RW-0039") return 20; // Organic Tapioca Syrup DE43
   const name = (r.customName ?? "").trim().toLowerCase();
   if (name.startsWith("citric acid + water solution")) return 50;
   if (name.startsWith("sodium citrate + water solution")) return 75;
+  // Catches rows typed by hand and the library's tapioca solutions
+  // ("Tapioca Syrup (80% sol)", "Tapioca + Water Solution (80/20)").
+  if (name.startsWith("tapioca")) return 20;
   return 0;
 }
 
