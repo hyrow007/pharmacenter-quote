@@ -77,7 +77,7 @@ export async function GET(
   const { data: formulaRow, error: formulaErr } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .eq("id", id)
     .maybeSingle();
@@ -215,6 +215,8 @@ type PutBody = {
   // Customer this formula is designed for. Set to null explicitly to
   // clear the reference; omit the field entirely to leave it untouched.
   customerId?: string | null;
+  /** v85.9: free-text customer, for a company not in Fishbowl yet. */
+  customerNameManual?: string | null;
   active?: boolean;
 };
 
@@ -239,7 +241,7 @@ export async function PUT(
   const { data: beforeRow, error: beforeErr } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .eq("id", id)
     .maybeSingle();
@@ -272,6 +274,19 @@ export async function PUT(
     // insert boundary with a 400 the caller can surface.
     const trimmed = typeof body.customerId === "string" ? body.customerId.trim() : body.customerId;
     patch.customer_id = trimmed ? trimmed : null;
+    // v85.9: the two are mutually exclusive by construction. Binding a
+    // real customer drops the typed placeholder, so a formula can never
+    // claim two different customers and leave the reader guessing which
+    // one the quote used.
+    if (patch.customer_id) patch.customer_name_manual = null;
+  }
+  if (body.customerNameManual !== undefined) {
+    const typed =
+      typeof body.customerNameManual === "string"
+        ? body.customerNameManual.trim()
+        : "";
+    patch.customer_name_manual = typed || null;
+    if (typed) patch.customer_id = null;
   }
   if (body.active !== undefined) patch.active = !!body.active;
 
@@ -280,7 +295,7 @@ export async function PUT(
     .update(patch)
     .eq("id", id)
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .maybeSingle();
 

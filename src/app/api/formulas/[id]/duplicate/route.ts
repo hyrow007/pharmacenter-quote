@@ -51,7 +51,7 @@ export async function POST(
   const { data: source, error: sourceErr } = await supabase
     .from("gummy_formulas")
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active",
     )
     .eq("id", id)
     .single();
@@ -101,11 +101,14 @@ export async function POST(
       shape: source.shape,
       flavor: source.flavor,
       customer_id: source.customer_id,
+      // v85.9: a copy keeps whichever customer the original carried,
+      // typed or picked.
+      customer_name_manual: source.customer_name_manual ?? null,
       created_by_email: user.email,
       updated_by_email: user.email,
     })
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .single();
   if (formulaErr || !formulaRow) {

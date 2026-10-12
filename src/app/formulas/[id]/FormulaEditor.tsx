@@ -724,8 +724,17 @@ export default function FormulaEditor({
   const [customerId, setCustomerId] = useState<string | null>(
     initialFormula.customerId ?? null,
   );
+  // v85.9: free-text customer for a company Fishbowl has not got yet.
+  // Stored on the formula (gummy_formulas.customer_name_manual), never in
+  // the shared `customers` table — see the note on the type.
+  const [customerNameManual, setCustomerNameManual] = useState<string>(
+    initialFormula.customerNameManual ?? "",
+  );
   const [customerMode, setCustomerMode] = useState<"existing" | "new">(
-    "existing",
+    // Open on whichever side actually holds this formula's customer.
+    initialFormula.customerNameManual && !initialFormula.customerId
+      ? "new"
+      : "existing",
   );
   // Display state resolved from the customers table when the formula
   // loads with a saved customer_id (or when the operator picks one).
@@ -738,15 +747,6 @@ export default function FormulaEditor({
   );
   const [customerSearch, setCustomerSearch] = useState<string>("");
   const [customerResults, setCustomerResults] = useState<CustomerRow[]>([]);
-  // New-customer form fields — kept in state so the form doesn't reset
-  // when the operator toggles between Existing / New. Not yet wired to a
-  // DB write; see the TODO below the Save-selection flow.
-  const [newCustomer, setNewCustomer] = useState<{
-    name: string;
-    contact: string;
-    email: string;
-  }>({ name: "", contact: "", email: "" });
-
   // Product Code search state — mirrors the "search vendors" pattern on
   // PricingCalculator. pcBkSearch is the query string; pcBkEditing is the
   // "am I currently searching?" flag which collapses the input into a
@@ -1662,7 +1662,11 @@ export default function FormulaEditor({
     // customerId is part of identity — Save must enable when the operator
     // changes the picked customer (or clears it) so it can flush the
     // change even if pickCustomer's inline PUT was skipped or failed.
-    (customerId ?? null) !== (initialFormula.customerId ?? null);
+    (customerId ?? null) !== (initialFormula.customerId ?? null) ||
+    // v85.9: typing a customer name is an identity edit like any other —
+    // without this Save stays greyed out and the text is silently lost.
+    (customerNameManual.trim() || null) !==
+      (initialFormula.customerNameManual ?? null);
 
   const versionDirty = useMemo(() => {
     // Build a version-shape blob and compare against the loaded snapshot.
@@ -2015,6 +2019,8 @@ export default function FormulaEditor({
   // waiting for the operator to hit the top Save button.
   async function pickCustomer(c: CustomerRow) {
     setCustomerId(c.id);
+    // v85.9: the real thing wins — the route does the same server-side.
+    setCustomerNameManual("");
     setCustomerName(c.name);
     setCustomerShipTo(c.default_ship_to);
     setEditingCustomer(false);
@@ -2238,6 +2244,9 @@ export default function FormulaEditor({
           body: JSON.stringify({
             name: name.trim(),
             pcBkCode: pcBkMode === "tbd" ? null : pcBkCode.trim() || null,
+            // v85.9: the route nulls this whenever a real customer is
+            // bound, so the two can never disagree.
+            customerNameManual: customerNameManual.trim() || null,
             shape,
             flavor: flavor.trim() || null,
             customerId: customerId ?? null,
@@ -4668,15 +4677,13 @@ export default function FormulaEditor({
             editing={editingCustomer}
             search={customerSearch}
             results={customerResults}
-            newCustomer={newCustomer}
+            customerNameManual={customerNameManual}
             onSetMode={setCustomerMode}
             onSearchChange={setCustomerSearch}
             onPick={pickCustomer}
+            onCustomerNameManualChange={setCustomerNameManual}
             onClear={clearCustomer}
             onStartEdit={() => setEditingCustomer(true)}
-            onNewCustomerChange={(patch) =>
-              setNewCustomer((prev) => ({ ...prev, ...patch }))
-            }
           />
         </div>
 
@@ -14656,15 +14663,14 @@ function CustomerSection(props: {
   editing: boolean;
   search: string;
   results: CustomerRow[];
-  newCustomer: { name: string; contact: string; email: string };
+  /** v85.9: free-text customer name held on the formula. */
+  customerNameManual: string;
   onSetMode: (m: "existing" | "new") => void;
   onSearchChange: (v: string) => void;
   onPick: (c: CustomerRow) => void;
   onClear: () => void;
   onStartEdit: () => void;
-  onNewCustomerChange: (
-    patch: Partial<{ name: string; contact: string; email: string }>,
-  ) => void;
+  onCustomerNameManualChange: (v: string) => void;
 }) {
   const tr = makeTr(useLang());
   const {
@@ -14675,13 +14681,13 @@ function CustomerSection(props: {
     editing,
     search,
     results,
-    newCustomer,
+    customerNameManual,
     onSetMode,
     onSearchChange,
     onPick,
     onClear,
     onStartEdit,
-    onNewCustomerChange,
+    onCustomerNameManualChange,
   } = props;
 
   // Section styles — mirror /start's approach so the picker reads as an
@@ -14896,51 +14902,23 @@ function CustomerSection(props: {
               ) : null}
             </>
           ) : (
-            // TODO: wire this form to an actual create-customer POST so
-            // the operator can create + pin a new customers row without
-            // leaving the formula editor. Right now the fields are
-            // captured locally but never persisted — matches the visual
-            // requirement in the spec while leaving the DB write for a
-            // follow-up.
+            // v85.9: Company name now persists on the formula itself.
+            // Contact and email were removed rather than left collecting
+            // text nothing reads — they belong on a customer record, and
+            // there is no customer record to put them on until Fishbowl
+            // has the company.
             <div
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
               <label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={labelText}>Company name *</span>
+                <span style={labelText}>{tr("Company name")}</span>
                 <input
                   type="text"
-                  value={newCustomer.name}
-                  onChange={(e) =>
-                    onNewCustomerChange({ name: e.target.value })
-                  }
-                  style={inputStyle}
-                />
-              </label>
-              <label
-                style={{ display: "flex", flexDirection: "column", gap: 4 }}
-              >
-                <span style={labelText}>Primary contact</span>
-                <input
-                  type="text"
-                  value={newCustomer.contact}
-                  onChange={(e) =>
-                    onNewCustomerChange({ contact: e.target.value })
-                  }
-                  style={inputStyle}
-                />
-              </label>
-              <label
-                style={{ display: "flex", flexDirection: "column", gap: 4 }}
-              >
-                <span style={labelText}>Email</span>
-                <input
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) =>
-                    onNewCustomerChange({ email: e.target.value })
-                  }
+                  value={customerNameManual}
+                  onChange={(e) => onCustomerNameManualChange(e.target.value)}
+                  placeholder="e.g. Elevate Organic"
                   style={inputStyle}
                 />
               </label>
@@ -14952,8 +14930,19 @@ function CustomerSection(props: {
                   fontStyle: "italic",
                 }}
               >
-                New customer creation coming soon — for now, add the
-                customer via /start, then pick it here.
+                {/* v85.8: the old text sent people to /start to "add the
+                    customer". /start does not create one either — it
+                    carries the typed name into the quote and the monday
+                    item. Nothing in these apps writes to `customers`;
+                    the table is filled by the nightly Fishbowl sync
+                    (upsert keyed on Fishbowl's own id). So the only way
+                    to make a company pickable here is to create it in
+                    Fishbowl. Saying that plainly beats sending someone
+                    to a screen that cannot help. */}
+                These fields are not saved yet. Customers come from the
+                nightly Fishbowl sync — add the company in Fishbowl, then
+                pick it under Existing once it syncs. A formula saves
+                fine without a customer.
               </p>
             </div>
           )}

@@ -350,6 +350,13 @@ export type GummyFormulaRecord = {
   // unassigned. FK into public.customers with ON DELETE SET NULL, so a
   // purged customer clears the reference without dropping the formula.
   customerId: string | null;
+  /** v85.9: free-text customer for a company Fishbowl doesn't carry yet.
+   *  Lives on the FORMULA, not in `customers`: that table is upserted by
+   *  the nightly Fishbowl sync on Fishbowl's own id, so a hand-made row
+   *  there could never match the real company when it finally arrives —
+   *  you'd end up with two, and formulas pointed at the orphan. Null
+   *  whenever customerId is set; picking a real customer clears it. */
+  customerNameManual: string | null;
   active: boolean;
   latestVersionNum: number;     // 0 while the first version is being written
   createdAt: string;            // ISO
@@ -777,6 +784,7 @@ export function recordFromRow(row: {
   // Optional so pre-migration rows and SELECTs that predate the column
   // still map cleanly. Reader coerces undefined → null.
   customer_id?: string | null;
+  customer_name_manual?: string | null;
   active: boolean;
   latest_version_num: number;
   created_at: string;
@@ -797,6 +805,7 @@ export function recordFromRow(row: {
     shape: row.shape,
     flavor: row.flavor,
     customerId: row.customer_id ?? null,
+    customerNameManual: row.customer_name_manual ?? null,
     active: row.active,
     latestVersionNum: row.latest_version_num,
     createdAt: row.created_at,
@@ -832,7 +841,14 @@ export type GummyFormulaAuditRecord = {
 // coerce per kind.
 export type IdentityDiff = {
   changes: Array<{
-    field: "name" | "pcBkCode" | "shape" | "flavor" | "active" | "customerId";
+    field:
+      | "name"
+      | "pcBkCode"
+      | "shape"
+      | "flavor"
+      | "active"
+      | "customerId"
+      | "customerNameManual";
     from: string | boolean | null;
     to: string | boolean | null;
   }>;
@@ -910,12 +926,22 @@ const IDENTITY_FIELD_LABELS: Record<
   shape: "shape",
   flavor: "flavor",
   customerId: "customer",
+  // v85.9: shows in the audit timeline as its own line, so "customer:
+  // (empty) → Elevate Organic" reads the same whether the company came
+  // from Fishbowl or was typed in.
+  customerNameManual: "customer (typed)",
   active: "active status",
 };
 
 export function diffIdentity(
-  before: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "active">,
-  after: Pick<GummyFormulaRecord, "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "active">,
+  before: Pick<
+    GummyFormulaRecord,
+    "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "customerNameManual" | "active"
+  >,
+  after: Pick<
+    GummyFormulaRecord,
+    "name" | "pcBkCode" | "shape" | "flavor" | "customerId" | "customerNameManual" | "active"
+  >,
 ): { diff: IdentityDiff; summary: string } {
   const changes: IdentityDiff["changes"] = [];
   (Object.keys(IDENTITY_FIELD_LABELS) as Array<keyof typeof IDENTITY_FIELD_LABELS>).forEach(

@@ -57,7 +57,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("gummy_formulas")
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .order("updated_at", { ascending: false });
 
@@ -152,6 +152,8 @@ type PostBody = {
   // Customer this formula was designed for. Optional so R&D can create
   // a formula without a customer picked yet. Set later via PUT /[id].
   customerId?: string | null;
+  /** v85.9: free-text customer, for a company not in Fishbowl yet. */
+  customerNameManual?: string | null;
   benchBatchG?: number;
   batchKg?: number;
   targetYieldUnits?: number;
@@ -202,11 +204,17 @@ export async function POST(request: Request) {
       shape,
       flavor,
       customer_id: customerId,
+      // v85.9: only when no real customer was picked — see the PUT route.
+      customer_name_manual: customerId
+        ? null
+        : (typeof body.customerNameManual === "string"
+            ? body.customerNameManual.trim() || null
+            : null),
       created_by_email: user.email,
       updated_by_email: user.email,
     })
     .select(
-      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
+      "id, formula_number, pc_bk_code, name, shape, flavor, customer_id, customer_name_manual, active, latest_version_num, created_at, updated_at, created_by_email, updated_by_email",
     )
     .single();
 

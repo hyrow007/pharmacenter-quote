@@ -152,7 +152,9 @@ export default function FormulasCatalog({
     if (f.customerId && customersById[f.customerId]) {
       return customersById[f.customerId];
     }
-    return "";
+    // v85.9: a typed customer is still a customer — it sorts and searches
+    // with the rest rather than reading as a blank row.
+    return f.customerNameManual ?? "";
   }
 
   // Filter first (search + shape) — then sort. The search field looks
@@ -505,6 +507,15 @@ export default function FormulasCatalog({
                 <Td>
                   {f.customerId && customersById[f.customerId] ? (
                     customersById[f.customerId]
+                  ) : f.customerNameManual ? (
+                    /* v85.9: typed, not yet a Fishbowl customer. Italic so
+                       the difference is visible without a second column. */
+                    <span
+                      style={{ fontStyle: "italic" }}
+                      title="Typed on the formula — not in Fishbowl yet"
+                    >
+                      {f.customerNameManual}
+                    </span>
                   ) : (
                     <em style={{ color: "#8a9498" }}>—</em>
                   )}
