@@ -4215,6 +4215,30 @@ export default function SachetCostingBoard({
             {/* Text input, not type=number, so the thousands separator can
                 render: 12,000 reads as twelve thousand at a glance where
                 12000 has to be counted. Digits only; commas are chrome. */}
+            {/* Hung, not in flow: this caption only appears while a
+                scenario is open, so in flow it would lift the QTY cell a
+                line above the rest of the row the moment you opened one —
+                and leave it level again when you went back to Base, which
+                is how a layout bug hides. Ellipsis rather than wrap: a
+                scenario can be named anything, and a long one must not run
+                into the column beside it. */}
+            <FieldNote
+              note={
+                activeScenario ? (
+                  <span
+                    style={{
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: "var(--teal-700, #1d6c7b)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    editing “{activeScenario.name}”
+                  </span>
+                ) : null
+              }
+            >
             <input
               inputMode="numeric"
               value={qty?.toLocaleString("en-US") ?? ""}
@@ -4228,18 +4252,7 @@ export default function SachetCostingBoard({
               }}
               style={numInput}
             />
-            {activeScenario ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--teal-700, #1d6c7b)",
-                  fontWeight: 600,
-                  marginTop: 3,
-                }}
-              >
-                editing “{activeScenario.name}”
-              </div>
-            ) : null}
+            </FieldNote>
           </ParamBlock>
           <ParamBlock label="Sachets / minute" nowrap>
             <NumField

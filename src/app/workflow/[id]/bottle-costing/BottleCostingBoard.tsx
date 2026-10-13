@@ -1281,6 +1281,60 @@ const yesNoSelect: React.CSSProperties = {
 };
 
 /**
+ * A field in Considerations with a caption hanging under it.
+ *
+ * metricGrid bottom-aligns its cells, so a caption placed IN FLOW under a
+ * field lifts that whole cell — label, input and all — by the caption's
+ * height, and the cell stops lining up with the rest of the row. The fix is
+ * the one FormYesNo already uses: take the caption out of flow and hang it
+ * below. This wrapper supplies both the relative parent and the absolute
+ * note, so no caller has to remember either half.
+ *
+ * Every note under a Considerations field goes through here.
+ */
+function FieldNote({
+  note,
+  tone = "muted",
+  wrap,
+  children,
+}: {
+  /** Null/false renders no caption. */
+  note?: React.ReactNode;
+  tone?: "muted" | "warn";
+  /** Long captions that cannot fit one line. They grow into the row gap, so
+   *  only the rare ones worth the space set this. */
+  wrap?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      {children}
+      {note ? (
+        <div
+          className="bc-noprint"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            whiteSpace: wrap ? "normal" : "nowrap",
+            lineHeight: "14px",
+            marginTop: 2,
+            fontSize: 11,
+            fontWeight: tone === "warn" ? 600 : 500,
+            textTransform: "none",
+            letterSpacing: 0,
+            color: tone === "warn" ? "#8a5a00" : "var(--ink-3, #7b7364)",
+          }}
+        >
+          {note}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * A Yes/No in Considerations whose DEFAULT comes from the packaging form but
  * which the costing can override without touching the form. Choosing what
  * the form already says clears the override, so the board goes back to
@@ -3922,6 +3976,30 @@ export default function BottleCostingBoard({
             {/* Text input, not type=number, so the thousands separator can
                 render: 12,000 reads as twelve thousand at a glance where
                 12000 has to be counted. Digits only; commas are chrome. */}
+            {/* Hung, not in flow: this caption only appears while a
+                scenario is open, so in flow it would lift the QTY cell a
+                line above the rest of the row the moment you opened one —
+                and leave it level again when you went back to Base, which
+                is how a layout bug hides. Ellipsis rather than wrap: a
+                scenario can be named anything, and a long one must not run
+                into the column beside it. */}
+            <FieldNote
+              note={
+                activeScenario ? (
+                  <span
+                    style={{
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: "var(--teal-700, #1d6c7b)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    editing “{activeScenario.name}”
+                  </span>
+                ) : null
+              }
+            >
             <input
               inputMode="numeric"
               value={qty?.toLocaleString("en-US") ?? ""}
@@ -3935,18 +4013,7 @@ export default function BottleCostingBoard({
               }}
               style={numInput}
             />
-            {activeScenario ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--teal-700, #1d6c7b)",
-                  fontWeight: 600,
-                  marginTop: 3,
-                }}
-              >
-                editing “{activeScenario.name}”
-              </div>
-            ) : null}
+            </FieldNote>
           </ParamBlock>
           <ParamBlock label="Line speed (bottles / minute)">
             <NumField
