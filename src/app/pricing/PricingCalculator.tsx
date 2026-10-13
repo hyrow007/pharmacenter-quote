@@ -1378,6 +1378,22 @@ function newTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Name for a duplicated tab: "Omega 3" → "Omega 3 (copy)", and the next one
+ * "(copy 2)" rather than "(copy) (copy)". Strips any existing suffix first
+ * so duplicating a duplicate counts up instead of nesting.
+ */
+function copyLabel(base: string, taken: string[]): string {
+  const root = base.replace(/\s*\(copy(?: \d+)?\)\s*$/i, "").trim() || base;
+  let candidate = `${root} (copy)`;
+  let n = 2;
+  while (taken.includes(candidate)) {
+    candidate = `${root} (copy ${n})`;
+    n += 1;
+  }
+  return candidate;
+}
+
 // Defaults for a freshly added blank tab. `commissionSeed` carries the
 // bulk-quote commission defaults (HoS 0.50% / Rep 3%) — undefined for
 // non-bulk quote types so those tabs start at 0%.
@@ -2511,6 +2527,44 @@ export default function PricingCalculator({
     applyTab(fresh);
   }
 
+  /**
+   * Copy a tab, inputs and all, and open the copy.
+   *
+   * The reason the costing boards grew scenarios: most of the time a second
+   * calculation is the first one with ONE number moved — a different
+   * quantity, a different margin, air instead of ocean. "+ Add tab" gives a
+   * blank sheet, so comparing two near-identical cases meant typing the
+   * same eleven fields twice and hoping they matched.
+   */
+  function duplicateTab(index: number) {
+    // Snapshot first: the active tab's in-flight edits live in the field
+    // state, not in `tabs`, so duplicating without this copies whatever was
+    // there the last time something happened to snapshot it.
+    const snap = snapshotCurrentTab();
+    const withSnap = tabs.map((t, i) => (i === activeTabIndex ? snap : t));
+    const source = withSnap[index];
+    if (!source) return;
+    const copy: TabState = {
+      ...source,
+      tabId: newTabId(),
+      // A copy has never been written to the workflow. Carrying savedAt
+      // across would date it to the original's save and read as saved when
+      // nothing of it has been.
+      savedAt: null,
+      label: copyLabel(tabDisplayLabels[index], tabDisplayLabels),
+    };
+    // Immediately after its source, not at the end of the strip: the point
+    // of a copy is to compare it with what it came from.
+    const next = [
+      ...withSnap.slice(0, index + 1),
+      copy,
+      ...withSnap.slice(index + 1),
+    ];
+    setTabs(next);
+    setActiveTabIndex(index + 1);
+    applyTab(copy);
+  }
+
   function removeTab(index: number) {
     if (tabs.length <= 1) return; // always keep at least one tab
     const nextTabs = tabs.filter((_, i) => i !== index);
@@ -3400,6 +3454,31 @@ export default function PricingCalculator({
                   }}
                 >
                   ✎
+                </button>
+              ) : null}
+              {/* Duplicate sits with rename on the ACTIVE tab only, for the
+                  same reason: an icon on every tab turns the strip into a
+                  row of icons and none of them reads as a verb. */}
+              {active && renamingTab !== i ? (
+                <button
+                  type="button"
+                  aria-label={`Duplicate ${label}`}
+                  title="Duplicate this tab with all its inputs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    duplicateTab(i);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    lineHeight: 1,
+                    padding: "0 2px",
+                  }}
+                >
+                  ⧉
                 </button>
               ) : null}
               {tabs.length > 1 ? (
