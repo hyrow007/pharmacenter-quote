@@ -221,11 +221,24 @@ export function fmtDate(iso: string, lang: string, withWeekday = true): string {
 // ---- gross ----------------------------------------------------------------
 
 // THE definition of gross per finished unit for entries made in the app, in
-// one place. The sheet's figure matched SO price minus the product's cost, not
-// the price itself (1928: price 6.48, sheet 4.80; 1075: price 3.82, sheet
-// 1.11), so that is the rule. An unknown cost makes the gross unknown -- it
-// does not fall back to the bare price, which would overstate every day.
+// one place: price per unit minus cost per unit. An unknown cost makes the
+// gross unknown -- it never falls back to the bare price.
+//
+// NOT YET CONFIRMED (2026-10-13): what the sheet's "Projected Gross" was
+// computed from. SO price minus products.avg_cost does not reproduce it --
+// 1928 is 6.48 - 2.84 = 3.64 against the sheet's 4.80 -- and avg_cost is in
+// the product's own unit of measure, which the products sync does not carry
+// (1075's is 2,630.66: per thousand). Until both are settled the app reads
+// NO per-unit cost (productCostEach below), so a Fishbowl gross is never
+// computed and the leader enters it by hand. That is deliberate: a wrong
+// gross is worse than a missing one.
 export function grossFrom(eachPrice: number | null, unitCost: number | null): number | null {
   if (eachPrice === null || unitCost === null) return null;
   return Math.round((eachPrice - unitCost) * 1e6) / 1e6;
+}
+
+// The product's cost per finished unit, or null when its unit is unknown --
+// which today is always: products.avg_cost has no unit column. See grossFrom().
+export function productCostEach(_avgCost: number | null): number | null {
+  return null;
 }

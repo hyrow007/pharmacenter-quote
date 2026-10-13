@@ -12,6 +12,7 @@ import {
   grossFrom,
   lineLabelKey,
   parseSoNumbers,
+  productCostEach,
   singlesFor,
   toNum,
   type YieldEntry,
@@ -61,6 +62,8 @@ export default function EntryForm({
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const [orders, setOrders] = useState<OrderLine[] | null>(null);
+  // Raw products.avg_cost, in the product's own (unknown) unit -- shown for
+  // reference only. productCostEach() decides what the gross may use.
   const [productCost, setProductCost] = useState<number | null>(editing?.unit_cost ?? null);
   const [soText, setSoText] = useState(editing?.so_numbers.join(", ") ?? "");
   const [multipack, setMultipack] = useState(editing?.is_multipack ?? false);
@@ -137,7 +140,7 @@ export default function EntryForm({
     const listed = (orders ?? []).filter((o) => soList.includes(o.so_number));
     return listed.find((o) => o.each_price !== null) ?? listed[0] ?? null;
   }, [orders, soList]);
-  const fishbowlGross = grossFrom(priceLine?.each_price ?? null, productCost);
+  const fishbowlGross = grossFrom(priceLine?.each_price ?? null, productCostEach(productCost));
   const grossPerUnit = grossMode === "manual" ? toNum(manualGross) : fishbowlGross;
 
   const fin = toNum(finished) ?? 0;
@@ -340,7 +343,15 @@ export default function EntryForm({
                   )}
                 </dd>
                 <dt>{t("grossCost")}</dt>
-                <dd>{productCost === null ? <span className={s.missing}>{t("missing")}</span> : `− ${fmtUnitMoney(productCost, lang)}`}</dd>
+                <dd>
+                  {productCost === null ? (
+                    <span className={s.missing}>{t("missing")}</span>
+                  ) : productCostEach(productCost) === null ? (
+                    <span className={s.missing}>{t("grossCostUnitUnknown", { cost: fmtMoney(productCost, lang, 2) })}</span>
+                  ) : (
+                    `− ${fmtUnitMoney(productCostEach(productCost), lang)}`
+                  )}
+                </dd>
                 <dt className={s.grossStrong}>{t("grossHeading")}</dt>
                 <dd className={s.grossStrong}>{fishbowlGross === null ? <span className={s.missing}>{t("missing")}</span> : fmtUnitMoney(fishbowlGross, lang)}</dd>
               </dl>

@@ -44,7 +44,11 @@ export async function GET(request: Request) {
       supabase
         .from("fishbowl_sales_orders")
         .select("so_number, customer_name, is_open, status_name, date_issued, items, synced_at")
-        .contains("items", [{ product_num: product }])
+        // jsonb containment. supabase-js's .contains() serialises a JS array
+        // as a Postgres ARRAY literal ({...}), which a jsonb column rejects
+        // ("invalid input syntax for type json") -- so the filter is built
+        // by hand with the JSON text.
+        .filter("items", "cs", JSON.stringify([{ product_num: product }]))
         .order("date_issued", { ascending: false })
         .limit(25),
     ]);

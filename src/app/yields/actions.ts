@@ -8,6 +8,7 @@ import {
   isIsoDate,
   isLine,
   parseSoNumbers,
+  productCostEach,
   singlesFor,
   toNum,
 } from "./_lib/model";
@@ -88,7 +89,7 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
       line?.uom as string | null | undefined,
       line?.uom_name as string | null | undefined,
     ).each;
-    unit_cost = toNum(pRes.data?.avg_cost);
+    unit_cost = productCostEach(toNum(pRes.data?.avg_cost));
     gross_per_unit = grossFrom(unit_price, unit_cost);
     gross_source = gross_per_unit === null ? null : "fishbowl";
   }
