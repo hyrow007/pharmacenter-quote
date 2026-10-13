@@ -96,7 +96,13 @@ export function parseSoNumbers(raw: string): string[] {
 // Only units known to be "one finished unit" or "a thousand of them" convert.
 // Anything else -- an unrecognised unit, or a line synced before the unit was
 // carried -- yields NO per-unit price, and the form says so and asks for one.
-const EACH_UNITS = new Set(["ea", "each", "pc", "pcs", "piece", "pieces", "unit", "units"]);
+//
+// Measured on the first sync that carried units (2026-10-13 21:43): of 142
+// finished-good lines, 62 are "ea / Each", 43 are "un / Unit" and 37 have no
+// unit. "Unit" is NOT one finished unit -- 1075 sells at 3,820 per "Unit" with
+// 52 ordered, i.e. 52 thousand bottles at $3.82. So only "Each" counts as each;
+// "Unit" and a missing unit are both unknown, and the form asks for the gross.
+const EACH_UNITS = new Set(["ea", "each"]);
 const THOUSAND_RE = /^(thousand|per thousand|1000|1,000|m units?|millar|mil)$/i;
 
 export type PriceUnit = { factor: number | null; label: string | null };
