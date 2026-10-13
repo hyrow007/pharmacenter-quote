@@ -1591,6 +1591,45 @@ html, body {
   padding-bottom: 14px;
 }
 
+/* ---- Coming soon --------------------------------------------------------
+   A tool that is announced but not built. Dimmed enough to read as inactive
+   at a glance, not so dim that the name cannot be read -- the point of the
+   tile is that someone learns the tool is coming. No hover lift, no pointer,
+   no icon colour change: every affordance the live tiles use to say "click
+   me" is removed, and the badge says why. */
+.hub-tile--soon {
+  opacity: 0.55;
+  cursor: default;
+  background: var(--cream);
+  border-style: dashed;
+}
+
+/* Beat the shared hover rule, which would otherwise lift a tile that does
+   nothing. */
+.hub-tile--soon:hover {
+  border-color: var(--stone);
+  box-shadow: none;
+  transform: none;
+}
+
+.hub-tile--soon:hover .hub-tile__icon {
+  background: var(--cream);
+  color: var(--teal-700);
+}
+
+/* Same corner the "Open →" label uses, but always visible: this one is the
+   whole message, not a hover affordance. */
+.hub-tile__soon {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hub-tile,
   .hub-tile__icon,

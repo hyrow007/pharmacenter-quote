@@ -40,6 +40,11 @@ type Tool = {
   // the tile, its icon and its two dictionary keys never drift apart while it
   // waits. Filtered out at render -- see VISIBLE_TOOLS.
   hidden?: boolean;
+  // Announced but not built. Renders as a dimmed, unclickable tile with a
+  // "Coming soon" badge instead of "Open". Deliberately NOT a link to a stub
+  // page: a tile that opens an empty screen is worse than one that says it is
+  // not ready, because the reader has to click to find that out.
+  comingSoon?: boolean;
 };
 
 // Stroke icons rather than glyphs or emoji: they take currentColor, so each
@@ -129,6 +134,27 @@ const TOOLS: Tool[] = [
       </svg>
     ),
   },
+  {
+    key: "dielines",
+    // No destination yet. The tile is not a link, so this is never followed --
+    // it is here so wiring it up later is one line and one flag.
+    href: "#",
+    titleKey: "hubDielinesName",
+    descKey: "hubDielinesDesc",
+    comingSoon: true,
+    // An unfolded carton: solid outline for the cut, dashed interior for the
+    // folds. That is what a dieline looks like on paper, so it reads as the
+    // thing rather than as a generic document.
+    icon: (
+      <svg {...ICON}>
+        <path d="M3.5 8.2h17v7.6h-17z" />
+        <path d="M3.5 8.2 5.6 5.4h12.8l2.1 2.8" />
+        <path d="M3.5 15.8 5.6 18.6h12.8l2.1-2.8" />
+        <path d="M8.6 8.2v7.6" strokeDasharray="2 2" />
+        <path d="M15.4 8.2v7.6" strokeDasharray="2 2" />
+      </svg>
+    ),
+  },
 ];
 
 const VISIBLE_TOOLS = TOOLS.filter((tool) => !tool.hidden);
@@ -163,18 +189,32 @@ export default async function HubPage() {
           <ul className="hub-grid">
             {VISIBLE_TOOLS.map((tool) => (
               <li key={tool.key}>
-                {/* The whole tile is the link, so the target is the card
-                    rather than a word inside it. */}
-                <a className="hub-tile" href={tool.href}>
-                  <span className="hub-tile__icon">{tool.icon}</span>
-                  <span className="hub-tile__body">
-                    <span className="hub-tile__name">{t(tool.titleKey)}</span>
-                    <span className="hub-tile__desc">{t(tool.descKey)}</span>
-                  </span>
-                  <span className="hub-tile__go" aria-hidden="true">
-                    {t("hubOpen")} &rarr;
-                  </span>
-                </a>
+                {tool.comingSoon ? (
+                  /* A div, not a disabled link: there is nowhere to go, and a
+                     link that goes nowhere is still focusable and still reads
+                     as clickable to a screen reader. */
+                  <div className="hub-tile hub-tile--soon">
+                    <span className="hub-tile__icon">{tool.icon}</span>
+                    <span className="hub-tile__body">
+                      <span className="hub-tile__name">{t(tool.titleKey)}</span>
+                      <span className="hub-tile__desc">{t(tool.descKey)}</span>
+                    </span>
+                    <span className="hub-tile__soon">{t("hubComingSoon")}</span>
+                  </div>
+                ) : (
+                  /* The whole tile is the link, so the target is the card
+                     rather than a word inside it. */
+                  <a className="hub-tile" href={tool.href}>
+                    <span className="hub-tile__icon">{tool.icon}</span>
+                    <span className="hub-tile__body">
+                      <span className="hub-tile__name">{t(tool.titleKey)}</span>
+                      <span className="hub-tile__desc">{t(tool.descKey)}</span>
+                    </span>
+                    <span className="hub-tile__go" aria-hidden="true">
+                      {t("hubOpen")} &rarr;
+                    </span>
+                  </a>
+                )}
               </li>
             ))}
           </ul>
