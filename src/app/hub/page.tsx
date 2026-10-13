@@ -162,16 +162,19 @@ const TOOLS: Tool[] = [
     titleKey: "hubDielinesName",
     descKey: "hubDielinesDesc",
     comingSoon: true,
-    // An unfolded carton: solid outline for the cut, dashed interior for the
-    // folds. That is what a dieline looks like on paper, so it reads as the
-    // thing rather than as a generic document.
+    // A sachet with its height and width called out, the way a dieline is
+    // actually drawn. The first attempt was an unfolded carton and read as a
+    // crate at 26px -- the dimension lines are what say "this is a spec, not
+    // a box".
     icon: (
       <svg {...ICON}>
-        <path d="M3.5 8.2h17v7.6h-17z" />
-        <path d="M3.5 8.2 5.6 5.4h12.8l2.1 2.8" />
-        <path d="M3.5 15.8 5.6 18.6h12.8l2.1-2.8" />
-        <path d="M8.6 8.2v7.6" strokeDasharray="2 2" />
-        <path d="M15.4 8.2v7.6" strokeDasharray="2 2" />
+        {/* sachet body and its top seal */}
+        <path d="M7.8 4.2h12v13.6h-12z" />
+        <path d="M7.8 7.4h12" />
+        {/* height, called out on the left */}
+        <path d="M4.8 4.2v13.6M3.8 4.2h2M3.8 17.8h2" />
+        {/* width, called out underneath */}
+        <path d="M7.8 20.6h12M7.8 19.6v2M19.8 19.6v2" />
       </svg>
     ),
   },
