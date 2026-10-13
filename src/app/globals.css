@@ -1592,33 +1592,34 @@ html, body {
 }
 
 /* ---- Coming soon --------------------------------------------------------
-   A tool that is announced but not built. Dimmed enough to read as inactive
-   at a glance, not so dim that the name cannot be read -- the point of the
-   tile is that someone learns the tool is coming. No hover lift, no pointer,
-   no icon colour change: every affordance the live tiles use to say "click
-   me" is removed, and the badge says why. */
+   A tool that is announced but not built. At rest it sits in the grid looking
+   like any other tile, so the set reads as one row of tools rather than one
+   row plus an apology. The difference shows on hover: instead of lifting and
+   offering "Open", it dims and says "Coming soon". Reaching for it is what
+   asks the question, so that is where the answer belongs. */
 .hub-tile--soon {
-  opacity: 0.55;
   cursor: default;
-  background: var(--cream);
-  border-style: dashed;
 }
 
-/* Beat the shared hover rule, which would otherwise lift a tile that does
-   nothing. */
+/* Beat the shared hover rule -- no lift, no shadow, no border colour. A tile
+   that does nothing must not perform the gesture that means "this works". */
 .hub-tile--soon:hover {
+  opacity: 0.5;
   border-color: var(--stone);
   box-shadow: none;
   transform: none;
 }
 
+/* The live tiles invert their icon on hover. This one stays put: the colour
+   change is the strongest "clickable" signal on the card. */
 .hub-tile--soon:hover .hub-tile__icon {
   background: var(--cream);
   color: var(--teal-700);
 }
 
-/* Same corner the "Open →" label uses, but always visible: this one is the
-   whole message, not a hover affordance. */
+/* Same corner as "Open →", same reveal. Kept in the DOM at opacity 0 rather
+   than display:none so a screen reader still announces it -- hover is not a
+   gesture everyone has. */
 .hub-tile__soon {
   position: absolute;
   right: 18px;
@@ -1628,6 +1629,23 @@ html, body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.hub-tile--soon:hover .hub-tile__soon {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* On a touch screen there is no hover, so the label would never appear and
+   the tile would just look broken when tapped. Show it outright there. */
+@media (hover: none) {
+  .hub-tile__soon {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
