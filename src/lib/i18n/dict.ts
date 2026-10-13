@@ -309,6 +309,7 @@ const en = {
   hubListsName: "Packing Lists",
   hubFormulasName: "Formulas",
   hubOrdersName: "Sales Orders",
+  hubYieldsName: "Yields",
   hubDielinesName: "Dielines",
   hubMeetingsName: "Meetings",
   hubEyebrow: "PharmaCenter · Tools",
@@ -320,6 +321,7 @@ const en = {
   hubListsDesc: "Generate packing lists for outbound shipments.",
   hubFormulasDesc: "Gummy formula catalog, scale-up and costing.",
   hubOrdersDesc: "Open sales orders, synced nightly from Fishbowl.",
+  hubYieldsDesc: "What each run actually packed against what it should have — by line, product and day.",
   hubDielinesDesc: "Dielines for sachet film, bottle labels and other components — the templates customers build their artwork on.",
   hubMeetingsDesc: "Weekly sales order review — notes and action items.",
   hubSignInLede:
@@ -680,6 +682,7 @@ const es: typeof en = {
   hubListsName: "Listas de empaque",
   hubFormulasName: "Fórmulas",
   hubOrdersName: "Órdenes de venta",
+  hubYieldsName: "Rendimientos",
   hubDielinesName: "Troqueles",
   hubMeetingsName: "Reuniones",
   hubEyebrow: "PharmaCenter · Herramientas",
@@ -691,6 +694,7 @@ const es: typeof en = {
   hubListsDesc: "Genere listas de empaque para los envíos.",
   hubFormulasDesc: "Catálogo de fórmulas de gomitas, escalado y costeo.",
   hubOrdersDesc: "Pedidos abiertos, sincronizados cada noche desde Fishbowl.",
+  hubYieldsDesc: "Lo que cada corrida realmente empacó frente a lo esperado — por línea, producto y día.",
   hubDielinesDesc: "Troqueles para película de sachet, etiquetas de botella y otros componentes — las plantillas sobre las que los clientes arman su arte.",
   hubMeetingsDesc: "Revisión semanal de pedidos — notas y tareas.",
   hubSignInLede:

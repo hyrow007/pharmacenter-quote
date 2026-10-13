@@ -135,6 +135,26 @@ const TOOLS: Tool[] = [
     ),
   },
   {
+    key: "yields",
+    // The subdomain does not exist yet -- no DNS, no Vercel host, no app. The
+    // tile is not a link while comingSoon is set, so this is never followed;
+    // it is here so that going live is deleting one line.
+    href: "https://yield.pharmacenter.app/",
+    titleKey: "hubYieldsName",
+    descKey: "hubYieldsDesc",
+    comingSoon: true,
+    // Bars of uneven height: a yield is a measurement that varies, not a
+    // number that climbs. A tidy ascending chart would be a small lie.
+    icon: (
+      <svg {...ICON}>
+        <path d="M4 19.5h16" />
+        <path d="M7.5 19.5V14" />
+        <path d="M12 19.5V8.5" />
+        <path d="M16.5 19.5V11.5" />
+      </svg>
+    ),
+  },
+  {
     key: "dielines",
     // No destination yet. The tile is not a link, so this is never followed --
     // it is here so wiring it up later is one line and one flag.
