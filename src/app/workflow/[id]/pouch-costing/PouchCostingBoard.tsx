@@ -2378,7 +2378,17 @@ function seedBulkPart(
 
 export type BoardProduct = {
   name: string;
+  /** The FIRST requested tier — the board's default quantity. */
   quantity: number | null;
+  /**
+   * Every quantity the request asked for, in the order it listed them.
+   *
+   * Most quotes ask for several: 5,000 / 10,000 / 15,000 / 20,000 / 25,000
+   * is one request with five prices, which is what scenarios are for. The
+   * board needs the whole set to tell a priced tier apart from a figure
+   * nobody asked for.
+   */
+  quantities?: number[];
   spec: Record<string, string> | null;
   initial: SavedState | null;
   /** Finished Product only: this product's saved Bulk-tab pricing, whose
@@ -3161,6 +3171,9 @@ export default function PouchCostingBoard({
   // derivation is already scenario-aware. Base's quantity comes from the
   // stash while a scenario is on screen (for the Base pill's label).
   const qty = st.quantityOverride ?? quantity;
+  /** Every quantity this product's request asked for. Empty on an old
+   *  workflow whose rows predate the tier list. */
+  const tiers = products[activeBaseIdx]?.quantities ?? [];
   const baseQty =
     activeScenarioId === null
       ? qty
@@ -4462,17 +4475,68 @@ export default function PouchCostingBoard({
               />
             </ParamBlock>
           )}
-          {/* Only when the two differ, so the override is never silent. */}
-          {st.quantityOverride !== null &&
-            st.quantityOverride !== quantity && (
-              <ParamBlock label="Workflow qty" nowrap>
-                <ReadOnly>
-                  <span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}>
-                    {quantity ? quantity.toLocaleString("en-US") : "—"}
-                  </span>
-                </ReadOnly>
-              </ParamBlock>
-            )}
+          {/* What the request actually asked for, measured against what this
+              tab is pricing.
+
+              Most quotes ask for several quantities at once, which is the
+              whole reason scenarios exist. This row used to compare against
+              quantities[0] alone and call every other tier a departure from
+              the request — so on a five-tier quote it cried wolf on four
+              perfectly ordinary scenarios, which is how a row that should
+              catch a typo gets ignored.
+
+              Three cases, and each earns its wording:
+                · several tiers, this one is one of them → say which. Calm,
+                  and it is the only place the board admits the other tiers
+                  exist at all, so it shows even on Base.
+                · several tiers, this one is none of them → flag it, and
+                  list what was asked for.
+                · one tier only → the old behaviour, which was right there:
+                  any departure is worth showing. */}
+          {(() => {
+            const onTier = qty !== null && tiers.includes(qty);
+            if (tiers.length > 1) {
+              const idx = onTier ? tiers.indexOf(qty as number) + 1 : 0;
+              return (
+                <ParamBlock label={onTier ? "Requested tier" : "Qty not requested"} nowrap>
+                  <ReadOnly>
+                    <span
+                      title={`Requested: ${tiers
+                        .map((t) => t.toLocaleString("en-US"))
+                        .join(" \u00b7 ")}`}
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        opacity: onTier ? 0.7 : 1,
+                        color: onTier ? undefined : "#8a5a00",
+                        display: "block",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {onTier
+                        ? `${idx} of ${tiers.length}`
+                        : `asked for ${tiers
+                            .map((t) => t.toLocaleString("en-US"))
+                            .join(" \u00b7 ")}`}
+                    </span>
+                  </ReadOnly>
+                </ParamBlock>
+              );
+            }
+            if (st.quantityOverride !== null && st.quantityOverride !== quantity) {
+              return (
+                <ParamBlock label="Workflow qty" nowrap>
+                  <ReadOnly>
+                    <span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}>
+                      {quantity ? quantity.toLocaleString("en-US") : "\u2014"}
+                    </span>
+                  </ReadOnly>
+                </ParamBlock>
+              );
+            }
+            return null;
+          })()}
           {/* Master-box and inner-pack counts used to live here too. They are
               typed on their own rows in Material Costs, where the part being
               counted is right next to the count — so a second copy up here was

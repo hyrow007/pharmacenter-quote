@@ -207,11 +207,14 @@ export default async function BlisterCostingPage({ params }: Ctx) {
     const quantities = Array.isArray(product.quantities)
       ? (product.quantities as unknown[])
       : [];
-    const firstQty = Number(
-      String(quantities[0] ?? "").toString().replace(/[^0-9.]/g, ""),
-    );
-    const quantity =
-      Number.isFinite(firstQty) && firstQty > 0 ? firstQty : null;
+    // EVERY tier the request carries, not just the first. A quote asking
+    // for 5,000 / 10,000 / 15,000 / 20,000 / 25,000 is one request with
+    // five prices, and a board that sees only quantities[0] reports the
+    // other four as departures from what the customer asked for.
+    const tiers = quantities
+      .map((q) => Number(String(q ?? "").replace(/[^0-9.]/g, "")))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const quantity = tiers.length > 0 ? tiers[0] : null;
     const productId = product.productId as string | undefined;
     const name =
       (productId && productId !== "new"
@@ -238,7 +241,7 @@ export default async function BlisterCostingPage({ params }: Ctx) {
     const bulkNoInbound =
       bulkSnapshot?.noInboundCosts ??
       (product.sourceMode === "stock" || Boolean(product.pinnedFormula));
-    return { name, quantity, spec, initial, bulkSnapshot, bulkNoInbound, bulkTabs };
+    return { name, quantity, quantities: tiers, spec, initial, bulkSnapshot, bulkNoInbound, bulkTabs };
   });
 
   return (
