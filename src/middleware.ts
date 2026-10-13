@@ -42,6 +42,14 @@ function isOrderHost(host: string | null): boolean {
   return host.startsWith("order.") || host.startsWith("orders.");
 }
 
+// yield.pharmacenter.app / yields.pharmacenter.app is the production yield
+// log (Yields). Same substring pattern and singular/plural alias as the
+// others; fronts /yields.
+function isYieldHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("yield.") || host.startsWith("yields.");
+}
+
 // v48.6: formulas are only reachable on the formula subdomain. A
 // /formulas page request arriving on the quote host gets a permanent
 // redirect to the same path on formula.<domain>. Scoped to hosts that
@@ -79,6 +87,14 @@ function shouldRewriteToOrders(pathname: string): boolean {
   // lives at /meetings/sales-orders/orders/[so]. Without this carve-out the
   // orders host rewrote that to /orders/meetings/... and every card 404'd.
   if (pathname.startsWith("/meetings")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  return true;
+}
+
+function shouldRewriteToYields(pathname: string): boolean {
+  if (pathname.startsWith("/api")) return false;
+  if (pathname.startsWith("/auth")) return false;
+  if (pathname.startsWith("/yields")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }
@@ -205,6 +221,27 @@ export async function middleware(request: NextRequest) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/orders" : `/orders${pathname}`;
+      rewriteUrl.search = search;
+      const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
+      authResponse.cookies.getAll().forEach((cookie) => {
+        rewriteResponse.cookies.set(cookie);
+      });
+      return rewriteResponse;
+    }
+  }
+
+  // yields host -- same rewrite pattern; fronts /yields.
+  if (isYieldHost(host)) {
+    const { pathname, search, searchParams } = request.nextUrl;
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
+    if (
+      shouldRewriteToYields(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname =
+        pathname === "/" ? "/yields" : `/yields${pathname}`;
       rewriteUrl.search = search;
       const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       authResponse.cookies.getAll().forEach((cookie) => {

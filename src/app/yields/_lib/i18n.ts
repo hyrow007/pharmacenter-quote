@@ -1,0 +1,226 @@
+// Yields' own strings, EN and ES. Kept beside the app rather than in the shared
+// dict.ts (Master's file) so the Yields chat can change its copy without
+// touching every app's dictionary. Same contract as dict.ts: every key exists
+// in both languages -- the `satisfies` on `es` makes a missing key a type
+// error, which is the parity check.
+
+import type { Lang } from "@/lib/i18n/dict";
+
+const en = {
+  eyebrow: "PharmaCenter · Yields",
+  title: "Production Yields",
+  lede: "What each line packed, what it was worth, and what it earned per labor hour.",
+  navToday: "Log",
+  navHistory: "History",
+
+  day: "Day",
+  prevDay: "← Previous day",
+  nextDay: "Next day →",
+  today: "Today",
+
+  formHeading: "Add an entry",
+  editHeading: "Edit entry",
+  fDate: "Date",
+  fLine: "Line",
+  fProduct: "Product",
+  fProductPh: "Search Fishbowl by number or name…",
+  fProductNotFound: "Not in Fishbowl's active products — saved as typed.",
+  fSo: "Sales order(s)",
+  fSoPh: "e.g. 14866 or 14866, 14867",
+  fSoHint: "Open orders for this product:",
+  fSoNone: "No sales orders in Fishbowl for this product.",
+  fMultipack: "Cartons, bundles or displays?",
+  fUnitsPerPack: "Units per carton / bundle / display",
+  fFinished: "Finished units",
+  fSingles: "Single units packed",
+  fPeople: "People",
+  fHours: "Hours",
+  fNote: "Note",
+  fNotePh: "Setup, changeover, machine down…",
+  yes: "Yes",
+  no: "No",
+
+  grossHeading: "Gross per finished unit",
+  grossFromFishbowl: "From Fishbowl",
+  grossPrice: "SO price",
+  grossCost: "Product cost",
+  grossPerUnitOf: "{price} per {unit} → {each} each",
+  grossUnitUnknown: "{price} per {unit} — unit not recognised; enter the gross by hand",
+  grossUnitMissing: "Fishbowl didn't send this line's unit yet; enter the gross by hand",
+  grossNone: "No usable price in Fishbowl for this order.",
+  grossManual: "Enter it by hand",
+  grossManualPh: "$ per finished unit",
+  grossUseFishbowl: "Use Fishbowl's",
+
+  save: "Save entry",
+  saving: "Saving…",
+  update: "Save changes",
+  cancel: "Cancel",
+  edit: "Edit",
+  delete: "Delete",
+  confirmDelete: "Delete this entry?",
+
+  colLine: "Line",
+  colProduct: "Product",
+  colSo: "SO #",
+  colFinished: "Finished",
+  colSingles: "Singles",
+  colPeople: "People",
+  colHours: "Hours",
+  colManHours: "Man-hrs",
+  colGrossUnit: "Gross / unit",
+  colGross: "Gross",
+  colGrossMh: "Gross / man-hr",
+  colDate: "Date",
+  colEntries: "Entries",
+
+  dayTotal: "Day total",
+  noEntries: "Nothing logged for this day yet.",
+  weekHeading: "Last 7 working days",
+  missing: "missing",
+  missingNote: "{n} entries have no gross yet, so the totals above are a floor, not the full day.",
+  source_sheet: "from the Google Sheet",
+  source_fishbowl: "from Fishbowl",
+  source_manual: "entered by hand",
+
+  histHeading: "History",
+  histLede: "Every entry since September 2022. The first three years came from the Google Sheet as it stood on 2026-10-13.",
+  fFrom: "From",
+  fTo: "To",
+  fAllLines: "All lines",
+  fProductFilter: "Product number",
+  apply: "Apply",
+  totals: "Totals",
+  days: "days",
+  perDay: "Gross per day",
+  byLine: "By line",
+  byDay: "By day",
+
+  line_blister: "Blisters",
+  line_bottle: "Bottles",
+  line_pouch: "Pouches",
+  line_sachet: "Sachets",
+  line_other: "Other",
+
+  err_not_signed_in: "Your session ended. Sign in again.",
+  err_bad_input: "Something in the form is not valid.",
+  err_no_product: "Choose a product.",
+  err_save_failed: "Could not save: {detail}",
+  err_not_allowed: "You can only change entries you created.",
+};
+
+export type YKey = keyof typeof en;
+
+const es = {
+  eyebrow: "PharmaCenter · Rendimientos",
+  title: "Rendimientos de producción",
+  lede: "Lo que empacó cada línea, lo que valió y lo que generó por hora de trabajo.",
+  navToday: "Registro",
+  navHistory: "Historial",
+
+  day: "Día",
+  prevDay: "← Día anterior",
+  nextDay: "Día siguiente →",
+  today: "Hoy",
+
+  formHeading: "Agregar registro",
+  editHeading: "Editar registro",
+  fDate: "Fecha",
+  fLine: "Línea",
+  fProduct: "Producto",
+  fProductPh: "Buscar en Fishbowl por número o nombre…",
+  fProductNotFound: "No está entre los productos activos de Fishbowl — se guarda como se escribió.",
+  fSo: "Orden(es) de venta",
+  fSoPh: "ej. 14866 o 14866, 14867",
+  fSoHint: "Órdenes abiertas de este producto:",
+  fSoNone: "No hay órdenes de venta en Fishbowl para este producto.",
+  fMultipack: "¿Cajas, paquetes o exhibidores?",
+  fUnitsPerPack: "Unidades por caja / paquete / exhibidor",
+  fFinished: "Unidades terminadas",
+  fSingles: "Unidades individuales empacadas",
+  fPeople: "Personas",
+  fHours: "Horas",
+  fNote: "Nota",
+  fNotePh: "Preparación, cambio de producto, máquina parada…",
+  yes: "Sí",
+  no: "No",
+
+  grossHeading: "Ganancia bruta por unidad terminada",
+  grossFromFishbowl: "De Fishbowl",
+  grossPrice: "Precio de la OV",
+  grossCost: "Costo del producto",
+  grossPerUnitOf: "{price} por {unit} → {each} c/u",
+  grossUnitUnknown: "{price} por {unit} — unidad no reconocida; ingresa la ganancia a mano",
+  grossUnitMissing: "Fishbowl aún no envió la unidad de esta línea; ingresa la ganancia a mano",
+  grossNone: "Fishbowl no tiene un precio utilizable para esta orden.",
+  grossManual: "Ingresarla a mano",
+  grossManualPh: "$ por unidad terminada",
+  grossUseFishbowl: "Usar la de Fishbowl",
+
+  save: "Guardar registro",
+  saving: "Guardando…",
+  update: "Guardar cambios",
+  cancel: "Cancelar",
+  edit: "Editar",
+  delete: "Eliminar",
+  confirmDelete: "¿Eliminar este registro?",
+
+  colLine: "Línea",
+  colProduct: "Producto",
+  colSo: "OV #",
+  colFinished: "Terminadas",
+  colSingles: "Individuales",
+  colPeople: "Personas",
+  colHours: "Horas",
+  colManHours: "Horas-hombre",
+  colGrossUnit: "Bruto / unidad",
+  colGross: "Bruto",
+  colGrossMh: "Bruto / hora-hombre",
+  colDate: "Fecha",
+  colEntries: "Registros",
+
+  dayTotal: "Total del día",
+  noEntries: "Todavía no hay nada registrado para este día.",
+  weekHeading: "Últimos 7 días laborables",
+  missing: "falta",
+  missingNote: "{n} registros aún no tienen ganancia bruta, así que los totales de arriba son un mínimo, no el día completo.",
+  source_sheet: "de la hoja de Google",
+  source_fishbowl: "de Fishbowl",
+  source_manual: "ingresada a mano",
+
+  histHeading: "Historial",
+  histLede: "Todos los registros desde septiembre de 2022. Los primeros tres años vienen de la hoja de Google tal como estaba el 2026-10-13.",
+  fFrom: "Desde",
+  fTo: "Hasta",
+  fAllLines: "Todas las líneas",
+  fProductFilter: "Número de producto",
+  apply: "Aplicar",
+  totals: "Totales",
+  days: "días",
+  perDay: "Bruto por día",
+  byLine: "Por línea",
+  byDay: "Por día",
+
+  line_blister: "Blísteres",
+  line_bottle: "Frascos",
+  line_pouch: "Bolsas",
+  line_sachet: "Sobres",
+  line_other: "Otro",
+
+  err_not_signed_in: "Tu sesión terminó. Vuelve a iniciar sesión.",
+  err_bad_input: "Algo en el formulario no es válido.",
+  err_no_product: "Elige un producto.",
+  err_save_failed: "No se pudo guardar: {detail}",
+  err_not_allowed: "Solo puedes cambiar los registros que tú creaste.",
+} satisfies Record<YKey, string>;
+
+export type YT = (key: YKey, vars?: Record<string, string | number>) => string;
+
+export function makeYT(lang: Lang): YT {
+  const dict: Record<YKey, string> = lang === "es" ? es : en;
+  return (key, vars) => {
+    let out = dict[key] ?? en[key] ?? key;
+    if (vars) for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v));
+    return out;
+  };
+}

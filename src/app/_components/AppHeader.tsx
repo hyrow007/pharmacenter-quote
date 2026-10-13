@@ -32,6 +32,7 @@ export type AppContext =
   | "packing-list"
   | "meetings"
   | "orders"
+  | "yields"
   // The apex, pharmacenter.app. Not a product -- the hub IS PharmaCenter, so
   // it wears the wordmark alone with no product name beside it.
   | "hub";
@@ -57,6 +58,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onFormulaHost = host.startsWith("formula.") || host.startsWith("formulas.");
   const onMeetingHost = host.startsWith("meeting.") || host.startsWith("meetings.");
   const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
+  const onYieldHost = host.startsWith("yield.") || host.startsWith("yields.");
   // Hub hosts only: pharmacenter.app, pharmacenter.tools and their www.
   // Deliberately NOT a suffix test -- "quote.pharmacenter.app" ends with the
   // apex too.
@@ -73,7 +75,9 @@ export default async function AppHeader({ user, appContext }: Props) {
   // the orders subdomain.
   const ctx: AppContext = onOrderHost
     ? "orders"
-    : (appContext ??
+    : onYieldHost
+      ? "yields"
+      : (appContext ??
       (onFormulaHost
         ? "formulas"
         : onMeetingHost
@@ -96,9 +100,13 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? onOrderHost
             ? "/"
             : "https://orders.pharmacenter.app/"
-          : ctx === "packing-list"
-            ? "https://packing.pharmacenter.app/lists"
-            : "/workflows";
+          : ctx === "yields"
+            ? onYieldHost
+              ? "/"
+              : "https://yield.pharmacenter.app/"
+            : ctx === "packing-list"
+              ? "https://packing.pharmacenter.app/lists"
+              : "/workflows";
   const productMain =
     ctx === "formulas"
       ? "Formulas"
@@ -106,9 +114,11 @@ export default async function AppHeader({ user, appContext }: Props) {
         ? "Meeting"
         : ctx === "orders"
           ? "Sales Order"
-          : ctx === "packing-list"
-            ? "Packing List"
-            : "Quote";
+          : ctx === "yields"
+            ? "Production"
+            : ctx === "packing-list"
+              ? "Packing List"
+              : "Quote";
   const productSub =
     ctx === "formulas"
       ? "Catalog"
@@ -116,9 +126,11 @@ export default async function AppHeader({ user, appContext }: Props) {
         ? "Hub"
         : ctx === "orders"
           ? "Tracker"
-          : ctx === "packing-list"
-            ? "Generator"
-            : "Work Flows";
+          : ctx === "yields"
+            ? "Yields"
+            : ctx === "packing-list"
+              ? "Generator"
+              : "Work Flows";
 
   return (
     <header className="app-nav">
@@ -174,6 +186,7 @@ export default async function AppHeader({ user, appContext }: Props) {
               onFormulaHost={onFormulaHost}
               onMeetingHost={onMeetingHost}
               onOrderHost={onOrderHost}
+              onYieldHost={onYieldHost}
               appContext={ctx}
               lang={lang}
             />

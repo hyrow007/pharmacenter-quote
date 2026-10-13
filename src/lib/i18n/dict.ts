@@ -24,6 +24,8 @@ const en = {
   navFeedback: "Feedback",
   navMenu: "Menu",
   navAdmin: "Admin",
+  navYieldsLog: "Log",
+  navYieldsHistory: "History",
 
   // ---- Formulas catalog ----
   catalogTitle: "Gummy Formula Catalog",
@@ -415,6 +417,8 @@ const es: typeof en = {
   navFeedback: "Comentarios",
   navMenu: "Menú",
   navAdmin: "Admin",
+  navYieldsLog: "Registro",
+  navYieldsHistory: "Historial",
 
   // ---- Formulas catalog ----
   catalogTitle: "Catálogo de Fórmulas de Gomitas",

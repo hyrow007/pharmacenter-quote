@@ -27,6 +27,7 @@ export default function NavLinks({
   onFormulaHost,
   onMeetingHost,
   onOrderHost,
+  onYieldHost,
   appContext,
   lang,
 }: {
@@ -37,12 +38,14 @@ export default function NavLinks({
   onFormulaHost: boolean;
   onMeetingHost: boolean;
   onOrderHost?: boolean;
+  onYieldHost?: boolean;
   appContext:
     | "quote"
     | "formulas"
     | "packing-list"
     | "meetings"
     | "orders"
+    | "yields"
     | "hub";
   lang: Lang;
 }) {
@@ -100,13 +103,31 @@ export default function NavLinks({
           {t("navOrders")}
         </Link>
       ) : null}
+      {appContext === "yields" ? (
+        <>
+          {/* On the yield host "/" is the log and "/history" rewrites to
+              /yields/history; elsewhere the full paths are used. */}
+          <Link
+            href={onYieldHost ? "/" : "/yields"}
+            className={`app-nav__link${pathname === "/yields" || pathname === "/" ? " app-nav__link--active" : ""}`}
+          >
+            {t("navYieldsLog")}
+          </Link>
+          <Link
+            href={onYieldHost ? "/history" : "/yields/history"}
+            className={`app-nav__link${pathname.endsWith("/history") ? " app-nav__link--active" : ""}`}
+          >
+            {t("navYieldsHistory")}
+          </Link>
+        </>
+      ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and
           shared by all PharmaCenter apps (packing list links here too).
           From the formula subdomain they're absolute URLs — a relative
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
         href={
-          onFormulaHost || onMeetingHost
+          onFormulaHost || onMeetingHost || onYieldHost
             ? `https://quote.pharmacenter.app/feedback?from=${appContext}`
             : appContext === "quote"
               ? "/feedback"

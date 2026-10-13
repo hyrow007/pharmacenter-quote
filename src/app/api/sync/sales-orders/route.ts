@@ -38,6 +38,9 @@ type SoItemPayload = {
   unit_price?: number | null;
   total_price?: number | null;
   date_scheduled?: string | null;
+  uom_id?: number | null;
+  uom?: string | null;
+  uom_name?: string | null;
 };
 
 type SalesOrderPayload = {
@@ -181,6 +184,11 @@ export async function POST(request: Request) {
             qty_picked: num(it?.qty_picked),
             unit_price: num(it?.unit_price),
             total_price: num(it?.total_price),
+            // The unit unit_price is quoted in. Absent from syncs before
+            // 2026-10-13, so readers must treat a missing uom as unknown.
+            uom_id: num(it?.uom_id),
+            uom: str(it?.uom),
+            uom_name: str(it?.uom_name),
             date_scheduled: str(it?.date_scheduled),
           }))
         : [],
