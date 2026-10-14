@@ -6,6 +6,7 @@ import AppHeader from "../../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeYT } from "../_lib/i18n";
 import { loadEntries } from "../_lib/load";
+import { fillMissingGross } from "../_lib/backfill";
 import {
   LINES,
   addDays,
@@ -53,6 +54,9 @@ export default async function YieldsHistoryPage({
   const product = (sp.product ?? "").trim() || null;
 
   const { rows, error } = await loadEntries(supabase, { from, to, line, product });
+  // Entries whose sales order has shipped since they were logged get their
+  // gross from Fishbowl now (see _lib/backfill.ts).
+  await fillMissingGross(supabase, rows);
 
   const total = emptyRollup();
   const byLine = new Map<string, Rollup>();

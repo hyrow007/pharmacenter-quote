@@ -350,8 +350,8 @@ export default function EntryForm({
                 <dd>
                   {priceLine.each_cost !== null ? (
                     `− ${fmtUnitMoney(priceLine.each_cost, lang)}`
-                  ) : priceLine.total_cost === null ? (
-                    <span className={s.missing}>{t("grossCostNotSynced")}</span>
+                  ) : !priceLine.total_cost ? (
+                    <span className={s.missing}>{t("grossCostNotShipped")}</span>
                   ) : (
                     <span className={s.missing}>{t("missing")}</span>
                   )}

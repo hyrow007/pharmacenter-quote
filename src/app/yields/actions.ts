@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
-  eachPrice,
   isIsoDate,
   isLine,
-  lineMarginEach,
+  marginFromLine,
   parseSoNumbers,
   singlesFor,
   toNum,
@@ -85,20 +84,10 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
       .maybeSingle();
     const items = (Array.isArray(soRes.data?.items) ? soRes.data.items : []) as Array<Record<string, unknown>>;
     const line = items.find((it) => it.product_num === product && (it.type_id === 10 || it.type_id === 30));
-    const price = eachPrice(
-      toNum(line?.unit_price),
-      line?.uom as string | null | undefined,
-      line?.uom_name as string | null | undefined,
-    );
-    const margin = lineMarginEach({
-      total_price: toNum(line?.total_price),
-      total_cost: toNum(line?.total_cost),
-      qty_ordered: toNum(line?.qty_ordered),
-      unit_factor: price.factor,
-    });
-    unit_price = price.each;
-    unit_cost = margin.cost;
-    gross_per_unit = margin.gross;
+    const m = marginFromLine(line ?? {});
+    unit_price = m.each_price;
+    unit_cost = m.each_cost;
+    gross_per_unit = m.each_gross;
     gross_source = gross_per_unit === null ? null : "fishbowl";
   }
 

@@ -8,6 +8,7 @@ import { getLangFromCookie } from "@/lib/i18n/server";
 import { I18nProvider } from "@/lib/i18n/context";
 import { makeYT } from "./_lib/i18n";
 import { loadEntries } from "./_lib/load";
+import { fillMissingGross } from "./_lib/backfill";
 import {
   addDays,
   addToRollup,
@@ -61,6 +62,9 @@ export default async function YieldsPage({
 
   // The selected day plus the fortnight before it, in one read.
   const { rows, error } = await loadEntries(supabase, { from: addDays(date, -20), to: date });
+  // Entries whose sales order has shipped since they were logged get their
+  // gross from Fishbowl now (see _lib/backfill.ts).
+  await fillMissingGross(supabase, rows);
   const dayRows = rows.filter((r) => r.run_date === date);
   const editing = sp.edit ? (rows.find((r) => r.id === sp.edit) ?? null) : null;
 

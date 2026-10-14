@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { eachPrice, lineMarginEach, toNum } from "@/app/yields/_lib/model";
+import { marginFromLine, toNum } from "@/app/yields/_lib/model";
 
 // GET /api/yields/lookup
 //
@@ -21,6 +21,7 @@ type Item = {
   product_num?: string | null;
   unit_price?: unknown;
   qty_ordered?: unknown;
+  qty_fulfilled?: unknown;
   total_price?: unknown;
   total_cost?: unknown;
   uom?: string | null;
@@ -75,11 +76,7 @@ export async function GET(request: Request) {
         .filter((it) => it.product_num === product && (it.type_id === 10 || it.type_id === 30))
         .map((it) => {
           const unitPrice = toNum(it.unit_price);
-          const { each, factor, unitLabel } = eachPrice(unitPrice, it.uom, it.uom_name);
-          const totalPrice = toNum(it.total_price);
-          const totalCost = toNum(it.total_cost);
-          const qty = toNum(it.qty_ordered);
-          const margin = lineMarginEach({ total_price: totalPrice, total_cost: totalCost, qty_ordered: qty, unit_factor: factor });
+          const m = marginFromLine(it);
           return {
             so_number: so.so_number as string,
             customer_name: (so.customer_name as string | null) ?? null,
@@ -88,13 +85,14 @@ export async function GET(request: Request) {
             date_issued: (so.date_issued as string | null) ?? null,
             unit_price: unitPrice,
             qty_ordered: toNum(it.qty_ordered),
-            each_price: each,
-            unit_factor: factor,
-            unit_label: unitLabel,
-            total_price: totalPrice,
-            total_cost: totalCost,
-            each_cost: margin.cost,
-            each_gross: margin.gross,
+            qty_fulfilled: toNum(it.qty_fulfilled),
+            each_price: m.each_price,
+            unit_factor: m.unit_factor,
+            unit_label: m.unit_label,
+            total_price: toNum(it.total_price),
+            total_cost: toNum(it.total_cost),
+            each_cost: m.each_cost,
+            each_gross: m.each_gross,
           };
         });
     });

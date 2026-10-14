@@ -227,27 +227,55 @@ export function fmtDate(iso: string, lang: string, withWeekday = true): string {
 // ---- gross ---------------------------------------------------------------
 
 // THE definition of gross per finished unit, in one place: what Fishbowl's own
-// Margin report shows for the sales-order line -- line price minus line cost
-// (soitem.totalPrice - soitem.totalCost) -- divided down to one finished unit.
-// That report is where the packaging sheet's "Projected Gross" was read from.
+// Margin report shows for the sales-order line -- its price minus the cost
+// Fishbowl recorded when the line SHIPPED (soitem.totalCost, written from the
+// shipment's cost layers at fulfillment; 0 before that). Verified 2026-10-13
+// against the packaging sheet: M14381-1 / 1928 gives 6.48 - 3,432.52/2,048 =
+// 4.80 per bag, 14610-2 / 1075 gives 1.11 per bottle -- the sheet's figures.
 //
-// Dividing down needs the line's unit, because qty_ordered is counted in it
-// ("Each" is 1; anything else is unknown -- see unitFactor). An unknown unit,
-// a line synced before total_cost was carried, or a zero quantity makes the
-// gross unknown. It never falls back to the bare price.
-export function lineMarginEach(line: {
-  total_price: number | null;
-  total_cost: number | null;
-  qty_ordered: number | null;
+// Per finished unit needs the line's unit ("Each" only -- see unitFactor) and
+// the shipped quantity. An unshipped line (cost 0), an unknown unit, or
+// nothing shipped makes the gross unknown. Never the bare price.
+export type SoItemLike = {
+  product_num?: string | null;
+  type_id?: number | null;
+  unit_price?: unknown;
+  total_cost?: unknown;
+  qty_fulfilled?: unknown;
+  uom?: string | null;
+  uom_name?: string | null;
+};
+export function marginFromLine(it: SoItemLike): {
+  each_price: number | null;
+  each_cost: number | null;
+  each_gross: number | null;
   unit_factor: number | null;
-}): { cost: number | null; gross: number | null } {
-  const { total_price, total_cost, qty_ordered, unit_factor } = line;
-  // A zero cost is NOT a free product: measured 2026-10-13, soitem.totalCost
-  // is 0 on every one of 105 mirrored lines, open and closed alike, so
-  // Fishbowl does not keep the margin report's cost there. Zero is unknown.
-  if (!total_cost || total_price === null || !qty_ordered || !unit_factor) return { cost: null, gross: null };
-  const units = qty_ordered * unit_factor;
-  const cost = total_cost / units;
-  const gross = (total_price - total_cost) / units;
-  return { cost: Math.round(cost * 1e6) / 1e6, gross: Math.round(gross * 1e6) / 1e6 };
+  unit_label: string | null;
+} {
+  const price = eachPrice(toNum(it.unit_price), it.uom, it.uom_name);
+  const cost = toNum(it.total_cost);
+  const shipped = toNum(it.qty_fulfilled);
+  let each_cost: number | null = null;
+  let each_gross: number | null = null;
+  if (price.each !== null && price.factor && cost && cost > 0 && shipped && shipped > 0) {
+    each_cost = Math.round((cost / (shipped * price.factor)) * 1e6) / 1e6;
+    each_gross = Math.round((price.each - each_cost) * 1e6) / 1e6;
+  }
+  return { each_price: price.each, each_cost, each_gross, unit_factor: price.factor, unit_label: price.unitLabel };
+}
+
+// Of several SOs on one entry, the first that can price the product.
+export function grossForEntry(
+  productNum: string,
+  soNumbers: string[],
+  itemsBySo: Map<string, SoItemLike[]>,
+): { so: string; each_price: number | null; each_cost: number | null; each_gross: number } | null {
+  for (const so of soNumbers) {
+    for (const it of itemsBySo.get(so) ?? []) {
+      if (it.product_num !== productNum || !(it.type_id === 10 || it.type_id === 30)) continue;
+      const m = marginFromLine(it);
+      if (m.each_gross !== null) return { so, each_price: m.each_price, each_cost: m.each_cost, each_gross: m.each_gross };
+    }
+  }
+  return null;
 }
