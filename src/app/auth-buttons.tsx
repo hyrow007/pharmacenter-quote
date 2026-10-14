@@ -15,7 +15,13 @@ const primaryStyle: CSSProperties = {
   fontFamily: "inherit", letterSpacing: "0.01em",
 };
 
-export function SignInButton() {
+export function SignInButton({
+  label = "Sign in with Google →",
+  loadingLabel = "Redirecting…",
+}: {
+  label?: string;
+  loadingLabel?: string;
+} = {}) {
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
@@ -42,7 +48,7 @@ export function SignInButton() {
 
   return (
     <button onClick={signIn} disabled={loading} style={primaryStyle}>
-      {loading ? "Redirecting…" : "Sign in with Google →"}
+      {loading ? loadingLabel : label}
     </button>
   );
 }
