@@ -242,7 +242,10 @@ export function lineMarginEach(line: {
   unit_factor: number | null;
 }): { cost: number | null; gross: number | null } {
   const { total_price, total_cost, qty_ordered, unit_factor } = line;
-  if (total_cost === null || total_price === null || !qty_ordered || !unit_factor) return { cost: null, gross: null };
+  // A zero cost is NOT a free product: measured 2026-10-13, soitem.totalCost
+  // is 0 on every one of 105 mirrored lines, open and closed alike, so
+  // Fishbowl does not keep the margin report's cost there. Zero is unknown.
+  if (!total_cost || total_price === null || !qty_ordered || !unit_factor) return { cost: null, gross: null };
   const units = qty_ordered * unit_factor;
   const cost = total_cost / units;
   const gross = (total_price - total_cost) / units;
