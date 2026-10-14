@@ -4,6 +4,17 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { SignInButton } from "./auth-buttons";
 
+// The root layout's title is "Quotes" -- right for the quote host, wrong on
+// every other identity's sign-in screen. The sign-in page names the product
+// the visitor actually came to.
+export async function generateMetadata() {
+  const host = (await headers()).get("host") ?? "";
+  if (host.startsWith("yield.") || host.startsWith("yields.")) return { title: "Yields" };
+  if (host.startsWith("order.") || host.startsWith("orders.")) return { title: "Sales Orders" };
+  if (host.startsWith("formula.") || host.startsWith("formulas.")) return { title: "Formulas" };
+  return {};
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -26,6 +37,8 @@ export default async function Home({
     hostHeader.startsWith("meeting.") || hostHeader.startsWith("meetings.");
   const isOrderHost =
     hostHeader.startsWith("order.") || hostHeader.startsWith("orders.");
+  const isYieldHost =
+    hostHeader.startsWith("yield.") || hostHeader.startsWith("yields.");
   // The hub hosts: pharmacenter.app and pharmacenter.tools (www. of either).
   // An exact match after stripping the port and a www. prefix, because every
   // other host ENDS with the apex too.
@@ -36,6 +49,7 @@ export default async function Home({
   if (user) {
     if (isFormulaHost) redirect("/formulas");
     if (isOrderHost) redirect("/orders");
+    if (isYieldHost) redirect("/yields");
     if (isMeetingHost) redirect("/meetings");
     if (isApexHost) redirect("/hub");
     redirect("/workflows");
@@ -64,6 +78,12 @@ export default async function Home({
         titleTop: "Sales Order",
         titleSub: "Tracker",
         lede: "Every open sales order across Fishbowl, with vendor purchase orders, meeting mentions, Monday chatter, and AI key points at a glance. Sign in with your PharmaCenter Google account to continue.",
+      }
+    : isYieldHost
+    ? {
+        titleTop: "Production",
+        titleSub: "Yields",
+        lede: "The daily production log — what each line packed, what it was worth, and what it earned per labor hour. Sign in with your PharmaCenter Google account to continue.",
       }
     : isMeetingHost
     ? {
