@@ -4,11 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   eachPrice,
-  grossFrom,
   isIsoDate,
   isLine,
+  lineMarginEach,
   parseSoNumbers,
-  productCostEach,
   singlesFor,
   toNum,
 } from "./_lib/model";
@@ -78,19 +77,28 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
     gross_per_unit = g;
     gross_source = "manual";
   } else if (input.gross_mode === "fishbowl" && input.price_so) {
-    const [soRes, pRes] = await Promise.all([
-      supabase.from("fishbowl_sales_orders").select("items").eq("so_number", input.price_so).limit(1).maybeSingle(),
-      supabase.from("products").select("avg_cost").eq("fp_code", product).limit(1).maybeSingle(),
-    ]);
+    const soRes = await supabase
+      .from("fishbowl_sales_orders")
+      .select("items")
+      .eq("so_number", input.price_so)
+      .limit(1)
+      .maybeSingle();
     const items = (Array.isArray(soRes.data?.items) ? soRes.data.items : []) as Array<Record<string, unknown>>;
     const line = items.find((it) => it.product_num === product && (it.type_id === 10 || it.type_id === 30));
-    unit_price = eachPrice(
+    const price = eachPrice(
       toNum(line?.unit_price),
       line?.uom as string | null | undefined,
       line?.uom_name as string | null | undefined,
-    ).each;
-    unit_cost = productCostEach(toNum(pRes.data?.avg_cost));
-    gross_per_unit = grossFrom(unit_price, unit_cost);
+    );
+    const margin = lineMarginEach({
+      total_price: toNum(line?.total_price),
+      total_cost: toNum(line?.total_cost),
+      qty_ordered: toNum(line?.qty_ordered),
+      unit_factor: price.factor,
+    });
+    unit_price = price.each;
+    unit_cost = margin.cost;
+    gross_per_unit = margin.gross;
     gross_source = gross_per_unit === null ? null : "fishbowl";
   }
 

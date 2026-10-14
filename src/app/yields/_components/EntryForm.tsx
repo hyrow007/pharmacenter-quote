@@ -6,13 +6,12 @@ import type { Lang } from "@/lib/i18n/dict";
 import { makeYT, type YKey } from "../_lib/i18n";
 import {
   LINES,
+  fmtDate,
   fmtInt,
   fmtMoney,
   fmtUnitMoney,
-  grossFrom,
   lineLabelKey,
   parseSoNumbers,
-  productCostEach,
   singlesFor,
   toNum,
   type YieldEntry,
@@ -32,7 +31,12 @@ type OrderLine = {
   each_price: number | null;
   unit_factor: number | null;
   unit_label: string | null;
+  total_price: number | null;
+  total_cost: number | null;
+  each_cost: number | null;
+  each_gross: number | null;
 };
+type LastGross = { value: number | null; run_date: string; source: string | null };
 
 // The leader's form. Fills the way the sheet's Data tab did, with the two
 // things the sheet could not do: the product comes from Fishbowl, and the
@@ -62,9 +66,9 @@ export default function EntryForm({
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const [orders, setOrders] = useState<OrderLine[] | null>(null);
-  // Raw products.avg_cost, in the product's own (unknown) unit -- shown for
-  // reference only. productCostEach() decides what the gross may use.
-  const [productCost, setProductCost] = useState<number | null>(editing?.unit_cost ?? null);
+  // The last gross recorded for this product, offered when the SO line
+  // cannot give one.
+  const [lastGross, setLastGross] = useState<LastGross | null>(null);
   const [soText, setSoText] = useState(editing?.so_numbers.join(", ") ?? "");
   const [multipack, setMultipack] = useState(editing?.is_multipack ?? false);
   const [perPack, setPerPack] = useState(editing?.units_per_pack?.toString() ?? "");
@@ -115,7 +119,7 @@ export default function EntryForm({
         const j = await r.json();
         if (!live || !j.ok) return;
         setOrders(j.orders);
-        setProductCost(j.product?.avg_cost ?? null);
+        setLastGross(j.last_gross ?? null);
         if (j.product?.name) setProduct((p) => (p && p.fp_code === code && !p.name ? { ...p, name: j.product.name } : p));
         // First open order pre-fills an empty SO box -- the usual case.
         setSoText((cur) => {
@@ -140,7 +144,7 @@ export default function EntryForm({
     const listed = (orders ?? []).filter((o) => soList.includes(o.so_number));
     return listed.find((o) => o.each_price !== null) ?? listed[0] ?? null;
   }, [orders, soList]);
-  const fishbowlGross = grossFrom(priceLine?.each_price ?? null, productCostEach(productCost));
+  const fishbowlGross = priceLine?.each_gross ?? null;
   const grossPerUnit = grossMode === "manual" ? toNum(manualGross) : fishbowlGross;
 
   const fin = toNum(finished) ?? 0;
@@ -344,12 +348,12 @@ export default function EntryForm({
                 </dd>
                 <dt>{t("grossCost")}</dt>
                 <dd>
-                  {productCost === null ? (
-                    <span className={s.missing}>{t("missing")}</span>
-                  ) : productCostEach(productCost) === null ? (
-                    <span className={s.missing}>{t("grossCostUnitUnknown", { cost: fmtMoney(productCost, lang, 2) })}</span>
+                  {priceLine.each_cost !== null ? (
+                    `− ${fmtUnitMoney(priceLine.each_cost, lang)}`
+                  ) : priceLine.total_cost === null ? (
+                    <span className={s.missing}>{t("grossCostNotSynced")}</span>
                   ) : (
-                    `− ${fmtUnitMoney(productCostEach(productCost), lang)}`
+                    <span className={s.missing}>{t("missing")}</span>
                   )}
                 </dd>
                 <dt className={s.grossStrong}>{t("grossHeading")}</dt>
@@ -357,6 +361,18 @@ export default function EntryForm({
               </dl>
             ) : product ? (
               <p className={s.hint}>{t("grossNone")}</p>
+            ) : null}
+            {fishbowlGross === null && lastGross?.value != null ? (
+              <button
+                type="button"
+                className={s.linkBtn}
+                onClick={() => {
+                  setManualGross(String(lastGross.value));
+                  setGrossMode("manual");
+                }}
+              >
+                {t("grossUseLast", { value: fmtUnitMoney(lastGross.value, lang), date: fmtDate(lastGross.run_date, lang, false) })}
+              </button>
             ) : null}
             <button type="button" className={s.linkBtn} onClick={() => setGrossMode("manual")}>{t("grossManual")}</button>
           </>

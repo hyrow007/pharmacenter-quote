@@ -38,6 +38,7 @@ type SoItemPayload = {
   unit_price?: number | null;
   total_price?: number | null;
   date_scheduled?: string | null;
+  total_cost?: number | null;
   uom_id?: number | null;
   uom?: string | null;
   uom_name?: string | null;
@@ -184,6 +185,9 @@ export async function POST(request: Request) {
             qty_picked: num(it?.qty_picked),
             unit_price: num(it?.unit_price),
             total_price: num(it?.total_price),
+            // Fishbowl's line cost (its Margin report's "Cost"). Absent from
+            // syncs before 2026-10-13 evening -- missing means unknown.
+            total_cost: num(it?.total_cost),
             // The unit unit_price is quoted in. Absent from syncs before
             // 2026-10-13, so readers must treat a missing uom as unknown.
             uom_id: num(it?.uom_id),

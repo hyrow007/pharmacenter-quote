@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { eachPrice, toNum } from "@/app/yields/_lib/model";
+import { eachPrice, lineMarginEach, toNum } from "@/app/yields/_lib/model";
 
 // GET /api/yields/lookup
 //
@@ -21,6 +21,8 @@ type Item = {
   product_num?: string | null;
   unit_price?: unknown;
   qty_ordered?: unknown;
+  total_price?: unknown;
+  total_cost?: unknown;
   uom?: string | null;
   uom_name?: string | null;
 };
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
   const product = (url.searchParams.get("product") || "").trim();
 
   if (product) {
-    const [pRes, soRes] = await Promise.all([
+    const [pRes, soRes, lastRes] = await Promise.all([
       supabase.from("products").select("fp_code, name, avg_cost").eq("fp_code", product).limit(1).maybeSingle(),
       supabase
         .from("fishbowl_sales_orders")
@@ -51,6 +53,17 @@ export async function GET(request: Request) {
         .filter("items", "cs", JSON.stringify([{ product_num: product }]))
         .order("date_issued", { ascending: false })
         .limit(25),
+      // The most recent gross anyone recorded for this product -- in the app
+      // or in the old sheet. Offered as a starting point when the SO line
+      // cannot give one, never applied silently.
+      supabase
+        .from("yield_entries")
+        .select("gross_per_unit, run_date, gross_source")
+        .eq("product_num", product)
+        .not("gross_per_unit", "is", null)
+        .order("run_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     if (soRes.error) return NextResponse.json({ ok: false, error: soRes.error.message }, { status: 500 });
 
@@ -63,6 +76,10 @@ export async function GET(request: Request) {
         .map((it) => {
           const unitPrice = toNum(it.unit_price);
           const { each, factor, unitLabel } = eachPrice(unitPrice, it.uom, it.uom_name);
+          const totalPrice = toNum(it.total_price);
+          const totalCost = toNum(it.total_cost);
+          const qty = toNum(it.qty_ordered);
+          const margin = lineMarginEach({ total_price: totalPrice, total_cost: totalCost, qty_ordered: qty, unit_factor: factor });
           return {
             so_number: so.so_number as string,
             customer_name: (so.customer_name as string | null) ?? null,
@@ -74,6 +91,10 @@ export async function GET(request: Request) {
             each_price: each,
             unit_factor: factor,
             unit_label: unitLabel,
+            total_price: totalPrice,
+            total_cost: totalCost,
+            each_cost: margin.cost,
+            each_gross: margin.gross,
           };
         });
     });
@@ -83,6 +104,13 @@ export async function GET(request: Request) {
       ok: true,
       product: p ? { fp_code: p.fp_code, name: p.name, avg_cost: toNum(p.avg_cost) } : null,
       orders,
+      last_gross: lastRes.data
+        ? {
+            value: toNum(lastRes.data.gross_per_unit),
+            run_date: lastRes.data.run_date as string,
+            source: lastRes.data.gross_source as string | null,
+          }
+        : null,
       synced_at: syncedAt,
     });
   }
