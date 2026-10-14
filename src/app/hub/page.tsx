@@ -136,13 +136,12 @@ const TOOLS: Tool[] = [
   },
   {
     key: "yields",
-    // The subdomain does not exist yet -- no DNS, no Vercel host, no app. The
-    // tile is not a link while comingSoon is set, so this is never followed;
-    // it is here so that going live is deleting one line.
+    // Live 2026-10-13: yield. and yields.pharmacenter.app both serve /yields
+    // (middleware rewrite; Vercel domains, Wix CNAMEs and Supabase redirect
+    // URLs in place for both spellings).
     href: "https://yield.pharmacenter.app/",
     titleKey: "hubYieldsName",
     descKey: "hubYieldsDesc",
-    comingSoon: true,
     // Bars of uneven height: a yield is a measurement that varies, not a
     // number that climbs. A tidy ascending chart would be a small lie.
     icon: (
