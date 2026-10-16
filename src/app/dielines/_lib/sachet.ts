@@ -17,12 +17,17 @@
 //     from the right seal, standard 4.5) -- never both
 //   the film always comes off the roll bottom edge first; the unwind
 //     position (1-4) only turns the copy
+//   hang hole (optional): the top seal grows to 20 mm and a 6 mm hole is
+//     punched centred in it, through both layers. The slit keeps its rule of
+//     4.5 mm below the top seal, so it moves down with it.
 
 export const MM_PER_IN = 25.4;
 export const SEAL = 6;
 export const BLEED = 1;
 export const EYE = 6;
-export const SLIT_FROM_TOP = SEAL + 4.5;
+export const SLIT_BELOW_SEAL = 4.5;
+export const HANG_SEAL = 20;
+export const HANG_HOLE_D = 6;
 export const SLIT_LEN = 4;
 export const TRI_W = 1.5;
 export const TRI_D = (TRI_W * Math.sqrt(3)) / 2;
@@ -48,6 +53,7 @@ export type SachetSpec = {
   notch: Notch;
   triangleOffsetMm: number;
   unwind: Unwind;
+  hangHole: boolean;
 };
 
 export const DEFAULT_SPEC: SachetSpec = {
@@ -56,7 +62,13 @@ export const DEFAULT_SPEC: SachetSpec = {
   notch: "slit",
   triangleOffsetMm: OFF_STD_MM,
   unwind: 2,
+  hangHole: false,
 };
+
+/** Top seal height: 6 mm, or 20 mm when the sachet has a hang hole. */
+export const topSeal = (spec: SachetSpec) => (spec.hangHole ? HANG_SEAL : SEAL);
+/** The slit's height from the top edge -- always 4.5 mm below the top seal. */
+export const slitY = (spec: SachetSpec) => topSeal(spec) + SLIT_BELOW_SEAL;
 
 /** Labels the drawings need, already in the viewer's language. */
 export type DrawLabels = {
@@ -85,8 +97,9 @@ export function dims(spec: SachetSpec) {
     filmW,
     height,
     panelW,
+    topSeal: topSeal(spec),
     clearW: panelW - SEAL,
-    clearH: height - 2 * SEAL,
+    clearH: height - topSeal(spec) - SEAL,
   };
 }
 
@@ -117,7 +130,7 @@ function copySample(spec: SachetSpec, cx: number, cy: number) {
 // the triangle's tip sits `triangleOffsetMm` in from the inside of that seal.
 function frontNotch(spec: SachetSpec, rightEdge: number, bottom: number) {
   if (spec.notch === "slit") {
-    return `<path class="s-cut" d="M${rightEdge} ${SLIT_FROM_TOP}H${rightEdge - SLIT_LEN}"/>`;
+    return `<path class="s-cut" d="M${rightEdge} ${slitY(spec)}H${rightEdge - SLIT_LEN}"/>`;
   }
   if (spec.notch === "triangle") {
     const tx = rightEdge - SEAL - spec.triangleOffsetMm;
@@ -130,14 +143,21 @@ function frontNotch(spec: SachetSpec, rightEdge: number, bottom: number) {
 // edge tears straight across at its own height; a triangle on the bottom edge
 // tears straight up from its tip. `tipX` is the triangle tip on this panel.
 function tearLine(spec: SachetSpec, w: number, H: number, tipX: number) {
-  if (spec.notch === "slit") return `<path class="s-tear" d="M0 ${SLIT_FROM_TOP}H${w}"/>`;
+  if (spec.notch === "slit") return `<path class="s-tear" d="M0 ${slitY(spec)}H${w}"/>`;
   if (spec.notch === "triangle") return `<path class="s-tear" d="M${tipX} ${H - TRI_D}V0"/>`;
   return "";
 }
 
+// The hang hole, centred across a panel of width `w` starting at `x0`, and
+// centred in the top seal.
+function hangHole(spec: SachetSpec, x0: number, w: number) {
+  if (!spec.hangHole) return "";
+  return `<circle class="s-hole" cx="${x0 + w / 2}" cy="${HANG_SEAL / 2}" r="${HANG_HOLE_D / 2}"/>`;
+}
+
 /** The printed web, flat, viewed from the printed side. */
 export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
-  const { filmW: W, height: H, panelW: half, clearW, clearH } = dims(spec);
+  const { filmW: W, height: H, panelW: half, topSeal: top, clearW, clearH } = dims(spec);
   const pl = 16, pr = 24, pt = 24, pb = 14;
   const bcx = half / 2 + SEAL / 2;
   const fcx = half * 1.5 - SEAL / 2;
@@ -145,22 +165,24 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   let g = "";
   g += `<rect class="s-bleed" x="${-BLEED}" y="${-BLEED}" width="${W + 2 * BLEED}" height="${H + 2 * BLEED}"/>`;
   g += `<rect class="s-film" x="0" y="0" width="${W}" height="${H}"/>`;
-  g += `<rect class="s-seal" x="0" y="0" width="${W}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${W}" height="${top}"/>`;
   g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${W}" height="${SEAL}"/>`;
   g += `<rect class="s-seal" x="${W - SEAL}" y="0" width="${SEAL}" height="${H}"/>`;
   g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
   g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
-  g += `<rect class="s-clear" x="${SEAL}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
-  g += `<rect class="s-clear" x="${half}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-clear" x="${SEAL}" y="${top}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-clear" x="${half}" y="${top}" width="${clearW}" height="${clearH}"/>`;
   g += `<rect class="s-outline" x="0" y="0" width="${W}" height="${H}"/>`;
   g += `<line class="s-fold" x1="${half}" y1="-4" x2="${half}" y2="${H + 4}"/>`;
   g += `<text class="t-sub t-fold" x="${half}" y="-5.2" text-anchor="middle">${esc(L.fold)}</text>`;
-  g += `<text class="t-panel" x="${bcx}" y="${SEAL + 6}" text-anchor="middle">${esc(L.back)}</text>`;
-  g += `<text class="t-panel" x="${fcx}" y="${SEAL + 6}" text-anchor="middle">${esc(L.front)}</text>`;
-  g += copySample(spec, bcx, H / 2 + 1) + copySample(spec, fcx, H / 2 + 1);
+  g += `<text class="t-panel" x="${bcx}" y="${top + 6}" text-anchor="middle">${esc(L.back)}</text>`;
+  g += `<text class="t-panel" x="${fcx}" y="${top + 6}" text-anchor="middle">${esc(L.front)}</text>`;
+  g += copySample(spec, bcx, (top + H - SEAL) / 2 + 1) + copySample(spec, fcx, (top + H - SEAL) / 2 + 1);
   g += `<text class="t-sub" x="${bcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
   g += `<text class="t-sub" x="${fcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
   g += frontNotch(spec, W, H);
+  // Punched through both layers, so it shows on both panels.
+  g += hangHole(spec, 0, half) + hangHole(spec, half, half);
   // Direction off the roll is fixed: bottom edge first.
   const ax = W * 0.76;
   g += `<path class="s-lead" d="M${ax - 2.4} ${H + 4}L${ax} ${H + 8.5}L${ax + 2.4} ${H + 4}Z"/>`;
@@ -173,7 +195,7 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
 
 /** Back (left) and front (right), as they look once folded and sealed. */
 export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
-  const { panelW: w, height: H, clearW, clearH } = dims(spec);
+  const { panelW: w, height: H, topSeal: top, clearW, clearH } = dims(spec);
   const gap = 20;
   const pl = 10, pr = 14, pt = 12, pb = 22;
   const fx = w + gap; // front panel's left edge
@@ -182,38 +204,40 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
 
   // BACK -- fold on its right; its outer edge carries the eye-mark lane.
   g += `<rect class="s-film" x="0" y="0" width="${w}" height="${H}"/>`;
-  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${top}"/>`;
   g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${w}" height="${SEAL}"/>`;
   g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
   g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
-  g += `<rect class="s-clear" x="${SEAL}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-clear" x="${SEAL}" y="${top}" width="${clearW}" height="${clearH}"/>`;
   g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;
   g += `<line class="s-foldedge" x1="${w}" y1="0" x2="${w}" y2="${H}"/>`;
   // The notch cuts both layers; seen from behind it is mirrored onto the
   // back's outer (left) edge.
-  if (spec.notch === "slit") g += `<path class="s-cut" d="M0 ${SLIT_FROM_TOP}H${SLIT_LEN}"/>`;
+  if (spec.notch === "slit") g += `<path class="s-cut" d="M0 ${slitY(spec)}H${SLIT_LEN}"/>`;
   if (spec.notch === "triangle") {
     const tx = SEAL + spec.triangleOffsetMm;
     g += `<path class="s-cutfill" d="M${tx - TRI_W / 2} ${H}L${tx} ${H - TRI_D}L${tx + TRI_W / 2} ${H}Z"/>`;
   }
   g += tearLine(spec, w, H, SEAL + spec.triangleOffsetMm);
+  g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.back)}</text>`;
-  g += copySample(spec, (w + SEAL) / 2, H / 2);
+  g += copySample(spec, (w + SEAL) / 2, (top + H - SEAL) / 2);
   g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
 
   // FRONT -- fold on its left.
   g += `<g transform="translate(${fx} 0)">`;
   g += `<rect class="s-film" x="0" y="0" width="${w}" height="${H}"/>`;
-  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${top}"/>`;
   g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${w}" height="${SEAL}"/>`;
   g += `<rect class="s-seal" x="${w - SEAL}" y="0" width="${SEAL}" height="${H}"/>`;
-  g += `<rect class="s-clear" x="0" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-clear" x="0" y="${top}" width="${clearW}" height="${clearH}"/>`;
   g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;
   g += `<line class="s-foldedge" x1="0" y1="0" x2="0" y2="${H}"/>`;
   g += frontNotch(spec, w, H);
   g += tearLine(spec, w, H, w - SEAL - spec.triangleOffsetMm);
+  g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.front)}</text>`;
-  g += copySample(spec, clearW / 2, H / 2);
+  g += copySample(spec, clearW / 2, (top + H - SEAL) / 2);
   g += `<text class="t-sub" x="${clearW / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
   g += `</g>`;
 

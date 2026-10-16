@@ -14,12 +14,14 @@ import {
   LEN_MIN_IN,
   OFF_MAX_MM,
   OFF_MIN_MM,
+  OFF_STD_MM,
   STANDARDS,
   TOOLING_IN,
   dims,
   finishedSvg,
   flatSvg,
   inches,
+  slitY,
   type Notch,
   type SachetSpec,
   type Unwind,
@@ -95,6 +97,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   const [spec, setSpec] = useState<SachetSpec>(DEFAULT_SPEC);
   // Length follows the width's standard unless someone deliberately opts out.
   const [customLength, setCustomLength] = useState(false);
+  const [customOffset, setCustomOffset] = useState(false);
   const standardLength = (toolingIn: number) =>
     STANDARDS.find((p) => p.tooling === toolingIn)?.length ?? DEFAULT_SPEC.lengthIn;
   const set = (patch: Partial<SachetSpec>) => setSpec((p) => ({ ...p, ...patch }));
@@ -109,14 +112,15 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     spec.notch === "triangle"
       ? t("sNotchTriangle", { o: spec.triangleOffsetMm })
       : spec.notch === "slit"
-        ? t("sNotchSlit")
+        ? t("sNotchSlit", { y: slitY(spec) })
         : t("sNotchNone");
 
   const specRows: [string, string][] = [
     [t("sFinished"), `${inches(d.panelW)} × ${inches(d.height)}`],
     [t("sFilm"), `${inches(d.filmW)} × ${inches(d.height)}`],
     [t("sClear"), `${inches(d.clearW)} × ${inches(d.clearH)}`],
-    [t("sSeals"), t("sSealsV")],
+    [t("sSeals"), spec.hangHole ? t("sSealsHangV") : t("sSealsV")],
+    [t("sHang"), spec.hangHole ? t("sHangV") : t("sHangNone")],
     [t("sBleed"), "1 mm"],
     [t("sEye"), t("sEyeV")],
     [t("sNotch"), notchValue],
@@ -128,6 +132,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     ...(spec.notch !== "none"
       ? [{ cls: s.swNotch, label: t("lgNotch") }, { cls: s.swTear, label: t("lgTear") }]
       : []),
+    ...(spec.hangHole ? [{ cls: s.swHole, label: t("lgHole") }] : []),
     { cls: s.swFold, label: t("lgFold") },
     { cls: s.swSeal, label: t("lgSeal") },
     { cls: s.swMark, label: t("lgMark") },
@@ -198,14 +203,51 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
 
         {spec.notch === "triangle" ? (
           <div className={s.field}>
-            <label className={s.label} htmlFor="dl-offset">{t("offset")}</label>
-            <NumberField
-              id="dl-offset" value={spec.triangleOffsetMm} min={OFF_MIN_MM} max={OFF_MAX_MM} step={0.5}
-              unit="mm" fixed={1} label={t("offset")} onCommit={(v) => set({ triangleOffsetMm: v })}
-            />
-            <p className={s.hint}>{t("offsetHint")}</p>
+            {customOffset ? (
+              <>
+                <label className={s.label} htmlFor="dl-offset">{t("offset")}</label>
+                <NumberField
+                  id="dl-offset" value={spec.triangleOffsetMm} min={OFF_MIN_MM} max={OFF_MAX_MM} step={0.5}
+                  unit="mm" fixed={1} label={t("offset")} onCommit={(v) => set({ triangleOffsetMm: v })}
+                />
+                <p className={s.hint}>{t("offsetHint")}</p>
+                <button
+                  type="button" className={s.chip}
+                  onClick={() => {
+                    setCustomOffset(false);
+                    set({ triangleOffsetMm: OFF_STD_MM });
+                  }}
+                >
+                  {t("offsetReset", { o: OFF_STD_MM })}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className={s.label}>{t("offset")}</span>
+                <p className={s.fixedValue}>
+                  {spec.triangleOffsetMm.toFixed(1)} mm <span className={s.hint}>{t("offsetStandard")}</span>
+                </p>
+                <button type="button" className={s.chip} onClick={() => setCustomOffset(true)}>
+                  {t("lengthCustomize")}
+                </button>
+              </>
+            )}
           </div>
         ) : null}
+
+        <div className={s.field}>
+          <span className={s.label}>{t("hang")}</span>
+          <Segmented<"no" | "yes">
+            label={t("hang")}
+            options={[
+              { v: "no", main: t("hangNo") },
+              { v: "yes", main: t("hangYes") },
+            ]}
+            value={spec.hangHole ? "yes" : "no"}
+            onPick={(v) => set({ hangHole: v === "yes" })}
+          />
+          <p className={s.hint}>{spec.hangHole ? t("hangHint") : t("hangHintNo")}</p>
+        </div>
 
         <div className={s.field}>
           <span className={s.label}>{t("unwind")}</span>
