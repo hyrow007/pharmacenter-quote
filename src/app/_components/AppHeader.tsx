@@ -108,13 +108,13 @@ export default async function AppHeader({ user, appContext }: Props) {
             ? onYieldHost
               ? "/"
               : "https://yield.pharmacenter.app/"
-          : ctx === "dielines"
-            ? onDielineHost
-              ? "/"
-              : "/dielines"
-            : ctx === "packing-list"
-              ? "https://packing.pharmacenter.app/lists"
-              : "/workflows";
+            : ctx === "dielines"
+              ? onDielineHost
+                ? "/"
+                : "https://dieline.pharmacenter.app/"
+              : ctx === "packing-list"
+                ? "https://packing.pharmacenter.app/lists"
+                : "/workflows";
   const productMain =
     ctx === "formulas"
       ? "Formulas"
@@ -124,11 +124,11 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? "Sales Order"
           : ctx === "yields"
             ? "Production"
-          : ctx === "dielines"
-            ? "Dieline"
-            : ctx === "packing-list"
-              ? "Packing List"
-              : "Quote";
+            : ctx === "dielines"
+              ? "Dieline"
+              : ctx === "packing-list"
+                ? "Packing List"
+                : "Quote";
   const productSub =
     ctx === "formulas"
       ? "Catalog"
@@ -138,11 +138,11 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? "Tracker"
           : ctx === "yields"
             ? "Yields"
-          : ctx === "dielines"
-            ? "Builder"
-            : ctx === "packing-list"
-              ? "Generator"
-              : "Work Flows";
+            : ctx === "dielines"
+              ? "Builder"
+              : ctx === "packing-list"
+                ? "Generator"
+                : "Work Flows";
 
   return (
     <header className="app-nav">

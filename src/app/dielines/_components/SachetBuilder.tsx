@@ -211,11 +211,23 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             <span className={s.viewMeta}>{inches(d.filmW)} × {inches(d.height)}</span>
           </div>
           <div className={s.drawing} dangerouslySetInnerHTML={{ __html: flat }} />
-          <ul className={s.legend}>
-            {legend.map((l) => (
-              <li key={l.label}><span className={`${s.sw} ${l.cls}`} />{l.label}</li>
-            ))}
-          </ul>
+          <div className={s.flatFoot}>
+            <ul className={s.legend}>
+              {legend.map((l) => (
+                <li key={l.label}><span className={`${s.sw} ${l.cls}`} />{l.label}</li>
+              ))}
+            </ul>
+            {/* The unwind position sits with the film it describes. */}
+            <figure className={s.roll} aria-live="polite">
+              {/* The roll pictures are the converter's own chart, cropped. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={73} />
+              <figcaption>
+                <b>{positionLabel}</b>
+                {t(UNWIND_HINT[spec.unwind])}
+              </figcaption>
+            </figure>
+          </div>
         </section>
 
         <section className={s.view}>
@@ -226,18 +238,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           <div className={s.drawing} dangerouslySetInnerHTML={{ __html: finished }} />
         </section>
 
-        <div className={s.bottom}>
-          <p className={s.foot}>{t("foot")}</p>
-          <figure className={s.roll} aria-live="polite">
-            {/* The roll pictures are the converter's own chart, cropped. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={73} />
-            <figcaption>
-              <b>{positionLabel}</b>
-              {t(UNWIND_HINT[spec.unwind])}
-            </figcaption>
-          </figure>
-        </div>
+        <p className={s.foot}>{t("foot")}</p>
       </div>
     </div>
   );
