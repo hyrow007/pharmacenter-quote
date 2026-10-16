@@ -155,12 +155,12 @@ const TOOLS: Tool[] = [
   },
   {
     key: "dielines",
-    // No destination yet. The tile is not a link, so this is never followed --
-    // it is here so wiring it up later is one line and one flag.
-    href: "#",
+    // The quote-host path until dieline.pharmacenter.app has DNS, a Vercel
+    // domain and a Supabase redirect entry; then this becomes
+    // "https://dieline.pharmacenter.app/".
+    href: "https://quote.pharmacenter.app/dielines",
     titleKey: "hubDielinesName",
     descKey: "hubDielinesDesc",
-    comingSoon: true,
     // A sachet with its height and width called out, the way a dieline is
     // actually drawn. The first attempt was an unfolded carton and read as a
     // crate at 26px -- the dimension lines are what say "this is a spec, not

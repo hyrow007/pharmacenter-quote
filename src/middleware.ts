@@ -50,6 +50,14 @@ function isYieldHost(host: string | null): boolean {
   return host.startsWith("yield.") || host.startsWith("yields.");
 }
 
+// dieline.pharmacenter.app / dielines.pharmacenter.app is the dieline
+// builder (Dielines). Same substring pattern and singular/plural alias as the
+// others; fronts /dielines.
+function isDielineHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("dieline.") || host.startsWith("dielines.");
+}
+
 // v48.6: formulas are only reachable on the formula subdomain. A
 // /formulas page request arriving on the quote host gets a permanent
 // redirect to the same path on formula.<domain>. Scoped to hosts that
@@ -95,6 +103,14 @@ function shouldRewriteToYields(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
   if (pathname.startsWith("/yields")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  return true;
+}
+
+function shouldRewriteToDielines(pathname: string): boolean {
+  if (pathname.startsWith("/api")) return false;
+  if (pathname.startsWith("/auth")) return false;
+  if (pathname.startsWith("/dielines")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }
@@ -242,6 +258,27 @@ export async function middleware(request: NextRequest) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/yields" : `/yields${pathname}`;
+      rewriteUrl.search = search;
+      const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
+      authResponse.cookies.getAll().forEach((cookie) => {
+        rewriteResponse.cookies.set(cookie);
+      });
+      return rewriteResponse;
+    }
+  }
+
+  // dielines host -- same rewrite pattern; fronts /dielines.
+  if (isDielineHost(host)) {
+    const { pathname, search, searchParams } = request.nextUrl;
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
+    if (
+      shouldRewriteToDielines(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname =
+        pathname === "/" ? "/dielines" : `/dielines${pathname}`;
       rewriteUrl.search = search;
       const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       authResponse.cookies.getAll().forEach((cookie) => {

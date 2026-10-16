@@ -33,6 +33,7 @@ export type AppContext =
   | "meetings"
   | "orders"
   | "yields"
+  | "dielines"
   // The apex, pharmacenter.app. Not a product -- the hub IS PharmaCenter, so
   // it wears the wordmark alone with no product name beside it.
   | "hub";
@@ -59,6 +60,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onMeetingHost = host.startsWith("meeting.") || host.startsWith("meetings.");
   const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
   const onYieldHost = host.startsWith("yield.") || host.startsWith("yields.");
+  const onDielineHost = host.startsWith("dieline.") || host.startsWith("dielines.");
   // Hub hosts only: pharmacenter.app, pharmacenter.tools and their www.
   // Deliberately NOT a suffix test -- "quote.pharmacenter.app" ends with the
   // apex too.
@@ -77,7 +79,9 @@ export default async function AppHeader({ user, appContext }: Props) {
     ? "orders"
     : onYieldHost
       ? "yields"
-      : (appContext ??
+      : onDielineHost
+        ? "dielines"
+        : (appContext ??
       (onFormulaHost
         ? "formulas"
         : onMeetingHost
@@ -104,6 +108,10 @@ export default async function AppHeader({ user, appContext }: Props) {
             ? onYieldHost
               ? "/"
               : "https://yield.pharmacenter.app/"
+          : ctx === "dielines"
+            ? onDielineHost
+              ? "/"
+              : "/dielines"
             : ctx === "packing-list"
               ? "https://packing.pharmacenter.app/lists"
               : "/workflows";
@@ -116,6 +124,8 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? "Sales Order"
           : ctx === "yields"
             ? "Production"
+          : ctx === "dielines"
+            ? "Dieline"
             : ctx === "packing-list"
               ? "Packing List"
               : "Quote";
@@ -128,6 +138,8 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? "Tracker"
           : ctx === "yields"
             ? "Yields"
+          : ctx === "dielines"
+            ? "Builder"
             : ctx === "packing-list"
               ? "Generator"
               : "Work Flows";
@@ -187,6 +199,7 @@ export default async function AppHeader({ user, appContext }: Props) {
               onMeetingHost={onMeetingHost}
               onOrderHost={onOrderHost}
               onYieldHost={onYieldHost}
+              onDielineHost={onDielineHost}
               appContext={ctx}
               lang={lang}
             />

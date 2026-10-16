@@ -1,0 +1,189 @@
+/* Dielines -- page styles. Brand tokens come from globals.css; no font family
+   is named literally except the numeric face, which globals.css itself names
+   the same way. Dieline drawing colours follow print convention: magenta for
+   anything cut, sage for the fold, a dashed line for bleed. */
+
+.layout {
+  --cut: #c0216a;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+/* ---- controls ---- */
+.controls {
+  display: grid;
+  gap: 22px;
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.field { display: grid; gap: 8px; min-width: 0; }
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.hint { font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: 1px solid var(--stone);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: 0;
+  border-right: 1px solid var(--stone);
+  background: var(--paper);
+  color: var(--ink-1);
+  font: 600 14px var(--sans);
+  padding: 9px 6px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.seg button:last-child { border-right: 0; }
+.seg button small {
+  display: block;
+  font: 400 11px var(--mono);
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.seg button[aria-pressed="true"] { background: var(--teal-900); color: var(--paper); }
+.seg button[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
+.seg button:focus-visible,
+.chip:focus-visible,
+.num input:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2px; }
+
+.num { display: flex; align-items: center; gap: 10px; }
+.num input[type="range"] { flex: 1; min-width: 0; accent-color: var(--teal-700); }
+.num input[type="number"] {
+  width: 84px;
+  font: 500 15px var(--mono);
+  color: var(--ink-1);
+  background: var(--cream-soft);
+  border: 1px solid var(--stone);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.unit { font: 400 13px var(--mono); color: var(--ink-3); }
+
+.presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip {
+  border: 1px solid var(--stone);
+  background: none;
+  color: var(--teal-900);
+  border-radius: 999px;
+  font: 500 12px var(--mono);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--teal-700); }
+
+.spec { display: grid; gap: 6px; font-size: 14px; }
+.specRow { display: grid; grid-template-columns: 9.5em 1fr; gap: 12px; }
+.specRow dt { color: var(--ink-3); }
+.specRow dd { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink-1); }
+
+/* ---- drawings ---- */
+.views { display: grid; gap: 22px; min-width: 0; }
+.view {
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  padding: 18px 18px 12px;
+  min-width: 0;
+}
+.viewHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.viewTitle { font-family: var(--serif); font-weight: 600; font-size: 24px; color: var(--teal-900); }
+.viewMeta { font: 400 13px var(--mono); color: var(--ink-3); }
+
+.drawing { overflow-x: auto; }
+.drawing :global(svg) { display: block; width: 100%; height: auto; max-height: 470px; }
+.drawing :global(.s-film) { fill: var(--paper); }
+.drawing :global(.s-outline) { fill: none; stroke: var(--cut); stroke-width: 0.35; }
+.drawing :global(.s-bleed) { fill: none; stroke: var(--ink-3); stroke-width: 0.25; stroke-dasharray: 1.2 0.9; }
+.drawing :global(.s-seal) { fill: var(--stone-2); }
+.drawing :global(.s-lane) { fill: var(--cream); stroke: var(--ink-3); stroke-width: 0.15; }
+.drawing :global(.s-mark) { fill: var(--teal-900); }
+.drawing :global(.s-fold) { stroke: var(--sage-500); stroke-width: 0.5; stroke-dasharray: 3 1.2 0.6 1.2; fill: none; }
+.drawing :global(.s-foldedge) { stroke: var(--sage-500); stroke-width: 1; fill: none; }
+.drawing :global(.s-clear) { fill: none; stroke: var(--teal-700); stroke-width: 0.2; stroke-dasharray: 0.8 0.8; opacity: 0.8; }
+.drawing :global(.s-cut) { stroke: var(--cut); stroke-width: 0.5; fill: none; stroke-linecap: round; }
+.drawing :global(.s-cutfill) { fill: var(--cut); }
+.drawing :global(.s-dim) { stroke: var(--ink-3); stroke-width: 0.2; fill: none; }
+.drawing :global(.s-lead) { fill: var(--sage-500); }
+.drawing :global(.s-copyline) { stroke: var(--ink-1); stroke-width: 0.7; fill: none; }
+.drawing :global(.t) { font-family: var(--mono); font-size: 3.1px; fill: var(--ink-3); }
+.drawing :global(.t-sub) { font-family: var(--mono); font-size: 2.8px; fill: var(--ink-3); }
+.drawing :global(.t-fold) { fill: var(--sage-700); }
+.drawing :global(.t-panel) { font-family: var(--serif); font-size: 5.4px; font-weight: 600; fill: var(--teal-900); }
+.drawing :global(.t-lead) { font-family: var(--sans); font-size: 3px; font-weight: 700; fill: var(--sage-700); }
+.drawing :global(.t-copy) { font-family: var(--sans); font-size: 7px; font-weight: 700; letter-spacing: 0.3px; fill: var(--ink-1); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 10px 0 2px;
+  list-style: none;
+}
+.legend li { display: flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
+.swCut { height: 0; border-top: 2px solid var(--cut); }
+.swNotch { background: var(--cut); }
+.swFold { height: 0; border-top: 2px dashed var(--sage-500); }
+.swSeal { background: var(--stone-2); border: 1px solid var(--stone); }
+.swMark { background: var(--teal-900); }
+.swClear { border: 1px dashed var(--teal-700); }
+.swBleed { border: 1px dashed var(--ink-3); }
+.swLead { background: var(--sage-500); }
+
+/* ---- bottom: note and the unwind picture ---- */
+.bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.foot { flex: 1 1 240px; min-width: 0; font-size: 12px; color: var(--ink-3); }
+.roll {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  padding: 8px 14px 8px 8px;
+  background: var(--stone-2);
+}
+.roll img { display: block; width: 112px; height: auto; background: #fff; border-radius: 6px; }
+.roll figcaption { font-size: 13px; color: var(--ink-2); line-height: 1.35; max-width: 160px; }
+.roll figcaption b {
+  display: block;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--teal-900);
+}

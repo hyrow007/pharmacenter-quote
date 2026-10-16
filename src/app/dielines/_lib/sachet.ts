@@ -1,0 +1,214 @@
+// Sachet film geometry -- the house rules, in one place, as pure functions.
+//
+// A PharmaCenter sachet is a 3-side seal: one printed web, folded down the
+// centre, sealed on the other three edges. Everything below is in millimetres
+// unless a name says otherwise. The drawings are returned as SVG strings so
+// the same code can later be the downloadable dieline, not just the preview.
+//
+// Rules (from the user, 2026-10-16):
+//   tooling (flat film width) 5.5 / 6 / 6.5 in; finished width is half
+//   length = finished height, 2.5 to 4.5 in
+//   seal 6 mm on top, bottom and both outer edges; the fold has none
+//   bleed 1 mm
+//   eye mark 6 x 6 mm, top-left, on a 6 mm high-contrast lane down the left edge
+//   left panel = back, right panel = front
+//   notch: none, or a slit (4 mm long, right edge, 4.5 mm below the top seal),
+//     or a triangle (1.5 mm wide, bottom edge of the front, tip 2-17 mm in
+//     from the right seal, standard 4.5) -- never both
+//   the film always comes off the roll bottom edge first; the unwind
+//     position (1-4) only turns the copy
+
+export const MM_PER_IN = 25.4;
+export const SEAL = 6;
+export const BLEED = 1;
+export const EYE = 6;
+export const SLIT_FROM_TOP = SEAL + 4.5;
+export const SLIT_LEN = 4;
+export const TRI_W = 1.5;
+export const TRI_D = (TRI_W * Math.sqrt(3)) / 2;
+
+export const TOOLING_IN = [5.5, 6, 6.5] as const;
+export const LEN_MIN_IN = 2.5;
+export const LEN_MAX_IN = 4.5;
+export const OFF_MIN_MM = 2;
+export const OFF_MAX_MM = 17;
+export const OFF_STD_MM = 4.5;
+export const STANDARDS = [
+  { tooling: 5.5, length: 3 },
+  { tooling: 6, length: 3.5 },
+  { tooling: 6.5, length: 3.5 },
+] as const;
+
+export type Notch = "none" | "slit" | "triangle";
+export type Unwind = 1 | 2 | 3 | 4;
+
+export type SachetSpec = {
+  toolingIn: number;
+  lengthIn: number;
+  notch: Notch;
+  triangleOffsetMm: number;
+  unwind: Unwind;
+};
+
+export const DEFAULT_SPEC: SachetSpec = {
+  toolingIn: 6,
+  lengthIn: 3.5,
+  notch: "slit",
+  triangleOffsetMm: OFF_STD_MM,
+  unwind: 2,
+};
+
+/** Labels the drawings need, already in the viewer's language. */
+export type DrawLabels = {
+  back: string;
+  front: string;
+  fold: string;
+  clear: string;
+  offRoll: string;
+};
+
+// Rotation of the copy on the film for each unwind position. The bottom edge
+// leads off the roll, so position 2 (bottom of the copy first) is upright.
+export const COPY_ROTATION: Record<Unwind, number> = { 1: 180, 2: 0, 3: 90, 4: -90 };
+
+export const inches = (mm: number) => (Math.round((mm / MM_PER_IN) * 100) / 100).toFixed(2) + '"';
+const mm1 = (mm: number) => (Math.round(mm * 10) / 10).toFixed(1);
+export const both = (mm: number) => `${inches(mm)} (${mm1(mm)} mm)`;
+const esc = (s: string) =>
+  s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+
+export function dims(spec: SachetSpec) {
+  const filmW = spec.toolingIn * MM_PER_IN;
+  const height = spec.lengthIn * MM_PER_IN;
+  const panelW = filmW / 2;
+  return {
+    filmW,
+    height,
+    panelW,
+    clearW: panelW - SEAL,
+    clearH: height - 2 * SEAL,
+  };
+}
+
+function hdim(x1: number, x2: number, y: number, label: string) {
+  return (
+    `<path class="s-dim" d="M${x1} ${y}H${x2}M${x1} ${y - 1.4}V${y + 1.4}M${x2} ${y - 1.4}V${y + 1.4}"/>` +
+    `<text class="t" x="${(x1 + x2) / 2}" y="${y - 1.3}" text-anchor="middle">${label}</text>`
+  );
+}
+
+function vdim(y1: number, y2: number, x: number, label: string) {
+  const cy = (y1 + y2) / 2;
+  return (
+    `<path class="s-dim" d="M${x} ${y1}V${y2}M${x - 1.4} ${y1}H${x + 1.4}M${x - 1.4} ${y2}H${x + 1.4}"/>` +
+    `<text class="t" x="${x + 1.6}" y="${cy}" text-anchor="middle" transform="rotate(90 ${x + 1.6} ${cy})">${label}</text>`
+  );
+}
+
+function copySample(spec: SachetSpec, cx: number, cy: number) {
+  const r = COPY_ROTATION[spec.unwind];
+  return (
+    `<g transform="rotate(${r} ${cx} ${cy})"><text class="t-copy" x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central">COPY</text>` +
+    `<path class="s-copyline" d="M${cx - 8} ${cy + 4.6}H${cx + 8}"/></g>`
+  );
+}
+
+// The notch as cut on the front panel. `rightEdge` is the front's outer edge;
+// the triangle's tip sits `triangleOffsetMm` in from the inside of that seal.
+function frontNotch(spec: SachetSpec, rightEdge: number, bottom: number) {
+  if (spec.notch === "slit") {
+    return `<path class="s-cut" d="M${rightEdge} ${SLIT_FROM_TOP}H${rightEdge - SLIT_LEN}"/>`;
+  }
+  if (spec.notch === "triangle") {
+    const tx = rightEdge - SEAL - spec.triangleOffsetMm;
+    return `<path class="s-cutfill" d="M${tx - TRI_W / 2} ${bottom}L${tx} ${bottom - TRI_D}L${tx + TRI_W / 2} ${bottom}Z"/>`;
+  }
+  return "";
+}
+
+/** The printed web, flat, viewed from the printed side. */
+export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
+  const { filmW: W, height: H, panelW: half, clearW, clearH } = dims(spec);
+  const pl = 16, pr = 24, pt = 24, pb = 14;
+  const bcx = half / 2 + SEAL / 2;
+  const fcx = half * 1.5 - SEAL / 2;
+  const clearLabel = `${esc(L.clear)} ${inches(clearW)} × ${inches(clearH)}`;
+  let g = "";
+  g += `<rect class="s-bleed" x="${-BLEED}" y="${-BLEED}" width="${W + 2 * BLEED}" height="${H + 2 * BLEED}"/>`;
+  g += `<rect class="s-film" x="0" y="0" width="${W}" height="${H}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${W}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${W}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="${W - SEAL}" y="0" width="${SEAL}" height="${H}"/>`;
+  g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
+  g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
+  g += `<rect class="s-clear" x="${SEAL}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-clear" x="${half}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-outline" x="0" y="0" width="${W}" height="${H}"/>`;
+  g += `<line class="s-fold" x1="${half}" y1="-4" x2="${half}" y2="${H + 4}"/>`;
+  g += `<text class="t-sub t-fold" x="${half}" y="-5.2" text-anchor="middle">${esc(L.fold)}</text>`;
+  g += `<text class="t-panel" x="${bcx}" y="${SEAL + 6}" text-anchor="middle">${esc(L.back)}</text>`;
+  g += `<text class="t-panel" x="${fcx}" y="${SEAL + 6}" text-anchor="middle">${esc(L.front)}</text>`;
+  g += copySample(spec, bcx, H / 2 + 1) + copySample(spec, fcx, H / 2 + 1);
+  g += `<text class="t-sub" x="${bcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
+  g += `<text class="t-sub" x="${fcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
+  g += frontNotch(spec, W, H);
+  // Direction off the roll is fixed: bottom edge first.
+  const ax = W * 0.76;
+  g += `<path class="s-lead" d="M${ax - 2.4} ${H + 4}L${ax} ${H + 8.5}L${ax + 2.4} ${H + 4}Z"/>`;
+  g += `<text class="t-lead" x="${ax + 4}" y="${H + 7.4}">${esc(L.offRoll)}</text>`;
+  g += hdim(0, half, -10, inches(half)) + hdim(half, W, -10, inches(half));
+  g += hdim(0, W, -18, both(W));
+  g += vdim(0, H, W + 7, both(H));
+  return `<svg viewBox="${-pl} ${-pt} ${W + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
+}
+
+/** Back (left) and front (right), as they look once folded and sealed. */
+export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
+  const { panelW: w, height: H, clearW, clearH } = dims(spec);
+  const gap = 20;
+  const pl = 10, pr = 14, pt = 12, pb = 22;
+  const fx = w + gap; // front panel's left edge
+  const clearLine = `${inches(clearW)} × ${inches(clearH)}`;
+  let g = "";
+
+  // BACK -- fold on its right; its outer edge carries the eye-mark lane.
+  g += `<rect class="s-film" x="0" y="0" width="${w}" height="${H}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
+  g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
+  g += `<rect class="s-clear" x="${SEAL}" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;
+  g += `<line class="s-foldedge" x1="${w}" y1="0" x2="${w}" y2="${H}"/>`;
+  // The notch cuts both layers; seen from behind it is mirrored onto the
+  // back's outer (left) edge.
+  if (spec.notch === "slit") g += `<path class="s-cut" d="M0 ${SLIT_FROM_TOP}H${SLIT_LEN}"/>`;
+  if (spec.notch === "triangle") {
+    const tx = SEAL + spec.triangleOffsetMm;
+    g += `<path class="s-cutfill" d="M${tx - TRI_W / 2} ${H}L${tx} ${H - TRI_D}L${tx + TRI_W / 2} ${H}Z"/>`;
+  }
+  g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.back)}</text>`;
+  g += copySample(spec, (w + SEAL) / 2, H / 2);
+  g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+
+  // FRONT -- fold on its left.
+  g += `<g transform="translate(${fx} 0)">`;
+  g += `<rect class="s-film" x="0" y="0" width="${w}" height="${H}"/>`;
+  g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${w}" height="${SEAL}"/>`;
+  g += `<rect class="s-seal" x="${w - SEAL}" y="0" width="${SEAL}" height="${H}"/>`;
+  g += `<rect class="s-clear" x="0" y="${SEAL}" width="${clearW}" height="${clearH}"/>`;
+  g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;
+  g += `<line class="s-foldedge" x1="0" y1="0" x2="0" y2="${H}"/>`;
+  g += frontNotch(spec, w, H);
+  g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.front)}</text>`;
+  g += copySample(spec, clearW / 2, H / 2);
+  g += `<text class="t-sub" x="${clearW / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  g += `</g>`;
+
+  g += `<text class="t-sub t-fold" x="${w}" y="${H + 4.5}" text-anchor="middle">${esc(L.fold)}</text>`;
+  g += `<text class="t-sub t-fold" x="${fx}" y="${H + 4.5}" text-anchor="middle">${esc(L.fold)}</text>`;
+  g += hdim(0, w, H + 13, both(w)) + hdim(fx, fx + w, H + 13, both(w));
+  g += vdim(0, H, fx + w + 7, both(H));
+  return `<svg viewBox="${-pl} ${-pt} ${2 * w + gap + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
+}
