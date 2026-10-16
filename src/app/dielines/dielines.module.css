@@ -129,6 +129,7 @@
 .drawing :global(.s-clear) { fill: none; stroke: var(--teal-700); stroke-width: 0.2; stroke-dasharray: 0.8 0.8; opacity: 0.8; }
 .drawing :global(.s-cut) { stroke: var(--cut); stroke-width: 0.5; fill: none; stroke-linecap: round; }
 .drawing :global(.s-cutfill) { fill: var(--cut); }
+.drawing :global(.s-tear) { stroke: var(--cut); stroke-width: 0.45; stroke-dasharray: 0.6 1.1; stroke-linecap: round; fill: none; opacity: 0.85; }
 .drawing :global(.s-dim) { stroke: var(--ink-3); stroke-width: 0.2; fill: none; }
 .drawing :global(.s-lead) { fill: var(--sage-500); }
 .drawing :global(.s-copyline) { stroke: var(--ink-1); stroke-width: 0.7; fill: none; }
@@ -152,6 +153,7 @@
 .sw { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
 .swCut { height: 0; border-top: 2px solid var(--cut); }
 .swNotch { background: var(--cut); }
+.swTear { height: 0; border-top: 2px dotted var(--cut); }
 .swFold { height: 0; border-top: 2px dashed var(--sage-500); }
 .swSeal { background: var(--stone-2); border: 1px solid var(--stone); }
 .swMark { background: var(--teal-900); }

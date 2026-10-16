@@ -126,6 +126,15 @@ function frontNotch(spec: SachetSpec, rightEdge: number, bottom: number) {
   return "";
 }
 
+// Where the pack tears once opened -- finished view only. A slit on the side
+// edge tears straight across at its own height; a triangle on the bottom edge
+// tears straight up from its tip. `tipX` is the triangle tip on this panel.
+function tearLine(spec: SachetSpec, w: number, H: number, tipX: number) {
+  if (spec.notch === "slit") return `<path class="s-tear" d="M0 ${SLIT_FROM_TOP}H${w}"/>`;
+  if (spec.notch === "triangle") return `<path class="s-tear" d="M${tipX} ${H - TRI_D}V0"/>`;
+  return "";
+}
+
 /** The printed web, flat, viewed from the printed side. */
 export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
   const { filmW: W, height: H, panelW: half, clearW, clearH } = dims(spec);
@@ -187,6 +196,7 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
     const tx = SEAL + spec.triangleOffsetMm;
     g += `<path class="s-cutfill" d="M${tx - TRI_W / 2} ${H}L${tx} ${H - TRI_D}L${tx + TRI_W / 2} ${H}Z"/>`;
   }
+  g += tearLine(spec, w, H, SEAL + spec.triangleOffsetMm);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.back)}</text>`;
   g += copySample(spec, (w + SEAL) / 2, H / 2);
   g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
@@ -201,6 +211,7 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;
   g += `<line class="s-foldedge" x1="0" y1="0" x2="0" y2="${H}"/>`;
   g += frontNotch(spec, w, H);
+  g += tearLine(spec, w, H, w - SEAL - spec.triangleOffsetMm);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.front)}</text>`;
   g += copySample(spec, clearW / 2, H / 2);
   g += `<text class="t-sub" x="${clearW / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;

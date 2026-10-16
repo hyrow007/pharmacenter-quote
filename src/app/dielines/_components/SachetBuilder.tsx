@@ -26,7 +26,11 @@ import {
 } from "../_lib/sachet";
 import s from "../dielines.module.css";
 
-const NOTCH_LABEL: Record<Notch, DKey> = { none: "notchNone", slit: "notchSlit", triangle: "notchTriangle" };
+// The buttons name the direction of the tear; the notch that makes it is the
+// subtext. A slit on the side edge tears across, a triangle on the bottom
+// edge tears upward.
+const NOTCH_LABEL: Record<Notch, DKey> = { none: "notchNone", slit: "notchHorizontal", triangle: "notchVertical" };
+const NOTCH_SUB: Record<Notch, DKey | null> = { none: null, slit: "notchSlit", triangle: "notchTriangle" };
 const NOTCH_HINT: Record<Notch, DKey> = { none: "notchHintNone", slit: "notchHintSlit", triangle: "notchHintTriangle" };
 const UNWIND_HINT: Record<Unwind, DKey> = { 1: "unwindHint1", 2: "unwindHint2", 3: "unwindHint3", 4: "unwindHint4" };
 
@@ -117,7 +121,9 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
 
   const legend: { cls: string; label: string }[] = [
     { cls: s.swCut, label: t("lgCut") },
-    ...(spec.notch !== "none" ? [{ cls: s.swNotch, label: t("lgNotch") }] : []),
+    ...(spec.notch !== "none"
+      ? [{ cls: s.swNotch, label: t("lgNotch") }, { cls: s.swTear, label: t("lgTear") }]
+      : []),
     { cls: s.swFold, label: t("lgFold") },
     { cls: s.swSeal, label: t("lgSeal") },
     { cls: s.swMark, label: t("lgMark") },
@@ -164,7 +170,10 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           <span className={s.label}>{t("notch")}</span>
           <Segmented<Notch>
             label={t("notch")}
-            options={(["none", "slit", "triangle"] as Notch[]).map((n) => ({ v: n, main: t(NOTCH_LABEL[n]) }))}
+            options={(["none", "slit", "triangle"] as Notch[]).map((n) => {
+              const sub = NOTCH_SUB[n];
+              return { v: n, main: t(NOTCH_LABEL[n]), small: sub ? t(sub) : undefined };
+            })}
             value={spec.notch}
             onPick={(v) => set({ notch: v })}
           />
