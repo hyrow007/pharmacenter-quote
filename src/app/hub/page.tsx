@@ -155,10 +155,7 @@ const TOOLS: Tool[] = [
   },
   {
     key: "dielines",
-    // The quote-host path until dieline.pharmacenter.app has DNS, a Vercel
-    // domain and a Supabase redirect entry; then this becomes
-    // "https://dieline.pharmacenter.app/".
-    href: "https://quote.pharmacenter.app/dielines",
+    href: "https://dieline.pharmacenter.app/",
     titleKey: "hubDielinesName",
     descKey: "hubDielinesDesc",
     // A sachet with its height and width called out, the way a dieline is
