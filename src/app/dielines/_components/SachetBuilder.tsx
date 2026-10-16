@@ -93,6 +93,10 @@ function Segmented<T extends string | number>({
 export default function SachetBuilder({ lang }: { lang: Lang }) {
   const t = useMemo(() => makeDT(lang), [lang]);
   const [spec, setSpec] = useState<SachetSpec>(DEFAULT_SPEC);
+  // Length follows the width's standard unless someone deliberately opts out.
+  const [customLength, setCustomLength] = useState(false);
+  const standardLength = (toolingIn: number) =>
+    STANDARDS.find((p) => p.tooling === toolingIn)?.length ?? DEFAULT_SPEC.lengthIn;
   const set = (patch: Partial<SachetSpec>) => setSpec((p) => ({ ...p, ...patch }));
 
   const d = dims(spec);
@@ -141,29 +145,41 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             label={t("width")}
             options={TOOLING_IN.map((w) => ({ v: w, main: `${half(w)}"`, small: `${t("widthTooling")} ${w}"` }))}
             value={spec.toolingIn}
-            onPick={(v) => set({ toolingIn: v })}
+            onPick={(v) => set(customLength ? { toolingIn: v } : { toolingIn: v, lengthIn: standardLength(v) })}
           />
           <p className={s.hint}>{t("widthHint")}</p>
         </div>
 
         <div className={s.field}>
-          <label className={s.label} htmlFor="dl-length">{t("length")}</label>
-          <NumberField
-            id="dl-length" value={spec.lengthIn} min={LEN_MIN_IN} max={LEN_MAX_IN} step={0.05}
-            unit="in" fixed={2} label={t("length")} onCommit={(v) => set({ lengthIn: v })}
-          />
-          <p className={s.hint}>{t("lengthHint")}</p>
-          <div className={s.presets}>
-            <span className={s.hint}>{t("standards")}:</span>
-            {STANDARDS.map((p) => (
+          {customLength ? (
+            <>
+              <label className={s.label} htmlFor="dl-length">{t("length")}</label>
+              <NumberField
+                id="dl-length" value={spec.lengthIn} min={LEN_MIN_IN} max={LEN_MAX_IN} step={0.05}
+                unit="in" fixed={2} label={t("length")} onCommit={(v) => set({ lengthIn: v })}
+              />
+              <p className={s.hint}>{t("lengthHint")}</p>
               <button
-                key={p.tooling} type="button" className={s.chip}
-                onClick={() => set({ toolingIn: p.tooling, lengthIn: p.length })}
+                type="button" className={s.chip}
+                onClick={() => {
+                  setCustomLength(false);
+                  set({ lengthIn: standardLength(spec.toolingIn) });
+                }}
               >
-                {half(p.tooling)} × {p.length}
+                {t("lengthReset", { l: standardLength(spec.toolingIn).toFixed(2) })}
               </button>
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              <span className={s.label}>{t("length")}</span>
+              <p className={s.fixedValue}>
+                {spec.lengthIn.toFixed(2)} in <span className={s.hint}>{t("lengthStandard")}</span>
+              </p>
+              <button type="button" className={s.chip} onClick={() => setCustomLength(true)}>
+                {t("lengthCustomize")}
+              </button>
+            </>
+          )}
         </div>
 
         <div className={s.field}>

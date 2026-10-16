@@ -90,6 +90,16 @@
   cursor: pointer;
 }
 .chip:hover { border-color: var(--teal-700); }
+.field > .chip { justify-self: start; font-family: var(--sans); font-weight: 600; }
+.fixedValue {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 500 15px var(--mono);
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+}
+.fixedValue .hint { font-family: var(--sans); }
 
 .spec { display: grid; gap: 6px; font-size: 14px; }
 .specRow { display: grid; grid-template-columns: 9.5em 1fr; gap: 12px; }
