@@ -155,6 +155,16 @@ function hangHole(spec: SachetSpec, x0: number, w: number) {
   return `<circle class="s-hole" cx="${x0 + w / 2}" cy="${HANG_SEAL / 2}" r="${HANG_HOLE_D / 2}"/>`;
 }
 
+// A faint diamond crosshatch on the sealed edges -- the mark the heat-seal
+// jaws leave. Each drawing gets its own pattern id (two drawings share a page).
+// Inline style beats the .s-seal class fill.
+function waffle(g: string, id: string) {
+  const defs =
+    `<defs><pattern id="${id}" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
+    `<rect class="s-waffle-bg" width="1.4" height="1.4"/><path class="s-waffle" d="M0 0H1.4M0 0V1.4"/></pattern></defs>`;
+  return defs + g.split('class="s-seal"').join(`class="s-seal" style="fill:url(#${id})"`);
+}
+
 /** The printed web, flat, viewed from the printed side. */
 export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): string {
   const { filmW: W, height: H, panelW: half, topSeal: top, clearW, clearH } = dims(spec);
@@ -190,7 +200,7 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   g += hdim(0, half, -10, inches(half)) + hdim(half, W, -10, inches(half));
   g += hdim(0, W, -18, both(W));
   g += vdim(0, H, W + 7, both(H));
-  return `<svg viewBox="${-pl} ${-pt} ${W + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
+  return `<svg viewBox="${-pl} ${-pt} ${W + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${waffle(g, "dl-waffle-flat")}</svg>`;
 }
 
 /** Back (left) and front (right), as they look once folded and sealed. */
@@ -245,5 +255,5 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += `<text class="t-sub t-fold" x="${fx}" y="${H + 4.5}" text-anchor="middle">${esc(L.fold)}</text>`;
   g += hdim(0, w, H + 13, both(w)) + hdim(fx, fx + w, H + 13, both(w));
   g += vdim(0, H, fx + w + 7, both(H));
-  return `<svg viewBox="${-pl} ${-pt} ${2 * w + gap + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
+  return `<svg viewBox="${-pl} ${-pt} ${2 * w + gap + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${waffle(g, "dl-waffle-fin")}</svg>`;
 }

@@ -132,6 +132,8 @@
 .drawing :global(.s-outline) { fill: none; stroke: var(--cut); stroke-width: 0.35; }
 .drawing :global(.s-bleed) { fill: none; stroke: var(--ink-3); stroke-width: 0.25; stroke-dasharray: 1.2 0.9; }
 .drawing :global(.s-seal) { fill: var(--stone-2); }
+.drawing :global(.s-waffle-bg) { fill: var(--stone-2); }
+.drawing :global(.s-waffle) { stroke: #d9d0b8; stroke-width: 0.14; fill: none; }
 .drawing :global(.s-lane) { fill: var(--cream); stroke: var(--ink-3); stroke-width: 0.15; }
 .drawing :global(.s-mark) { fill: var(--teal-900); }
 .drawing :global(.s-fold) { stroke: var(--sage-500); stroke-width: 0.5; stroke-dasharray: 3 1.2 0.6 1.2; fill: none; }
