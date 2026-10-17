@@ -83,6 +83,9 @@ const en = {
   sUnwind: "Unwind",
 
   guidelines: "Artwork guidelines",
+  library: "Dieline library",
+  libraryHint: "Ready-made files for the three standard sizes: standard length, horizontal slit, no hang hole, unwind position 2.",
+  download: "Download",
   generate: "Generate dieline file",
   generating: "Generating…",
   generateHint: "PDF at 1:1. Page 1 is the layered dieline in the non-printing color \"Dieline\", with an eye mark the customer keeps; pages 2–3 are these two drawings for reference.",
@@ -170,6 +173,9 @@ const es = {
   sUnwind: "Desenrollado",
 
   guidelines: "Guía para el arte",
+  library: "Biblioteca de troqueles",
+  libraryHint: "Archivos listos para los tres tamaños estándar: largo estándar, corte horizontal, sin orificio, posición de desenrollado 2.",
+  download: "Descargar",
   generate: "Generar archivo de troquel",
   generating: "Generando…",
   generateHint: "PDF a escala 1:1. La página 1 es el troquel en capas, en el color que no se imprime \"Dieline\", con una marca de fotocelda que el cliente conserva; las páginas 2–3 son estos dos dibujos como referencia.",

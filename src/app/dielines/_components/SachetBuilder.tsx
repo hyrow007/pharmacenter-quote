@@ -118,6 +118,31 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
       setBusy(false);
     }
   };
+  // Dieline library: the three standard sizes with house defaults, generated
+  // on demand. The drawings are rendered off-screen inside a .drawing box so
+  // they pick up the same styles as the ones on the page.
+  const [libBusy, setLibBusy] = useState<number | null>(null);
+  const downloadStandard = async (tooling: number, length: number) => {
+    const std: SachetSpec = { ...DEFAULT_SPEC, toolingIn: tooling, lengthIn: length };
+    const L = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll") };
+    const holder = document.createElement("div");
+    holder.className = s.drawing;
+    holder.setAttribute("aria-hidden", "true");
+    holder.style.cssText = "position:absolute;left:-10000px;top:0;width:1200px";
+    holder.innerHTML = flatSvg(std, L, t("flat")) + finishedSvg(std, L, t("finished"));
+    document.body.appendChild(holder);
+    const [f, fin] = Array.from(holder.querySelectorAll("svg"));
+    setLibBusy(tooling);
+    setFileError(false);
+    try {
+      await downloadDieline(std, { flat: f ?? null, finished: fin ?? null });
+    } catch {
+      setFileError(true);
+    } finally {
+      holder.remove();
+      setLibBusy(null);
+    }
+  };
   const standardLength = (toolingIn: number) =>
     STANDARDS.find((p) => p.tooling === toolingIn)?.length ?? DEFAULT_SPEC.lengthIn;
   const set = (patch: Partial<SachetSpec>) => setSpec((p) => ({ ...p, ...patch }));
@@ -281,26 +306,11 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           <p className={s.hint}>{t("unwindNote")}</p>
         </div>
 
-        <div className={s.generate}>
-          <button type="button" className={s.generateBtn} onClick={generate} disabled={busy}>
-            {busy ? t("generating") : t("generate")}
-          </button>
-          <p className={s.hint}>{t("generateHint")}</p>
-          <p className={s.fileName}>{dielineFileName(spec)}</p>
-          {fileError ? <p className={s.error} role="alert">{t("generateError")}</p> : null}
-        </div>
-
-        <dl className={s.spec}>
-          {specRows.map(([k, v]) => (
-            <div key={k} className={s.specRow}>
-              <dt>{k}</dt>
-              <dd>{v}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
 
-      <div className={s.views}>
+      {/* Row 1: the options beside the flat film. Row 2: the file and the
+          spec beside the finished sachet. Each pair shares a grid row, so the
+          cards line up top and bottom. */}
         <section className={s.view}>
           <div className={s.viewHead}>
             <h2 className={s.viewTitle}>{t("flat")}</h2>
@@ -326,6 +336,26 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           </div>
         </section>
 
+      <section className={`${s.controls} ${s.output}`} aria-label={t("generate")}>
+        <div className={s.generate}>
+          <button type="button" className={s.generateBtn} onClick={generate} disabled={busy}>
+            {busy ? t("generating") : t("generate")}
+          </button>
+          <p className={s.hint}>{t("generateHint")}</p>
+          <p className={s.fileName}>{dielineFileName(spec)}</p>
+          {fileError ? <p className={s.error} role="alert">{t("generateError")}</p> : null}
+        </div>
+
+        <dl className={s.spec}>
+          {specRows.map(([k, v]) => (
+            <div key={k} className={s.specRow}>
+              <dt>{k}</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
         <section className={s.view}>
           <div className={s.viewHead}>
             <h2 className={s.viewTitle}>{t("finished")}</h2>
@@ -333,6 +363,33 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           </div>
           <div ref={finishedRef} className={s.drawing} dangerouslySetInnerHTML={{ __html: finished }} />
         </section>
+
+
+      {/* Row 3: the library beside the guidelines. */}
+      <section className={`${s.controls} ${s.library}`} aria-labelledby="dl-library">
+        <h2 className={s.viewTitle} id="dl-library">{t("library")}</h2>
+        <p className={s.hint}>{t("libraryHint")}</p>
+        <ul className={s.libList}>
+          {STANDARDS.map((p) => {
+            const stdSpec: SachetSpec = { ...DEFAULT_SPEC, toolingIn: p.tooling, lengthIn: p.length };
+            return (
+              <li key={p.tooling} className={s.libItem}>
+                <div className={s.libText}>
+                  <b>{half(p.tooling)} × {p.length.toFixed(2)} in</b>
+                  <span className={s.fileName}>{dielineFileName(stdSpec)}</span>
+                </div>
+                <button
+                  type="button" className={s.libBtn}
+                  onClick={() => downloadStandard(p.tooling, p.length)}
+                  disabled={libBusy !== null}
+                >
+                  {libBusy === p.tooling ? t("generating") : t("download")}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
         <section className={s.view} aria-labelledby="dl-guidelines">
           <div className={s.viewHead}>
@@ -348,8 +405,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           </ul>
         </section>
 
-        <p className={s.foot}>{t("foot")}</p>
-      </div>
+      <p className={`${s.foot} ${s.fullRow}`}>{t("foot")}</p>
     </div>
   );
 }

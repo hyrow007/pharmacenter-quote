@@ -8,9 +8,43 @@
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   display: grid;
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
+  gap: 22px 24px;
+  /* Stretch: each left card is as tall as the drawing beside it. */
+  align-items: stretch;
 }
+.fullRow { grid-column: 1 / -1; display: grid; gap: 22px; min-width: 0; }
+/* The second left card: generate button and file name on top, spec below. */
+.output { align-content: start; }
+.output .generate { border-top: 0; padding-top: 0; }
+.output .generateBtn { margin-top: 0; }
+.library { align-content: start; gap: 12px; }
+.libList { list-style: none; display: grid; gap: 10px; }
+.libItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--stone);
+  border-radius: 8px;
+  background: var(--cream-soft);
+}
+.libText { display: grid; gap: 2px; min-width: 0; }
+.libText b { font: 600 15px var(--sans); color: var(--teal-900); }
+.libBtn {
+  flex: none;
+  border: 1px solid var(--teal-900);
+  background: var(--paper);
+  color: var(--teal-900);
+  border-radius: 6px;
+  font: 700 13px var(--sans);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.libBtn:hover:not(:disabled) { background: var(--teal-900); color: var(--paper); }
+.libBtn:disabled { opacity: 0.6; cursor: progress; }
+.libBtn:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2px; }
+.output .spec { border-top: 1px solid var(--stone); padding-top: 16px; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
 }
@@ -150,7 +184,7 @@
 .specRow dd { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink-1); }
 
 /* ---- drawings ---- */
-.views { display: grid; gap: 22px; min-width: 0; }
+.views { display: grid; gap: 22px; min-width: 0; align-content: start; }
 .view {
   background: var(--paper);
   border: 1px solid var(--stone);
