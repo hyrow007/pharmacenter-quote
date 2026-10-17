@@ -195,8 +195,11 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   g += hangHole(spec, 0, half) + hangHole(spec, half, half);
   // Direction off the roll is fixed: bottom edge first.
   const ax = W * 0.76;
-  g += `<path class="s-lead" d="M${ax - 2.4} ${H + 4}L${ax} ${H + 8.5}L${ax + 2.4} ${H + 4}Z"/>`;
-  g += `<text class="t-lead" x="${ax + 4}" y="${H + 7.4}">${esc(L.offRoll)}</text>`;
+  // A short, stubby arrow: wide shaft, broad head, pointing down off the roll.
+  g +=
+    `<path class="s-lead" d="M${ax - 1.3} ${H + 3.5}H${ax + 1.3}V${H + 6.3}H${ax + 3}` +
+    `L${ax} ${H + 9.6}L${ax - 3} ${H + 6.3}H${ax - 1.3}Z"/>`;
+  g += `<text class="t-lead" x="${ax + 4}" y="${H + 7.6}">${esc(L.offRoll)}</text>`;
   g += hdim(0, half, -10, inches(half)) + hdim(half, W, -10, inches(half));
   g += hdim(0, W, -18, both(W));
   g += vdim(0, H, W + 7, both(H));
