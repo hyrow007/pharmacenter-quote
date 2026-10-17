@@ -7,26 +7,58 @@ import { grossForEntry, type SoItemLike, type YieldEntry } from "./model";
 // belongs to them appears in the mirror days later. This fills it in.
 //
 // Runs on page load over the rows being shown, and only touches entries that
-// (a) were made in the app, (b) have no gross yet, (c) name a sales order.
-// Hand-entered and sheet grosses are never overwritten. Rows are updated in
-// place in the array as well, so the page shows the new figure on this load.
+// (a) have no gross yet and (b) name a sales order. That includes rows
+// imported from the sheet after 2026-09-01, when the sheet stopped computing
+// gross -- filling a blank is not overwriting anything. A gross that exists,
+// typed or imported, is never replaced. (RLS lets only admins write sheet
+// rows; for anyone else those updates are refused and the rows stay blank
+// until an admin opens the page.) Rows are updated in place in the array too,
+// so the page shows the new figure on this load.
+//
+// The sheet often names the base order ("M14381") while Fishbowl splits it
+// into shipments ("M14381-1" ... "-6"), each with its own cost. A base number
+// therefore matches its -N shipments, and the one used is the first that
+// shipped on or after the run date -- the shipment those units most likely
+// went out on -- or the latest one if none did.
 const MAX_SOS = 200;
 
 export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntry[]): Promise<number> {
   const pending = rows.filter(
-    (r) => r.source === "app" && r.gross_per_unit === null && r.finished_units > 0 && r.so_numbers.length > 0,
+    (r) => r.gross_per_unit === null && r.finished_units > 0 && r.so_numbers.length > 0,
   );
   if (pending.length === 0) return 0;
 
-  const sos = Array.from(new Set(pending.flatMap((r) => r.so_numbers))).slice(0, MAX_SOS);
-  const { data, error } = await supabase.from("fishbowl_sales_orders").select("so_number, items").in("so_number", sos);
+  const wanted = Array.from(new Set(pending.flatMap((r) => r.so_numbers))).slice(0, MAX_SOS);
+  // Exact numbers, plus every "-N" shipment of a base number.
+  const ors = wanted.map((so) => `so_number.eq.${so},so_number.like.${so}-*`).join(",");
+  const { data, error } = await supabase
+    .from("fishbowl_sales_orders")
+    .select("so_number, items, date_last_modified")
+    .or(ors)
+    .limit(1000);
   if (error || !data) return 0;
   const itemsBySo = new Map<string, SoItemLike[]>();
-  for (const so of data) itemsBySo.set(so.so_number as string, (Array.isArray(so.items) ? so.items : []) as SoItemLike[]);
+  const shippedAt = new Map<string, string>();
+  for (const so of data) {
+    itemsBySo.set(so.so_number as string, (Array.isArray(so.items) ? so.items : []) as SoItemLike[]);
+    shippedAt.set(so.so_number as string, ((so.date_last_modified as string | null) ?? "").slice(0, 10));
+  }
+  const candidatesFor = (r: YieldEntry): string[] => {
+    const out: string[] = [];
+    for (const so of r.so_numbers) {
+      if (itemsBySo.has(so)) out.push(so);
+      const parts = [...itemsBySo.keys()]
+        .filter((k) => k.startsWith(`${so}-`))
+        .sort((a, b) => (shippedAt.get(a) ?? "").localeCompare(shippedAt.get(b) ?? ""));
+      const after = parts.filter((k) => (shippedAt.get(k) ?? "") >= r.run_date);
+      out.push(...after, ...parts.filter((k) => !after.includes(k)).reverse());
+    }
+    return out;
+  };
 
   let filled = 0;
   for (const r of pending) {
-    const g = grossForEntry(r.product_num, r.so_numbers, itemsBySo);
+    const g = grossForEntry(r.product_num, candidatesFor(r), itemsBySo);
     if (!g) continue;
     const { error: upErr } = await supabase
       .from("yield_entries")
