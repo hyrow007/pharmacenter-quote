@@ -295,9 +295,12 @@ const STYLE_PROPS = [
   "opacity", "font-family", "font-size", "font-weight", "letter-spacing",
 ];
 
-/** Rasterise a live SVG, carrying its computed styles (CSS-module classes and
- *  CSS variables do not survive serialisation on their own). */
-async function svgToJpeg(svg: SVGSVGElement, widthPx: number) {
+/** Copy a live SVG with its computed styles baked in (CSS-module classes and
+ *  CSS variables do not survive serialisation on their own). Must run while
+ *  the SVG is on screen -- before any await, because the builder re-renders
+ *  as soon as the button flips to "Generating…" and a detached element has no
+ *  computed style. */
+function snapshotSvg(svg: SVGSVGElement) {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const src = [svg, ...Array.from(svg.querySelectorAll("*"))];
   const dst = [clone, ...Array.from(clone.querySelectorAll("*"))];
@@ -310,6 +313,13 @@ async function svgToJpeg(svg: SVGSVGElement, widthPx: number) {
     target.setAttribute("style", `${style};${keep}`);
   });
   const vb = svg.viewBox.baseVal;
+  return { clone, vbWidth: vb.width, vbHeight: vb.height };
+}
+
+/** Rasterise a snapshot taken by snapshotSvg. */
+async function svgToJpeg(snap: ReturnType<typeof snapshotSvg>, widthPx: number) {
+  const { clone } = snap;
+  const vb = { width: snap.vbWidth, height: snap.vbHeight };
   const heightPx = Math.round((widthPx * vb.height) / vb.width);
   clone.setAttribute("width", String(widthPx));
   clone.setAttribute("height", String(heightPx));
@@ -350,6 +360,9 @@ async function toJpeg(img: CanvasImageSource, w: number, h: number) {
 /** Build the PDF and hand it to the browser as a download. */
 export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGElement | null; finished: SVGSVGElement | null }) {
   const today = new Date().toISOString().slice(0, 10);
+  // Snapshot the drawings first, synchronously, while they are on screen.
+  const flatSnap = views.flat ? snapshotSvg(views.flat) : null;
+  const finishedSnap = views.finished ? snapshotSvg(views.finished) : null;
   const jpegs: { name: string; width: number; height: number; bytes: Uint8Array }[] = [];
 
   let hasLogo = false;
@@ -372,13 +385,13 @@ export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGEle
 
   const fileName = dielineFileName(spec);
   const pages = [dielinePage(spec, today, hasUnwind, hasLogo)];
-  if (views.flat) {
-    const j = await svgToJpeg(views.flat, 2600);
+  if (flatSnap) {
+    const j = await svgToJpeg(flatSnap, 2600);
     jpegs.push({ name: "RefFlat", ...j });
     pages.push(referencePage("Film laid flat", { name: "RefFlat", ...j }, hasLogo, fileName, today));
   }
-  if (views.finished) {
-    const j = await svgToJpeg(views.finished, 2600);
+  if (finishedSnap) {
+    const j = await svgToJpeg(finishedSnap, 2600);
     jpegs.push({ name: "RefFinished", ...j });
     pages.push(referencePage("Finished sachet", { name: "RefFinished", ...j }, hasLogo, fileName, today));
   }
