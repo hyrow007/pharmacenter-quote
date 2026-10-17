@@ -23,12 +23,12 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
     ];
   }
   return [
-    { title: "Eye mark lane", text: "Keep the 6 mm lane down the left edge one solid colour, full length -- no images, text or gradients." },
+    { title: "Eye mark lane", text: "Keep the 6 mm lane down the left edge one solid color, full length -- no images, text or gradients." },
     { title: "Contrast", text: "The eye mark must stand out clearly from its lane. On a light lane use a black mark; on a dark lane use a white one." },
     { title: "Eye mark", text: "The eye mark in the file is black. Change it to white if your lane is dark; keep its size and position." },
-    { title: `Seals (${seal})`, text: "No text, barcodes, logos or fine detail. The seal jaws crush and distort print there; plain background colour may run through." },
+    { title: `Seals (${seal})`, text: "No text, barcodes, logos or fine detail. The seal jaws crush and distort print there; plain background color may run through." },
     { title: "Clear area", text: "Keep all text and important graphics inside the clear area." },
-    { title: "Bleed", text: "Run background colour and images 1 mm past the cut line." },
-    { title: "Dieline layers", text: "Lines in the spot colour \"Dieline\" do not print. Hide or delete those layers before sending art to print; keep the eye mark." },
+    { title: "Bleed", text: "Run background color and images 1 mm past the cut line." },
+    { title: "Dieline layers", text: "Lines in the spot color \"Dieline\" do not print. Hide or delete those layers before sending art to print; keep the eye mark." },
   ];
 }

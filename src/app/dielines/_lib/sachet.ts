@@ -1,7 +1,7 @@
 // Sachet film geometry -- the house rules, in one place, as pure functions.
 //
 // A PharmaCenter sachet is a 3-side seal: one printed web, folded down the
-// centre, sealed on the other three edges. Everything below is in millimetres
+// center, sealed on the other three edges. Everything below is in millimeters
 // unless a name says otherwise. The drawings are returned as SVG strings so
 // the same code can later be the downloadable dieline, not just the preview.
 //
@@ -18,7 +18,7 @@
 //   the film always comes off the roll bottom edge first; the unwind
 //     position (1-4) only turns the copy
 //   hang hole (optional): the top seal grows to 20 mm and a 6 mm hole is
-//     punched centred in it, through both layers. The slit keeps its rule of
+//     punched centered in it, through both layers. The slit keeps its rule of
 //     4.5 mm below the top seal, so it moves down with it.
 
 export const MM_PER_IN = 25.4;
@@ -148,8 +148,8 @@ function tearLine(spec: SachetSpec, w: number, H: number, tipX: number) {
   return "";
 }
 
-// The hang hole, centred across a panel of width `w` starting at `x0`, and
-// centred in the top seal.
+// The hang hole, centered across a panel of width `w` starting at `x0`, and
+// centered in the top seal.
 function hangHole(spec: SachetSpec, x0: number, w: number) {
   if (!spec.hangHole) return "";
   return `<circle class="s-hole" cx="${x0 + w / 2}" cy="${HANG_SEAL / 2}" r="${HANG_HOLE_D / 2}"/>`;

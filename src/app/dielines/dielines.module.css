@@ -1,6 +1,6 @@
 /* Dielines -- page styles. Brand tokens come from globals.css; no font family
    is named literally except the numeric face, which globals.css itself names
-   the same way. Dieline drawing colours follow print convention: magenta for
+   the same way. Dieline drawing colors follow print convention: magenta for
    anything cut, sage for the fold, a dashed line for bleed. */
 
 .layout {

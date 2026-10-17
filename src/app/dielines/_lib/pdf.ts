@@ -3,12 +3,12 @@
 // What it supports, because a dieline needs it:
 //   * layers (Optional Content Groups), so the file opens in Acrobat with the
 //     Cut line, Fold, Bleed... toggleable
-//   * a named spot colour ("Dieline") with overprint, the convention printers
+//   * a named spot color ("Dieline") with overprint, the convention printers
 //     use for non-printing technical lines
 //   * the 14 standard fonts (Helvetica) with WinAnsi text
 //   * JPEG images (DCTDecode) -- the bytes go in as they are
 //
-// Drawing happens in millimetres with the origin at the TOP-LEFT and y going
+// Drawing happens in millimeters with the origin at the TOP-LEFT and y going
 // down, like the SVG drawings; the page transform flips it once.
 
 const PT_PER_MM = 72 / 25.4;
@@ -41,7 +41,7 @@ function pdfString(s: string): string {
 const n = (v: number) => (Math.round(v * 1000) / 1000).toString();
 
 export type Color =
-  | { kind: "spot"; tint: number } // the Dieline spot colour
+  | { kind: "spot"; tint: number } // the Dieline spot color
   | { kind: "gray"; g: number }
   | { kind: "rgb"; r: number; g: number; b: number }
   | { kind: "cmyk"; c: number; m: number; y: number; k: number };

@@ -1,7 +1,7 @@
 // The downloadable sachet dieline: a three-page PDF.
 //
 //   Page 1 -- the dieline itself, 1:1, clean technical lines on layers, every
-//             line in the non-printing spot colour "Dieline" (overprint), plus
+//             line in the non-printing spot color "Dieline" (overprint), plus
 //             a real black eye mark on its own layer the customer keeps, and a
 //             notes block below the art.
 //   Page 2 -- the film laid flat, as drawn in the builder (reference picture).
@@ -80,7 +80,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
   const hair = 0.1; // ~0.28 pt
   const fine = 0.18;
 
-  // ---- art-area layers, all in the Dieline spot colour ----
+  // ---- art-area layers, all in the Dieline spot color ----
   p.layer(L.bleed, () => {
     p.rect(X(-BLEED), Y(-BLEED), W + 2 * BLEED, H + 2 * BLEED, { stroke: DIELINE, width: hair, dash: [1, 0.7] });
   });
@@ -200,13 +200,13 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     const rows: [string, string][] = [
       ["Finished size", `${inches(d.panelW)} x ${inches(H)} (W x H)`],
       ["Film (flat)", `${inMm(W)} x ${inMm(H)}`],
-      ["Construction", "3-side seal; folded at centre; left panel = back, right panel = front"],
+      ["Construction", "3-side seal; folded at center; left panel = back, right panel = front"],
       ["Seals", spec.hangHole ? "Top 20 mm; sides and bottom 6 mm; fold has none" : "6 mm top, bottom and outer side; fold has none"],
       ["Clear area (each panel)", `${inches(d.clearW)} x ${inches(d.clearH)}`],
       ["Bleed", `${BLEED} mm`],
       ["Eye mark", "6 x 6 mm, top-left, on a 6 mm solid high-contrast lane down the left edge"],
       ["Notch", notchText],
-      ["Hang hole", spec.hangHole ? `${HANG_HOLE_D} mm diameter, centred in the top seal` : "None"],
+      ["Hang hole", spec.hangHole ? `${HANG_HOLE_D} mm diameter, centered in the top seal` : "None"],
       ["Unwind", `Position ${spec.unwind} -- ${UNWIND_TEXT[spec.unwind]}`],
     ];
     for (const [k, v] of rows) {
