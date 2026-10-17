@@ -5,7 +5,7 @@
 // numbers and our own escaped labels, never user text), so the same functions
 // can produce the downloadable file later.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeDT, type DKey } from "../_lib/i18n";
 import {
@@ -26,6 +26,8 @@ import {
   type SachetSpec,
   type Unwind,
 } from "../_lib/sachet";
+import { dielineFileName, downloadDieline } from "../_lib/dielinePdf";
+import { artworkGuidelines } from "../_lib/guidelines";
 import s from "../dielines.module.css";
 
 // The buttons name the direction of the tear; the notch that makes it is the
@@ -98,6 +100,24 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   // Length follows the width's standard unless someone deliberately opts out.
   const [customLength, setCustomLength] = useState(false);
   const [customOffset, setCustomOffset] = useState(false);
+  const flatRef = useRef<HTMLDivElement>(null);
+  const finishedRef = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [fileError, setFileError] = useState(false);
+  const generate = async () => {
+    setBusy(true);
+    setFileError(false);
+    try {
+      await downloadDieline(spec, {
+        flat: flatRef.current?.querySelector("svg") ?? null,
+        finished: finishedRef.current?.querySelector("svg") ?? null,
+      });
+    } catch {
+      setFileError(true);
+    } finally {
+      setBusy(false);
+    }
+  };
   const standardLength = (toolingIn: number) =>
     STANDARDS.find((p) => p.tooling === toolingIn)?.length ?? DEFAULT_SPEC.lengthIn;
   const set = (patch: Partial<SachetSpec>) => setSpec((p) => ({ ...p, ...patch }));
@@ -261,6 +281,15 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           <p className={s.hint}>{t("unwindNote")}</p>
         </div>
 
+        <div className={s.generate}>
+          <button type="button" className={s.generateBtn} onClick={generate} disabled={busy}>
+            {busy ? t("generating") : t("generate")}
+          </button>
+          <p className={s.hint}>{t("generateHint")}</p>
+          <p className={s.fileName}>{dielineFileName(spec)}</p>
+          {fileError ? <p className={s.error} role="alert">{t("generateError")}</p> : null}
+        </div>
+
         <dl className={s.spec}>
           {specRows.map(([k, v]) => (
             <div key={k} className={s.specRow}>
@@ -277,7 +306,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             <h2 className={s.viewTitle}>{t("flat")}</h2>
             <span className={s.viewMeta}>{inches(d.filmW)} × {inches(d.height)}</span>
           </div>
-          <div className={s.drawing} dangerouslySetInnerHTML={{ __html: flat }} />
+          <div ref={flatRef} className={s.drawing} dangerouslySetInnerHTML={{ __html: flat }} />
           <div className={s.flatFoot}>
             <ul className={s.legend}>
               {legend.map((l) => (
@@ -302,7 +331,21 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             <h2 className={s.viewTitle}>{t("finished")}</h2>
             <span className={s.viewMeta}>{inches(d.panelW)} × {inches(d.height)}</span>
           </div>
-          <div className={s.drawing} dangerouslySetInnerHTML={{ __html: finished }} />
+          <div ref={finishedRef} className={s.drawing} dangerouslySetInnerHTML={{ __html: finished }} />
+        </section>
+
+        <section className={s.view} aria-labelledby="dl-guidelines">
+          <div className={s.viewHead}>
+            <h2 className={s.viewTitle} id="dl-guidelines">{t("guidelines")}</h2>
+          </div>
+          <ul className={s.guides}>
+            {artworkGuidelines(spec, lang).map((g) => (
+              <li key={g.title}>
+                <b>{g.title}</b>
+                <span>{g.text}</span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <p className={s.foot}>{t("foot")}</p>
