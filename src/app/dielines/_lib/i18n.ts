@@ -90,7 +90,7 @@ const en = {
   generating: "Generating…",
   generateHint: "PDF at 1:1. Page 1 is the layered dieline in the non-printing color \"Dieline\", with an eye mark the customer keeps; pages 2–3 are these two drawings for reference.",
   generateError: "The file could not be made. Try again; if it keeps failing, tell the Dielines chat.",
-  foot: "Drawn to scale from the house rules. A preview for checking the layout; it is not yet a print file.",
+  foot: "Drawn to scale from the house rules. The generated PDF is the file to send to customers.",
 };
 
 export type DKey = keyof typeof en;
@@ -180,7 +180,7 @@ const es = {
   generating: "Generando…",
   generateHint: "PDF a escala 1:1. La página 1 es el troquel en capas, en el color que no se imprime \"Dieline\", con una marca de fotocelda que el cliente conserva; las páginas 2–3 son estos dos dibujos como referencia.",
   generateError: "No se pudo crear el archivo. Intente de nuevo; si sigue fallando, avise al chat de Troqueles.",
-  foot: "Dibujado a escala según las reglas de la casa. Es una vista previa para revisar el diseño; todavía no es un archivo de impresión.",
+  foot: "Dibujado a escala según las reglas de la casa. El PDF generado es el archivo que se envía a los clientes.",
 } satisfies Record<DKey, string>;
 
 export type DT = (key: DKey, vars?: Record<string, string | number>) => string;

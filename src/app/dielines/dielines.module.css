@@ -145,6 +145,7 @@
 .guides li {
   display: grid;
   gap: 2px;
+  align-content: start;
   padding-left: 14px;
   position: relative;
   font-size: 14px;
