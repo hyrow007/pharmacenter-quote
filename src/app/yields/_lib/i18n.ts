@@ -100,6 +100,8 @@ const en = {
   perDay: "Gross per day",
   byLine: "By line",
   byDay: "By day",
+  allEntries: "Every entry",
+  entriesCapped: "Showing the newest {shown} of {n} entries. Narrow the dates, line or product to see the rest.",
 
   line_blister: "Blisters",
   line_bottle: "Bottles",
@@ -210,6 +212,8 @@ const es = {
   perDay: "Bruto por día",
   byLine: "Por línea",
   byDay: "Por día",
+  allEntries: "Todos los registros",
+  entriesCapped: "Se muestran los {shown} registros más recientes de {n}. Acorte las fechas, la línea o el producto para ver el resto.",
 
   line_blister: "Blísteres",
   line_bottle: "Frascos",
