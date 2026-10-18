@@ -111,7 +111,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
       await downloadDieline(spec, {
         flat: flatRef.current?.querySelector("svg") ?? null,
         finished: finishedRef.current?.querySelector("svg") ?? null,
-      });
+      }, lang);
     } catch {
       setFileError(true);
     } finally {
@@ -135,7 +135,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     setLibBusy(tooling);
     setFileError(false);
     try {
-      await downloadDieline(std, { flat: f ?? null, finished: fin ?? null });
+      await downloadDieline(std, { flat: f ?? null, finished: fin ?? null }, lang);
     } catch {
       setFileError(true);
     } finally {

@@ -33,28 +33,90 @@ const TEAL_2 = hex("#1d6c7b");
 const SAGE = hex("#7fb04f");
 const LOGO_RATIO = 991 / 252; // public/logo.png, width / height
 
-const L = {
-  notes: "Notes",
-  cut: "Cut line",
-  bleed: "Bleed",
-  fold: "Fold",
-  seals: "Seals",
-  clear: "Clear area",
-  lane: "Eye mark lane",
-  notch: "Notch & hang hole",
-  labels: "Labels & dimensions",
-  eye: "Eye mark (keep)",
-  ref: "Reference",
-};
-const LAYERS = [L.eye, L.cut, L.bleed, L.fold, L.seals, L.clear, L.lane, L.notch, L.labels, L.notes, L.ref];
-
 const NOTCH_CODE = { none: "NoNotch", slit: "HSlit", triangle: "VTri" } as const;
-const UNWIND_TEXT = {
-  1: "Top of the art comes off the roll first",
-  2: "Bottom of the art comes off the roll first",
-  3: "Right side of the art comes off the roll first",
-  4: "Left side of the art comes off the roll first",
-} as const;
+type PdfLang = "en" | "es";
+
+/** Every word the PDF prints, in both languages. The file follows the
+ *  builder's language; the spot color stays "Dieline" in both, because that
+ *  is its name in the file. */
+const TX = {
+  en: {
+    ly: {
+      notes: "Notes", cut: "Cut line", bleed: "Bleed", fold: "Fold", seals: "Seals", clear: "Clear area",
+      lane: "Eye mark lane", notch: "Notch & hang hole", labels: "Labels & dimensions", eye: "Eye mark (keep)", ref: "Reference",
+    },
+    back: "BACK", front: "FRONT", clearArea: "CLEAR AREA", foldUp: "FOLD", film: "FILM", offRoll: "OFF THE ROLL", slit: "SLIT",
+    title: "Sachet dieline",
+    none: "None",
+    notchSlit: (y: string) => `Horizontal tear: slit ${SLIT_LEN} mm, right edge, ${y} from top`,
+    notchTri: (o: string) => `Vertical tear: triangle ${TRI_W} mm, bottom of front, tip ${o} in from the right seal`,
+    rFinished: "Finished size", rFilm: "Film (flat)", rConstruction: "Construction", rSeals: "Seals",
+    rClear: "Clear area (each panel)", rBleed: "Bleed", rEye: "Eye mark", rNotch: "Notch", rHang: "Hang hole", rUnwind: "Unwind",
+    wxh: "(W x H)",
+    construction: "3-side seal; folded at center; left panel = back, right panel = front",
+    sealsHang: "Top 20 mm; sides and bottom 6 mm; fold has none",
+    seals: "6 mm top, bottom and outer side; fold has none",
+    eye: "6 x 6 mm, top-left, on a 6 mm solid high-contrast lane down the left edge",
+    hang: `${HANG_HOLE_D} mm diameter, centered in the top seal`,
+    position: (n: number) => `Position ${n}`,
+    unwind: {
+      1: "Top of the art comes off the roll first",
+      2: "Bottom of the art comes off the roll first",
+      3: "Right side of the art comes off the roll first",
+      4: "Left side of the art comes off the roll first",
+    },
+    guidelines: "Artwork guidelines",
+    unwindPos: (n: number) => `Unwind position ${n}`,
+    flatTitle: "Film laid flat",
+    finishedTitle: "Finished sachet",
+    refOnly: "Reference only",
+    refNote: "As drawn in the PharmaCenter dieline builder. Use page 1 for artwork.",
+    generated: (d: string) => `Generated ${d} by the PharmaCenter dieline builder`,
+    lg: {
+      cut: "Cut line", notch: "Notch", tear: "Tear line", hole: "Hang hole 6 mm", fold: "Fold", foldEdge: "Fold",
+      seal: "Seal 6 mm", mark: "Eye mark 6 × 6 mm", clear: "Clear area", bleed: "Bleed 1 mm",
+    },
+  },
+  es: {
+    ly: {
+      notes: "Notas", cut: "Línea de corte", bleed: "Sangrado", fold: "Pliegue", seals: "Sellos", clear: "Área libre",
+      lane: "Carril de la marca", notch: "Muesca y orificio", labels: "Etiquetas y medidas", eye: "Marca de fotocelda (conservar)", ref: "Referencia",
+    },
+    back: "REVERSO", front: "FRENTE", clearArea: "ÁREA LIBRE", foldUp: "PLIEGUE", film: "PELÍCULA", offRoll: "SALIDA DEL ROLLO", slit: "CORTE",
+    title: "Troquel de sachet",
+    none: "Ninguno",
+    notchSlit: (y: string) => `Rasgado horizontal: corte de ${SLIT_LEN} mm, borde derecho, a ${y} desde arriba`,
+    notchTri: (o: string) => `Rasgado vertical: triángulo de ${TRI_W} mm, abajo en el frente, punta a ${o} del sello derecho`,
+    rFinished: "Tamaño terminado", rFilm: "Película (extendida)", rConstruction: "Construcción", rSeals: "Sellos",
+    rClear: "Área libre (cada panel)", rBleed: "Sangrado", rEye: "Marca de fotocelda", rNotch: "Muesca", rHang: "Orificio para colgar", rUnwind: "Desenrollado",
+    wxh: "(ancho x alto)",
+    construction: "Sellado en 3 lados; doblado al centro; panel izquierdo = reverso, panel derecho = frente",
+    sealsHang: "Superior 20 mm; lados e inferior 6 mm; el pliegue no lleva",
+    seals: "6 mm arriba, abajo y en el lado exterior; el pliegue no lleva",
+    eye: "6 x 6 mm, arriba a la izquierda, en un carril sólido de 6 mm de alto contraste",
+    hang: `${HANG_HOLE_D} mm de diámetro, centrado en el sello superior`,
+    position: (n: number) => `Posición ${n}`,
+    unwind: {
+      1: "La parte superior del arte sale primero del rollo",
+      2: "La parte inferior del arte sale primero del rollo",
+      3: "El lado derecho del arte sale primero del rollo",
+      4: "El lado izquierdo del arte sale primero del rollo",
+    },
+    guidelines: "Guía para el arte",
+    unwindPos: (n: number) => `Posición de desenrollado ${n}`,
+    flatTitle: "Película extendida",
+    finishedTitle: "Sachet terminado",
+    refOnly: "Solo referencia",
+    refNote: "Tal como se dibuja en el constructor de troqueles de PharmaCenter. Use la página 1 para el arte.",
+    generated: (d: string) => `Generado el ${d} por el constructor de troqueles de PharmaCenter`,
+    lg: {
+      cut: "Línea de corte", notch: "Muesca", tear: "Línea de rasgado", hole: "Orificio 6 mm", fold: "Pliegue", foldEdge: "Pliegue",
+      seal: "Sello 6 mm", mark: "Marca de fotocelda 6 × 6 mm", clear: "Área libre", bleed: "Sangrado 1 mm",
+    },
+  },
+};
+type Tx = (typeof TX)["en"];
+const layerOrder = (T: Tx) => [T.ly.eye, T.ly.cut, T.ly.bleed, T.ly.fold, T.ly.seals, T.ly.clear, T.ly.lane, T.ly.notch, T.ly.labels, T.ly.notes, T.ly.ref];
 
 export function dielineFileName(spec: SachetSpec) {
   const d = dims(spec);
@@ -67,7 +129,7 @@ const mm = (v: number) => `${(Math.round(v * 10) / 10).toFixed(1)} mm`;
 const inMm = (v: number) => `${inches(v)} (${mm(v)})`;
 
 /** Page 1: the dieline. Returns the page; the unwind picture is drawn as "Unwind". */
-function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, hasLogo: boolean) {
+function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, hasLogo: boolean, T: Tx, lang: PdfLang) {
   const d = dims(spec);
   const W = d.filmW, H = d.height, half = d.panelW, top = d.topSeal;
   const ox = 22, oy = 30; // film origin on the page
@@ -81,27 +143,27 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
   const fine = 0.18;
 
   // ---- art-area layers, all in the Dieline spot color ----
-  p.layer(L.bleed, () => {
+  p.layer(T.ly.bleed, () => {
     p.rect(X(-BLEED), Y(-BLEED), W + 2 * BLEED, H + 2 * BLEED, { stroke: DIELINE, width: hair, dash: [1, 0.7] });
   });
-  p.layer(L.seals, () => {
+  p.layer(T.ly.seals, () => {
     const s = { stroke: { kind: "spot", tint: 0.6 } as const, width: hair, dash: [0.6, 0.6] };
     p.line(X(0), Y(top), X(W), Y(top), s);
     p.line(X(0), Y(H - SEAL), X(W), Y(H - SEAL), s);
     p.line(X(W - SEAL), Y(0), X(W - SEAL), Y(H), s);
   });
-  p.layer(L.lane, () => {
+  p.layer(T.ly.lane, () => {
     p.rect(X(0), Y(0), EYE, H, { stroke: { kind: "spot", tint: 0.6 }, width: hair, dash: [0.6, 0.6] });
   });
-  p.layer(L.clear, () => {
+  p.layer(T.ly.clear, () => {
     const c = { stroke: { kind: "spot", tint: 0.45 } as const, width: hair, dash: [0.3, 0.6] };
     p.rect(X(SEAL), Y(top), d.clearW, d.clearH, c);
     p.rect(X(half), Y(top), d.clearW, d.clearH, c);
   });
-  p.layer(L.fold, () => {
+  p.layer(T.ly.fold, () => {
     p.line(X(half), Y(-4), X(half), Y(H + 4), { stroke: DIELINE, width: fine, dash: [3, 1, 0.6, 1] });
   });
-  p.layer(L.notch, () => {
+  p.layer(T.ly.notch, () => {
     if (spec.notch === "slit") {
       p.line(X(W), Y(slitY(spec)), X(W - SLIT_LEN), Y(slitY(spec)), { stroke: DIELINE, width: 0.25, cap: 1 });
     }
@@ -122,18 +184,18 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       }
     }
   });
-  p.layer(L.cut, () => {
+  p.layer(T.ly.cut, () => {
     p.rect(X(0), Y(0), W, H, { stroke: DIELINE, width: fine });
   });
-  p.layer(L.labels, () => {
+  p.layer(T.ly.labels, () => {
     const t = { color: DIELINE, size: 2.2 };
     const tb = { color: DIELINE, size: 3.2, font: "bold" as const, align: "center" as const };
-    p.text(X(half / 2 + SEAL / 2), Y(top + 6), "BACK", tb);
-    p.text(X(half * 1.5 - SEAL / 2), Y(top + 6), "FRONT", tb);
-    const clear = `CLEAR AREA ${inches(d.clearW)} x ${inches(d.clearH)}`;
+    p.text(X(half / 2 + SEAL / 2), Y(top + 6), T.back, tb);
+    p.text(X(half * 1.5 - SEAL / 2), Y(top + 6), T.front, tb);
+    const clear = `${T.clearArea} ${inches(d.clearW)} x ${inches(d.clearH)}`;
     p.text(X(half / 2 + SEAL / 2), Y(H - SEAL - 2), clear, { ...t, size: 1.8, align: "center" });
     p.text(X(half * 1.5 - SEAL / 2), Y(H - SEAL - 2), clear, { ...t, size: 1.8, align: "center" });
-    p.text(X(half), Y(-5), "FOLD", { ...t, size: 1.8, align: "center" });
+    p.text(X(half), Y(-5), T.foldUp, { ...t, size: 1.8, align: "center" });
     // dimensions above
     const dim = (x1: number, x2: number, y: number, label: string) => {
       p.line(X(x1), Y(y), X(x2), Y(y), { stroke: DIELINE, width: hair });
@@ -143,7 +205,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     };
     dim(0, half, -10, inches(half));
     dim(half, W, -10, inches(half));
-    dim(0, W, -18, `FILM ${inMm(W)}`);
+    dim(0, W, -18, `${T.film} ${inMm(W)}`);
     // length on the right
     const vx = W + 7;
     p.line(X(vx), Y(0), X(vx), Y(H), { stroke: DIELINE, width: hair });
@@ -165,17 +227,17 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       ],
       { fill: DIELINE },
     );
-    p.text(X(ax + 4.5), Y(H + 7.6), "OFF THE ROLL", { ...t });
-    if (spec.notch === "slit") p.text(X(W + 1.5), Y(slitY(spec) + 0.8), "SLIT", { ...t, size: 1.6 });
+    p.text(X(ax + 4.5), Y(H + 7.6), T.offRoll, { ...t });
+    if (spec.notch === "slit") p.text(X(W + 1.5), Y(slitY(spec) + 0.8), T.slit, { ...t, size: 1.6 });
   });
 
   // ---- the one printing element: the eye mark ----
-  p.layer(L.eye, () => {
+  p.layer(T.ly.eye, () => {
     p.rect(X(0), Y(0), EYE, EYE, { fill: BLACK });
   });
 
   // ---- notes block, below the art ----
-  p.layer(L.notes, () => {
+  p.layer(T.ly.notes, () => {
     const ink = gray(0.15);
     const soft = gray(0.45);
     let y = notesTop;
@@ -187,27 +249,27 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       p.image("Logo", ox, y - 5, lh * LOGO_RATIO, lh);
       tx = ox + lh * LOGO_RATIO + 5;
     }
-    p.text(tx, y + 1, "Sachet dieline", { color: TEAL, size: 4.6, font: "bold" });
+    p.text(tx, y + 1, T.title, { color: TEAL, size: 4.6, font: "bold" });
     p.rect(tx, y + 2.6, 14, 0.6, { fill: SAGE });
     p.text(pageW - 12, y + 1, today, { color: soft, size: 2.6, align: "right" });
     y += 10;
     const notchText =
       spec.notch === "slit"
-        ? `Horizontal tear: slit ${SLIT_LEN} mm, right edge, ${mm(slitY(spec))} from top`
+        ? T.notchSlit(mm(slitY(spec)))
         : spec.notch === "triangle"
-          ? `Vertical tear: triangle ${TRI_W} mm, bottom of front, tip ${mm(spec.triangleOffsetMm)} in from the right seal`
-          : "None";
+          ? T.notchTri(mm(spec.triangleOffsetMm))
+          : T.none;
     const rows: [string, string][] = [
-      ["Finished size", `${inches(d.panelW)} x ${inches(H)} (W x H)`],
-      ["Film (flat)", `${inMm(W)} x ${inMm(H)}`],
-      ["Construction", "3-side seal; folded at center; left panel = back, right panel = front"],
-      ["Seals", spec.hangHole ? "Top 20 mm; sides and bottom 6 mm; fold has none" : "6 mm top, bottom and outer side; fold has none"],
-      ["Clear area (each panel)", `${inches(d.clearW)} x ${inches(d.clearH)}`],
-      ["Bleed", `${BLEED} mm`],
-      ["Eye mark", "6 x 6 mm, top-left, on a 6 mm solid high-contrast lane down the left edge"],
-      ["Notch", notchText],
-      ["Hang hole", spec.hangHole ? `${HANG_HOLE_D} mm diameter, centered in the top seal` : "None"],
-      ["Unwind", `Position ${spec.unwind} -- ${UNWIND_TEXT[spec.unwind]}`],
+      [T.rFinished, `${inches(d.panelW)} x ${inches(H)} ${T.wxh}`],
+      [T.rFilm, `${inMm(W)} x ${inMm(H)}`],
+      [T.rConstruction, T.construction],
+      [T.rSeals, spec.hangHole ? T.sealsHang : T.seals],
+      [T.rClear, `${inches(d.clearW)} x ${inches(d.clearH)}`],
+      [T.rBleed, `${BLEED} mm`],
+      [T.rEye, T.eye],
+      [T.rNotch, notchText],
+      [T.rHang, spec.hangHole ? T.hang : T.none],
+      [T.rUnwind, `${T.position(spec.unwind)} -- ${T.unwind[spec.unwind]}`],
     ];
     for (const [k, v] of rows) {
       p.text(ox, y, k, { color: TEAL_2, size: 2.5 });
@@ -216,12 +278,12 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     }
     // Artwork guidelines -- the mistakes that stop a run on the machine.
     y += 4;
-    p.text(ox, y, "Artwork guidelines", { color: TEAL, size: 3.2, font: "bold" });
+    p.text(ox, y, T.guidelines, { color: TEAL, size: 3.2, font: "bold" });
     p.rect(ox, y + 1.4, 10, 0.5, { fill: SAGE });
     y += 6;
     const gs = 2.3;
     const maxW = pageW - 12 - (ox + 3.5);
-    for (const g of artworkGuidelines(spec, "en")) {
+    for (const g of artworkGuidelines(spec, lang)) {
       p.circle(ox + 1, y - 0.8, 0.45, { fill: SAGE });
       const head = `${g.title}: `;
       p.text(ox + 3.5, y, head.trim(), { color: TEAL, size: gs, font: "bold" });
@@ -243,9 +305,9 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     if (hasUnwindImage) {
       const iw = 34, ih = iw * (73 / 112);
       p.image("Unwind", pageW - 12 - iw, notesTop + 9, iw, ih);
-      p.text(pageW - 12 - iw / 2, notesTop + 11 + ih + 2, `Unwind position ${spec.unwind}`, { color: TEAL, size: 2.4, font: "bold", align: "center" });
+      p.text(pageW - 12 - iw / 2, notesTop + 11 + ih + 2, T.unwindPos(spec.unwind), { color: TEAL, size: 2.4, font: "bold", align: "center" });
     }
-    footer(p, dielineFileName(spec), today);
+    footer(p, dielineFileName(spec), today, T);
   });
   return p;
 }
@@ -266,19 +328,6 @@ const SW = {
 };
 
 type LegendKey = "cut" | "notch" | "tear" | "hole" | "fold" | "foldEdge" | "seal" | "mark" | "clear" | "bleed";
-const LEGEND_LABEL: Record<LegendKey, string> = {
-  cut: "Cut line",
-  notch: "Notch",
-  tear: "Tear line",
-  hole: "Hang hole 6 mm",
-  fold: "Fold",
-  foldEdge: "Fold",
-  seal: "Seal 6 mm",
-  mark: "Eye mark 6 × 6 mm",
-  clear: "Clear area",
-  bleed: "Bleed 1 mm",
-};
-
 /** Which keys each drawing carries -- only what that drawing actually shows. */
 export function legendKeys(spec: SachetSpec, view: "flat" | "finished"): LegendKey[] {
   const notch: LegendKey[] = spec.notch !== "none" ? ["notch"] : [];
@@ -333,14 +382,14 @@ function swatch(p: PageCanvas, key: LegendKey, spec: SachetSpec, x: number, y: n
 }
 
 /** A single centered row of keys with its baseline near y. */
-function legendRow(p: PageCanvas, keys: LegendKey[], spec: SachetSpec, y: number) {
-  const size = 2.8, swW = 6, gap = 1.8, between = 7;
-  const widths = keys.map((k) => swW + gap + textWidth(LEGEND_LABEL[k], size, "regular"));
+function legendRow(p: PageCanvas, keys: LegendKey[], spec: SachetSpec, y: number, T: Tx) {
+  const size = 2.8, swW = 6, gap = 1.8, between = 5.5;
+  const widths = keys.map((k) => swW + gap + textWidth(T.lg[k], size, "regular"));
   const total = widths.reduce((a, b) => a + b, 0) + between * (keys.length - 1);
   let x = (p.widthMm - total) / 2;
   keys.forEach((k, i) => {
     swatch(p, k, spec, x, y - 2.9);
-    p.text(x + swW + gap, y, LEGEND_LABEL[k], { color: gray(0.4), size });
+    p.text(x + swW + gap, y, T.lg[k], { color: gray(0.4), size });
     x += widths[i] + between;
   });
 }
@@ -353,10 +402,11 @@ function referencePage(
   today: string,
   spec: SachetSpec,
   keys: LegendKey[],
+  T: Tx,
 ) {
   const pageW = 279.4, pageH = 215.9; // US Letter, landscape
   const p = new PageCanvas(pageW, pageH);
-  p.layer(L.ref, () => {
+  p.layer(T.ly.ref, () => {
     let tx = 18;
     if (hasLogo) {
       const lh = 9;
@@ -365,25 +415,25 @@ function referencePage(
     }
     p.text(tx, 18, title, { color: TEAL, size: 5.2, font: "bold" });
     p.rect(tx, 20, 16, 0.7, { fill: SAGE });
-    p.text(pageW - 18, 18, "Reference only", { color: TEAL_2, size: 2.8, font: "bold", align: "right" });
+    p.text(pageW - 18, 18, T.refOnly, { color: TEAL_2, size: 2.8, font: "bold", align: "right" });
     p.rect(18, 25, pageW - 36, 0.7, { fill: TEAL });
-    p.text(18, 31, "As drawn in the PharmaCenter dieline builder. Use page 1 for artwork.", { color: gray(0.45), size: 2.6 });
+    p.text(18, 31, T.refNote, { color: gray(0.45), size: 2.6 });
     const maxW = pageW - 36, maxH = pageH - 70; // room below for the legend
     const s = Math.min(maxW / img.width, maxH / img.height);
     const w = img.width * s, h = img.height * s;
     p.image(img.name, (pageW - w) / 2, 38 + (maxH - h) / 2, w, h);
-    legendRow(p, keys, spec, pageH - 21);
-    footer(p, fileName, today);
+    legendRow(p, keys, spec, pageH - 21, T);
+    footer(p, fileName, today, T);
   });
   return p;
 }
 
 /** Thin teal rule and a quiet line naming the file, on every page. */
-function footer(p: PageCanvas, fileName: string, today: string) {
+function footer(p: PageCanvas, fileName: string, today: string, T: Tx) {
   const y = p.heightMm - 9;
   p.rect(18, y - 4, p.widthMm - 36, 0.3, { fill: TEAL });
   p.text(18, y, `PharmaCenter  ·  ${fileName.replace(/\.pdf$/, "")}`, { color: TEAL_2, size: 2.2 });
-  p.text(p.widthMm - 18, y, `Generated ${today} by the PharmaCenter dieline builder`, { color: gray(0.5), size: 2.2, align: "right" });
+  p.text(p.widthMm - 18, y, T.generated(today), { color: gray(0.5), size: 2.2, align: "right" });
 }
 
 // ---- browser helpers: turn the live SVGs and the unwind PNG into JPEG bytes ----
@@ -456,7 +506,12 @@ async function toJpeg(img: CanvasImageSource, w: number, h: number) {
 }
 
 /** Build the PDF and hand it to the browser as a download. */
-export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGElement | null; finished: SVGSVGElement | null }) {
+export async function downloadDieline(
+  spec: SachetSpec,
+  views: { flat: SVGSVGElement | null; finished: SVGSVGElement | null },
+  lang: PdfLang = "en",
+) {
+  const T = TX[lang];
   const today = new Date().toISOString().slice(0, 10);
   // Snapshot the drawings first, synchronously, while they are on screen.
   const flatSnap = views.flat ? snapshotSvg(views.flat) : null;
@@ -482,19 +537,19 @@ export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGEle
   }
 
   const fileName = dielineFileName(spec);
-  const pages = [dielinePage(spec, today, hasUnwind, hasLogo)];
+  const pages = [dielinePage(spec, today, hasUnwind, hasLogo, T, lang)];
   if (flatSnap) {
     const j = await svgToJpeg(flatSnap, 2600);
     jpegs.push({ name: "RefFlat", ...j });
-    pages.push(referencePage("Film laid flat", { name: "RefFlat", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "flat")));
+    pages.push(referencePage(T.flatTitle, { name: "RefFlat", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "flat"), T));
   }
   if (finishedSnap) {
     const j = await svgToJpeg(finishedSnap, 2600);
     jpegs.push({ name: "RefFinished", ...j });
-    pages.push(referencePage("Finished sachet", { name: "RefFinished", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "finished")));
+    pages.push(referencePage(T.finishedTitle, { name: "RefFinished", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "finished"), T));
   }
 
-  const bytes = buildPdf({ title: dielineFileName(spec).replace(/\.pdf$/, ""), pages, layers: LAYERS, jpegs });
+  const bytes = buildPdf({ title: dielineFileName(spec).replace(/\.pdf$/, ""), pages, layers: layerOrder(T), jpegs });
   const url = URL.createObjectURL(new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: "application/pdf" }));
   const a = document.createElement("a");
   a.href = url;
