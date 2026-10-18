@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { grossForEntry, type SoItemLike, type YieldEntry } from "./model";
+import { grossForEntry, isHouseCustomer, type SoItemLike, type YieldEntry } from "./model";
 
 // Production happens before shipping, and Fishbowl only records a line's cost
 // when it ships. So most entries are saved with no gross, and the gross that
@@ -24,7 +24,7 @@ const MAX_SOS = 200;
 
 export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntry[]): Promise<number> {
   const pending = rows.filter(
-    (r) => r.gross_per_unit === null && r.finished_units > 0 && r.so_numbers.length > 0,
+    (r) => r.gross_per_unit === null && r.gross_source !== "house" && r.finished_units > 0 && r.so_numbers.length > 0,
   );
   if (pending.length === 0) return 0;
 
@@ -33,13 +33,15 @@ export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntr
   const ors = wanted.map((so) => `so_number.eq.${so},so_number.like.${so}-*`).join(",");
   const { data, error } = await supabase
     .from("fishbowl_sales_orders")
-    .select("so_number, items, date_last_modified")
+    .select("so_number, customer_name, items, date_last_modified")
     .or(ors)
     .limit(1000);
   if (error || !data) return 0;
   const itemsBySo = new Map<string, SoItemLike[]>();
   const shippedAt = new Map<string, string>();
+  const house = new Set<string>();
   for (const so of data) {
+    if (isHouseCustomer(so.customer_name as string | null)) house.add(so.so_number as string);
     itemsBySo.set(so.so_number as string, (Array.isArray(so.items) ? so.items : []) as SoItemLike[]);
     shippedAt.set(so.so_number as string, ((so.date_last_modified as string | null) ?? "").slice(0, 10));
   }
@@ -58,8 +60,20 @@ export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntr
 
   let filled = 0;
   for (const r of pending) {
-    const g = grossForEntry(r.product_num, candidatesFor(r), itemsBySo);
-    if (!g) continue;
+    const cands = candidatesFor(r);
+    const g = grossForEntry(r.product_num, cands, itemsBySo);
+    if (!g) {
+      // Every order it names is one of ours -> house stock, not a missing gross.
+      if (cands.length > 0 && cands.every((so) => house.has(so))) {
+        const { error: hErr } = await supabase
+          .from("yield_entries")
+          .update({ gross_source: "house" })
+          .eq("id", r.id)
+          .is("gross_per_unit", null);
+        if (!hErr) r.gross_source = "house";
+      }
+      continue;
+    }
     const { error: upErr } = await supabase
       .from("yield_entries")
       .update({ gross_per_unit: g.each_gross, gross_source: "fishbowl", unit_price: g.each_price, unit_cost: g.each_cost })

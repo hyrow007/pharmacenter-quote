@@ -84,6 +84,9 @@ const en = {
   source_sheet: "from the Google Sheet",
   source_fishbowl: "from Fishbowl",
   source_manual: "entered by hand",
+  source_house: "house-brand stock — our own order, no sale, so no gross",
+  houseStock: "house stock",
+  houseNote: "{n} house-brand stock runs have no gross by design and are left out of gross per man-hour.",
 
   histHeading: "History",
   histLede: "Every entry since September 2022. The first three years came from the Google Sheet as it stood on 2026-10-13.",
@@ -191,6 +194,9 @@ const es = {
   source_sheet: "de la hoja de Google",
   source_fishbowl: "de Fishbowl",
   source_manual: "ingresada a mano",
+  source_house: "inventario de marca propia — orden nuestra, sin venta, sin bruto",
+  houseStock: "marca propia",
+  houseNote: "{n} corridas de inventario de marca propia no tienen bruto a propósito y no cuentan en bruto por hora-hombre.",
 
   histHeading: "Historial",
   histLede: "Todos los registros desde septiembre de 2022. Los primeros tres años vienen de la hoja de Google tal como estaba el 2026-10-13.",

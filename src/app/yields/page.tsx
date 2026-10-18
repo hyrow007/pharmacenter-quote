@@ -152,7 +152,9 @@ export default async function YieldsPage({
                               ) : null}
                             </td>
                             <td className={s.num} title={r.gross_source ? t(`source_${r.gross_source}`) : undefined}>
-                              {r.gross_per_unit === null && r.finished_units > 0 ? (
+                              {r.gross_source === "house" ? (
+                                <span className={s.sub}>{t("houseStock")}</span>
+                              ) : r.gross_per_unit === null && r.finished_units > 0 ? (
                                 <span className={s.missing}>{t("missing")}</span>
                               ) : (
                                 fmtUnitMoney(r.gross_per_unit, lang)
@@ -183,6 +185,7 @@ export default async function YieldsPage({
                 {dayTotal.grossMissing > 0 ? (
                   <p className={s.warn}>{t("missingNote", { n: dayTotal.grossMissing })}</p>
                 ) : null}
+                {dayTotal.house > 0 ? <p className={s.hint}>{t("houseNote", { n: dayTotal.house })}</p> : null}
               </section>
 
               <section className={s.card}>

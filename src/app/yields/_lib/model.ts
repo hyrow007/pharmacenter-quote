@@ -15,7 +15,16 @@ export const isLine = (v: unknown): v is LineKey =>
 export const lineLabelKey = (l: string): YKey =>
   (isLine(l) ? `line_${l}` : "line_other") as YKey;
 
-export type GrossSource = "sheet" | "fishbowl" | "manual";
+export type GrossSource = "sheet" | "fishbowl" | "manual" | "house";
+
+// A run on a sales order whose customer is PharmaCenter itself is house-brand
+// stock (FGBG and the like): production for our own shelf, sold later outside
+// anything Yields sees. There is no sale, so there is no gross -- and that is
+// not a gap to chase. Such entries are marked gross_source = 'house': they
+// count toward units and man-hours, never toward gross or "missing".
+export function isHouseCustomer(name: string | null | undefined): boolean {
+  return /^\s*pharma\s*center\b/i.test(name ?? "");
+}
 
 export type YieldEntry = {
   id: string;
@@ -141,10 +150,11 @@ export type Rollup = {
   manHours: number; // entries with both people and hours
   grossMissing: number; // entries with finished > 0 and no gross
   grossManHours: number; // man-hours on entries that HAVE gross -- the honest denominator
+  house: number; // house-brand stock runs: no sale, so no gross, and not missing
 };
 
 export function emptyRollup(): Rollup {
-  return { entries: 0, finished: 0, gross: 0, manHours: 0, grossMissing: 0, grossManHours: 0 };
+  return { entries: 0, finished: 0, gross: 0, manHours: 0, grossMissing: 0, grossManHours: 0, house: 0 };
 }
 
 export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
@@ -155,6 +165,8 @@ export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
   if (e.gross_total !== null) {
     r.gross += e.gross_total;
     if (mh !== null) r.grossManHours += mh;
+  } else if (e.gross_source === "house") {
+    r.house += 1;
   } else if (e.finished_units > 0) {
     r.grossMissing += 1;
   }

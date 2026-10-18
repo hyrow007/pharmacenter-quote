@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
+  isHouseCustomer,
   isIsoDate,
   isLine,
   marginFromLine,
@@ -68,7 +69,7 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
   let unit_price: number | null = null;
   let unit_cost: number | null = null;
   let gross_per_unit: number | null = null;
-  let gross_source: "fishbowl" | "manual" | null = null;
+  let gross_source: "fishbowl" | "manual" | "house" | null = null;
 
   if (input.gross_mode === "manual") {
     const g = toNum(input.manual_gross);
@@ -78,7 +79,7 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
   } else if (input.gross_mode === "fishbowl" && input.price_so) {
     const soRes = await supabase
       .from("fishbowl_sales_orders")
-      .select("items")
+      .select("items, customer_name")
       .eq("so_number", input.price_so)
       .limit(1)
       .maybeSingle();
@@ -88,7 +89,8 @@ export async function saveYieldEntry(input: SaveInput): Promise<ActionResult> {
     unit_price = m.each_price;
     unit_cost = m.each_cost;
     gross_per_unit = m.each_gross;
-    gross_source = gross_per_unit === null ? null : "fishbowl";
+    gross_source =
+      gross_per_unit !== null ? "fishbowl" : isHouseCustomer(soRes.data?.customer_name as string | null) ? "house" : null;
   }
 
   const row = {

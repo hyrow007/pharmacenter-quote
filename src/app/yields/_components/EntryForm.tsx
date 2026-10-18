@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeYT, type YKey } from "../_lib/i18n";
 import {
+  isHouseCustomer,
   LINES,
   fmtDate,
   fmtInt,
@@ -350,6 +351,8 @@ export default function EntryForm({
                 <dd>
                   {priceLine.each_cost !== null ? (
                     `− ${fmtUnitMoney(priceLine.each_cost, lang)}`
+                  ) : isHouseCustomer(priceLine.customer_name) ? (
+                    <span className={s.sub}>{t("source_house")}</span>
                   ) : !priceLine.total_cost ? (
                     <span className={s.missing}>{t("grossCostNotShipped")}</span>
                   ) : (
@@ -357,7 +360,7 @@ export default function EntryForm({
                   )}
                 </dd>
                 <dt className={s.grossStrong}>{t("grossHeading")}</dt>
-                <dd className={s.grossStrong}>{fishbowlGross === null ? <span className={s.missing}>{t("missing")}</span> : fmtUnitMoney(fishbowlGross, lang)}</dd>
+                <dd className={s.grossStrong}>{fishbowlGross === null ? (isHouseCustomer(priceLine.customer_name) ? t("houseStock") : <span className={s.missing}>{t("missing")}</span>) : fmtUnitMoney(fishbowlGross, lang)}</dd>
               </dl>
             ) : product ? (
               <p className={s.hint}>{t("grossNone")}</p>
