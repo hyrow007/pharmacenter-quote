@@ -172,18 +172,32 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     [t("sUnwind"), positionLabel],
   ];
 
-  const legend: { cls: string; label: string }[] = [
+  // Each drawing gets a legend of only what it actually shows: the tear line
+  // is drawn on the finished sachet only; bleed and the direction off the roll
+  // belong to the flat film; the fold is a dashed line flat, a solid edge folded.
+  type Lg = { cls: string; label: string };
+  const notchLg: Lg[] = spec.notch !== "none" ? [{ cls: s.swNotch, label: t("lgNotch") }] : [];
+  const holeLg: Lg[] = spec.hangHole ? [{ cls: s.swHole, label: t("lgHole") }] : [];
+  const legendFlat: Lg[] = [
     { cls: s.swCut, label: t("lgCut") },
-    ...(spec.notch !== "none"
-      ? [{ cls: s.swNotch, label: t("lgNotch") }, { cls: s.swTear, label: t("lgTear") }]
-      : []),
-    ...(spec.hangHole ? [{ cls: s.swHole, label: t("lgHole") }] : []),
+    ...notchLg,
+    ...holeLg,
     { cls: s.swFold, label: t("lgFold") },
     { cls: s.swSeal, label: t("lgSeal") },
     { cls: s.swMark, label: t("lgMark") },
     { cls: s.swClear, label: t("lgClear") },
     { cls: s.swBleed, label: t("lgBleed") },
     { cls: s.swLead, label: t("lgLead") },
+  ];
+  const legendFinished: Lg[] = [
+    { cls: s.swCut, label: t("lgCut") },
+    ...notchLg,
+    ...(spec.notch !== "none" ? [{ cls: s.swTear, label: t("lgTear") }] : []),
+    ...holeLg,
+    { cls: s.swFoldEdge, label: t("lgFold") },
+    { cls: s.swSeal, label: t("lgSeal") },
+    { cls: s.swMark, label: t("lgMark") },
+    { cls: s.swClear, label: t("lgClear") },
   ];
 
   return (
@@ -319,7 +333,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           <div ref={flatRef} className={s.drawing} dangerouslySetInnerHTML={{ __html: flat }} />
           <div className={s.flatFoot}>
             <ul className={s.legend}>
-              {legend.map((l) => (
+              {legendFlat.map((l) => (
                 <li key={l.label}><span className={`${s.sw} ${l.cls}`} />{l.label}</li>
               ))}
             </ul>
@@ -362,6 +376,11 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             <span className={s.viewMeta}>{inches(d.panelW)} × {inches(d.height)}</span>
           </div>
           <div ref={finishedRef} className={s.drawing} dangerouslySetInnerHTML={{ __html: finished }} />
+          <ul className={`${s.legend} ${s.legendFinished}`}>
+            {legendFinished.map((l) => (
+              <li key={l.label}><span className={`${s.sw} ${l.cls}`} />{l.label}</li>
+            ))}
+          </ul>
         </section>
 
 

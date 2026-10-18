@@ -247,6 +247,8 @@
 .swHole { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--cut); background: var(--paper); }
 .swTear { height: 0; border-top: 2px dotted var(--cut); }
 .swFold { height: 0; border-top: 2px dashed var(--sage-500); }
+.swFoldEdge { height: 0; border-top: 3px solid var(--sage-500); }
+.legendFinished { margin-top: 10px; }
 .swSeal { background: var(--stone-2); border: 1px solid var(--stone); }
 .swMark { background: var(--teal-900); }
 .swClear { border: 1px dashed var(--teal-700); }
