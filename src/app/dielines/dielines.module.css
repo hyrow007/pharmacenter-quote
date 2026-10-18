@@ -245,9 +245,9 @@
 .sw { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
 .swCut { height: 0; border-top: 2px solid var(--cut); }
 /* notch swatch takes the notch's own shape: a short slit, or a triangle */
-.swNotchSlit { height: 0; width: 10px; border-top: 2px solid var(--notch); }
-.swNotchTri { width: 10px; height: 10px; background: var(--notch); clip-path: polygon(0 100%, 50% 0, 100% 100%); }
-.swHole { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--cut); background: var(--paper); }
+.swNotchSlit { height: 0; border-top: 2px solid var(--notch); }
+.swNotchTri { background: var(--notch); clip-path: polygon(22% 100%, 50% 0, 78% 100%); }
+.swHole { width: 10px; height: 10px; margin: 0 4px; border-radius: 50%; border: 2px solid var(--cut); background: var(--paper); }
 .swTear { height: 0; border-top: 2px dotted var(--cut); }
 .swFold { height: 0; border-top: 2px dashed var(--sage-500); }
 .swFoldEdge { height: 0; border-top: 3px solid var(--sage-500); }
