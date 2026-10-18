@@ -159,10 +159,19 @@ function hangHole(spec: SachetSpec, x0: number, w: number) {
 // jaws leave. Each drawing gets its own pattern id (two drawings share a page).
 // Inline style beats the .s-seal class fill.
 function waffle(g: string, id: string) {
+  const grid = `<path class="s-waffle" d="M0 0H1.4M0 0V1.4"/>`;
   const defs =
     `<defs><pattern id="${id}" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
-    `<rect class="s-waffle-bg" width="1.4" height="1.4"/><path class="s-waffle" d="M0 0H1.4M0 0V1.4"/></pattern></defs>`;
-  return defs + g.split('class="s-seal"').join(`class="s-seal" style="fill:url(#${id})"`);
+    `<rect class="s-waffle-bg" width="1.4" height="1.4"/>${grid}</pattern>` +
+    // Lines only, laid over the eye-mark lane: it is the back panel's side
+    // seal, so it gets the waffle while keeping its own lane color.
+    `<pattern id="${id}-lane" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">${grid}</pattern></defs>`;
+  return (
+    defs +
+    g
+      .split('class="s-seal"').join(`class="s-seal" style="fill:url(#${id})"`)
+      .split('class="s-lanewaffle"').join(`class="s-lanewaffle" style="fill:url(#${id}-lane)"`)
+  );
 }
 
 /** The printed web, flat, viewed from the printed side. */
@@ -179,6 +188,7 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${W}" height="${SEAL}"/>`;
   g += `<rect class="s-seal" x="${W - SEAL}" y="0" width="${SEAL}" height="${H}"/>`;
   g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
+  g += `<rect class="s-lanewaffle" x="0" y="0" width="${EYE}" height="${H}"/>`;
   g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
   g += `<rect class="s-clear" x="${SEAL}" y="${top}" width="${clearW}" height="${clearH}"/>`;
   g += `<rect class="s-clear" x="${half}" y="${top}" width="${clearW}" height="${clearH}"/>`;
@@ -220,6 +230,7 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += `<rect class="s-seal" x="0" y="0" width="${w}" height="${top}"/>`;
   g += `<rect class="s-seal" x="0" y="${H - SEAL}" width="${w}" height="${SEAL}"/>`;
   g += `<rect class="s-lane" x="0" y="0" width="${EYE}" height="${H}"/>`;
+  g += `<rect class="s-lanewaffle" x="0" y="0" width="${EYE}" height="${H}"/>`;
   g += `<rect class="s-mark" x="0" y="0" width="${EYE}" height="${EYE}"/>`;
   g += `<rect class="s-clear" x="${SEAL}" y="${top}" width="${clearW}" height="${clearH}"/>`;
   g += `<rect class="s-outline" x="0" y="0" width="${w}" height="${H}"/>`;

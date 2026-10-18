@@ -214,6 +214,7 @@
 .drawing :global(.s-waffle-bg) { fill: var(--stone-2); }
 .drawing :global(.s-waffle) { stroke: #d9d0b8; stroke-width: 0.14; fill: none; }
 .drawing :global(.s-lane) { fill: var(--cream); stroke: var(--ink-3); stroke-width: 0.15; }
+.drawing :global(.s-lanewaffle) { fill: none; stroke: none; }
 .drawing :global(.s-mark) { fill: var(--teal-900); }
 .drawing :global(.s-fold) { stroke: var(--sage-500); stroke-width: 0.5; stroke-dasharray: 3 1.2 0.6 1.2; fill: none; }
 .drawing :global(.s-foldedge) { stroke: var(--sage-500); stroke-width: 1; fill: none; }
