@@ -62,7 +62,6 @@ const en = {
   lgMark: "Eye mark 6 × 6 mm",
   lgClear: "Clear area",
   lgBleed: "Bleed 1 mm",
-  lgLead: "Direction off the roll",
 
   sFinished: "Finished",
   sFilm: "Film",
@@ -152,7 +151,6 @@ const es = {
   lgMark: "Marca de fotocelda 6 × 6 mm",
   lgClear: "Área libre",
   lgBleed: "Sangrado 1 mm",
-  lgLead: "Dirección de salida del rollo",
 
   sFinished: "Terminado",
   sFilm: "Película",

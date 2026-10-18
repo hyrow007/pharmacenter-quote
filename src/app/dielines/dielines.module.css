@@ -5,6 +5,7 @@
 
 .layout {
   --cut: #c0216a;
+  --notch: #e07800;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   display: grid;
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
@@ -217,8 +218,8 @@
 .drawing :global(.s-fold) { stroke: var(--sage-500); stroke-width: 0.5; stroke-dasharray: 3 1.2 0.6 1.2; fill: none; }
 .drawing :global(.s-foldedge) { stroke: var(--sage-500); stroke-width: 1; fill: none; }
 .drawing :global(.s-clear) { fill: none; stroke: var(--teal-700); stroke-width: 0.2; stroke-dasharray: 0.8 0.8; opacity: 0.8; }
-.drawing :global(.s-cut) { stroke: var(--cut); stroke-width: 0.5; fill: none; stroke-linecap: round; }
-.drawing :global(.s-cutfill) { fill: var(--cut); }
+.drawing :global(.s-cut) { stroke: var(--notch); stroke-width: 0.5; fill: none; stroke-linecap: round; }
+.drawing :global(.s-cutfill) { fill: var(--notch); }
 .drawing :global(.s-hole) { fill: var(--paper); stroke: var(--cut); stroke-width: 0.45; }
 .drawing :global(.s-tear) { stroke: var(--cut); stroke-width: 0.45; stroke-dasharray: 0.6 1.1; stroke-linecap: round; fill: none; opacity: 0.85; }
 .drawing :global(.s-dim) { stroke: var(--ink-3); stroke-width: 0.2; fill: none; }
@@ -243,17 +244,24 @@
 .legend li { display: flex; align-items: center; gap: 6px; }
 .sw { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
 .swCut { height: 0; border-top: 2px solid var(--cut); }
-.swNotch { background: var(--cut); }
+/* notch swatch takes the notch's own shape: a short slit, or a triangle */
+.swNotchSlit { height: 0; width: 10px; border-top: 2px solid var(--notch); }
+.swNotchTri { width: 10px; height: 10px; background: var(--notch); clip-path: polygon(0 100%, 50% 0, 100% 100%); }
 .swHole { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--cut); background: var(--paper); }
 .swTear { height: 0; border-top: 2px dotted var(--cut); }
 .swFold { height: 0; border-top: 2px dashed var(--sage-500); }
 .swFoldEdge { height: 0; border-top: 3px solid var(--sage-500); }
 .legendFinished { margin-top: 10px; }
-.swSeal { background: var(--stone-2); border: 1px solid var(--stone); }
+.swSeal {
+  background-color: var(--stone-2);
+  background-image:
+    repeating-linear-gradient(45deg, #cfc4a8 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, #cfc4a8 0 1px, transparent 1px 4px);
+  border: 1px solid var(--stone);
+}
 .swMark { background: var(--teal-900); }
 .swClear { border: 1px dashed var(--teal-700); }
 .swBleed { border: 1px dashed var(--ink-3); }
-.swLead { background: var(--sage-500); }
 
 /* ---- under the flat film: legend left, unwind picture bottom right ---- */
 .flatFoot {

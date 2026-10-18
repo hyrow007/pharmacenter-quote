@@ -176,7 +176,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   // is drawn on the finished sachet only; bleed and the direction off the roll
   // belong to the flat film; the fold is a dashed line flat, a solid edge folded.
   type Lg = { cls: string; label: string };
-  const notchLg: Lg[] = spec.notch !== "none" ? [{ cls: s.swNotch, label: t("lgNotch") }] : [];
+  const notchLg: Lg[] = spec.notch !== "none" ? [{ cls: spec.notch === "slit" ? s.swNotchSlit : s.swNotchTri, label: t("lgNotch") }] : [];
   const holeLg: Lg[] = spec.hangHole ? [{ cls: s.swHole, label: t("lgHole") }] : [];
   const legendFlat: Lg[] = [
     { cls: s.swCut, label: t("lgCut") },
@@ -187,7 +187,6 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     { cls: s.swMark, label: t("lgMark") },
     { cls: s.swClear, label: t("lgClear") },
     { cls: s.swBleed, label: t("lgBleed") },
-    { cls: s.swLead, label: t("lgLead") },
   ];
   const legendFinished: Lg[] = [
     { cls: s.swCut, label: t("lgCut") },
