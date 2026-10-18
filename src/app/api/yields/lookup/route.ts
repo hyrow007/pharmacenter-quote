@@ -61,6 +61,7 @@ export async function GET(request: Request) {
         .from("yield_entries")
         .select("gross_per_unit, run_date, gross_source")
         .eq("product_num", product)
+        .in("gross_source", ["fishbowl", "sheet", "manual"]) // real figures only, never a provisional one
         .not("gross_per_unit", "is", null)
         .order("run_date", { ascending: false })
         .limit(1)

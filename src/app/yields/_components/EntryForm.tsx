@@ -84,6 +84,12 @@ export default function EntryForm({
     editing?.gross_source === "manual" || editing?.gross_source === "sheet" ? String(editing.gross_per_unit ?? "") : "",
   );
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Edit is usually clicked in a table further down the page; bring the
+  // form, now holding that entry, into view.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    if (editing) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editing]);
 
   // Product search, debounced. Skipped once a product is chosen and the box
   // still shows its code.
@@ -215,7 +221,7 @@ export default function EntryForm({
   const notInFishbowl = !product && query.trim().length >= 2 && suggestions.length === 0;
 
   return (
-    <form className={s.form} onSubmit={submit} aria-busy={pending}>
+    <form ref={formRef} className={s.form} onSubmit={submit} aria-busy={pending} style={{ scrollMarginTop: 90 }}>
       <div className={s.row2}>
         <label className={s.field}>
           <span>{t("fDate")}</span>
