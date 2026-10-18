@@ -16,15 +16,14 @@ import {
   fmtInt,
   fmtMoney,
   fmtNum,
-  fmtUnitMoney,
   grossPerManHour,
-  grossPerManHourOf,
   isIsoDate,
   isLine,
   lineLabelKey,
   todayInPlant,
   type Rollup,
 } from "../_lib/model";
+import EntriesTable, { sortEntries } from "../_components/EntriesTable";
 import s from "../yields.module.css";
 
 // /yields/history -- any date range, optionally one line or one product.
@@ -71,13 +70,7 @@ export default async function YieldsHistoryPage({
   const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   // Every entry, newest first (same day: by line, then product).
   const ENTRY_CAP = 1000;
-  const entryRows = [...rows]
-    .sort((a, b) =>
-      a.run_date !== b.run_date
-        ? a.run_date < b.run_date ? 1 : -1
-        : a.line_key.localeCompare(b.line_key) || a.product_num.localeCompare(b.product_num),
-    )
-    .slice(0, ENTRY_CAP);
+  const entryRows = sortEntries(rows).slice(0, ENTRY_CAP);
   const lineRows = LINES.filter((l) => byLine.has(l)).map((l) => [l, byLine.get(l)!] as const);
 
   return (
@@ -208,60 +201,7 @@ export default async function YieldsHistoryPage({
             {rows.length > entryRows.length ? (
               <p className={s.hint}>{t("entriesCapped", { shown: entryRows.length, n: rows.length })}</p>
             ) : null}
-            <div className={s.tableWrap}>
-              <table className={s.table}>
-                <thead>
-                  <tr>
-                    <th>{t("colDate")}</th>
-                    <th>{t("colLine")}</th>
-                    <th>{t("colProduct")}</th>
-                    <th>{t("colSo")}</th>
-                    <th className={s.num}>{t("colFinished")}</th>
-                    <th className={s.num}>{t("colManHours")}</th>
-                    <th className={s.num}>{t("colGrossUnit")}</th>
-                    <th className={s.num}>{t("colGross")}</th>
-                    <th className={s.num}>{t("colGrossMh")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entryRows.map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ whiteSpace: "nowrap" }}><Link href={`/yields?date=${r.run_date}`}>{fmtDate(r.run_date, lang)}</Link></td>
-                      <td>{t(lineLabelKey(r.line_key))}</td>
-                      <td>
-                        <span className={s.code}>{r.product_num}</span>
-                        <span className={s.sub}>{r.product_name}</span>
-                        {r.note ? <span className={s.note}>{r.note}</span> : null}
-                      </td>
-                      <td className={s.code}>{r.so_numbers.join(", ") || "—"}</td>
-                      <td className={s.num}>
-                        {fmtInt(r.finished_units, lang)}
-                        {r.is_multipack && r.single_units !== null ? (
-                          <span className={s.sub}>{fmtInt(r.single_units, lang)} {t("colSingles").toLowerCase()}</span>
-                        ) : null}
-                      </td>
-                      <td className={s.num}>
-                        {fmtNum(r.man_hours, lang)}
-                        {r.people !== null && r.hours !== null ? (
-                          <span className={s.sub}>{fmtNum(r.people, lang)} × {fmtNum(r.hours, lang)}</span>
-                        ) : null}
-                      </td>
-                      <td className={s.num} title={r.gross_source ? t(`source_${r.gross_source}`) : undefined}>
-                        {r.gross_source === "house" ? (
-                          <span className={s.sub}>{t("houseStock")}</span>
-                        ) : r.gross_per_unit === null && r.finished_units > 0 ? (
-                          <span className={s.missing}>{t("missing")}</span>
-                        ) : (
-                          fmtUnitMoney(r.gross_per_unit, lang)
-                        )}
-                      </td>
-                      <td className={s.num}>{fmtMoney(r.gross_total, lang)}</td>
-                      <td className={s.num}>{fmtMoney(grossPerManHourOf(r), lang)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <EntriesTable rows={entryRows} lang={lang} />
           </section>
         </div>
       </main>

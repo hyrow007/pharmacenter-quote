@@ -101,6 +101,7 @@ const en = {
   byLine: "By line",
   byDay: "By day",
   allEntries: "Every entry",
+  recentEntries: "Every entry, last 7 working days",
   entriesCapped: "Showing the newest {shown} of {n} entries. Narrow the dates, line or product to see the rest.",
 
   line_blister: "Blisters",
@@ -213,6 +214,7 @@ const es = {
   byLine: "Por línea",
   byDay: "Por día",
   allEntries: "Todos los registros",
+  recentEntries: "Todos los registros, últimos 7 días laborables",
   entriesCapped: "Se muestran los {shown} registros más recientes de {n}. Acorte las fechas, la línea o el producto para ver el resto.",
 
   line_blister: "Blísteres",

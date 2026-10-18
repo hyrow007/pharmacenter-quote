@@ -1,0 +1,104 @@
+import Link from "next/link";
+import type { Lang } from "@/lib/i18n/dict";
+import { makeYT } from "../_lib/i18n";
+import {
+  fmtDate,
+  fmtInt,
+  fmtMoney,
+  fmtNum,
+  fmtUnitMoney,
+  grossPerManHourOf,
+  lineLabelKey,
+  type YieldEntry,
+} from "../_lib/model";
+import RowActions from "./RowActions";
+import s from "../yields.module.css";
+
+// One row per entry, newest first -- the same view as the sheet's Data tab.
+// Used on the daily log (recent entries, with edit/delete) and on History
+// (any range, read-only; the date links to that day's log for editing).
+
+export function sortEntries(rows: YieldEntry[]): YieldEntry[] {
+  return [...rows].sort((a, b) =>
+    a.run_date !== b.run_date
+      ? a.run_date < b.run_date ? 1 : -1
+      : a.line_key.localeCompare(b.line_key) || a.product_num.localeCompare(b.product_num),
+  );
+}
+
+export default function EntriesTable({
+  rows,
+  lang,
+  canChange,
+}: {
+  rows: YieldEntry[];
+  lang: Lang;
+  // When given, rows it allows get Edit / Delete.
+  canChange?: (r: YieldEntry) => boolean;
+}) {
+  const t = makeYT(lang);
+  return (
+    <div className={s.tableWrap}>
+      <table className={s.table}>
+        <thead>
+          <tr>
+            <th>{t("colDate")}</th>
+            <th>{t("colLine")}</th>
+            <th>{t("colProduct")}</th>
+            <th>{t("colSo")}</th>
+            <th className={s.num}>{t("colFinished")}</th>
+            <th className={s.num}>{t("colManHours")}</th>
+            <th className={s.num}>{t("colGrossUnit")}</th>
+            <th className={s.num}>{t("colGross")}</th>
+            <th className={s.num}>{t("colGrossMh")}</th>
+            {canChange ? <th /> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td style={{ whiteSpace: "nowrap" }}>
+                <Link href={`/yields?date=${r.run_date}`}>{fmtDate(r.run_date, lang)}</Link>
+              </td>
+              <td>{t(lineLabelKey(r.line_key))}</td>
+              <td>
+                <span className={s.code}>{r.product_num}</span>
+                <span className={s.sub}>{r.product_name}</span>
+                {r.note ? <span className={s.note}>{r.note}</span> : null}
+              </td>
+              <td className={s.code}>{r.so_numbers.join(", ") || "—"}</td>
+              <td className={s.num}>
+                {fmtInt(r.finished_units, lang)}
+                {r.is_multipack && r.single_units !== null ? (
+                  <span className={s.sub}>{fmtInt(r.single_units, lang)} {t("colSingles").toLowerCase()}</span>
+                ) : null}
+              </td>
+              <td className={s.num}>
+                {fmtNum(r.man_hours, lang)}
+                {r.people !== null && r.hours !== null ? (
+                  <span className={s.sub}>{fmtNum(r.people, lang)} × {fmtNum(r.hours, lang)}</span>
+                ) : null}
+              </td>
+              <td className={s.num} title={r.gross_source ? t(`source_${r.gross_source}`) : undefined}>
+                {r.gross_source === "house" ? (
+                  <span className={s.sub}>{t("houseStock")}</span>
+                ) : r.gross_per_unit === null && r.finished_units > 0 ? (
+                  <span className={s.missing}>{t("missing")}</span>
+                ) : (
+                  fmtUnitMoney(r.gross_per_unit, lang)
+                )}
+              </td>
+              <td className={s.num}>{fmtMoney(r.gross_total, lang)}</td>
+              <td className={s.num}>{fmtMoney(grossPerManHourOf(r), lang)}</td>
+              {canChange ? (
+                <td className={s.actions}>
+                  {canChange(r) ? <RowActions id={r.id} date={r.run_date} lang={lang} /> : null}
+                </td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

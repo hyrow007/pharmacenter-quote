@@ -27,6 +27,7 @@ import {
 } from "./_lib/model";
 import EntryForm from "./_components/EntryForm";
 import RowActions from "./_components/RowActions";
+import EntriesTable, { sortEntries } from "./_components/EntriesTable";
 import s from "./yields.module.css";
 
 // /yields -- the daily log. Served at yield.pharmacenter.app/ by the host
@@ -72,6 +73,9 @@ export default async function YieldsPage({
   for (const r of rows) byDay.set(r.run_date, addToRollup(byDay.get(r.run_date) ?? emptyRollup(), r));
   const week = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 7);
   const dayTotal = byDay.get(date) ?? emptyRollup();
+  // Every individual entry on those working days, newest first.
+  const weekDays = new Set(week.map(([d]) => d));
+  const recentRows = sortEntries(rows.filter((r) => weekDays.has(r.run_date)));
 
   const canChange = (r: (typeof rows)[number]) =>
     admin || (r.source === "app" && r.created_by === user.email);
@@ -220,6 +224,15 @@ export default async function YieldsPage({
               </section>
             </div>
           </div>
+
+          <section className={s.card} style={{ marginTop: 20 }}>
+            <h2 className={s.cardTitle}>{t("recentEntries")} ({recentRows.length})</h2>
+            {recentRows.length === 0 ? (
+              <p className={s.empty}>{t("noEntries")}</p>
+            ) : (
+              <EntriesTable rows={recentRows} lang={lang} canChange={canChange} />
+            )}
+          </section>
         </div>
       </main>
     </div>
