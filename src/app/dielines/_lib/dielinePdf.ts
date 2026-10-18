@@ -250,12 +250,109 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
   return p;
 }
 
+// ---- reference-page legends: the same keys the builder shows under each drawing ----
+
+const SW = {
+  cut: hex("#c0216a"),
+  notch: hex("#e07800"),
+  sage: SAGE,
+  seal: hex("#efe9da"),
+  sealLine: hex("#cfc4a8"),
+  sealEdge: hex("#e3dcc9"),
+  mark: TEAL,
+  clear: TEAL_2,
+  bleed: hex("#8a9498"),
+  white: hex("#ffffff"),
+};
+
+type LegendKey = "cut" | "notch" | "tear" | "hole" | "fold" | "foldEdge" | "seal" | "mark" | "clear" | "bleed";
+const LEGEND_LABEL: Record<LegendKey, string> = {
+  cut: "Cut line",
+  notch: "Notch",
+  tear: "Tear line",
+  hole: "Hang hole 6 mm",
+  fold: "Fold",
+  foldEdge: "Fold",
+  seal: "Seal 6 mm",
+  mark: "Eye mark 6 × 6 mm",
+  clear: "Clear area",
+  bleed: "Bleed 1 mm",
+};
+
+/** Which keys each drawing carries -- only what that drawing actually shows. */
+export function legendKeys(spec: SachetSpec, view: "flat" | "finished"): LegendKey[] {
+  const notch: LegendKey[] = spec.notch !== "none" ? ["notch"] : [];
+  const hole: LegendKey[] = spec.hangHole ? ["hole"] : [];
+  if (view === "flat") return ["cut", ...notch, ...hole, "fold", "seal", "mark", "clear", "bleed"];
+  return ["cut", ...notch, ...(spec.notch !== "none" ? (["tear"] as LegendKey[]) : []), ...hole, "foldEdge", "seal", "mark", "clear"];
+}
+
+/** One swatch, 6 x 3.4 mm, top-left at (x, y). */
+function swatch(p: PageCanvas, key: LegendKey, spec: SachetSpec, x: number, y: number) {
+  const w = 6, h = 3.4, cy = y + h / 2;
+  switch (key) {
+    case "cut": p.line(x, cy, x + w, cy, { stroke: SW.cut, width: 0.6 }); break;
+    case "notch":
+      if (spec.notch === "slit") p.line(x, cy, x + w, cy, { stroke: SW.notch, width: 0.6 });
+      else p.poly([[x + 1.3, y + h], [x + w / 2, y], [x + w - 1.3, y + h]], { fill: SW.notch });
+      break;
+    case "tear": p.line(x, cy, x + w, cy, { stroke: SW.cut, width: 0.6, dash: [0.01, 1], cap: 1 }); break;
+    case "hole": p.circle(x + w / 2, cy, 1.5, { stroke: SW.cut, fill: SW.white, width: 0.5 }); break;
+    case "fold": p.line(x, cy, x + w, cy, { stroke: SW.sage, width: 0.6, dash: [1.4, 0.8] }); break;
+    case "foldEdge": p.line(x, cy, x + w, cy, { stroke: SW.sage, width: 0.9 }); break;
+    case "seal": {
+      p.rect(x, y, w, h, { fill: SW.seal });
+      // waffle: 45-degree lines both ways, clipped to the box by hand
+      const step = 1.1;
+      for (let c = -h; c < w + h; c += step) {
+        for (const dir of [1, -1]) {
+          // line through (x + c, y) going down-right (dir 1) or down-left (dir -1)
+          const pts: [number, number][] = [];
+          const x0 = x + c, y0 = y;
+          const x1 = x0 + dir * h, y1 = y + h;
+          // clip parametric segment to [x, x+w]
+          let t0 = 0, t1 = 1;
+          const dx = x1 - x0;
+          if (dx !== 0) {
+            const ta = (x - x0) / dx, tb = (x + w - x0) / dx;
+            t0 = Math.max(t0, Math.min(ta, tb));
+            t1 = Math.min(t1, Math.max(ta, tb));
+          }
+          if (t1 <= t0) continue;
+          pts.push([x0 + dx * t0, y0 + h * t0], [x0 + dx * t1, y0 + h * t1]);
+          p.line(pts[0][0], pts[0][1], pts[1][0], pts[1][1], { stroke: SW.sealLine, width: 0.15 });
+        }
+      }
+      p.rect(x, y, w, h, { stroke: SW.sealEdge, width: 0.2 });
+      break;
+    }
+    case "mark": p.rect(x, y, w, h, { fill: SW.mark }); break;
+    case "clear": p.rect(x, y, w, h, { stroke: SW.clear, width: 0.25, dash: [0.8, 0.6] }); break;
+    case "bleed": p.rect(x, y, w, h, { stroke: SW.bleed, width: 0.25, dash: [0.8, 0.6] }); break;
+  }
+}
+
+/** A single centered row of keys with its baseline near y. */
+function legendRow(p: PageCanvas, keys: LegendKey[], spec: SachetSpec, y: number) {
+  const size = 2.8, swW = 6, gap = 1.8, between = 7;
+  const widths = keys.map((k) => swW + gap + textWidth(LEGEND_LABEL[k], size, "regular"));
+  const total = widths.reduce((a, b) => a + b, 0) + between * (keys.length - 1);
+  let x = (p.widthMm - total) / 2;
+  keys.forEach((k, i) => {
+    swatch(p, k, spec, x, y - 2.9);
+    p.text(x + swW + gap, y, LEGEND_LABEL[k], { color: gray(0.4), size });
+    x += widths[i] + between;
+  });
+}
+
 function referencePage(
   title: string,
   img: { name: string; width: number; height: number },
   hasLogo: boolean,
   fileName: string,
   today: string,
+  spec: SachetSpec,
+  keys: LegendKey[],
 ) {
   const pageW = 279.4, pageH = 215.9; // US Letter, landscape
   const p = new PageCanvas(pageW, pageH);
@@ -271,10 +368,11 @@ function referencePage(
     p.text(pageW - 18, 18, "Reference only", { color: TEAL_2, size: 2.8, font: "bold", align: "right" });
     p.rect(18, 25, pageW - 36, 0.7, { fill: TEAL });
     p.text(18, 31, "As drawn in the PharmaCenter dieline builder. Use page 1 for artwork.", { color: gray(0.45), size: 2.6 });
-    const maxW = pageW - 36, maxH = pageH - 58;
+    const maxW = pageW - 36, maxH = pageH - 70; // room below for the legend
     const s = Math.min(maxW / img.width, maxH / img.height);
     const w = img.width * s, h = img.height * s;
     p.image(img.name, (pageW - w) / 2, 38 + (maxH - h) / 2, w, h);
+    legendRow(p, keys, spec, pageH - 21);
     footer(p, fileName, today);
   });
   return p;
@@ -388,12 +486,12 @@ export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGEle
   if (flatSnap) {
     const j = await svgToJpeg(flatSnap, 2600);
     jpegs.push({ name: "RefFlat", ...j });
-    pages.push(referencePage("Film laid flat", { name: "RefFlat", ...j }, hasLogo, fileName, today));
+    pages.push(referencePage("Film laid flat", { name: "RefFlat", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "flat")));
   }
   if (finishedSnap) {
     const j = await svgToJpeg(finishedSnap, 2600);
     jpegs.push({ name: "RefFinished", ...j });
-    pages.push(referencePage("Finished sachet", { name: "RefFinished", ...j }, hasLogo, fileName, today));
+    pages.push(referencePage("Finished sachet", { name: "RefFinished", ...j }, hasLogo, fileName, today, spec, legendKeys(spec, "finished")));
   }
 
   const bytes = buildPdf({ title: dielineFileName(spec).replace(/\.pdf$/, ""), pages, layers: LAYERS, jpegs });
