@@ -20,12 +20,32 @@ import { grossForEntry, isHouseCustomer, type SoItemLike, type YieldEntry } from
 // therefore matches its -N shipments, and the one used is the first that
 // shipped on or after the run date -- the shipment those units most likely
 // went out on -- or the latest one if none did.
+//
+// Until then an entry carries the product's LAST real gross (Fishbowl, sheet
+// or typed -- the most recent run that had one) as a provisional figure,
+// gross_source = 'last', shown with "≈". The real Fishbowl number replaces it
+// as soon as the order ships. (User's rule, 2026-10-17.)
 const MAX_SOS = 200;
+const REAL_SOURCES = ["fishbowl", "sheet", "manual"];
 
 export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntry[]): Promise<number> {
   const pending = rows.filter(
-    (r) => r.gross_per_unit === null && r.gross_source !== "house" && r.finished_units > 0 && r.so_numbers.length > 0,
+    (r) =>
+      (r.gross_per_unit === null || r.gross_source === "last") &&
+      r.gross_source !== "house" &&
+      r.finished_units > 0,
   );
+  if (pending.length === 0) return 0;
+  let filled = await fillFromFishbowl(supabase, pending.filter((r) => r.so_numbers.length > 0));
+  filled += await fillFromLastRun(
+    supabase,
+    pending.filter((r) => r.gross_per_unit === null && r.gross_source !== "house"),
+  );
+  return filled;
+}
+
+// Real gross from the shipped SO line.
+async function fillFromFishbowl(supabase: SupabaseClient, pending: YieldEntry[]): Promise<number> {
   if (pending.length === 0) return 0;
 
   const wanted = Array.from(new Set(pending.flatMap((r) => r.so_numbers))).slice(0, MAX_SOS);
@@ -64,7 +84,7 @@ export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntr
     const g = grossForEntry(r.product_num, cands, itemsBySo);
     if (!g) {
       // Every order it names is one of ours -> house stock, not a missing gross.
-      if (cands.length > 0 && cands.every((so) => house.has(so))) {
+      if (r.gross_source !== "last" && cands.length > 0 && cands.every((so) => house.has(so))) {
         const { error: hErr } = await supabase
           .from("yield_entries")
           .update({ gross_source: "house" })
@@ -78,13 +98,54 @@ export async function fillMissingGross(supabase: SupabaseClient, rows: YieldEntr
       .from("yield_entries")
       .update({ gross_per_unit: g.each_gross, gross_source: "fishbowl", unit_price: g.each_price, unit_cost: g.each_cost })
       .eq("id", r.id)
-      .is("gross_per_unit", null);
+      // Only over a blank or a provisional figure -- never a real one.
+      .or("gross_per_unit.is.null,gross_source.eq.last");
     if (upErr) continue;
     r.gross_per_unit = g.each_gross;
     r.gross_source = "fishbowl";
     r.unit_price = g.each_price;
     r.unit_cost = g.each_cost;
     r.gross_total = r.finished_units * g.each_gross;
+    filled += 1;
+  }
+  return filled;
+}
+
+// Provisional gross: the product's most recent real gross, from an earlier
+// entry. One small query per product; a page shows a few dozen at most.
+async function fillFromLastRun(supabase: SupabaseClient, pending: YieldEntry[]): Promise<number> {
+  if (pending.length === 0) return 0;
+  const products = Array.from(new Set(pending.map((r) => r.product_num))).slice(0, 100);
+  const lastByProduct = new Map<string, number>();
+  await Promise.all(
+    products.map(async (p) => {
+      const { data } = await supabase
+        .from("yield_entries")
+        .select("gross_per_unit")
+        .eq("product_num", p)
+        .in("gross_source", REAL_SOURCES)
+        .not("gross_per_unit", "is", null)
+        .order("run_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const g = data ? Number(data.gross_per_unit) : NaN;
+      if (Number.isFinite(g)) lastByProduct.set(p, g);
+    }),
+  );
+  let filled = 0;
+  for (const r of pending) {
+    const g = lastByProduct.get(r.product_num);
+    if (g === undefined) continue;
+    const { error } = await supabase
+      .from("yield_entries")
+      .update({ gross_per_unit: g, gross_source: "last" })
+      .eq("id", r.id)
+      .is("gross_per_unit", null);
+    if (error) continue;
+    r.gross_per_unit = g;
+    r.gross_source = "last";
+    r.gross_total = r.finished_units * g;
     filled += 1;
   }
   return filled;

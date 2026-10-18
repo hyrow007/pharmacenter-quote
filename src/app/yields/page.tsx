@@ -161,10 +161,10 @@ export default async function YieldsPage({
                               ) : r.gross_per_unit === null && r.finished_units > 0 ? (
                                 <span className={s.missing}>{t("missing")}</span>
                               ) : (
-                                fmtUnitMoney(r.gross_per_unit, lang)
+                                `${r.gross_source === "last" ? "≈ " : ""}${fmtUnitMoney(r.gross_per_unit, lang)}`
                               )}
                             </td>
-                            <td className={s.num}>{fmtMoney(r.gross_total, lang)}</td>
+                            <td className={s.num}>{r.gross_source === "last" && r.gross_total !== null ? "≈ " : ""}{fmtMoney(r.gross_total, lang)}</td>
                             <td className={s.num}>{fmtMoney(grossPerManHourOf(r), lang)}</td>
                             <td className={s.actions}>
                               {canChange(r) ? <RowActions id={r.id} date={date} lang={lang} /> : null}
@@ -189,6 +189,7 @@ export default async function YieldsPage({
                 {dayTotal.grossMissing > 0 ? (
                   <p className={s.warn}>{t("missingNote", { n: dayTotal.grossMissing })}</p>
                 ) : null}
+                {dayTotal.provisional > 0 ? <p className={s.hint}>{t("provisionalNote", { n: dayTotal.provisional })}</p> : null}
                 {dayTotal.house > 0 ? <p className={s.hint}>{t("houseNote", { n: dayTotal.house })}</p> : null}
               </section>
 

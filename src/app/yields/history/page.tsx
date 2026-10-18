@@ -131,6 +131,7 @@ export default async function YieldsHistoryPage({
             </div>
           </div>
           {total.grossMissing > 0 ? <p className={s.warn}>{t("missingNote", { n: total.grossMissing })}</p> : null}
+          {total.provisional > 0 ? <p className={s.hint}>{t("provisionalNote", { n: total.provisional })}</p> : null}
           {total.house > 0 ? <p className={s.hint}>{t("houseNote", { n: total.house })}</p> : null}
 
           <section className={s.card}>

@@ -85,10 +85,10 @@ export default function EntriesTable({
                 ) : r.gross_per_unit === null && r.finished_units > 0 ? (
                   <span className={s.missing}>{t("missing")}</span>
                 ) : (
-                  fmtUnitMoney(r.gross_per_unit, lang)
+                  `${r.gross_source === "last" ? "≈ " : ""}${fmtUnitMoney(r.gross_per_unit, lang)}`
                 )}
               </td>
-              <td className={s.num}>{fmtMoney(r.gross_total, lang)}</td>
+              <td className={s.num}>{r.gross_source === "last" && r.gross_total !== null ? "≈ " : ""}{fmtMoney(r.gross_total, lang)}</td>
               <td className={s.num}>{fmtMoney(grossPerManHourOf(r), lang)}</td>
               {canChange ? (
                 <td className={s.actions}>

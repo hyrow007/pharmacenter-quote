@@ -85,6 +85,8 @@ const en = {
   source_fishbowl: "from Fishbowl",
   source_manual: "entered by hand",
   source_house: "house-brand stock — our own order, no sale, so no gross",
+  source_last: "provisional — the last run's gross for this product; replaced by the real number from Fishbowl once the order ships",
+  provisionalNote: "{n} entries use the last run's gross (≈) until their order ships; they update by themselves when Fishbowl has the real number.",
   houseStock: "house stock",
   houseNote: "{n} house-brand stock runs have no gross by design and are left out of gross per man-hour.",
 
@@ -198,6 +200,8 @@ const es = {
   source_fishbowl: "de Fishbowl",
   source_manual: "ingresada a mano",
   source_house: "inventario de marca propia — orden nuestra, sin venta, sin bruto",
+  source_last: "provisional — el bruto de la última corrida de este producto; se reemplaza por el número real de Fishbowl cuando la orden se envíe",
+  provisionalNote: "{n} registros usan el bruto de la última corrida (≈) hasta que su orden se envíe; se actualizan solos cuando Fishbowl tenga el número real.",
   houseStock: "marca propia",
   houseNote: "{n} corridas de inventario de marca propia no tienen bruto a propósito y no cuentan en bruto por hora-hombre.",
 

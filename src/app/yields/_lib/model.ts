@@ -15,7 +15,7 @@ export const isLine = (v: unknown): v is LineKey =>
 export const lineLabelKey = (l: string): YKey =>
   (isLine(l) ? `line_${l}` : "line_other") as YKey;
 
-export type GrossSource = "sheet" | "fishbowl" | "manual" | "house";
+export type GrossSource = "sheet" | "fishbowl" | "manual" | "house" | "last";
 
 // A run on a sales order whose customer is PharmaCenter itself is house-brand
 // stock (FGBG and the like): production for our own shelf, sold later outside
@@ -151,10 +151,11 @@ export type Rollup = {
   grossMissing: number; // entries with finished > 0 and no gross
   grossManHours: number; // man-hours on entries that HAVE gross -- the honest denominator
   house: number; // house-brand stock runs: no sale, so no gross, and not missing
+  provisional: number; // entries carrying the last run's gross until their order ships
 };
 
 export function emptyRollup(): Rollup {
-  return { entries: 0, finished: 0, gross: 0, manHours: 0, grossMissing: 0, grossManHours: 0, house: 0 };
+  return { entries: 0, finished: 0, gross: 0, manHours: 0, grossMissing: 0, grossManHours: 0, house: 0, provisional: 0 };
 }
 
 export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
@@ -164,6 +165,7 @@ export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
   if (mh !== null) r.manHours += mh;
   if (e.gross_total !== null) {
     r.gross += e.gross_total;
+    if (e.gross_source === "last") r.provisional += 1;
     if (mh !== null) r.grossManHours += mh;
   } else if (e.gross_source === "house") {
     r.house += 1;
