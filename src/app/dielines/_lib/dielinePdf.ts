@@ -377,7 +377,7 @@ export async function downloadDieline(spec: SachetSpec, views: { flat: SVGSVGEle
   let hasUnwind = false;
   try {
     const img = await loadImage(`/dielines/unwind-${spec.unwind}.png`);
-    jpegs.push({ name: "Unwind", ...(await toJpeg(img, img.naturalWidth * 3, img.naturalHeight * 3)) });
+    jpegs.push({ name: "Unwind", ...(await toJpeg(img, img.naturalWidth, img.naturalHeight)) });
     hasUnwind = true;
   } catch {
     // The notes still say the position in words.
