@@ -257,7 +257,9 @@ export function marginFromLine(it: SoItemLike): {
   const shipped = toNum(it.qty_fulfilled);
   let each_cost: number | null = null;
   let each_gross: number | null = null;
-  if (price.each !== null && price.factor && cost && cost > 0 && shipped && shipped > 0) {
+  // A $0 line is an internal / no-charge order (e.g. our own FGBG brand on a
+  // PharmaCenter SO): there is no sale, so price minus cost is not a margin.
+  if (price.each !== null && price.each > 0 && price.factor && cost && cost > 0 && shipped && shipped > 0) {
     each_cost = Math.round((cost / (shipped * price.factor)) * 1e6) / 1e6;
     each_gross = Math.round((price.each - each_cost) * 1e6) / 1e6;
   }
