@@ -2008,6 +2008,10 @@ function ComponentPicker({
   spec,
   onPick,
   onCustom,
+  bulkTabs = [],
+  activeBulkTabId = null,
+  bulkTabCostOf,
+  onPickBulkTab,
 }: {
   /** "bulk" routes the search to the products table (PC-BK / CA-BK). */
   slot: PackagingSlot | "bulk";
@@ -2019,6 +2023,19 @@ function ComponentPicker({
   onPick: (opt: ComponentOption | null) => void;
   /** Commit the typed text as a hand-described part with no Fishbowl record. */
   onCustom: (name: string) => void;
+  /**
+   * Finished Product, bulk row only: the Bulk tabs priced on this quote.
+   *
+   * The row's real identity is WHICH BULK, and this box is where you go to
+   * say what a row is — so the bulk belongs in the same list as the parts,
+   * not only in a separate select two columns away that stays hidden until
+   * a second tab exists. A quote with one bulk still has to show which one
+   * is feeding the price.
+   */
+  bulkTabs?: BulkTabOption[];
+  activeBulkTabId?: string | null;
+  bulkTabCostOf?: (tabId: string) => number | null;
+  onPickBulkTab?: (tab: BulkTabOption) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -2221,6 +2238,62 @@ function ComponentPicker({
               exactly where a user has already given up looking.
               Deliberately NOT offered on an empty query: a blank description
               is worse than no part at all. */}
+          {slot === "bulk" && bulkTabs.length > 0 && onPickBulkTab ? (
+            <div style={{ borderBottom: "1px solid #e6ddcc" }}>
+              <div
+                style={{
+                  padding: "7px 10px 4px",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--ink-3, #7b7364)",
+                  background: "#fdf9f0",
+                }}
+              >
+                Priced on this quote
+              </div>
+              {bulkTabs.map((t) => {
+                const chosen =
+                  current.costSource === "Bulk tab" && activeBulkTabId === t.tabId;
+                const c = bulkTabCostOf ? bulkTabCostOf(t.tabId) : null;
+                return (
+                  <button
+                    key={t.tabId}
+                    type="button"
+                    onClick={() => {
+                      onPickBulkTab(t);
+                      setQ("");
+                      setOpen(false);
+                    }}
+                    style={{ ...rowBtn, background: "#fdf9f0" }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 13,
+                        color: "var(--teal-900, #0f4a56)",
+                      }}
+                    >
+                      {chosen ? "\u2713 " : ""}
+                      {t.label}
+                    </div>
+                    <div style={{ fontSize: 11.5, opacity: 0.8, marginTop: 2 }}>
+                      {/* The landed bulk cost this tab would hand the row, so
+                          the choice is made on the number rather than on the
+                          tab's name. A tab with no quantity yet prices
+                          nothing and says so rather than reading as free. */}
+                      {c !== null
+                        ? `${money(c * 1000, 2)} / 1,000 doses`
+                        : "not priced yet"}
+                      {t.partFpCode ? ` \u00b7 ${t.partFpCode}` : ""}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           {q.trim() && (
             <button
               type="button"
@@ -5014,6 +5087,40 @@ export default function PouchCostingBoard({
                       slot={
                         slotKeyOf(line)?.key === "bulk" ? "bulk" : line.slot
                       }
+                      bulkTabs={finishedProduct ? bulkTabOptions : []}
+                      activeBulkTabId={line.bulkTabId ?? defaultBulkTabId}
+                      bulkTabCostOf={(id) => bulkCostByTabId.get(id) ?? null}
+                      onPickBulkTab={(t) => {
+                        // Picking from THIS box always renames the row.
+                        //
+                        // The small select under Cost source preserves a
+                        // hand-picked part, and rightly so: it is a
+                        // cost-routing control and the part is not what you
+                        // went there to change. This box is the opposite —
+                        // it is where you say what the row IS, so choosing a
+                        // bulk here is a statement about identity. Leaving a
+                        // typed "Women' Mood Bulk" on a row now priced from
+                        // the Saffron tab is exactly the silent disagreement
+                        // the rest of this board exists to prevent.
+                        setLine(line.id, {
+                          costSource: "Bulk tab",
+                          bulkTabId: t.tabId,
+                          ...(t.partFpCode
+                            ? {
+                                fpCode: t.partFpCode,
+                                name: t.partName ?? t.partFpCode,
+                                customPart: false,
+                              }
+                            : {
+                                // The tab names no Fishbowl part, so the
+                                // tab's own label is the truest name the row
+                                // can carry.
+                                fpCode: null,
+                                customPart: true,
+                                name: t.label,
+                              }),
+                        });
+                      }}
                       slotKey={slotKeyOf(line)?.key}
                       current={line}
                       spec={spec}
