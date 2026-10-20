@@ -32,3 +32,22 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
     { title: "Dieline layers", text: "Lines in the spot color \"Dieline\" do not print. Hide or delete those layers before sending art to print; keep the eye mark." },
   ];
 }
+
+/** Bottle labels -- the same idea, for a plain wrap-around label. */
+export function labelGuidelines(cornerR: number, lang: Lang): Guideline[] {
+  const r = String(Math.round(cornerR * 100) / 100);
+  if (lang === "es") {
+    return [
+      { title: "Zona segura de texto", text: "Mantenga todo el texto, los códigos de barras y los gráficos importantes dentro de la zona segura, a 1.5 mm del corte." },
+      { title: "Sangrado", text: "Extienda el color de fondo y las imágenes 1 mm más allá de la línea de corte." },
+      { title: `Esquinas (radio ${r} mm)`, text: "La etiqueta se corta con esquinas redondeadas; no coloque detalles importantes en las esquinas." },
+      { title: "Capas Dieline", text: "Las líneas en el color directo \"Dieline\" no se imprimen. Oculte o borre esas capas antes de enviar el arte." },
+    ];
+  }
+  return [
+    { title: "Text safe zone", text: "Keep all text, barcodes and important graphics inside the text safe zone, 1.5 mm in from the cut." },
+    { title: "Bleed", text: "Run background color and images 1 mm past the cut line." },
+    { title: `Corners (${r} mm radius)`, text: "The label is cut with rounded corners; keep important detail out of the corners." },
+    { title: "Dieline layers", text: "Lines in the spot color \"Dieline\" do not print. Hide or delete those layers before sending art to print." },
+  ];
+}

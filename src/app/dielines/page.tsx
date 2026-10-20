@@ -8,7 +8,7 @@ import s from "./dielines.module.css";
 
 // /dielines -- the chooser: which kind of dieline. Served at
 // dieline.pharmacenter.app/ by the host rewrite in middleware.ts. Sachet is
-// built (/dielines/sachet); bottle is next; blister comes after.
+// built (/dielines/sachet), bottle labels too (/dielines/bottle); blister is next.
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dielines" };
@@ -62,7 +62,7 @@ export default async function DielinesPage() {
 
   const types = [
     { key: "sachet", icon: <SachetIcon />, title: t("typeSachet"), sub: t("typeSachetSub"), href: `${base}/sachet`, badge: null },
-    { key: "bottle", icon: <BottleIcon />, title: t("typeBottle"), sub: t("typeBottleSub"), href: null, badge: t("badgeNext") },
+    { key: "bottle", icon: <BottleIcon />, title: t("typeBottle"), sub: t("typeBottleSub"), href: `${base}/bottle`, badge: null },
     { key: "blister", icon: <BlisterIcon />, title: t("typeBlister"), sub: t("typeBlisterSub"), href: null, badge: t("badgeSoon") },
   ];
 

@@ -482,7 +482,7 @@ async function svgToJpeg(snap: ReturnType<typeof snapshotSvg>, widthPx: number) 
   }
 }
 
-function loadImage(src: string) {
+export function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -491,7 +491,7 @@ function loadImage(src: string) {
   });
 }
 
-async function toJpeg(img: CanvasImageSource, w: number, h: number) {
+export async function toJpeg(img: CanvasImageSource, w: number, h: number) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
