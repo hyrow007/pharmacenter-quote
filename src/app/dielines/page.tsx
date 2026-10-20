@@ -26,12 +26,13 @@ function SachetIcon() {
   );
 }
 function BottleIcon() {
+  // A vitamin bottle: wide ridged cap, short neck, label band on the body.
   return (
     <svg viewBox="0 0 64 64" aria-hidden="true">
-      <rect x="24" y="5" width="16" height="8" rx="1.5" {...ICON} />
-      <path d="M27 13v5M37 13v5" {...ICON} />
-      <path d="M19 27c0-6 4-9 8-9h10c4 0 8 3 8 9v26c0 3-2 5-5 5H24c-3 0-5-2-5-5z" {...ICON} />
-      <rect x="19" y="32" width="26" height="15" {...ICON} strokeWidth={1.6} />
+      <rect x="18" y="5" width="28" height="12" rx="2.5" {...ICON} />
+      <path d="M25 9v4M30.3 9v4M35.7 9v4M41 9v4" {...ICON} strokeWidth={2} />
+      <path d="M22 17v3.5Q16 22.5 16 29v24q0 5 5 5h22q5 0 5-5V29q0-6.5-6-8.5V17" {...ICON} />
+      <path d="M16 31H48M16 49H48" {...ICON} />
     </svg>
   );
 }
