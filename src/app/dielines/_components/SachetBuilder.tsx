@@ -340,7 +340,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
             <figure className={s.roll} aria-live="polite">
               {/* The roll pictures are the converter's own chart, cropped. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={73} />
+              <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={82} />
               <figcaption>
                 <b>{positionLabel}</b>
                 {t(UNWIND_HINT[spec.unwind])}

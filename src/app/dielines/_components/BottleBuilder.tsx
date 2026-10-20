@@ -139,7 +139,7 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
               unwind positions, so the numbers mean the same thing. */}
           <figure className={s.roll} aria-live="polite">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={73} />
+            <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={82} />
             <figcaption>
               <b>{positionLabel}</b>
               {t(UNWIND_HINT[spec.unwind])}

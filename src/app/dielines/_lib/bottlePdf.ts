@@ -205,7 +205,7 @@ function labelPage(spec: LabelSpec, d: Die, today: string, hasLogo: boolean, has
       y += 4.2;
     }
     if (hasUnwind) {
-      const iw = 34, ih = iw * (73 / 112);
+      const iw = 34, ih = iw * (700 / 960);
       p.image("Unwind", right - iw, notesTop + 9, iw, ih);
       p.text(right - iw / 2, notesTop + 11 + ih + 2, T.unwindPos(spec.unwind), { color: TEAL, size: 2.4, font: "bold", align: "center" });
     }
