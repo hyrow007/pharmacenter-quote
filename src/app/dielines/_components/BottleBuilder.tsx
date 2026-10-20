@@ -85,6 +85,7 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const specRows: [string, string][] = [
     [t("bsSize"), `${sizeIn(d)}  (${sizeMm(d)})`],
     [t("bsDie"), `#${d.die}`],
+    [t("bsVendor"), d.vendor],
     [t("bsCorners"), t("bsCornersV", { r: mmText(d.r) })],
     [t("sBleed"), "1 mm"],
     [t("bsSafe"), t("bsSafeV", { s: `${inText(safeH)} × ${inText(safeL)}` })],
@@ -114,7 +115,7 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
               <button
                 key={x.die} type="button" aria-pressed={x.die === spec.die}
                 onClick={() => set({ die: x.die })}
-                title={x.note}
+                title={`${x.vendor} #${x.die}${x.note ? ` · ${x.note}` : ""}`}
               >
                 {unit === "mm" ? `${mmText(x.h)} × ${mmText(x.l)}` : `${inNum(x.h)} × ${inNum(x.l)}`}
                 <small>#{x.die}</small>

@@ -24,33 +24,36 @@ export type Die = {
   l: number;
   /** Corner radius of the cut, mm. */
   r: number;
+  /** The label printer whose die this is (internal -- not printed on the customer file). */
+  vendor: string;
   note?: string;
 };
 
+// All 21 are Stickler dies (Stickler Label Printing Solutions templates).
 // Sorted by height, then length. Two dies are drawn from the template's own
 // numbers where the file name rounds: #6812 is exactly 2.25 x 6 in (57.15 mm).
 export const DIES: Die[] = [
-  { die: 3911, h: 38, l: 114, r: 2, note: "Small pump spray" },
-  { die: 3942, h: 44, l: 126, r: 2 },
-  { die: 4499, h: 44.45, l: 139.7, r: 2 },
-  { die: 4002, h: 50, l: 140, r: 2 },
-  { die: 6812, h: 57.15, l: 152.4, r: 4.23 },
-  { die: 15500, h: 57, l: 175, r: 2 },
-  { die: 3100, h: 58, l: 147, r: 3.58 },
-  { die: 15720, h: 63, l: 173, r: 2 },
-  { die: 4632, h: 65, l: 148, r: 2 },
-  { die: 6766, h: 65, l: 170, r: 2 },
-  { die: 16260, h: 66.6, l: 152.4, r: 3.17 },
-  { die: 3396, h: 66.7, l: 171.5, r: 2 },
-  { die: 4545, h: 67, l: 143, r: 2 },
-  { die: 3521, h: 67, l: 190, r: 2 },
-  { die: 3791, h: 68, l: 175, r: 2 },
-  { die: 3447, h: 69.5, l: 178, r: 2.24 },
-  { die: 6807, h: 70, l: 156, r: 2 },
-  { die: 6400, h: 70, l: 180, r: 2 },
-  { die: 6881, h: 70, l: 190, r: 2 },
-  { die: 4438, h: 70, l: 195, r: 2 },
-  { die: 3090, h: 70, l: 200, r: 2 },
+  { die: 3911, h: 38, l: 114, r: 2, vendor: "Stickler", note: "Small pump spray" },
+  { die: 3942, h: 44, l: 126, r: 2, vendor: "Stickler" },
+  { die: 4499, h: 44.45, l: 139.7, r: 2, vendor: "Stickler" },
+  { die: 4002, h: 50, l: 140, r: 2, vendor: "Stickler" },
+  { die: 6812, h: 57.15, l: 152.4, r: 4.23, vendor: "Stickler" },
+  { die: 15500, h: 57, l: 175, r: 2, vendor: "Stickler" },
+  { die: 3100, h: 58, l: 147, r: 3.58, vendor: "Stickler" },
+  { die: 15720, h: 63, l: 173, r: 2, vendor: "Stickler" },
+  { die: 4632, h: 65, l: 148, r: 2, vendor: "Stickler" },
+  { die: 6766, h: 65, l: 170, r: 2, vendor: "Stickler" },
+  { die: 16260, h: 66.6, l: 152.4, r: 3.17, vendor: "Stickler" },
+  { die: 3396, h: 66.7, l: 171.5, r: 2, vendor: "Stickler" },
+  { die: 4545, h: 67, l: 143, r: 2, vendor: "Stickler" },
+  { die: 3521, h: 67, l: 190, r: 2, vendor: "Stickler" },
+  { die: 3791, h: 68, l: 175, r: 2, vendor: "Stickler" },
+  { die: 3447, h: 69.5, l: 178, r: 2.24, vendor: "Stickler" },
+  { die: 6807, h: 70, l: 156, r: 2, vendor: "Stickler" },
+  { die: 6400, h: 70, l: 180, r: 2, vendor: "Stickler" },
+  { die: 6881, h: 70, l: 190, r: 2, vendor: "Stickler" },
+  { die: 4438, h: 70, l: 195, r: 2, vendor: "Stickler" },
+  { die: 3090, h: 70, l: 200, r: 2, vendor: "Stickler" },
 ];
 
 export type LabelUnwind = 1 | 2 | 3 | 4;
