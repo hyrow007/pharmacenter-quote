@@ -111,8 +111,13 @@ export function parseSoNumbers(raw: string): string[] {
 // unit. "Unit" is NOT one finished unit -- 1075 sells at 3,820 per "Unit" with
 // 52 ordered, i.e. 52 thousand bottles at $3.82. So only "Each" counts as each;
 // "Unit" and a missing unit are both unknown, and the form asks for the gross.
+//
+// UPDATE 2026-10-20: the user confirmed "Unit" ALWAYS means 1,000 in
+// PharmaCenter's Fishbowl. Checked on 14866 / 0430: $2,680 per Unit, 2.124
+// Units shipped against ~2,124 bottles logged -> $2.68 a bottle. So "un /
+// Unit" now converts at 1,000. A line with NO unit is still unknown.
 const EACH_UNITS = new Set(["ea", "each"]);
-const THOUSAND_RE = /^(thousand|per thousand|1000|1,000|m units?|millar|mil)$/i;
+const THOUSAND_RE = /^(un|unit|units|thousand|per thousand|1000|1,000|m units?|millar|mil)$/i;
 
 export type PriceUnit = { factor: number | null; label: string | null };
 export function unitFactor(uom: string | null | undefined, uomName: string | null | undefined): PriceUnit {
