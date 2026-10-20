@@ -46,7 +46,7 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const drawing = labelSvg(spec, { safe: t("bSafe"), offRoll: t("offRoll") }, t("bFlat"));
   const positionLabel = t("position", { n: spec.unwind });
   const bottle = bottleOf(bottleCc);
-  const onBottle = onBottleSvg(spec, bottle, { front: t("bFront"), above: t("bAbove") }, t("bOnBottle"));
+  const onBottle = onBottleSvg(spec, bottle, { front: t("bFront"), back: t("bBack"), above: t("bAbove"), gap: t("bGap"), overlap: t("bOverlapShort") }, t("bOnBottle"));
   const f = fit(d, bottle);
   const r0 = (n: number) => String(Math.round(n));
 

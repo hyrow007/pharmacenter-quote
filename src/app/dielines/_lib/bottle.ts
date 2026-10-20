@@ -207,70 +207,105 @@ export function fit(d: Die, b: Bottle) {
   };
 }
 
-export type OnBottleLabels = { front: string; above: string };
+export type OnBottleLabels = { front: string; back: string; above: string; gap: string; overlap: string };
 
-/** Front view of the bottle with the label on it, plus a small top view. */
+/** Front and back views of the bottle with the label on it, plus a top view. */
 export function onBottleSvg(spec: LabelSpec, b: Bottle, L: OnBottleLabels, ariaLabel: string): string {
   const d = dieOf(spec);
   const bd = bottleDims(b);
-  const { h, r, neckH, neckW, shoulder, heel, wallTop, capH, capW } = bd;
-  // y grows downward; the base sits at y = 0 and the bottle rises into negative y
-  const Y = (z: number) => -z;
-  let g = "";
-  g += `<defs><linearGradient id="bt-shade" x1="0" x2="1" y1="0" y2="0">` +
-    `<stop offset="0" stop-color="#000" stop-opacity="0.12"/><stop offset="0.35" stop-color="#000" stop-opacity="0"/>` +
-    `<stop offset="0.7" stop-color="#000" stop-opacity="0.03"/><stop offset="1" stop-color="#000" stop-opacity="0.16"/></linearGradient></defs>`;
-  // body outline: base with a rounded heel, straight wall, curved shoulder into the neck
-  const nx = neckW / 2;
-  const body =
-    `M${-r + heel} ${Y(0)}H${r - heel}Q${r} ${Y(0)} ${r} ${Y(heel)}V${Y(wallTop)}` +
-    `Q${r} ${Y(wallTop + shoulder)} ${nx} ${Y(wallTop + shoulder)}V${Y(h)}H${-nx}V${Y(wallTop + shoulder)}` +
-    `Q${-r} ${Y(wallTop + shoulder)} ${-r} ${Y(wallTop)}V${Y(heel)}Q${-r} ${Y(0)} ${-r + heel} ${Y(0)}Z`;
-  g += `<path class="s-bottle" d="${body}"/>`;
-  g += `<path d="${body}" fill="url(#bt-shade)"/>`;
-  // cap with ridges
-  const cy = Y(h - 1);
-  g += `<rect class="s-cap" x="${-capW / 2}" y="${cy - capH}" width="${capW}" height="${capH}" rx="1.5"/>`;
-  for (let x = -capW / 2 + 2.5; x < capW / 2 - 1.5; x += 2.2) {
-    g += `<path class="s-capline" d="M${x} ${cy - capH + 1.5}V${cy - 1.5}"/>`;
-  }
-  // the label, as seen from the front: the part facing us is foreshortened
-  const half = d.l / 2 / r; // half the wrap angle, radians
-  const vis = half >= Math.PI / 2 ? r : r * Math.sin(half);
-  const lz = (bd.panelBottom + bd.panelTop) / 2; // centered on the panel
-  const top = Y(lz + d.h / 2), lh = d.h;
-  g += `<rect class="s-blabel" x="${-vis}" y="${top}" width="${2 * vis}" height="${lh}" rx="${Math.min(d.r, 2)}"/>`;
-  g += `<rect x="${-vis}" y="${top}" width="${2 * vis}" height="${lh}" fill="url(#bt-shade)"/>`;
-  const fs = Math.min(7, lh * 0.22, vis * 0.38);
-  g += `<text class="t-copy" x="0" y="${top + lh / 2}" text-anchor="middle" dominant-baseline="central" style="font-size:${fs}px">COPY</text>`;
-  // dimensions: overall height on the left, diameter below
-  const lx = -r - 7;
-  g += `<path class="s-dim" d="M${lx} ${Y(0)}V${Y(h)}M${lx - 1.4} ${Y(0)}H${lx + 1.4}M${lx - 1.4} ${Y(h)}H${lx + 1.4}"/>`;
-  g += `<text class="t" x="${lx - 1.6}" y="${Y(h / 2)}" text-anchor="middle" transform="rotate(-90 ${lx - 1.6} ${Y(h / 2)})">${inText(h)} (${mmText(Math.round(h))} mm)</text>`;
-  g += `<path class="s-dim" d="M${-r} 6H${r}M${-r} 4.6V7.4M${r} 4.6V7.4"/>`;
-  g += `<text class="t" x="0" y="11" text-anchor="middle">Ø ${inText(2 * r)} (${mmText(Math.round(2 * r))} mm)</text>`;
-  g += `<text class="t-sub" x="0" y="${Y(h) - capH - 4}" text-anchor="middle">${esc(L.front)}</text>`;
-  // top view: the bottle as a circle, the label as an arc around the front
+  const { h, r, neckW, shoulder, heel, wallTop, capH, capW } = bd;
   // Every bottle is drawn in the same frame, sized for the largest, so
   // switching bottles shows their real difference in size.
   const big = bottleDims(BOTTLES[BOTTLES.length - 1]);
+  const Y = (z: number) => -z; // base at y = 0, bottle rises into negative y
+  const lz = (bd.panelBottom + bd.panelTop) / 2; // label centered on the panel
+  const top = Y(lz + d.h / 2), lh = d.h;
+  const lr = Math.min(d.r, 2);
+  const half = d.l / 2 / r; // half the wrap angle, radians, centered on the front
+  const circ = 2 * Math.PI * r;
+
+  let g = `<defs><linearGradient id="bt-shade" x1="0" x2="1" y1="0" y2="0">` +
+    `<stop offset="0" stop-color="#000" stop-opacity="0.12"/><stop offset="0.35" stop-color="#000" stop-opacity="0"/>` +
+    `<stop offset="0.7" stop-color="#000" stop-opacity="0.03"/><stop offset="1" stop-color="#000" stop-opacity="0.16"/></linearGradient></defs>`;
+
+  const bottleAt = (cx: number) => {
+    const nx = neckW / 2;
+    const body =
+      `M${cx - r + heel} ${Y(0)}H${cx + r - heel}Q${cx + r} ${Y(0)} ${cx + r} ${Y(heel)}V${Y(wallTop)}` +
+      `Q${cx + r} ${Y(wallTop + shoulder)} ${cx + nx} ${Y(wallTop + shoulder)}V${Y(h)}H${cx - nx}V${Y(wallTop + shoulder)}` +
+      `Q${cx - r} ${Y(wallTop + shoulder)} ${cx - r} ${Y(wallTop)}V${Y(heel)}Q${cx - r} ${Y(0)} ${cx - r + heel} ${Y(0)}Z`;
+    let s = `<path class="s-bottle" d="${body}"/><path d="${body}" fill="url(#bt-shade)"/>`;
+    const cy = Y(h - 1);
+    s += `<rect class="s-cap" x="${cx - capW / 2}" y="${cy - capH}" width="${capW}" height="${capH}" rx="1.5"/>`;
+    for (let x = -capW / 2 + 2.5; x < capW / 2 - 1.5; x += 2.2) {
+      s += `<path class="s-capline" d="M${cx + x} ${cy - capH + 1.5}V${cy - 1.5}"/>`;
+    }
+    return s;
+  };
+  const labelRect = (x1: number, x2: number) =>
+    x2 - x1 < 0.05 ? "" :
+    `<rect class="s-blabel" x="${x1}" y="${top}" width="${x2 - x1}" height="${lh}" rx="${lr}"/>` +
+    `<rect x="${x1}" y="${top}" width="${x2 - x1}" height="${lh}" fill="url(#bt-shade)" opacity="0.6"/>`;
+  const caption = (cx: number, text: string) =>
+    `<text class="t-sub" x="${cx}" y="${Y(h) - capH - 4}" text-anchor="middle">${esc(text)}</text>`;
+
+  // ---- front: the middle of the label faces us
+  const fx = 0;
+  g += bottleAt(fx);
+  const vis = half >= Math.PI / 2 ? r : r * Math.sin(half);
+  g += labelRect(fx - vis, fx + vis);
+  const fs = Math.min(7, lh * 0.22, vis * 0.38);
+  g += `<text class="t-copy" x="${fx}" y="${top + lh / 2}" text-anchor="middle" dominant-baseline="central" style="font-size:${fs}px">COPY</text>`;
+  g += caption(fx, L.front);
+
+  // ---- back: where the two ends of the label meet, or don't
+  const bx = 2 * big.r + 18;
+  g += bottleAt(bx);
+  const gapLen = circ - d.l; // > 0: bare film at the back; < 0: the ends overlap
+  if (gapLen >= circ / 2) {
+    // the label never reaches round to the back
+  } else if (gapLen > 0) {
+    const gHalf = gapLen / 2 / r; // half the gap angle, centered on the back
+    const gw = r * Math.sin(gHalf);
+    g += labelRect(bx - r, bx - gw) + labelRect(bx + gw, bx + r);
+    // dimension across the gap
+    const yy = top + lh + 4;
+    g += `<path class="s-dim" d="M${bx - gw} ${top - 1}V${yy + 1.4}M${bx + gw} ${top - 1}V${yy + 1.4}M${bx - gw} ${yy}H${bx + gw}"/>`;
+  } else {
+    g += labelRect(bx - r, bx + r);
+    g += `<path class="s-seam" d="M${bx} ${top}V${top + lh}"/>`;
+  }
+  // under the back bottle, on the same line as the diameter under the front
+  const gapText = gapLen >= 0 ? `${L.gap} ${Math.round(gapLen)} mm` : `${L.overlap} ${Math.round(-gapLen)} mm`;
+  g += `<text class="t" x="${bx}" y="12" text-anchor="middle">${esc(gapText)}</text>`;
+  g += caption(bx, L.back);
+
+  // ---- dimensions on the front bottle: height on the left, diameter below
+  const lx = fx - r - 7;
+  g += `<path class="s-dim" d="M${lx} ${Y(0)}V${Y(h)}M${lx - 1.4} ${Y(0)}H${lx + 1.4}M${lx - 1.4} ${Y(h)}H${lx + 1.4}"/>`;
+  g += `<text class="t" x="${lx - 1.6}" y="${Y(h / 2)}" text-anchor="middle" transform="rotate(-90 ${lx - 1.6} ${Y(h / 2)})">${inText(h)} (${mmText(Math.round(h))} mm)</text>`;
+  g += `<path class="s-dim" d="M${fx - r} 6H${fx + r}M${fx - r} 4.6V7.4M${fx + r} 4.6V7.4"/>`;
+  g += `<text class="t" x="${fx}" y="12" text-anchor="middle">Ø ${inText(2 * r)} (${mmText(Math.round(2 * r))} mm)</text>`;
+
+  // ---- top view: the bottle as a circle, the label as an arc round the front
   const tvR = Math.min(r, 26);
-  const tcx = big.r + 22 + 26, tcy = Y(h / 2);
+  const tcx = bx + big.r + 20 + 26, tcy = Y(h / 2);
   g += `<circle class="s-bottle" cx="${tcx}" cy="${tcy}" r="${tvR}"/>`;
   g += `<circle class="s-cap" cx="${tcx}" cy="${tcy}" r="${tvR * (capW / (2 * r))}"/>`;
-  const wrap = Math.min(d.l / (2 * Math.PI * r), 1);
+  const wrap = Math.min(d.l / circ, 1);
+  const R = tvR + 1.6;
   if (wrap >= 1) {
-    g += `<circle class="s-arc" cx="${tcx}" cy="${tcy}" r="${tvR + 1.6}"/>`;
+    g += `<circle class="s-arc" cx="${tcx}" cy="${tcy}" r="${R}"/>`;
   } else {
     const a = wrap * Math.PI; // half-angle, centered on the front (bottom of the circle)
-    const R = tvR + 1.6;
     const x1 = tcx - R * Math.sin(a), y1 = tcy + R * Math.cos(a);
     const x2 = tcx + R * Math.sin(a), y2 = tcy + R * Math.cos(a);
     g += `<path class="s-arc" d="M${x1} ${y1}A${R} ${R} 0 ${wrap > 0.5 ? 1 : 0} 0 ${x2} ${y2}"/>`;
   }
   g += `<text class="t-sub" x="${tcx}" y="${tcy - tvR - 5}" text-anchor="middle">${esc(L.above)}</text>`;
   g += `<text class="t" x="${tcx}" y="${tcy + tvR + 8}" text-anchor="middle">${Math.round(wrap * 100)}%</text>`;
-  const x0 = -big.r - 16, x1v = tcx + 26 + 8;
-  const y0 = -big.h - big.capH - 10, y1v = 15;
+
+  const x0 = -big.r - 18, x1v = tcx + 26 + 6;
+  const y0 = -big.h - big.capH - 10, y1v = 16;
   return `<svg viewBox="${x0} ${y0} ${x1v - x0} ${y1v - y0}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
 }

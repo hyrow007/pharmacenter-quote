@@ -370,7 +370,7 @@ a.typeCard:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2
 .sizeGrid button:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2px; }
 
 /* ---- bottle labels: the label on the chosen bottle ---- */
-.bottleDrawing :global(svg) { max-height: 380px; }
+.bottleDrawing :global(svg) { max-height: 440px; }
 .drawing :global(.s-bottle) { fill: #ffffff; stroke: var(--ink-3); stroke-width: 0.45; }
 .drawing :global(.s-cap) { fill: var(--stone-2); stroke: var(--ink-3); stroke-width: 0.45; }
 .drawing :global(.s-capline) { stroke: var(--ink-3); stroke-width: 0.35; }
@@ -384,3 +384,4 @@ a.typeCard:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2
 /* the bottle frame is drawn at one scale for every bottle, so its text runs larger */
 .bottleDrawing :global(.t) { font-size: 4.6px; }
 .bottleDrawing :global(.t-sub) { font-size: 4.2px; }
+.drawing :global(.s-seam) { stroke: #c0392b; stroke-width: 0.6; stroke-dasharray: 1.2 0.8; }
