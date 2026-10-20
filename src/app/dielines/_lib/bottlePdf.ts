@@ -47,6 +47,7 @@ const TX = {
       4: "Left side of the art comes off the roll first",
     },
     guidelines: "Artwork guidelines",
+    unwindPos: (n: number) => `Unwind position ${n}`,
     generated: (d: string) => `Generated ${d} by the PharmaCenter dieline builder`,
   },
   es: {
@@ -67,6 +68,7 @@ const TX = {
       4: "El lado izquierdo del arte sale primero del rollo",
     },
     guidelines: "Guía para el arte",
+    unwindPos: (n: number) => `Posición de desenrollado ${n}`,
     generated: (d: string) => `Generado el ${d} por el constructor de troqueles de PharmaCenter`,
   },
 };
@@ -95,7 +97,7 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): [nu
   return pts;
 }
 
-function labelPage(spec: LabelSpec, d: Die, today: string, hasLogo: boolean, T: Tx, lang: PdfLang) {
+function labelPage(spec: LabelSpec, d: Die, today: string, hasLogo: boolean, hasUnwind: boolean, T: Tx, lang: PdfLang) {
   const { safeH, safeL, safeR } = labelDims(d);
   const W = d.l, H = d.h;
   const pageW = 279.4;
@@ -202,6 +204,11 @@ function labelPage(spec: LabelSpec, d: Die, today: string, hasLogo: boolean, T: 
       if (line) p.text(x0, y, line, { color: ink, size: gs });
       y += 4.2;
     }
+    if (hasUnwind) {
+      const iw = 34, ih = iw * (73 / 112);
+      p.image("Unwind", right - iw, notesTop + 9, iw, ih);
+      p.text(right - iw / 2, notesTop + 11 + ih + 2, T.unwindPos(spec.unwind), { color: TEAL, size: 2.4, font: "bold", align: "center" });
+    }
     const fy = pageH - 9;
     p.rect(left, fy - 4, right - left, 0.3, { fill: TEAL });
     p.text(left, fy, `PharmaCenter  ·  ${labelFileName(spec).replace(/\.pdf$/, "")}`, { color: TEAL_2, size: 2.2 });
@@ -224,8 +231,16 @@ export async function downloadLabel(spec: LabelSpec, lang: PdfLang = "en") {
   } catch {
     // Text title alone if the logo cannot be read.
   }
+  let hasUnwind = false;
+  try {
+    const img = await loadImage(`/dielines/unwind-${spec.unwind}.png`);
+    jpegs.push({ name: "Unwind", ...(await toJpeg(img, img.naturalWidth, img.naturalHeight)) });
+    hasUnwind = true;
+  } catch {
+    // The notes still say the position in words.
+  }
   const fileName = labelFileName(spec);
-  const page = labelPage(spec, d, today, hasLogo, T, lang);
+  const page = labelPage(spec, d, today, hasLogo, hasUnwind, T, lang);
   const layers = [T.ly.cut, T.ly.bleed, T.ly.safe, T.ly.labels, T.ly.notes];
   const bytes = buildPdf({ title: fileName.replace(/\.pdf$/, ""), pages: [page], layers, jpegs });
   const url = URL.createObjectURL(new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: "application/pdf" }));

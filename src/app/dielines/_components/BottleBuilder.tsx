@@ -135,7 +135,11 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
               <li key={l.label}><span className={`${s.sw} ${l.cls}`} />{l.label}</li>
             ))}
           </ul>
-          <figure className={`${s.roll} ${s.rollText}`} aria-live="polite">
+          {/* Same roll chart as the sachet builder: the converter's label
+              unwind positions, so the numbers mean the same thing. */}
+          <figure className={s.roll} aria-live="polite">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/dielines/unwind-${spec.unwind}.png`} alt={positionLabel} width={112} height={73} />
             <figcaption>
               <b>{positionLabel}</b>
               {t(UNWIND_HINT[spec.unwind])}

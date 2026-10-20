@@ -368,4 +368,3 @@ a.typeCard:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2
 .sizeGrid button[aria-pressed="true"] { background: var(--teal-900); border-color: var(--teal-900); color: var(--paper); }
 .sizeGrid button[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
 .sizeGrid button:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2px; }
-.rollText { padding: 10px 14px; }
