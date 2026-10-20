@@ -385,3 +385,13 @@ a.typeCard:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2
 .bottleDrawing :global(.t) { font-size: 4.6px; }
 .bottleDrawing :global(.t-sub) { font-size: 4.2px; }
 .drawing :global(.s-seam) { stroke: #c0392b; stroke-width: 0.6; stroke-dasharray: 1.2 0.8; }
+
+/* label size: mm / in switch beside the field label */
+.fieldHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.unitToggle { display: inline-flex; border: 1px solid var(--stone); border-radius: 999px; overflow: hidden; }
+.unitToggle button {
+  border: 0; background: var(--paper); color: var(--ink-2);
+  font: 600 12px var(--mono); padding: 3px 10px; cursor: pointer;
+}
+.unitToggle button[aria-pressed="true"] { background: var(--teal-900); color: var(--paper); }
+.unitToggle button:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 1px; }

@@ -4,7 +4,7 @@
 // pick a die-cut size and (rarely) an unwind position; the label redraws to
 // scale and Generate downloads the 1:1 PDF.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeDT, type DKey } from "../_lib/i18n";
 import {
@@ -37,6 +37,24 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_LABEL);
   const [customUnwind, setCustomUnwind] = useState(false);
   const [bottleCc, setBottleCc] = useState(DEFAULT_BOTTLE_CC);
+  // Size buttons in mm or inches; remembered per browser, mm by default.
+  const [unit, setUnit] = useState<"mm" | "in">("mm");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("dl-label-unit") === "in") setUnit("in");
+    } catch {
+      // storage blocked -- stay in mm
+    }
+  }, []);
+  const pickUnit = (u: "mm" | "in") => {
+    setUnit(u);
+    try {
+      localStorage.setItem("dl-label-unit", u);
+    } catch {
+      // not remembered, still switched
+    }
+  };
+  const inNum = (mm: number) => (mm / 25.4).toFixed(2);
   const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState(false);
   const set = (patch: Partial<LabelSpec>) => setSpec((p) => ({ ...p, ...patch }));
@@ -81,7 +99,14 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
     <div className={s.layout}>
       <section className={s.controls} aria-label={t("bTitle")}>
         <div className={s.field}>
-          <span className={s.label}>{t("bSize")}</span>
+          <div className={s.fieldHead}>
+            <span className={s.label}>{t("bSize")}</span>
+            <div className={s.unitToggle} role="group" aria-label={t("bUnits")}>
+              {(["mm", "in"] as const).map((u) => (
+                <button key={u} type="button" aria-pressed={unit === u} onClick={() => pickUnit(u)}>{u}</button>
+              ))}
+            </div>
+          </div>
           <div className={s.sizeGrid} role="group" aria-label={t("bSize")}>
             {DIES.map((x) => (
               <button
@@ -89,12 +114,12 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
                 onClick={() => set({ die: x.die })}
                 title={x.note}
               >
-                {mmText(x.h)} × {mmText(x.l)}
+                {unit === "mm" ? `${mmText(x.h)} × ${mmText(x.l)}` : `${inNum(x.h)} × ${inNum(x.l)}`}
                 <small>#{x.die}</small>
               </button>
             ))}
           </div>
-          <p className={s.hint}>{t("bSizeHint")}</p>
+          <p className={s.hint}>{t(unit === "mm" ? "bSizeHint" : "bSizeHintIn")}</p>
         </div>
 
         <div className={s.field}>
