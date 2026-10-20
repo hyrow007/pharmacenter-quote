@@ -276,7 +276,8 @@ export function onBottleSvg(spec: LabelSpec, b: Bottle, L: OnBottleLabels, ariaL
     g += `<path class="s-seam" d="M${bx} ${top}V${top + lh}"/>`;
   }
   // under the back bottle, on the same line as the diameter under the front
-  const gapText = gapLen >= 0 ? `${L.gap} ${Math.round(gapLen)} mm` : `${L.overlap} ${Math.round(-gapLen)} mm`;
+  const gapMm = Math.abs(gapLen);
+  const gapText = `${gapLen >= 0 ? L.gap : L.overlap} ${inText(gapMm)} (${Math.round(gapMm)} mm)`;
   g += `<text class="t" x="${bx}" y="12" text-anchor="middle">${esc(gapText)}</text>`;
   g += caption(bx, L.back);
 

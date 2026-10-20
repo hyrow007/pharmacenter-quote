@@ -67,6 +67,8 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const onBottle = onBottleSvg(spec, bottle, { front: t("bFront"), back: t("bBack"), above: t("bAbove"), gap: t("bGap"), overlap: t("bOverlapShort") }, t("bOnBottle"));
   const f = fit(d, bottle);
   const r0 = (n: number) => String(Math.round(n));
+  // inches first, mm in brackets, like every other measurement on the page
+  const both = (mm: number) => `${inText(mm)} (${Math.round(mm)} mm)`;
 
   const generate = async () => {
     setBusy(true);
@@ -211,11 +213,11 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
         <ul className={s.fitList}>
           <li className={f.overlap > 0 ? s.fitWarn : undefined}>
             {f.overlap > 0
-              ? t("bOverlap", { o: r0(f.overlap) })
-              : t("bWrap", { pct: r0(f.coverage * 100), l: mmText(d.l), c: r0(f.circ) })}
+              ? t("bOverlap", { o: both(f.overlap) })
+              : t("bWrap", { pct: r0(f.coverage * 100), l: both(d.l), c: both(f.circ) })}
           </li>
           <li className={f.tooTall ? s.fitWarn : undefined}>
-            {f.tooTall ? t("bTooTall", { p: r0(f.panelH) }) : t("bFitsTall", { p: r0(f.panelH) })}
+            {f.tooTall ? t("bTooTall", { p: both(f.panelH) }) : t("bFitsTall", { p: both(f.panelH) })}
           </li>
         </ul>
         <p className={s.hint}>{t("bPreviewNote")}</p>
