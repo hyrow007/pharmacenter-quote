@@ -368,3 +368,19 @@ a.typeCard:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2
 .sizeGrid button[aria-pressed="true"] { background: var(--teal-900); border-color: var(--teal-900); color: var(--paper); }
 .sizeGrid button[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
 .sizeGrid button:focus-visible { outline: 2px solid var(--sage-500); outline-offset: 2px; }
+
+/* ---- bottle labels: the label on the chosen bottle ---- */
+.bottleDrawing :global(svg) { max-height: 380px; }
+.drawing :global(.s-bottle) { fill: #ffffff; stroke: var(--ink-3); stroke-width: 0.45; }
+.drawing :global(.s-cap) { fill: var(--stone-2); stroke: var(--ink-3); stroke-width: 0.45; }
+.drawing :global(.s-capline) { stroke: var(--ink-3); stroke-width: 0.35; }
+.drawing :global(.s-blabel) { fill: var(--cream); stroke: var(--teal-700); stroke-width: 0.5; }
+.drawing :global(.s-arc) { fill: none; stroke: var(--teal-700); stroke-width: 2.2; stroke-linecap: round; }
+.fitList { list-style: none; display: grid; gap: 4px; margin: 10px 0 4px; font-size: 14px; color: var(--ink-2); }
+.fitList li { padding-left: 14px; position: relative; }
+.fitList li::before { content: ""; position: absolute; left: 0; top: 0.5em; width: 7px; height: 7px; border-radius: 50%; background: var(--sage-500); }
+.fitList li.fitWarn { color: #9b2c2c; }
+.fitList li.fitWarn::before { background: #c0392b; }
+/* the bottle frame is drawn at one scale for every bottle, so its text runs larger */
+.bottleDrawing :global(.t) { font-size: 4.6px; }
+.bottleDrawing :global(.t-sub) { font-size: 4.2px; }

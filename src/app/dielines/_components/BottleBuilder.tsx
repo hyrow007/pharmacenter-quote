@@ -8,8 +8,13 @@ import { useMemo, useState } from "react";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeDT, type DKey } from "../_lib/i18n";
 import {
+  BOTTLES,
+  DEFAULT_BOTTLE_CC,
   DEFAULT_LABEL,
   DIES,
+  bottleOf,
+  fit,
+  onBottleSvg,
   LABEL_UNWIND_STD,
   dieOf,
   inText,
@@ -31,6 +36,7 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const t = useMemo(() => makeDT(lang), [lang]);
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_LABEL);
   const [customUnwind, setCustomUnwind] = useState(false);
+  const [bottleCc, setBottleCc] = useState(DEFAULT_BOTTLE_CC);
   const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState(false);
   const set = (patch: Partial<LabelSpec>) => setSpec((p) => ({ ...p, ...patch }));
@@ -39,6 +45,10 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
   const { safeH, safeL } = labelDims(d);
   const drawing = labelSvg(spec, { safe: t("bSafe"), offRoll: t("offRoll") }, t("bFlat"));
   const positionLabel = t("position", { n: spec.unwind });
+  const bottle = bottleOf(bottleCc);
+  const onBottle = onBottleSvg(spec, bottle, { front: t("bFront"), above: t("bAbove") }, t("bOnBottle"));
+  const f = fit(d, bottle);
+  const r0 = (n: number) => String(Math.round(n));
 
   const generate = async () => {
     setBusy(true);
@@ -146,6 +156,44 @@ export default function BottleBuilder({ lang }: { lang: Lang }) {
             </figcaption>
           </figure>
         </div>
+      </section>
+
+      {/* Row 2: which bottle, beside how the label looks on it. */}
+      <section className={`${s.controls} ${s.output}`} aria-label={t("bBottle")}>
+        <div className={s.field}>
+          <span className={s.label}>{t("bBottle")}</span>
+          <div className={s.sizeGrid} role="group" aria-label={t("bBottle")}>
+            {BOTTLES.map((b) => (
+              <button
+                key={b.cc} type="button" aria-pressed={b.cc === bottleCc}
+                onClick={() => setBottleCc(b.cc)}
+              >
+                {b.cc} cc
+                <small>{b.finish}-400</small>
+              </button>
+            ))}
+          </div>
+          <p className={s.hint}>{t("bBottleHint")}</p>
+        </div>
+      </section>
+
+      <section className={s.view}>
+        <div className={s.viewHead}>
+          <h2 className={s.viewTitle}>{t("bOnBottle")}</h2>
+          <span className={s.viewMeta}>{bottle.cc} cc · {bottle.finish}-400</span>
+        </div>
+        <div className={`${s.drawing} ${s.bottleDrawing}`} dangerouslySetInnerHTML={{ __html: onBottle }} />
+        <ul className={s.fitList}>
+          <li className={f.overlap > 0 ? s.fitWarn : undefined}>
+            {f.overlap > 0
+              ? t("bOverlap", { o: r0(f.overlap) })
+              : t("bWrap", { pct: r0(f.coverage * 100), l: mmText(d.l), c: r0(f.circ) })}
+          </li>
+          <li className={f.tooTall ? s.fitWarn : undefined}>
+            {f.tooTall ? t("bTooTall", { p: r0(f.panelH) }) : t("bFitsTall", { p: r0(f.panelH) })}
+          </li>
+        </ul>
+        <p className={s.hint}>{t("bPreviewNote")}</p>
       </section>
 
       <section className={`${s.controls} ${s.output}`} aria-label={t("generate")}>

@@ -6,6 +6,16 @@
 import type { Lang } from "@/lib/i18n/dict";
 
 const en = {
+  bBottle: "Bottle",
+  bBottleHint: "Round HDPE packer bottles. Height and diameter are stock catalog sizes; your supplier's bottle may differ slightly.",
+  bOnBottle: "On the bottle",
+  bFront: "Front",
+  bAbove: "From above",
+  bWrap: "Wraps {pct}% of the way around ({l} of {c} mm).",
+  bOverlap: "Longer than the bottle is around: the ends overlap by {o} mm.",
+  bTooTall: "Taller than the label panel (about {p} mm): it will run onto the shoulder or heel.",
+  bFitsTall: "Fits the label panel (about {p} mm tall).",
+  bPreviewNote: "A guide to proportions, not a proof: the label panel height is estimated.",
   bTitle: "Bottle Label Dieline Builder",
   bLede: "Pick the label size and unwind position. The label redraws to scale with its cut line, bleed and text safe zone.",
   bSize: "Label size",
@@ -124,6 +134,16 @@ const en = {
 export type DKey = keyof typeof en;
 
 const es = {
+  bBottle: "Frasco",
+  bBottleHint: "Frascos redondos de HDPE (packer). Alto y diámetro son medidas de catálogo; el frasco de su proveedor puede variar un poco.",
+  bOnBottle: "En el frasco",
+  bFront: "Frente",
+  bAbove: "Desde arriba",
+  bWrap: "Cubre el {pct}% de la vuelta ({l} de {c} mm).",
+  bOverlap: "Más larga que el contorno del frasco: los extremos se traslapan {o} mm.",
+  bTooTall: "Más alta que el panel de etiqueta (unos {p} mm): subirá al hombro o bajará al talón.",
+  bFitsTall: "Cabe en el panel de etiqueta (unos {p} mm de alto).",
+  bPreviewNote: "Una guía de proporciones, no una prueba: la altura del panel de etiqueta es estimada.",
   bTitle: "Constructor de troqueles de etiquetas para frascos",
   bLede: "Elija el tamaño de la etiqueta y la posición de desenrollado. La etiqueta se redibuja a escala con su línea de corte, sangrado y zona segura de texto.",
   bSize: "Tamaño de etiqueta",

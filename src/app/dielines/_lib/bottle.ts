@@ -142,3 +142,135 @@ export function labelSvg(spec: LabelSpec, L: LabelDrawLabels, ariaLabel: string)
   }
   return `<svg viewBox="${-pl} ${-pt} ${W + pl + pr} ${H + pt + pb}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
 }
+
+// ---- the bottle the label goes on -------------------------------------------
+//
+// Round HDPE "packer" bottles, 50-750 cc, the standard pill/vitamin bottle.
+// Overall height (to the top of the neck, cap off) and body diameter are the
+// stock dimensions from Alpha Packaging's HDPE catalog (Pharma Line where it
+// has the size); a supplier's own bottle may differ by a millimeter or two.
+// Catalogs don't publish label panel height, so the panel here is an estimate:
+// the straight wall between the heel and the start of the shoulder.
+
+export type Bottle = { cc: number; finish: number; hIn: number; dIn: number; part: string };
+
+export const BOTTLES: Bottle[] = [
+  { cc: 50, finish: 33, hIn: 2.694, dIn: 1.52, part: "50PH33" },
+  { cc: 60, finish: 33, hIn: 3.046, dIn: 1.515, part: "60QL33" },
+  { cc: 75, finish: 33, hIn: 2.978, dIn: 1.705, part: "75PH33" },
+  { cc: 100, finish: 38, hIn: 3.225, dIn: 1.837, part: "100PH38" },
+  { cc: 120, finish: 38, hIn: 3.4, dIn: 2.015, part: "120PH38" },
+  { cc: 150, finish: 38, hIn: 3.725, dIn: 2.093, part: "150PH38" },
+  { cc: 175, finish: 38, hIn: 3.85, dIn: 2.192, part: "175PH38" },
+  { cc: 200, finish: 38, hIn: 4.281, dIn: 2.313, part: "200S38" },
+  { cc: 225, finish: 45, hIn: 4.239, dIn: 2.38, part: "225PH45" },
+  { cc: 250, finish: 45, hIn: 4.688, dIn: 2.516, part: "250S45" },
+  { cc: 275, finish: 45, hIn: 4.477, dIn: 2.507, part: "275PH45" },
+  { cc: 300, finish: 45, hIn: 4.94, dIn: 2.584, part: "300PH45" },
+  { cc: 400, finish: 45, hIn: 5.22, dIn: 2.895, part: "400PH45" },
+  { cc: 500, finish: 53, hIn: 5.56, dIn: 3.1, part: "500PH53" },
+  { cc: 625, finish: 53, hIn: 6.169, dIn: 3.197, part: "625PH53" },
+  { cc: 750, finish: 53, hIn: 6.54, dIn: 3.474, part: "750PH53" },
+];
+export const DEFAULT_BOTTLE_CC = 300;
+export const bottleOf = (cc: number) => BOTTLES.find((b) => b.cc === cc) ?? BOTTLES[0];
+
+/** Body proportions, in mm, drawn and measured the same way. */
+export function bottleDims(b: Bottle) {
+  const h = b.hIn * MM_PER_IN;
+  const d = b.dIn * MM_PER_IN;
+  const neckH = b.finish * 0.3; // a 38-400 neck is about 11-12 mm tall
+  const neckW = b.finish;
+  const shoulder = d * 0.22; // shoulder rise from wall to neck
+  const heel = 3; // rounded base
+  const wallTop = h - neckH - shoulder; // height where the straight wall ends
+  const panelBottom = heel + 1.5;
+  const panelTop = wallTop - 1.5;
+  return {
+    h, d, r: d / 2, neckH, neckW, shoulder, heel, wallTop,
+    panelBottom, panelTop, panelH: panelTop - panelBottom,
+    circ: Math.PI * d,
+    capH: b.finish * 0.42, capW: b.finish + 3,
+  };
+}
+
+/** How a label of this die sits on this bottle. */
+export function fit(d: Die, b: Bottle) {
+  const bd = bottleDims(b);
+  const coverage = d.l / bd.circ;
+  return {
+    circ: bd.circ,
+    coverage, // 1 = all the way round
+    overlap: Math.max(d.l - bd.circ, 0),
+    panelH: bd.panelH,
+    tooTall: d.h > bd.panelH,
+  };
+}
+
+export type OnBottleLabels = { front: string; above: string };
+
+/** Front view of the bottle with the label on it, plus a small top view. */
+export function onBottleSvg(spec: LabelSpec, b: Bottle, L: OnBottleLabels, ariaLabel: string): string {
+  const d = dieOf(spec);
+  const bd = bottleDims(b);
+  const { h, r, neckH, neckW, shoulder, heel, wallTop, capH, capW } = bd;
+  // y grows downward; the base sits at y = 0 and the bottle rises into negative y
+  const Y = (z: number) => -z;
+  let g = "";
+  g += `<defs><linearGradient id="bt-shade" x1="0" x2="1" y1="0" y2="0">` +
+    `<stop offset="0" stop-color="#000" stop-opacity="0.12"/><stop offset="0.35" stop-color="#000" stop-opacity="0"/>` +
+    `<stop offset="0.7" stop-color="#000" stop-opacity="0.03"/><stop offset="1" stop-color="#000" stop-opacity="0.16"/></linearGradient></defs>`;
+  // body outline: base with a rounded heel, straight wall, curved shoulder into the neck
+  const nx = neckW / 2;
+  const body =
+    `M${-r + heel} ${Y(0)}H${r - heel}Q${r} ${Y(0)} ${r} ${Y(heel)}V${Y(wallTop)}` +
+    `Q${r} ${Y(wallTop + shoulder)} ${nx} ${Y(wallTop + shoulder)}V${Y(h)}H${-nx}V${Y(wallTop + shoulder)}` +
+    `Q${-r} ${Y(wallTop + shoulder)} ${-r} ${Y(wallTop)}V${Y(heel)}Q${-r} ${Y(0)} ${-r + heel} ${Y(0)}Z`;
+  g += `<path class="s-bottle" d="${body}"/>`;
+  g += `<path d="${body}" fill="url(#bt-shade)"/>`;
+  // cap with ridges
+  const cy = Y(h - 1);
+  g += `<rect class="s-cap" x="${-capW / 2}" y="${cy - capH}" width="${capW}" height="${capH}" rx="1.5"/>`;
+  for (let x = -capW / 2 + 2.5; x < capW / 2 - 1.5; x += 2.2) {
+    g += `<path class="s-capline" d="M${x} ${cy - capH + 1.5}V${cy - 1.5}"/>`;
+  }
+  // the label, as seen from the front: the part facing us is foreshortened
+  const half = d.l / 2 / r; // half the wrap angle, radians
+  const vis = half >= Math.PI / 2 ? r : r * Math.sin(half);
+  const lz = (bd.panelBottom + bd.panelTop) / 2; // centered on the panel
+  const top = Y(lz + d.h / 2), lh = d.h;
+  g += `<rect class="s-blabel" x="${-vis}" y="${top}" width="${2 * vis}" height="${lh}" rx="${Math.min(d.r, 2)}"/>`;
+  g += `<rect x="${-vis}" y="${top}" width="${2 * vis}" height="${lh}" fill="url(#bt-shade)"/>`;
+  const fs = Math.min(7, lh * 0.22, vis * 0.38);
+  g += `<text class="t-copy" x="0" y="${top + lh / 2}" text-anchor="middle" dominant-baseline="central" style="font-size:${fs}px">COPY</text>`;
+  // dimensions: overall height on the left, diameter below
+  const lx = -r - 7;
+  g += `<path class="s-dim" d="M${lx} ${Y(0)}V${Y(h)}M${lx - 1.4} ${Y(0)}H${lx + 1.4}M${lx - 1.4} ${Y(h)}H${lx + 1.4}"/>`;
+  g += `<text class="t" x="${lx - 1.6}" y="${Y(h / 2)}" text-anchor="middle" transform="rotate(-90 ${lx - 1.6} ${Y(h / 2)})">${inText(h)} (${mmText(Math.round(h))} mm)</text>`;
+  g += `<path class="s-dim" d="M${-r} 6H${r}M${-r} 4.6V7.4M${r} 4.6V7.4"/>`;
+  g += `<text class="t" x="0" y="11" text-anchor="middle">Ø ${inText(2 * r)} (${mmText(Math.round(2 * r))} mm)</text>`;
+  g += `<text class="t-sub" x="0" y="${Y(h) - capH - 4}" text-anchor="middle">${esc(L.front)}</text>`;
+  // top view: the bottle as a circle, the label as an arc around the front
+  // Every bottle is drawn in the same frame, sized for the largest, so
+  // switching bottles shows their real difference in size.
+  const big = bottleDims(BOTTLES[BOTTLES.length - 1]);
+  const tvR = Math.min(r, 26);
+  const tcx = big.r + 22 + 26, tcy = Y(h / 2);
+  g += `<circle class="s-bottle" cx="${tcx}" cy="${tcy}" r="${tvR}"/>`;
+  g += `<circle class="s-cap" cx="${tcx}" cy="${tcy}" r="${tvR * (capW / (2 * r))}"/>`;
+  const wrap = Math.min(d.l / (2 * Math.PI * r), 1);
+  if (wrap >= 1) {
+    g += `<circle class="s-arc" cx="${tcx}" cy="${tcy}" r="${tvR + 1.6}"/>`;
+  } else {
+    const a = wrap * Math.PI; // half-angle, centered on the front (bottom of the circle)
+    const R = tvR + 1.6;
+    const x1 = tcx - R * Math.sin(a), y1 = tcy + R * Math.cos(a);
+    const x2 = tcx + R * Math.sin(a), y2 = tcy + R * Math.cos(a);
+    g += `<path class="s-arc" d="M${x1} ${y1}A${R} ${R} 0 ${wrap > 0.5 ? 1 : 0} 0 ${x2} ${y2}"/>`;
+  }
+  g += `<text class="t-sub" x="${tcx}" y="${tcy - tvR - 5}" text-anchor="middle">${esc(L.above)}</text>`;
+  g += `<text class="t" x="${tcx}" y="${tcy + tvR + 8}" text-anchor="middle">${Math.round(wrap * 100)}%</text>`;
+  const x0 = -big.r - 16, x1v = tcx + 26 + 8;
+  const y0 = -big.h - big.capH - 10, y1v = 15;
+  return `<svg viewBox="${x0} ${y0} ${x1v - x0} ${y1v - y0}" role="img" aria-label="${esc(ariaLabel)}">${g}</svg>`;
+}
