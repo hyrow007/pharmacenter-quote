@@ -6,6 +6,18 @@
 import type { Lang } from "@/lib/i18n/dict";
 
 const en = {
+  chooseTitle: "Dielines",
+  chooseLede: "Pick the package. Each builder draws to scale from the house rules and generates the file you send to the customer.",
+  typeSachet: "Sachet",
+  typeSachetSub: "3-side seal, folded film, notch and unwind position.",
+  typeBottle: "Bottle",
+  typeBottleSub: "Labels for bottles.",
+  typeBlister: "Blister",
+  typeBlisterSub: "Blister cards and lidding.",
+  badgeNext: "Next up",
+  badgeSoon: "Coming soon",
+  open: "Open",
+  allDielines: "All dielines",
   eyebrow: "PharmaCenter · Dielines",
   title: "Sachet Dieline Builder",
   lede: "Pick the size, notch and unwind position. The film and the finished sachet redraw to scale from the house rules.",
@@ -95,6 +107,18 @@ const en = {
 export type DKey = keyof typeof en;
 
 const es = {
+  chooseTitle: "Troqueles",
+  chooseLede: "Elija el empaque. Cada constructor dibuja a escala según las reglas de la casa y genera el archivo que se envía al cliente.",
+  typeSachet: "Sachet",
+  typeSachetSub: "Sellado en 3 lados, película doblada, muesca y posición de desenrollado.",
+  typeBottle: "Frasco",
+  typeBottleSub: "Etiquetas para frascos.",
+  typeBlister: "Blíster",
+  typeBlisterSub: "Tarjetas de blíster y tapa.",
+  badgeNext: "Siguiente",
+  badgeSoon: "Próximamente",
+  open: "Abrir",
+  allDielines: "Todos los troqueles",
   eyebrow: "PharmaCenter · Troqueles",
   title: "Constructor de troqueles de sachet",
   lede: "Elija el tamaño, la muesca y la posición de desenrollado. La película y el sachet terminado se redibujan a escala según las reglas de la casa.",
