@@ -57,8 +57,6 @@ export type SachetSpec = {
   /** Hot-stamped LOT / EXP area (stamped at PharmaCenter after printing). */
   stamp: boolean;
   stampLines: StampLines;
-  /** Foil color of the hot stamp: black or white (user, 2026-10-22). */
-  stampColor: StampColor;
   /** Top-left of the stamp area on the flat film, mm; null = standard spot. */
   stampPos: { x: number; y: number } | null;
 };
@@ -72,7 +70,6 @@ export const DEFAULT_SPEC: SachetSpec = {
   hangHole: false,
   stamp: false,
   stampLines: 1, // standard: one line (user, 2026-10-22)
-  stampColor: "black",
   stampPos: null,
 };
 
@@ -81,9 +78,9 @@ export const DEFAULT_SPEC: SachetSpec = {
 // count), characters about 1.5 mm tall (~6 pt). The stamp reads upright on the
 // film -- like unwind position 2 -- whatever the unwind position, and it can be
 // moved anywhere on the film. Standard spot: back panel, just above the bottom
-// seal, one line. The width assumes a monospaced stamp font at ~1.25 mm per character.
+// seal, one line. Ink is black or white only (no choice in the builder; the
+// guidelines say so). The width assumes a monospaced stamp font at ~1.25 mm per character.
 export type StampLines = 1 | 2 | 3;
-export type StampColor = "black" | "white";
 export const STAMP_CHAR_H = 1.5;
 export const STAMP_LINE_GAP = 1;
 export const STAMP_MARGIN = 1;
@@ -225,11 +222,9 @@ function stampArea(spec: SachetSpec, label: string, x0 = -Infinity, x1 = Infinit
   if (!b) return "";
   const l = Math.max(b.x, x0), r = Math.min(b.x + b.w, x1);
   if (r - l <= 0.05) return "";
-  // White foil is shown on a dark box, black foil on a light one.
-  const white = spec.stampColor === "white";
-  let s = `<rect class="s-stamp${white ? " s-stamp-white" : ""}" x="${l + dx}" y="${b.y}" width="${r - l}" height="${b.h}"/>`;
+  let s = `<rect class="s-stamp" x="${l + dx}" y="${b.y}" width="${r - l}" height="${b.h}"/>`;
   if (r - l >= 12) {
-    s += `<text class="t-stamp${white ? " t-stamp-white" : ""}" x="${(l + r) / 2 + dx}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
+    s += `<text class="t-stamp" x="${(l + r) / 2 + dx}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
   }
   return s;
 }

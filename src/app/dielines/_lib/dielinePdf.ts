@@ -51,8 +51,8 @@ const TX = {
     },
     stampTag: "LOT / EXP (HOT STAMP)",
     rStamp: "Hot stamp",
-    stampV: (n: number, w: string, h: string, std: boolean, white: boolean) =>
-      `${white ? "White" : "Black"} foil, LOT / EXP, ${n} line${n > 1 ? "s" : ""} of up to ${STAMP_MAX_CHARS} characters; area ${w} x ${h} mm, ${std ? "back panel, just above the bottom seal" : "as placed on the dieline"}`,
+    stampV: (n: number, w: string, h: string, std: boolean) =>
+      `LOT / EXP in black or white, ${n} line${n > 1 ? "s" : ""} of up to ${STAMP_MAX_CHARS} characters; area ${w} x ${h} mm, ${std ? "back panel, just above the bottom seal" : "as placed on the dieline"}`,
     back: "BACK", front: "FRONT", clearArea: "CLEAR AREA", foldUp: "FOLD", film: "FILM", offRoll: "OFF THE ROLL", slit: "SLIT",
     title: "Sachet dieline",
     none: "None",
@@ -94,8 +94,8 @@ const TX = {
     },
     stampTag: "LOTE / VENC. (ESTAMPADO)",
     rStamp: "Estampado en caliente",
-    stampV: (n: number, w: string, h: string, std: boolean, white: boolean) =>
-      `Foil ${white ? "blanco" : "negro"}, LOTE / VENC., ${n} línea${n > 1 ? "s" : ""} de hasta ${STAMP_MAX_CHARS} caracteres; área de ${w} x ${h} mm, ${std ? "reverso, justo arriba del sello inferior" : "según se ubica en el troquel"}`,
+    stampV: (n: number, w: string, h: string, std: boolean) =>
+      `LOTE / VENC. en negro o blanco, ${n} línea${n > 1 ? "s" : ""} de hasta ${STAMP_MAX_CHARS} caracteres; área de ${w} x ${h} mm, ${std ? "reverso, justo arriba del sello inferior" : "según se ubica en el troquel"}`,
     back: "REVERSO", front: "FRENTE", clearArea: "ÁREA LIBRE", foldUp: "PLIEGUE", film: "PELÍCULA", offRoll: "SALIDA DEL ROLLO", slit: "CORTE",
     title: "Troquel de sachet",
     none: "Ninguno",
@@ -293,7 +293,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       [T.rEye, T.eye],
       [T.rNotch, notchText],
       [T.rHang, spec.hangHole ? T.hang : T.none],
-      [T.rStamp, sb ? T.stampV(spec.stampLines, String(sb.w), String(Math.round(sb.h * 10) / 10), spec.stampPos === null, spec.stampColor === "white") : T.none],
+      [T.rStamp, sb ? T.stampV(spec.stampLines, String(sb.w), String(Math.round(sb.h * 10) / 10), spec.stampPos === null) : T.none],
       [T.rUnwind, `${T.position(spec.unwind)} -- ${T.unwind[spec.unwind]}`],
     ];
     for (const [k, v] of rows) {
