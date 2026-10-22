@@ -22,6 +22,9 @@ import {
   dims,
   inches,
   slitY,
+  stampBox,
+  clearCaptionY,
+  STAMP_MAX_CHARS,
   type SachetSpec,
 } from "./sachet";
 import { BLACK, DIELINE, PageCanvas, buildPdf, gray, hex, textWidth } from "./pdf";
@@ -44,7 +47,12 @@ const TX = {
     ly: {
       notes: "Notes", cut: "Cut line", bleed: "Bleed", fold: "Fold", seals: "Seals", clear: "Clear area",
       lane: "Eye mark lane", notch: "Notch & hang hole", labels: "Labels & dimensions", eye: "Eye mark (keep)", ref: "Reference",
+      stamp: "Hot stamp area",
     },
+    stampTag: "LOT / EXP (HOT STAMP)",
+    rStamp: "Hot stamp",
+    stampV: (n: number, w: string, h: string, std: boolean) =>
+      `LOT / EXP, ${n} line${n > 1 ? "s" : ""} of up to ${STAMP_MAX_CHARS} characters; area ${w} x ${h} mm, ${std ? "back panel, just above the bottom seal" : "as placed on the dieline"}`,
     back: "BACK", front: "FRONT", clearArea: "CLEAR AREA", foldUp: "FOLD", film: "FILM", offRoll: "OFF THE ROLL", slit: "SLIT",
     title: "Sachet dieline",
     none: "None",
@@ -75,13 +83,19 @@ const TX = {
     lg: {
       cut: "Cut line", notch: "Notch", tear: "Tear line", hole: "Hang hole 6 mm", fold: "Fold", foldEdge: "Fold",
       seal: "Seal 6 mm", mark: "Eye mark 6 × 6 mm", clear: "Clear area", bleed: "Bleed 1 mm",
+      stamp: "Hot stamp (LOT / EXP)",
     },
   },
   es: {
     ly: {
       notes: "Notas", cut: "Línea de corte", bleed: "Sangrado", fold: "Pliegue", seals: "Sellos", clear: "Área libre",
       lane: "Carril de la marca", notch: "Muesca y orificio", labels: "Etiquetas y medidas", eye: "Marca de fotocelda (conservar)", ref: "Referencia",
+      stamp: "Área de estampado en caliente",
     },
+    stampTag: "LOTE / VENC. (ESTAMPADO)",
+    rStamp: "Estampado en caliente",
+    stampV: (n: number, w: string, h: string, std: boolean) =>
+      `LOTE / VENC., ${n} línea${n > 1 ? "s" : ""} de hasta ${STAMP_MAX_CHARS} caracteres; área de ${w} x ${h} mm, ${std ? "reverso, justo arriba del sello inferior" : "según se ubica en el troquel"}`,
     back: "REVERSO", front: "FRENTE", clearArea: "ÁREA LIBRE", foldUp: "PLIEGUE", film: "PELÍCULA", offRoll: "SALIDA DEL ROLLO", slit: "CORTE",
     title: "Troquel de sachet",
     none: "Ninguno",
@@ -112,17 +126,18 @@ const TX = {
     lg: {
       cut: "Línea de corte", notch: "Muesca", tear: "Línea de rasgado", hole: "Orificio 6 mm", fold: "Pliegue", foldEdge: "Pliegue",
       seal: "Sello 6 mm", mark: "Marca de fotocelda 6 × 6 mm", clear: "Área libre", bleed: "Sangrado 1 mm",
+      stamp: "Estampado (LOTE / VENC.)",
     },
   },
 };
 type Tx = (typeof TX)["en"];
-const layerOrder = (T: Tx) => [T.ly.eye, T.ly.cut, T.ly.bleed, T.ly.fold, T.ly.seals, T.ly.clear, T.ly.lane, T.ly.notch, T.ly.labels, T.ly.notes, T.ly.ref];
+const layerOrder = (T: Tx) => [T.ly.eye, T.ly.cut, T.ly.bleed, T.ly.fold, T.ly.seals, T.ly.clear, T.ly.lane, T.ly.notch, T.ly.stamp, T.ly.labels, T.ly.notes, T.ly.ref];
 
 export function dielineFileName(spec: SachetSpec) {
   const d = dims(spec);
   const w = (d.panelW / 25.4).toFixed(2);
   const h = spec.lengthIn.toFixed(2);
-  return `PharmaCenter-Sachet-${w}x${h}-${NOTCH_CODE[spec.notch]}${spec.hangHole ? "-HangHole" : ""}.pdf`;
+  return `PharmaCenter-Sachet-${w}x${h}-${NOTCH_CODE[spec.notch]}${spec.hangHole ? "-HangHole" : ""}${spec.stamp ? "-LotExp" : ""}.pdf`;
 }
 
 const mm = (v: number) => `${(Math.round(v * 10) / 10).toFixed(1)} mm`;
@@ -135,7 +150,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
   const ox = 22, oy = 30; // film origin on the page
   const notesTop = oy + H + 20;
   const pageW = Math.max(ox + W + 30, 200);
-  const pageH = notesTop + 122;
+  const pageH = notesTop + 122 + (spec.stamp ? 12 : 0);
   const p = new PageCanvas(pageW, pageH);
   const X = (x: number) => ox + x;
   const Y = (y: number) => oy + y;
@@ -193,8 +208,8 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     p.text(X(half / 2 + SEAL / 2), Y(top + 6), T.back, tb);
     p.text(X(half * 1.5 - SEAL / 2), Y(top + 6), T.front, tb);
     const clear = `${T.clearArea} ${inches(d.clearW)} x ${inches(d.clearH)}`;
-    p.text(X(half / 2 + SEAL / 2), Y(H - SEAL - 2), clear, { ...t, size: 1.8, align: "center" });
-    p.text(X(half * 1.5 - SEAL / 2), Y(H - SEAL - 2), clear, { ...t, size: 1.8, align: "center" });
+    p.text(X(half / 2 + SEAL / 2), Y(clearCaptionY(spec, half / 2 + SEAL / 2, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
+    p.text(X(half * 1.5 - SEAL / 2), Y(clearCaptionY(spec, half * 1.5 - SEAL / 2, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
     p.text(X(half), Y(-5), T.foldUp, { ...t, size: 1.8, align: "center" });
     // dimensions above
     const dim = (x1: number, x2: number, y: number, label: string) => {
@@ -230,6 +245,15 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     p.text(X(ax + 4.5), Y(H + 7.6), T.offRoll, { ...t });
     if (spec.notch === "slit") p.text(X(W + 1.5), Y(slitY(spec) + 0.8), T.slit, { ...t, size: 1.6 });
   });
+
+  // ---- hot stamp area (LOT / EXP), stamped at PharmaCenter after printing ----
+  const sb = stampBox(spec);
+  if (sb) {
+    p.layer(T.ly.stamp, () => {
+      p.rect(X(sb.x), Y(sb.y), sb.w, sb.h, { stroke: DIELINE, width: 0.18, dash: [0.8, 0.5] });
+      p.text(X(sb.x + sb.w / 2), Y(sb.y + sb.h / 2 + 0.6), T.stampTag, { color: DIELINE, size: 1.5, align: "center" });
+    });
+  }
 
   // ---- the one printing element: the eye mark ----
   p.layer(T.ly.eye, () => {
@@ -269,6 +293,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       [T.rEye, T.eye],
       [T.rNotch, notchText],
       [T.rHang, spec.hangHole ? T.hang : T.none],
+      [T.rStamp, sb ? T.stampV(spec.stampLines, String(sb.w), String(Math.round(sb.h * 10) / 10), spec.stampPos === null) : T.none],
       [T.rUnwind, `${T.position(spec.unwind)} -- ${T.unwind[spec.unwind]}`],
     ];
     for (const [k, v] of rows) {
@@ -325,15 +350,18 @@ const SW = {
   clear: TEAL_2,
   bleed: hex("#8a9498"),
   white: hex("#ffffff"),
+  stamp: hex("#5b4b9a"),
+  stampFill: hex("#efeaf7"),
 };
 
-type LegendKey = "cut" | "notch" | "tear" | "hole" | "fold" | "foldEdge" | "seal" | "mark" | "clear" | "bleed";
+type LegendKey = "cut" | "notch" | "tear" | "hole" | "fold" | "foldEdge" | "seal" | "mark" | "clear" | "bleed" | "stamp";
 /** Which keys each drawing carries -- only what that drawing actually shows. */
 export function legendKeys(spec: SachetSpec, view: "flat" | "finished"): LegendKey[] {
   const notch: LegendKey[] = spec.notch !== "none" ? ["notch"] : [];
   const hole: LegendKey[] = spec.hangHole ? ["hole"] : [];
-  if (view === "flat") return ["cut", ...notch, ...hole, "fold", "seal", "mark", "clear", "bleed"];
-  return ["cut", ...notch, ...(spec.notch !== "none" ? (["tear"] as LegendKey[]) : []), ...hole, "foldEdge", "seal", "mark", "clear"];
+  const stamp: LegendKey[] = spec.stamp ? ["stamp"] : [];
+  if (view === "flat") return ["cut", ...notch, ...hole, "fold", "seal", "mark", "clear", ...stamp, "bleed"];
+  return ["cut", ...notch, ...(spec.notch !== "none" ? (["tear"] as LegendKey[]) : []), ...hole, "foldEdge", "seal", "mark", "clear", ...stamp];
 }
 
 /** One swatch, 6 x 3.4 mm, top-left at (x, y). */
@@ -378,6 +406,7 @@ function swatch(p: PageCanvas, key: LegendKey, spec: SachetSpec, x: number, y: n
     case "mark": p.rect(x, y, w, h, { fill: SW.mark }); break;
     case "clear": p.rect(x, y, w, h, { stroke: SW.clear, width: 0.25, dash: [0.8, 0.6] }); break;
     case "bleed": p.rect(x, y, w, h, { stroke: SW.bleed, width: 0.25, dash: [0.8, 0.6] }); break;
+    case "stamp": p.rect(x, y, w, h, { stroke: SW.stamp, fill: SW.stampFill, width: 0.25, dash: [0.8, 0.5] }); break;
   }
 }
 

@@ -54,6 +54,11 @@ export type SachetSpec = {
   triangleOffsetMm: number;
   unwind: Unwind;
   hangHole: boolean;
+  /** Hot-stamped LOT / EXP area (stamped at PharmaCenter after printing). */
+  stamp: boolean;
+  stampLines: StampLines;
+  /** Top-left of the stamp area on the flat film, mm; null = standard spot. */
+  stampPos: { x: number; y: number } | null;
 };
 
 export const DEFAULT_SPEC: SachetSpec = {
@@ -63,7 +68,43 @@ export const DEFAULT_SPEC: SachetSpec = {
   triangleOffsetMm: OFF_STD_MM,
   unwind: 2,
   hangHole: false,
+  stamp: false,
+  stampLines: 1, // standard: one line (user, 2026-10-22)
+  stampPos: null,
 };
+
+// ---- hot stamp (LOT / EXP) ----------------------------------------------------
+// From the user, 2026-10-22: up to 3 lines, max 15 characters per line (spaces
+// count), characters about 1.5 mm tall (~6 pt). The stamp reads upright on the
+// film -- like unwind position 2 -- whatever the unwind position, and it can be
+// moved anywhere on the film. Standard spot: back panel, just above the bottom
+// seal, one line. The width assumes a monospaced stamp font at ~1.25 mm per character.
+export type StampLines = 1 | 2 | 3;
+export const STAMP_CHAR_H = 1.5;
+export const STAMP_LINE_GAP = 1;
+export const STAMP_MARGIN = 1;
+export const STAMP_MAX_CHARS = 15;
+export const STAMP_CHAR_W = 1.25;
+export const STAMP_W = Math.round(STAMP_MAX_CHARS * STAMP_CHAR_W + 2 * STAMP_MARGIN); // 21 mm
+export const stampH = (n: StampLines) => n * STAMP_CHAR_H + (n - 1) * STAMP_LINE_GAP + 2 * STAMP_MARGIN;
+
+/** The standard spot: centered on the back panel's clear area, 0.5 mm above the bottom seal. */
+export function stampStd(spec: SachetSpec) {
+  const half = (spec.toolingIn * MM_PER_IN) / 2;
+  const H = spec.lengthIn * MM_PER_IN;
+  return { x: (SEAL + half) / 2 - STAMP_W / 2, y: H - SEAL - stampH(spec.stampLines) - 0.5 };
+}
+
+/** Where the stamp area actually is (kept on the film), or null when off. */
+export function stampBox(spec: SachetSpec) {
+  if (!spec.stamp) return null;
+  const W = spec.toolingIn * MM_PER_IN, H = spec.lengthIn * MM_PER_IN;
+  const h = stampH(spec.stampLines);
+  const p = spec.stampPos ?? stampStd(spec);
+  const x = Math.min(Math.max(p.x, 0), W - STAMP_W);
+  const y = Math.min(Math.max(p.y, 0), H - h);
+  return { x, y, w: STAMP_W, h };
+}
 
 /** Top seal height: 6 mm, or 20 mm when the sachet has a hang hole. */
 export const topSeal = (spec: SachetSpec) => (spec.hangHole ? HANG_SEAL : SEAL);
@@ -77,6 +118,7 @@ export type DrawLabels = {
   fold: string;
   clear: string;
   offRoll: string;
+  stamp: string;
 };
 
 // Rotation of the copy on the film for each unwind position. The bottom edge
@@ -155,6 +197,30 @@ function hangHole(spec: SachetSpec, x0: number, w: number) {
   return `<circle class="s-hole" cx="${x0 + w / 2}" cy="${HANG_SEAL / 2}" r="${HANG_HOLE_D / 2}"/>`;
 }
 
+/** Baseline for a panel's "Clear area" caption: lifted above the stamp area
+ *  when the stamp would sit on top of it. `cx` is the caption's center in
+ *  film coordinates. */
+export function clearCaptionY(spec: SachetSpec, cx: number, y: number) {
+  const b = stampBox(spec);
+  if (!b) return y;
+  const overlapsX = Math.abs(b.x + b.w / 2 - cx) < b.w / 2 + 26;
+  const overlapsY = b.y < y + 1 && b.y + b.h > y - 3;
+  return overlapsX && overlapsY ? b.y - 1.5 : y;
+}
+
+/** The hot stamp area, clipped to [x0, x1) of the film and shifted by dx. */
+function stampArea(spec: SachetSpec, label: string, x0 = -Infinity, x1 = Infinity, dx = 0) {
+  const b = stampBox(spec);
+  if (!b) return "";
+  const l = Math.max(b.x, x0), r = Math.min(b.x + b.w, x1);
+  if (r - l <= 0.05) return "";
+  let s = `<rect class="s-stamp" x="${l + dx}" y="${b.y}" width="${r - l}" height="${b.h}"/>`;
+  if (r - l >= 12) {
+    s += `<text class="t-stamp" x="${(l + r) / 2 + dx}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
+  }
+  return s;
+}
+
 // A faint diamond crosshatch on the sealed edges -- the mark the heat-seal
 // jaws leave. Each drawing gets its own pattern id (two drawings share a page).
 // Inline style beats the .s-seal class fill.
@@ -198,8 +264,9 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   g += `<text class="t-panel" x="${bcx}" y="${top + 6}" text-anchor="middle">${esc(L.back)}</text>`;
   g += `<text class="t-panel" x="${fcx}" y="${top + 6}" text-anchor="middle">${esc(L.front)}</text>`;
   g += copySample(spec, bcx, (top + H - SEAL) / 2 + 1) + copySample(spec, fcx, (top + H - SEAL) / 2 + 1);
-  g += `<text class="t-sub" x="${bcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
-  g += `<text class="t-sub" x="${fcx}" y="${H - SEAL - 2.5}" text-anchor="middle">${clearLabel}</text>`;
+  g += `<text class="t-sub" x="${bcx}" y="${clearCaptionY(spec, bcx, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
+  g += `<text class="t-sub" x="${fcx}" y="${clearCaptionY(spec, fcx, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
+  g += stampArea(spec, L.stamp);
   g += frontNotch(spec, W, H);
   // Punched through both layers, so it shows on both panels.
   g += hangHole(spec, 0, half) + hangHole(spec, half, half);
@@ -246,7 +313,9 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.back)}</text>`;
   g += copySample(spec, (w + SEAL) / 2, (top + H - SEAL) / 2);
-  g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${clearCaptionY(spec, (w + SEAL) / 2, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  // The stamp stays where it is on the film: back = film x 0..w.
+  g += stampArea(spec, L.stamp, 0, w, 0);
 
   // FRONT -- fold on its left.
   g += `<g transform="translate(${fx} 0)">`;
@@ -262,7 +331,9 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.front)}</text>`;
   g += copySample(spec, clearW / 2, (top + H - SEAL) / 2);
-  g += `<text class="t-sub" x="${clearW / 2}" y="${H - SEAL - 2.5}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  g += `<text class="t-sub" x="${clearW / 2}" y="${clearCaptionY(spec, w + clearW / 2, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  // front = film x w..2w, drawn from this panel's left edge
+  g += stampArea(spec, L.stamp, w, 2 * w, -w);
   g += `</g>`;
 
   g += `<text class="t-sub t-fold" x="${w}" y="${H + 4.5}" text-anchor="middle">${esc(L.fold)}</text>`;

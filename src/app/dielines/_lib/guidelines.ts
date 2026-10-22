@@ -20,6 +20,7 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
       { title: "Área libre", text: "Mantenga todo el texto y los gráficos importantes dentro del área libre." },
       { title: "Sangrado", text: "Extienda el color de fondo y las imágenes 1 mm más allá de la línea de corte." },
       { title: "Capas Dieline", text: "Las líneas en el color directo \"Dieline\" no se imprimen. Oculte o borre esas capas antes de enviar el arte; conserve la marca de fotocelda." },
+      ...(spec.stamp ? [{ title: "Estampado en caliente (LOTE / VENC.)", text: "PharmaCenter estampa el lote y el vencimiento en el área marcada después de imprimir. Mantenga esa área libre de texto, códigos de barras y detalles finos." }] : []),
     ];
   }
   return [
@@ -30,6 +31,7 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
     { title: "Clear area", text: "Keep all text and important graphics inside the clear area." },
     { title: "Bleed", text: "Run background color and images 1 mm past the cut line." },
     { title: "Dieline layers", text: "Lines in the spot color \"Dieline\" do not print. Hide or delete those layers before sending art to print; keep the eye mark." },
+    ...(spec.stamp ? [{ title: "Hot stamp (LOT / EXP)", text: "PharmaCenter hot stamps the lot number and expiration date in the marked area after printing. Keep that area free of text, barcodes and fine detail." }] : []),
   ];
 }
 

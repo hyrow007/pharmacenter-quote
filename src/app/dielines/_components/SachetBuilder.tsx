@@ -16,6 +16,11 @@ import {
   OFF_MIN_MM,
   OFF_STD_MM,
   STANDARDS,
+  STAMP_W,
+  stampBox,
+  stampH,
+  stampStd,
+  type StampLines,
   TOOLING_IN,
   dims,
   finishedSvg,
@@ -124,7 +129,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   const [libBusy, setLibBusy] = useState<number | null>(null);
   const downloadStandard = async (tooling: number, length: number) => {
     const std: SachetSpec = { ...DEFAULT_SPEC, toolingIn: tooling, lengthIn: length };
-    const L = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll") };
+    const L = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll"), stamp: t("stampTag") };
     const holder = document.createElement("div");
     holder.className = s.drawing;
     holder.setAttribute("aria-hidden", "true");
@@ -148,7 +153,8 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   const set = (patch: Partial<SachetSpec>) => setSpec((p) => ({ ...p, ...patch }));
 
   const d = dims(spec);
-  const labels = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll") };
+  const labels = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll"), stamp: t("stampTag") };
+  const sb = stampBox(spec);
   const flat = flatSvg(spec, labels, t("flat"));
   const finished = finishedSvg(spec, labels, t("finished"));
   const positionLabel = t("position", { n: spec.unwind });
@@ -169,6 +175,9 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     [t("sBleed"), "1 mm"],
     [t("sEye"), t("sEyeV")],
     [t("sNotch"), notchValue],
+    [t("sStamp"), sb
+      ? t(spec.stampPos ? "sStampAt" : "sStampStd", { n: spec.stampLines, w: STAMP_W, h: sb.h, x: sb.x.toFixed(1), y: sb.y.toFixed(1) })
+      : t("sStampNone")],
     [t("sUnwind"), positionLabel],
   ];
 
@@ -178,6 +187,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
   type Lg = { cls: string; label: string };
   const notchLg: Lg[] = spec.notch !== "none" ? [{ cls: spec.notch === "slit" ? s.swNotchSlit : s.swNotchTri, label: t("lgNotch") }] : [];
   const holeLg: Lg[] = spec.hangHole ? [{ cls: s.swHole, label: t("lgHole") }] : [];
+  const stampLg: Lg[] = spec.stamp ? [{ cls: s.swStamp, label: t("lgStamp") }] : [];
   const legendFlat: Lg[] = [
     { cls: s.swCut, label: t("lgCut") },
     ...notchLg,
@@ -186,6 +196,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     { cls: s.swSeal, label: t("lgSeal") },
     { cls: s.swMark, label: t("lgMark") },
     { cls: s.swClear, label: t("lgClear") },
+    ...stampLg,
     { cls: s.swBleed, label: t("lgBleed") },
   ];
   const legendFinished: Lg[] = [
@@ -197,6 +208,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     { cls: s.swSeal, label: t("lgSeal") },
     { cls: s.swMark, label: t("lgMark") },
     { cls: s.swClear, label: t("lgClear") },
+    ...stampLg,
   ];
 
   return (
@@ -306,6 +318,64 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
           />
           <p className={s.hint}>{spec.hangHole ? t("hangHint") : t("hangHintNo")}</p>
         </div>
+
+        <div className={s.field}>
+          <span className={s.label}>{t("stamp")}</span>
+          <Segmented<"no" | "yes">
+            label={t("stamp")}
+            options={[
+              { v: "no", main: t("hangNo") },
+              { v: "yes", main: t("hangYes") },
+            ]}
+            value={spec.stamp ? "yes" : "no"}
+            onPick={(v) => set({ stamp: v === "yes" })}
+          />
+          <p className={s.hint}>{spec.stamp ? t("stampHint") : t("stampHintNo")}</p>
+        </div>
+
+        {spec.stamp && sb ? (
+          <>
+            <div className={s.field}>
+              <span className={s.label}>{t("stampLines")}</span>
+              <Segmented<StampLines>
+                label={t("stampLines")}
+                options={([1, 2, 3] as StampLines[]).map((n) => ({ v: n, main: String(n), small: n === 1 ? t("stampStdTag") : undefined }))}
+                value={spec.stampLines}
+                onPick={(v) => set({ stampLines: v })}
+              />
+              <p className={s.hint}>{t("stampLinesHint", { w: STAMP_W, h: stampH(spec.stampLines) })}</p>
+            </div>
+            <div className={s.field}>
+              <span className={s.label}>{t("stampPos")}</span>
+              {spec.stampPos ? (
+                <>
+                  <label className={s.hint} htmlFor="dl-stamp-x">{t("stampX")}</label>
+                  <NumberField
+                    id="dl-stamp-x" value={Math.round(sb.x * 10) / 10} min={0} max={Math.floor((d.filmW - STAMP_W) * 10) / 10} step={0.5}
+                    unit="mm" fixed={1} label={t("stampX")} onCommit={(v) => set({ stampPos: { x: v, y: sb.y } })}
+                  />
+                  <label className={s.hint} htmlFor="dl-stamp-y">{t("stampY")}</label>
+                  <NumberField
+                    id="dl-stamp-y" value={Math.round(sb.y * 10) / 10} min={0} max={Math.floor((d.height - sb.h) * 10) / 10} step={0.5}
+                    unit="mm" fixed={1} label={t("stampY")} onCommit={(v) => set({ stampPos: { x: sb.x, y: v } })}
+                  />
+                  <button type="button" className={s.chip} onClick={() => set({ stampPos: null })}>
+                    {t("stampReset")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className={s.fixedValue}>
+                    {t("stampStdShort")} <span className={s.hint}>{t("stampStdTag")}</span>
+                  </p>
+                  <button type="button" className={s.chip} onClick={() => set({ stampPos: stampStd(spec) })}>
+                    {t("lengthCustomize")}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        ) : null}
 
         <div className={s.field}>
           <span className={s.label}>{t("unwind")}</span>
