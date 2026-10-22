@@ -20,7 +20,7 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
       { title: "Área libre", text: "Mantenga todo el texto y los gráficos importantes dentro del área libre." },
       { title: "Sangrado", text: "Extienda el color de fondo y las imágenes 1 mm más allá de la línea de corte." },
       { title: "Capas Dieline", text: "Las líneas en el color directo \"Dieline\" no se imprimen. Oculte o borre esas capas antes de enviar el arte; conserve la marca de fotocelda." },
-      ...(spec.stamp ? [{ title: "Estampado en caliente (LOTE / VENC.)", text: "PharmaCenter estampa el lote y el vencimiento en el área marcada después de imprimir, solo en negro o blanco. Mantenga esa área libre de texto, códigos de barras y detalles finos, con un fondo claro (para negro) u oscuro (para blanco) para que se lea bien." }] : []),
+      ...(spec.stamp ? [{ title: "Estampado en caliente (LOTE / VENC.)", text: `PharmaCenter estampa el lote y el vencimiento en el área marcada después de imprimir, solo en negro o blanco. ${spec.stampPos === null ? "El área marcada es nuestra posición estándar (reverso, justo arriba del sello inferior); se puede mover a cualquier parte de la película si su diseño lo necesita, solo avísenos." : "El área marcada es donde se ubicó para este diseño."} Mantenga esa área libre de texto, códigos de barras y detalles finos, con un fondo claro (para negro) u oscuro (para blanco) para que se lea bien.` }] : []),
     ];
   }
   return [
@@ -31,7 +31,7 @@ export function artworkGuidelines(spec: SachetSpec, lang: Lang): Guideline[] {
     { title: "Clear area", text: "Keep all text and important graphics inside the clear area." },
     { title: "Bleed", text: "Run background color and images 1 mm past the cut line." },
     { title: "Dieline layers", text: "Lines in the spot color \"Dieline\" do not print. Hide or delete those layers before sending art to print; keep the eye mark." },
-    ...(spec.stamp ? [{ title: "Hot stamp (LOT / EXP)", text: "PharmaCenter hot stamps the lot number and expiration date in the marked area after printing, in black or white only. Keep that area free of text, barcodes and fine detail, on a light background (for black) or a dark one (for white) so it reads clearly." }] : []),
+    ...(spec.stamp ? [{ title: "Hot stamp (LOT / EXP)", text: `PharmaCenter hot stamps the lot number and expiration date in the marked area after printing, in black or white only. ${spec.stampPos === null ? "The marked area is our standard position (back panel, just above the bottom seal); it can be moved anywhere on the film if your design needs it, so let us know." : "The marked area is where it was placed for this design."} Keep that area free of text, barcodes and fine detail, on a light background (for black) or a dark one (for white) so it reads clearly.` }] : []),
   ];
 }
 
