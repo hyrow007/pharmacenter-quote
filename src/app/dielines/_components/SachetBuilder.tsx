@@ -20,6 +20,7 @@ import {
   stampBox,
   stampH,
   stampStd,
+  type StampColor,
   type StampLines,
   TOOLING_IN,
   dims,
@@ -123,12 +124,13 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
       setBusy(false);
     }
   };
-  // Dieline library: the three standard sizes with house defaults, generated
+  // Dieline library: the three standard sizes with house defaults (and the
+  // standard LOT / EXP stamp: 1 line, black, back panel), generated
   // on demand. The drawings are rendered off-screen inside a .drawing box so
   // they pick up the same styles as the ones on the page.
   const [libBusy, setLibBusy] = useState<number | null>(null);
   const downloadStandard = async (tooling: number, length: number) => {
-    const std: SachetSpec = { ...DEFAULT_SPEC, toolingIn: tooling, lengthIn: length };
+    const std: SachetSpec = { ...DEFAULT_SPEC, toolingIn: tooling, lengthIn: length, stamp: true };
     const L = { back: t("back"), front: t("front"), fold: t("fold"), clear: t("clear"), offRoll: t("offRoll"), stamp: t("stampTag") };
     const holder = document.createElement("div");
     holder.className = s.drawing;
@@ -176,7 +178,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
     [t("sEye"), t("sEyeV")],
     [t("sNotch"), notchValue],
     [t("sStamp"), sb
-      ? t(spec.stampPos ? "sStampAt" : "sStampStd", { n: spec.stampLines, w: STAMP_W, h: sb.h, x: sb.x.toFixed(1), y: sb.y.toFixed(1) })
+      ? t(spec.stampPos ? "sStampAt" : "sStampStd", { n: spec.stampLines, c: t(spec.stampColor === "black" ? "stampBlack" : "stampWhite").toLowerCase(), w: STAMP_W, h: sb.h, x: sb.x.toFixed(1), y: sb.y.toFixed(1) })
       : t("sStampNone")],
     [t("sUnwind"), positionLabel],
   ];
@@ -346,6 +348,19 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
               <p className={s.hint}>{t("stampLinesHint", { w: STAMP_W, h: stampH(spec.stampLines) })}</p>
             </div>
             <div className={s.field}>
+              <span className={s.label}>{t("stampColor")}</span>
+              <Segmented<StampColor>
+                label={t("stampColor")}
+                options={[
+                  { v: "black", main: t("stampBlack") },
+                  { v: "white", main: t("stampWhite") },
+                ]}
+                value={spec.stampColor}
+                onPick={(v) => set({ stampColor: v })}
+              />
+              <p className={s.hint}>{t(spec.stampColor === "black" ? "stampBlackHint" : "stampWhiteHint")}</p>
+            </div>
+            <div className={s.field}>
               <span className={s.label}>{t("stampPos")}</span>
               {spec.stampPos ? (
                 <>
@@ -459,7 +474,7 @@ export default function SachetBuilder({ lang }: { lang: Lang }) {
         <p className={s.hint}>{t("libraryHint")}</p>
         <ul className={s.libList}>
           {STANDARDS.map((p) => {
-            const stdSpec: SachetSpec = { ...DEFAULT_SPEC, toolingIn: p.tooling, lengthIn: p.length };
+            const stdSpec: SachetSpec = { ...DEFAULT_SPEC, toolingIn: p.tooling, lengthIn: p.length, stamp: true };
             return (
               <li key={p.tooling} className={s.libItem}>
                 <div className={s.libText}>

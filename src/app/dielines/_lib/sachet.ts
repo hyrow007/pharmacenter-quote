@@ -57,6 +57,8 @@ export type SachetSpec = {
   /** Hot-stamped LOT / EXP area (stamped at PharmaCenter after printing). */
   stamp: boolean;
   stampLines: StampLines;
+  /** Foil color of the hot stamp: black or white (user, 2026-10-22). */
+  stampColor: StampColor;
   /** Top-left of the stamp area on the flat film, mm; null = standard spot. */
   stampPos: { x: number; y: number } | null;
 };
@@ -70,6 +72,7 @@ export const DEFAULT_SPEC: SachetSpec = {
   hangHole: false,
   stamp: false,
   stampLines: 1, // standard: one line (user, 2026-10-22)
+  stampColor: "black",
   stampPos: null,
 };
 
@@ -80,6 +83,7 @@ export const DEFAULT_SPEC: SachetSpec = {
 // moved anywhere on the film. Standard spot: back panel, just above the bottom
 // seal, one line. The width assumes a monospaced stamp font at ~1.25 mm per character.
 export type StampLines = 1 | 2 | 3;
+export type StampColor = "black" | "white";
 export const STAMP_CHAR_H = 1.5;
 export const STAMP_LINE_GAP = 1;
 export const STAMP_MARGIN = 1;
@@ -208,15 +212,24 @@ export function clearCaptionY(spec: SachetSpec, cx: number, y: number) {
   return overlapsX && overlapsY ? b.y - 1.5 : y;
 }
 
+/** One baseline for both panels' "Clear area" captions, so they always line
+ *  up: if the stamp lifts one, both move. */
+export function captionsY(spec: SachetSpec, y: number) {
+  const half = (spec.toolingIn * MM_PER_IN) / 2;
+  return Math.min(clearCaptionY(spec, half / 2 + SEAL / 2, y), clearCaptionY(spec, half * 1.5 - SEAL / 2, y));
+}
+
 /** The hot stamp area, clipped to [x0, x1) of the film and shifted by dx. */
 function stampArea(spec: SachetSpec, label: string, x0 = -Infinity, x1 = Infinity, dx = 0) {
   const b = stampBox(spec);
   if (!b) return "";
   const l = Math.max(b.x, x0), r = Math.min(b.x + b.w, x1);
   if (r - l <= 0.05) return "";
-  let s = `<rect class="s-stamp" x="${l + dx}" y="${b.y}" width="${r - l}" height="${b.h}"/>`;
+  // White foil is shown on a dark box, black foil on a light one.
+  const white = spec.stampColor === "white";
+  let s = `<rect class="s-stamp${white ? " s-stamp-white" : ""}" x="${l + dx}" y="${b.y}" width="${r - l}" height="${b.h}"/>`;
   if (r - l >= 12) {
-    s += `<text class="t-stamp" x="${(l + r) / 2 + dx}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
+    s += `<text class="t-stamp${white ? " t-stamp-white" : ""}" x="${(l + r) / 2 + dx}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
   }
   return s;
 }
@@ -264,8 +277,8 @@ export function flatSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string): str
   g += `<text class="t-panel" x="${bcx}" y="${top + 6}" text-anchor="middle">${esc(L.back)}</text>`;
   g += `<text class="t-panel" x="${fcx}" y="${top + 6}" text-anchor="middle">${esc(L.front)}</text>`;
   g += copySample(spec, bcx, (top + H - SEAL) / 2 + 1) + copySample(spec, fcx, (top + H - SEAL) / 2 + 1);
-  g += `<text class="t-sub" x="${bcx}" y="${clearCaptionY(spec, bcx, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
-  g += `<text class="t-sub" x="${fcx}" y="${clearCaptionY(spec, fcx, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
+  g += `<text class="t-sub" x="${bcx}" y="${captionsY(spec, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
+  g += `<text class="t-sub" x="${fcx}" y="${captionsY(spec, H - SEAL - 2.5)}" text-anchor="middle">${clearLabel}</text>`;
   g += stampArea(spec, L.stamp);
   g += frontNotch(spec, W, H);
   // Punched through both layers, so it shows on both panels.
@@ -313,7 +326,7 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.back)}</text>`;
   g += copySample(spec, (w + SEAL) / 2, (top + H - SEAL) / 2);
-  g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${clearCaptionY(spec, (w + SEAL) / 2, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  g += `<text class="t-sub" x="${(w + SEAL) / 2}" y="${captionsY(spec, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
   // The stamp stays where it is on the film: back = film x 0..w.
   g += stampArea(spec, L.stamp, 0, w, 0);
 
@@ -331,7 +344,7 @@ export function finishedSvg(spec: SachetSpec, L: DrawLabels, ariaLabel: string):
   g += hangHole(spec, 0, w);
   g += `<text class="t-panel" x="${w / 2}" y="-4" text-anchor="middle">${esc(L.front)}</text>`;
   g += copySample(spec, clearW / 2, (top + H - SEAL) / 2);
-  g += `<text class="t-sub" x="${clearW / 2}" y="${clearCaptionY(spec, w + clearW / 2, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
+  g += `<text class="t-sub" x="${clearW / 2}" y="${captionsY(spec, H - SEAL - 2.5)}" text-anchor="middle">${esc(L.clear)} ${clearLine}</text>`;
   // front = film x w..2w, drawn from this panel's left edge
   g += stampArea(spec, L.stamp, w, 2 * w, -w);
   g += `</g>`;

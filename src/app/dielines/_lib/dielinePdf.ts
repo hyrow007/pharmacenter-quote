@@ -23,7 +23,7 @@ import {
   inches,
   slitY,
   stampBox,
-  clearCaptionY,
+  captionsY,
   STAMP_MAX_CHARS,
   type SachetSpec,
 } from "./sachet";
@@ -51,8 +51,8 @@ const TX = {
     },
     stampTag: "LOT / EXP (HOT STAMP)",
     rStamp: "Hot stamp",
-    stampV: (n: number, w: string, h: string, std: boolean) =>
-      `LOT / EXP, ${n} line${n > 1 ? "s" : ""} of up to ${STAMP_MAX_CHARS} characters; area ${w} x ${h} mm, ${std ? "back panel, just above the bottom seal" : "as placed on the dieline"}`,
+    stampV: (n: number, w: string, h: string, std: boolean, white: boolean) =>
+      `${white ? "White" : "Black"} foil, LOT / EXP, ${n} line${n > 1 ? "s" : ""} of up to ${STAMP_MAX_CHARS} characters; area ${w} x ${h} mm, ${std ? "back panel, just above the bottom seal" : "as placed on the dieline"}`,
     back: "BACK", front: "FRONT", clearArea: "CLEAR AREA", foldUp: "FOLD", film: "FILM", offRoll: "OFF THE ROLL", slit: "SLIT",
     title: "Sachet dieline",
     none: "None",
@@ -94,8 +94,8 @@ const TX = {
     },
     stampTag: "LOTE / VENC. (ESTAMPADO)",
     rStamp: "Estampado en caliente",
-    stampV: (n: number, w: string, h: string, std: boolean) =>
-      `LOTE / VENC., ${n} línea${n > 1 ? "s" : ""} de hasta ${STAMP_MAX_CHARS} caracteres; área de ${w} x ${h} mm, ${std ? "reverso, justo arriba del sello inferior" : "según se ubica en el troquel"}`,
+    stampV: (n: number, w: string, h: string, std: boolean, white: boolean) =>
+      `Foil ${white ? "blanco" : "negro"}, LOTE / VENC., ${n} línea${n > 1 ? "s" : ""} de hasta ${STAMP_MAX_CHARS} caracteres; área de ${w} x ${h} mm, ${std ? "reverso, justo arriba del sello inferior" : "según se ubica en el troquel"}`,
     back: "REVERSO", front: "FRENTE", clearArea: "ÁREA LIBRE", foldUp: "PLIEGUE", film: "PELÍCULA", offRoll: "SALIDA DEL ROLLO", slit: "CORTE",
     title: "Troquel de sachet",
     none: "Ninguno",
@@ -208,8 +208,8 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
     p.text(X(half / 2 + SEAL / 2), Y(top + 6), T.back, tb);
     p.text(X(half * 1.5 - SEAL / 2), Y(top + 6), T.front, tb);
     const clear = `${T.clearArea} ${inches(d.clearW)} x ${inches(d.clearH)}`;
-    p.text(X(half / 2 + SEAL / 2), Y(clearCaptionY(spec, half / 2 + SEAL / 2, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
-    p.text(X(half * 1.5 - SEAL / 2), Y(clearCaptionY(spec, half * 1.5 - SEAL / 2, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
+    p.text(X(half / 2 + SEAL / 2), Y(captionsY(spec, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
+    p.text(X(half * 1.5 - SEAL / 2), Y(captionsY(spec, H - SEAL - 2)), clear, { ...t, size: 1.8, align: "center" });
     p.text(X(half), Y(-5), T.foldUp, { ...t, size: 1.8, align: "center" });
     // dimensions above
     const dim = (x1: number, x2: number, y: number, label: string) => {
@@ -293,7 +293,7 @@ function dielinePage(spec: SachetSpec, today: string, hasUnwindImage: boolean, h
       [T.rEye, T.eye],
       [T.rNotch, notchText],
       [T.rHang, spec.hangHole ? T.hang : T.none],
-      [T.rStamp, sb ? T.stampV(spec.stampLines, String(sb.w), String(Math.round(sb.h * 10) / 10), spec.stampPos === null) : T.none],
+      [T.rStamp, sb ? T.stampV(spec.stampLines, String(sb.w), String(Math.round(sb.h * 10) / 10), spec.stampPos === null, spec.stampColor === "white") : T.none],
       [T.rUnwind, `${T.position(spec.unwind)} -- ${T.unwind[spec.unwind]}`],
     ];
     for (const [k, v] of rows) {
