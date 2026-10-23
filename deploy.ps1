@@ -180,6 +180,35 @@ if (Test-Path $lockFile) {
     }
 }
 
+# --- Cohesion gate ----------------------------------------------------------
+# Runs BEFORE `git add -A`, like the typecheck gate, so a failure leaves the
+# working tree exactly as it was. Read-only: it stages and writes nothing.
+#
+# It catches the three things that used to depend on someone remembering them:
+# the six files that must stay identical across both repos, EN/ES dictionary
+# parity, and another chat's work sitting in the tree about to be swept into
+# your commit. See Check-Cohesion.ps1 for what each check is and why.
+$cohesionScript = Join-Path $PSScriptRoot "Check-Cohesion.ps1"
+if (Test-Path $cohesionScript) {
+    & $cohesionScript -CommitMessage $msg
+    $cohesionCode = $LASTEXITCODE
+    if ($cohesionCode -eq 1) {
+        Write-Error "Cohesion check FAILED - nothing staged, nothing committed, nothing pushed."
+        exit 1
+    }
+    if ($cohesionCode -eq 2) {
+        # A warning, not a verdict. Spanning apps in one commit is sometimes
+        # right; doing it without noticing never is.
+        $answer = Read-Host "Commit these anyway? (y/N)"
+        if ($answer -ne "y") {
+            Write-Host "Aborted. Nothing staged, nothing committed, nothing pushed." -ForegroundColor Yellow
+            exit 1
+        }
+    }
+} else {
+    Write-Host "Check-Cohesion.ps1 not found - skipping the cohesion gate." -ForegroundColor Yellow
+}
+
 git add -A
 if ($LASTEXITCODE -ne 0) {
     Write-Error "git add failed - nothing staged, nothing committed, nothing pushed."
