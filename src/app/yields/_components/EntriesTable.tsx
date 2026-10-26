@@ -53,6 +53,7 @@ export default function EntriesTable({
             <th className={s.num}>{t("colFinished")}</th>
             {balances ? <th className={s.num}>{t("colDoneToDate")}</th> : null}
             {balances ? <th className={s.num}>{t("colSoBalance")}</th> : null}
+            {balances ? <th className={s.num}>{t("colEcd")}</th> : null}
             <th className={s.num}>{t("colPeople")}</th>
             <th className={s.num}>{t("colManHours")}</th>
             <th className={s.num}>{t("colGrossUnit")}</th>
@@ -82,6 +83,7 @@ export default function EntriesTable({
               </td>
               {balances ? <DoneCell b={balances.get(r.id)} lang={lang} /> : null}
               {balances ? <BalanceCell b={balances.get(r.id)} lang={lang} /> : null}
+              {balances ? <EcdCell b={balances.get(r.id)} lang={lang} /> : null}
               <td className={s.num}>{fmtNum(r.people, lang)}</td>
               <td className={s.num}>
                 {fmtNum(r.man_hours, lang)}
@@ -144,6 +146,20 @@ function DoneCell({ b, lang }: { b: SoBalance | undefined; lang: Lang }) {
     <td className={s.num} title={t("balanceTitle", { o: fmtInt(b.ordered, lang), p: fmtInt(b.produced, lang) })}>
       {fmtInt(b.produced, lang)}
       {pct !== null ? <span className={s.sub}>{t("pctOfOrder", { p: pct })}</span> : null}
+    </td>
+  );
+}
+
+// Estimated completion date at the average of the last two run rates.
+function EcdCell({ b, lang }: { b: SoBalance | undefined; lang: Lang }) {
+  const t = makeYT(lang);
+  if (!b) return <td className={s.num}>—</td>;
+  if (b.balance <= 0) return <td className={s.num}><span className={s.balanceDone}>{t("balanceDone")}</span></td>;
+  if (!b.ecd) return <td className={s.num}>—</td>;
+  return (
+    <td className={s.num} style={{ whiteSpace: "nowrap" }} title={t("ecdTitle", { r: fmtInt(b.rate, lang) })}>
+      {fmtDate(b.ecd, lang)}
+      <span className={s.sub}>{t("ecdDays", { n: b.daysLeft ?? 0 })}</span>
     </td>
   );
 }

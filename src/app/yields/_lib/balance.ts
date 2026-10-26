@@ -17,7 +17,31 @@ import { toNum, unitFactor, type SoItemLike, type YieldEntry } from "./model";
 // No SO, an SO not in the mirror, or a line whose unit is unknown -> no
 // balance (shown as "—"), never a guess.
 
-export type SoBalance = { ordered: number; produced: number; balance: number };
+//
+// ECD (estimated completion date), as of each run: the balance divided by the
+// average of the last two run rates -- finished units per working day on this
+// product + SO set, the two most recent days with runs up to and including this
+// one (one day if that is all there is) -- counted forward in working days
+// (Mon-Fri; holidays are not known) from the run date.
+export type SoBalance = {
+  ordered: number;
+  produced: number;
+  balance: number;
+  rate: number | null; // avg finished units per working day, last two run days
+  daysLeft: number | null; // working days still needed at that rate
+  ecd: string | null; // YYYY-MM-DD
+};
+
+function addWorkingDays(iso: string, n: number): string {
+  const d = new Date(iso + "T12:00:00Z");
+  let left = n;
+  while (left > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const wd = d.getUTCDay();
+    if (wd !== 0 && wd !== 6) left -= 1;
+  }
+  return d.toISOString().slice(0, 10);
+}
 
 const keyOf = (product: string, sos: string[]) => `${product}|${[...sos].sort().join(",")}`;
 
@@ -88,6 +112,7 @@ export async function soBalances(
   const wantedKeys = new Set(withSo.map((r) => keyOf(r.product_num, r.so_numbers)));
   const orderedByKey = new Map<string, number | null>();
   const running = new Map<string, number>();
+  const daily = new Map<string, Map<string, number>>(); // key -> run_date -> units
   for (const e of logged) {
     if (e.so_numbers.length === 0) continue;
     const k = keyOf(e.product_num, e.so_numbers);
@@ -96,8 +121,23 @@ export async function soBalances(
     const ordered = orderedByKey.get(k);
     const produced = (running.get(k) ?? 0) + e.finished_units;
     running.set(k, produced);
+    const days = daily.get(k) ?? new Map<string, number>();
+    days.set(e.run_date, (days.get(e.run_date) ?? 0) + e.finished_units);
+    daily.set(k, days);
     if (ordered == null) continue;
-    out.set(e.id, { ordered, produced, balance: ordered - produced });
+    const balance = ordered - produced;
+    // Last two run days up to this one (entries arrive in run order).
+    const recent = [...days.entries()].filter(([d]) => d <= e.run_date).slice(-2).map(([, u]) => u);
+    const rate = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+    let daysLeft: number | null = null;
+    let ecd: string | null = null;
+    if (balance <= 0) {
+      daysLeft = 0;
+    } else if (rate && rate > 0) {
+      daysLeft = Math.ceil(balance / rate);
+      ecd = addWorkingDays(e.run_date, daysLeft);
+    }
+    out.set(e.id, { ordered, produced, balance, rate: rate === null ? null : Math.round(rate), daysLeft, ecd });
   }
   return out;
 }
