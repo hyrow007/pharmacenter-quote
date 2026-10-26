@@ -18,16 +18,18 @@ import { toNum, unitFactor, type SoItemLike, type YieldEntry } from "./model";
 // balance (shown as "—"), never a guess.
 
 //
-// ECD (estimated completion date), as of each run: the balance divided by the
-// average of the last two run rates -- finished units per working day on this
-// product + SO set, the two most recent days with runs up to and including this
-// one (one day if that is all there is) -- counted forward in working days
-// (Mon-Fri; holidays are not known) from the run date.
+// ECD (estimated completion date), as of each run. Run rate = finished units
+// per HOUR on a run day (units / hours logged that day for this product + SO
+// set), so a short run does not read as a slow day. The rate used is the
+// average of the last two run days up to and including this one (one if that
+// is all there is), times an 8-hour day (user, 2026-10-26). Days left =
+// balance / daily rate, rounded up, counted forward in working days (Mon-Fri;
+// holidays are not known) from the run date. Days with no hours are skipped.
 export type SoBalance = {
   ordered: number;
   produced: number;
   balance: number;
-  rate: number | null; // avg finished units per working day, last two run days
+  rate: number | null; // finished units per 8-hour day: avg units/hour of the last two run days x 8
   daysLeft: number | null; // working days still needed at that rate
   ecd: string | null; // YYYY-MM-DD
 };
@@ -42,6 +44,8 @@ function addWorkingDays(iso: string, n: number): string {
   }
   return d.toISOString().slice(0, 10);
 }
+
+const HOURS_PER_DAY = 8;
 
 const keyOf = (product: string, sos: string[]) => `${product}|${[...sos].sort().join(",")}`;
 
@@ -86,11 +90,19 @@ export async function soBalances(
 
   // 2. Everything ever logged for these products, to accumulate in order.
   const products = Array.from(new Set(withSo.map((r) => r.product_num))).slice(0, 200);
-  const logged: { id: string; product_num: string; so_numbers: string[]; finished_units: number; run_date: string; created_at: string }[] = [];
+  const logged: {
+    id: string;
+    product_num: string;
+    so_numbers: string[];
+    finished_units: number;
+    hours: number | null;
+    run_date: string;
+    created_at: string;
+  }[] = [];
   for (let offset = 0; offset < 20_000; offset += 1000) {
     const { data, error } = await supabase
       .from("yield_entries")
-      .select("id, product_num, so_numbers, finished_units, run_date, created_at")
+      .select("id, product_num, so_numbers, finished_units, hours, run_date, created_at")
       .in("product_num", products)
       .order("run_date", { ascending: true })
       .order("created_at", { ascending: true })
@@ -102,6 +114,7 @@ export async function soBalances(
         product_num: d.product_num as string,
         so_numbers: Array.isArray(d.so_numbers) ? (d.so_numbers as string[]) : [],
         finished_units: toNum(d.finished_units) ?? 0,
+        hours: toNum(d.hours),
         run_date: d.run_date as string,
         created_at: d.created_at as string,
       });
@@ -112,7 +125,7 @@ export async function soBalances(
   const wantedKeys = new Set(withSo.map((r) => keyOf(r.product_num, r.so_numbers)));
   const orderedByKey = new Map<string, number | null>();
   const running = new Map<string, number>();
-  const daily = new Map<string, Map<string, number>>(); // key -> run_date -> units
+  const daily = new Map<string, Map<string, { units: number; hours: number }>>(); // key -> run_date
   for (const e of logged) {
     if (e.so_numbers.length === 0) continue;
     const k = keyOf(e.product_num, e.so_numbers);
@@ -121,14 +134,20 @@ export async function soBalances(
     const ordered = orderedByKey.get(k);
     const produced = (running.get(k) ?? 0) + e.finished_units;
     running.set(k, produced);
-    const days = daily.get(k) ?? new Map<string, number>();
-    days.set(e.run_date, (days.get(e.run_date) ?? 0) + e.finished_units);
+    const days = daily.get(k) ?? new Map<string, { units: number; hours: number }>();
+    const day = days.get(e.run_date) ?? { units: 0, hours: 0 };
+    day.units += e.finished_units;
+    day.hours += e.hours && e.hours > 0 ? e.hours : 0;
+    days.set(e.run_date, day);
     daily.set(k, days);
     if (ordered == null) continue;
     const balance = ordered - produced;
     // Last two run days up to this one (entries arrive in run order).
-    const recent = [...days.entries()].filter(([d]) => d <= e.run_date).slice(-2).map(([, u]) => u);
-    const rate = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+    const perHour = [...days.entries()]
+      .filter(([d, v]) => d <= e.run_date && v.hours > 0)
+      .slice(-2)
+      .map(([, v]) => v.units / v.hours);
+    const rate = perHour.length ? (perHour.reduce((a, b) => a + b, 0) / perHour.length) * HOURS_PER_DAY : null;
     let daysLeft: number | null = null;
     let ecd: string | null = null;
     if (balance <= 0) {
