@@ -41,7 +41,11 @@ export async function soBalances(
     let total = 0;
     let found = false;
     for (const so of soNumbers) {
-      const targets = itemsBySo.has(so) ? [so] : [...itemsBySo.keys()].filter((k) => k.startsWith(`${so}-`));
+      // The exact order if it sells this product; otherwise its "-N" splits
+      // (the sheet writes "13915" where Fishbowl's line is on "13915-2").
+      const sells = (k: string) =>
+        (itemsBySo.get(k) ?? []).some((it) => it.product_num === product && (it.type_id === 10 || it.type_id === 30));
+      const targets = sells(so) ? [so] : [...itemsBySo.keys()].filter((k) => k.startsWith(`${so}-`));
       for (const t of targets) {
         for (const it of itemsBySo.get(t) ?? []) {
           if (it.product_num !== product || !(it.type_id === 10 || it.type_id === 30)) continue;
