@@ -174,6 +174,27 @@ const TOOLS: Tool[] = [
       </svg>
     ),
   },
+  {
+    key: "kpi",
+    // Host not provisioned yet. Set alongside dropping comingSoon, the same
+    // way Yields and Dielines went live -- see the sequence in
+    // working-agreement.md.
+    href: "https://kpi.pharmacenter.app/",
+    titleKey: "hubKpiName",
+    descKey: "hubKpiDesc",
+    comingSoon: true,
+    // A gauge, not another bar chart. Yields already owns bars, and this tile
+    // sits two along from it; at 26px two bar charts read as the same tool.
+    // A gauge also says the right thing -- a reading against a range, rather
+    // than a quantity.
+    icon: (
+      <svg {...ICON}>
+        <path d="M4.5 17.5a7.5 7.5 0 0 1 15 0" />
+        <path d="M12 17.5l4.6-4.1" />
+        <circle cx="12" cy="17.5" r="0.9" />
+      </svg>
+    ),
+  },
 ];
 
 const VISIBLE_TOOLS = TOOLS.filter((tool) => !tool.hidden);

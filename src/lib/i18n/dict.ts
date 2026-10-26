@@ -326,6 +326,7 @@ const en = {
   signInRedirecting: "Redirecting…",
   hubYieldsName: "Yields",
   hubDielinesName: "Dielines",
+  hubKpiName: "KPIs",
   hubMeetingsName: "Meetings",
   hubEyebrow: "PharmaCenter · Tools",
   hubTitle: "Your tools",
@@ -338,6 +339,7 @@ const en = {
   hubOrdersDesc: "Open sales orders, synced nightly from Fishbowl.",
   hubYieldsDesc: "What each run actually packed against what it should have — by line, product and day.",
   hubDielinesDesc: "Dielines for sachet film, bottle labels and other components — the templates customers build their artwork on.",
+  hubKpiDesc: "How the business is doing, section by section — production yields, open sales orders, and the trend behind each number.",
   hubMeetingsDesc: "Weekly sales order review — notes and action items.",
   hubSignInLede:
     "One place for the tools we use for work. Sign in with your PharmaCenter Google account to continue.",
@@ -713,6 +715,7 @@ const es: typeof en = {
   signInRedirecting: "Redirigiendo…",
   hubYieldsName: "Rendimientos",
   hubDielinesName: "Troqueles",
+  hubKpiName: "Indicadores",
   hubMeetingsName: "Reuniones",
   hubEyebrow: "PharmaCenter · Herramientas",
   hubTitle: "Sus herramientas",
@@ -725,6 +728,7 @@ const es: typeof en = {
   hubOrdersDesc: "Pedidos abiertos, sincronizados cada noche desde Fishbowl.",
   hubYieldsDesc: "Lo que cada corrida realmente empacó frente a lo esperado — por línea, producto y día.",
   hubDielinesDesc: "Troqueles para película de sachet, etiquetas de botella y otros componentes — las plantillas sobre las que los clientes arman su arte.",
+  hubKpiDesc: "Cómo va el negocio, sección por sección — rendimientos de producción, pedidos abiertos y la tendencia detrás de cada número.",
   hubMeetingsDesc: "Revisión semanal de pedidos — notas y tareas.",
   hubSignInLede:
     "Un solo lugar para las herramientas que usamos para trabajar. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
