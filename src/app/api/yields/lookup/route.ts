@@ -41,6 +41,29 @@ export async function GET(request: Request) {
   const q = (url.searchParams.get("q") || "").trim();
   const product = (url.searchParams.get("product") || "").trim();
 
+  // ?logged=<text>: products that have yield entries (any age, active or not)
+  // -- the entries filter on the log page searches these.
+  const logged = (url.searchParams.get("logged") || "").trim();
+  if (logged) {
+    if (logged.length < 2) return NextResponse.json({ ok: true, products: [] });
+    const term = logged.replace(/[%_,()*]/g, " ").trim();
+    const { data, error } = await supabase
+      .from("yield_entries")
+      .select("product_num, product_name, run_date")
+      .or(`product_num.ilike.%${term}%,product_name.ilike.%${term}%`)
+      .order("run_date", { ascending: false })
+      .limit(500);
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    const seen = new Map<string, { fp_code: string; name: string }>();
+    for (const r of data ?? []) {
+      const code = r.product_num as string;
+      if (!seen.has(code)) seen.set(code, { fp_code: code, name: (r.product_name as string | null) ?? "" });
+    }
+    const rows = [...seen.values()];
+    rows.sort((a, b) => Number(b.fp_code === term) - Number(a.fp_code === term));
+    return NextResponse.json({ ok: true, products: rows.slice(0, 20) });
+  }
+
   if (product) {
     const [pRes, soRes, lastRes] = await Promise.all([
       supabase.from("products").select("fp_code, name, avg_cost").eq("fp_code", product).limit(1).maybeSingle(),

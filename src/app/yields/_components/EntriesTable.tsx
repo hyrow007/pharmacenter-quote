@@ -12,6 +12,7 @@ import {
   type YieldEntry,
 } from "../_lib/model";
 import RowActions from "./RowActions";
+import type { SoBalance } from "../_lib/balance";
 import s from "../yields.module.css";
 
 // One row per entry, newest first -- the same view as the sheet's Data tab.
@@ -30,9 +31,12 @@ export default function EntriesTable({
   rows,
   lang,
   canChange,
+  balances,
 }: {
   rows: YieldEntry[];
   lang: Lang;
+  // SO balance per entry id (see _lib/balance.ts); the column shows when given.
+  balances?: Map<string, SoBalance>;
   // When given, rows it allows get Edit / Delete.
   canChange?: (r: YieldEntry) => boolean;
 }) {
@@ -47,6 +51,7 @@ export default function EntriesTable({
             <th>{t("colProduct")}</th>
             <th>{t("colSo")}</th>
             <th className={s.num}>{t("colFinished")}</th>
+            {balances ? <th className={s.num}>{t("colSoBalance")}</th> : null}
             <th className={s.num}>{t("colManHours")}</th>
             <th className={s.num}>{t("colGrossUnit")}</th>
             <th className={s.num}>{t("colGross")}</th>
@@ -73,6 +78,7 @@ export default function EntriesTable({
                   <span className={s.sub}>{fmtInt(r.single_units, lang)} {t("colSingles").toLowerCase()}</span>
                 ) : null}
               </td>
+              {balances ? <BalanceCell b={balances.get(r.id)} lang={lang} /> : null}
               <td className={s.num}>
                 {fmtNum(r.man_hours, lang)}
                 {r.people !== null && r.hours !== null ? (
@@ -100,5 +106,28 @@ export default function EntriesTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function BalanceCell({ b, lang }: { b: SoBalance | undefined; lang: Lang }) {
+  const t = makeYT(lang);
+  if (!b) return <td className={s.num}>—</td>;
+  const title = t("balanceTitle", { o: fmtInt(b.ordered, lang), p: fmtInt(b.produced, lang) });
+  return (
+    <td className={s.num} title={title}>
+      {b.balance > 0 ? (
+        <>
+          {fmtInt(b.balance, lang)}
+          <span className={s.sub}>{t("balanceOf", { n: fmtInt(b.ordered, lang) })}</span>
+        </>
+      ) : b.balance === 0 ? (
+        <span className={s.balanceDone}>{t("balanceDone")}</span>
+      ) : (
+        <>
+          <span className={s.balanceOver}>{t("balanceOver", { n: fmtInt(-b.balance, lang) })}</span>
+          <span className={s.sub}>{t("balanceOf", { n: fmtInt(b.ordered, lang) })}</span>
+        </>
+      )}
+    </td>
   );
 }

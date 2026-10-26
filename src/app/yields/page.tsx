@@ -10,6 +10,8 @@ import { makeYT } from "./_lib/i18n";
 import { loadEntries } from "./_lib/load";
 import { fillMissingGross } from "./_lib/backfill";
 import {
+  DAY_OPTIONS,
+  DEFAULT_DAYS,
   addDays,
   addToRollup,
   emptyRollup,
@@ -28,6 +30,8 @@ import {
 import EntryForm from "./_components/EntryForm";
 import RowActions from "./_components/RowActions";
 import EntriesTable, { sortEntries } from "./_components/EntriesTable";
+import EntriesFilter from "./_components/EntriesFilter";
+import { soBalances } from "./_lib/balance";
 import s from "./yields.module.css";
 
 // /yields -- the daily log. Served at yield.pharmacenter.app/ by the host
@@ -43,7 +47,7 @@ export const metadata = { title: "Yields" };
 export default async function YieldsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; edit?: string }>;
+  searchParams: Promise<{ date?: string; edit?: string; days?: string; product?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -73,9 +77,32 @@ export default async function YieldsPage({
   for (const r of rows) byDay.set(r.run_date, addToRollup(byDay.get(r.run_date) ?? emptyRollup(), r));
   const week = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 7);
   const dayTotal = byDay.get(date) ?? emptyRollup();
-  // Every individual entry on those working days, newest first.
-  const weekDays = new Set(week.map(([d]) => d));
-  const recentRows = sortEntries(rows.filter((r) => weekDays.has(r.run_date)));
+  // "Every entry": the last N working days (days with entries) up to the
+  // selected date -- 10 by default, or all -- optionally one product only.
+  const days = (DAY_OPTIONS as readonly string[]).includes(sp.days ?? "") ? sp.days! : DEFAULT_DAYS;
+  const product = (sp.product ?? "").trim() || null;
+  let listFrom = "2000-01-01";
+  if (days !== "all") {
+    const n = Number(days);
+    const { data: dateRows } = await supabase
+      .from("yield_entries")
+      .select("run_date")
+      .lte("run_date", date)
+      .order("run_date", { ascending: false })
+      .limit(Math.min(n * 40, 5000));
+    const distinct = Array.from(new Set((dateRows ?? []).map((d) => d.run_date as string)));
+    listFrom = distinct[Math.min(n, distinct.length) - 1] ?? date;
+  }
+  const LIST_CAP = 1000;
+  const listRes = await loadEntries(supabase, { from: listFrom, to: date, product });
+  const known = new Set(rows.map((r) => r.id));
+  await fillMissingGross(supabase, listRes.rows.filter((r) => !known.has(r.id)));
+  // Rows already on screen above carry any gross just filled in.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const listAll = sortEntries(listRes.rows.map((r) => byId.get(r.id) ?? r));
+  const recentRows = listAll.slice(0, LIST_CAP);
+  const balances = await soBalances(supabase, recentRows);
+  const productName = product ? (listAll[0]?.product_name ?? null) : null;
 
   const canChange = (r: (typeof rows)[number]) =>
     admin || (r.source === "app" && r.created_by === user.email);
@@ -227,11 +254,17 @@ export default async function YieldsPage({
           </div>
 
           <section className={s.card} style={{ marginTop: 20 }}>
-            <h2 className={s.cardTitle}>{t("recentEntries")} ({recentRows.length})</h2>
+            <div className={s.entriesHead} id="entries">
+              <h2 className={s.cardTitle}>{t("recentEntries")} ({fmtInt(listAll.length, lang)})</h2>
+              <EntriesFilter lang={lang} days={days} product={product} productName={productName} />
+            </div>
+            {listAll.length > recentRows.length ? (
+              <p className={s.hint}>{t("entriesCapped", { shown: recentRows.length, n: listAll.length })}</p>
+            ) : null}
             {recentRows.length === 0 ? (
               <p className={s.empty}>{t("noEntries")}</p>
             ) : (
-              <EntriesTable rows={recentRows} lang={lang} canChange={canChange} />
+              <EntriesTable rows={recentRows} lang={lang} canChange={canChange} balances={balances} />
             )}
           </section>
         </div>

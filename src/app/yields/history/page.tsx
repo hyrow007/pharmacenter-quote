@@ -24,6 +24,7 @@ import {
   type Rollup,
 } from "../_lib/model";
 import EntriesTable, { sortEntries } from "../_components/EntriesTable";
+import { soBalances } from "../_lib/balance";
 import s from "../yields.module.css";
 
 // /yields/history -- any date range, optionally one line or one product.
@@ -71,6 +72,7 @@ export default async function YieldsHistoryPage({
   // Every entry, newest first (same day: by line, then product).
   const ENTRY_CAP = 1000;
   const entryRows = sortEntries(rows).slice(0, ENTRY_CAP);
+  const balances = await soBalances(supabase, entryRows);
   const lineRows = LINES.filter((l) => byLine.has(l)).map((l) => [l, byLine.get(l)!] as const);
 
   return (
@@ -202,7 +204,7 @@ export default async function YieldsHistoryPage({
             {rows.length > entryRows.length ? (
               <p className={s.hint}>{t("entriesCapped", { shown: entryRows.length, n: rows.length })}</p>
             ) : null}
-            <EntriesTable rows={entryRows} lang={lang} />
+            <EntriesTable rows={entryRows} lang={lang} balances={balances} />
           </section>
         </div>
       </main>

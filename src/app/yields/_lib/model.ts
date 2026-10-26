@@ -300,3 +300,9 @@ export function grossForEntry(
   }
   return null;
 }
+
+// ---- the log page's entry list --------------------------------------------
+
+// How many working days (days with entries) the "Every entry" list shows.
+export const DAY_OPTIONS = ["5", "10", "20", "30", "60", "90", "all"] as const;
+export const DEFAULT_DAYS = "10";
