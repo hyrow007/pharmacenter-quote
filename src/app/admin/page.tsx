@@ -124,6 +124,11 @@ export default async function AdminPage() {
           blurb: "Features and tools we want to add, and what state each one is in.",
         },
         {
+          href: "/admin/monday",
+          title: "Fishbowl → Monday",
+          blurb: "Which sales orders are missing, stale or wrong on the Monday boards. Read-only.",
+        },
+        {
           href: "/feedback",
           title: "Feedback",
           blurb: "What people have reported from any of the four apps.",

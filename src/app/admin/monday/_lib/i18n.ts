@@ -1,0 +1,119 @@
+// The Monday reconciler's own strings, EN and ES. Same contract as the shared
+// dictionary: `satisfies` on `es` makes a missing key a type error.
+
+import type { Lang } from "@/lib/i18n/dict";
+
+const en = {
+  eyebrow: "PharmaCenter · Admin",
+  title: "Fishbowl → Monday",
+  lede: "Every sales order in Fishbowl compared with the Open and Fulfilled boards in Monday. Read-only: this page changes nothing in Monday or Fishbowl.",
+  asOf: "Fishbowl data as of {when}. Monday read just now.",
+  stale: "The Fishbowl data is more than 26 hours old, so this report may be out of date. Press Sync in the ☰ menu and reload.",
+  noFulfilled: "The mirror holds no fulfilled orders, so the sync on the office server is older than 5c192bf. Until it is updated, fulfilled and cancelled orders both show up as “closed without being fulfilled”.",
+  loadFailed: "Could not build the report: {detail}",
+  totals: "{wanted} orders should be on the Open board · Open board has {open} items · Fulfilled board has {fulfilled}",
+  allClear: "Nothing to fix. The boards match Fishbowl.",
+  backToAdmin: "← Admin",
+
+  sMissing: "In Fishbowl, not on either board",
+  hMissing: "Open orders and estimates that should be on the Open board.",
+  sOpenOnFulfilled: "Still open in Fishbowl, but on the Fulfilled board",
+  hOpenOnFulfilled: "Moved too early, or moved by hand.",
+  sFulfilledOnOpen: "On the Open board, but fulfilled in Fishbowl",
+  hFulfilledOnOpen: "These should move to the Fulfilled board.",
+  sClosedOnOpen: "On the Open board, but closed in Fishbowl without being fulfilled",
+  hClosedOnOpen: "Cancelled, void, closed short or expired — or fulfilled more than a year ago. Fishbowl's last status before closing is shown.",
+  sUnknown: "On the Open board, not in Fishbowl at all",
+  hUnknown: "Item names that match no sales order. Could be a typo, a manual item, or a very old order. Never touched automatically.",
+  sDiffs: "Matched, but a column disagrees",
+  hDiffs: "Fishbowl's value against the board's. Vendor PO and Date are not checked yet: the mirror does not carry them.",
+  sPrefix: "Matched only by ignoring spacing or the M / M-RD prefix",
+  hPrefix: "The board name and the Fishbowl number are not identical. Confirm these are the same order.",
+  sDupes: "The same order on more than one item",
+  hDupes: "",
+  sFulfilledNeither: "Fulfilled since go-live, on neither board",
+  hFulfilledNeither: "For reference. These would normally sit on the Fulfilled board.",
+
+  colSo: "SO",
+  colCustomer: "Customer",
+  colStatus: "Fishbowl status",
+  colItem: "Monday item",
+  colBoard: "Board",
+  colField: "Column",
+  colFishbowl: "Fishbowl",
+  colMonday: "Monday",
+  colMatch: "Matched as",
+  boardOpen: "Open",
+  boardFulfilled: "Fulfilled",
+  fieldCustomer: "Customer",
+  fieldCustomerPo: "Customer PO",
+  fieldOwner: "Owner",
+  matchFormat: "spacing / format",
+  matchPrefix: "M prefix ignored",
+  empty: "(empty)",
+  open: "open",
+};
+
+type MKey = keyof typeof en;
+
+const es = {
+  eyebrow: "PharmaCenter · Administración",
+  title: "Fishbowl → Monday",
+  lede: "Cada orden de venta de Fishbowl comparada con los tableros Open y Fulfilled de Monday. Solo lectura: esta página no cambia nada en Monday ni en Fishbowl.",
+  asOf: "Datos de Fishbowl al {when}. Monday leído ahora mismo.",
+  stale: "Los datos de Fishbowl tienen más de 26 horas, así que este informe puede estar desactualizado. Pulsa Sincronizar en el menú ☰ y recarga.",
+  noFulfilled: "El espejo no tiene órdenes completadas, así que la sincronización del servidor de la oficina es anterior a 5c192bf. Hasta que se actualice, las órdenes completadas y las canceladas aparecen ambas como “cerradas sin completarse”.",
+  loadFailed: "No se pudo generar el informe: {detail}",
+  totals: "{wanted} órdenes deberían estar en el tablero Open · El tablero Open tiene {open} elementos · El tablero Fulfilled tiene {fulfilled}",
+  allClear: "Nada que corregir. Los tableros coinciden con Fishbowl.",
+  backToAdmin: "← Administración",
+
+  sMissing: "En Fishbowl, en ningún tablero",
+  hMissing: "Órdenes abiertas y estimados que deberían estar en el tablero Open.",
+  sOpenOnFulfilled: "Aún abiertas en Fishbowl, pero en el tablero Fulfilled",
+  hOpenOnFulfilled: "Movidas antes de tiempo o a mano.",
+  sFulfilledOnOpen: "En el tablero Open, pero completadas en Fishbowl",
+  hFulfilledOnOpen: "Deberían pasar al tablero Fulfilled.",
+  sClosedOnOpen: "En el tablero Open, pero cerradas en Fishbowl sin completarse",
+  hClosedOnOpen: "Canceladas, anuladas, cerradas incompletas o vencidas — o completadas hace más de un año. Se muestra el último estado que tuvo en Fishbowl antes de cerrarse.",
+  sUnknown: "En el tablero Open, pero no existen en Fishbowl",
+  hUnknown: "Nombres de elemento que no coinciden con ninguna orden. Puede ser un error de escritura, un elemento manual o una orden muy antigua. Nunca se tocan automáticamente.",
+  sDiffs: "Coinciden, pero una columna no concuerda",
+  hDiffs: "El valor de Fishbowl frente al del tablero. Vendor PO y Date aún no se revisan: el espejo no los trae.",
+  sPrefix: "Coinciden solo ignorando espacios o el prefijo M / M-RD",
+  hPrefix: "El nombre en el tablero y el número en Fishbowl no son idénticos. Confirma que son la misma orden.",
+  sDupes: "La misma orden en más de un elemento",
+  hDupes: "",
+  sFulfilledNeither: "Completadas desde el arranque, en ningún tablero",
+  hFulfilledNeither: "Como referencia. Normalmente estarían en el tablero Fulfilled.",
+
+  colSo: "OV",
+  colCustomer: "Cliente",
+  colStatus: "Estado en Fishbowl",
+  colItem: "Elemento en Monday",
+  colBoard: "Tablero",
+  colField: "Columna",
+  colFishbowl: "Fishbowl",
+  colMonday: "Monday",
+  colMatch: "Coincide como",
+  boardOpen: "Open",
+  boardFulfilled: "Fulfilled",
+  fieldCustomer: "Cliente",
+  fieldCustomerPo: "OC del cliente",
+  fieldOwner: "Responsable",
+  matchFormat: "espacios / formato",
+  matchPrefix: "prefijo M ignorado",
+  empty: "(vacío)",
+  open: "abrir",
+} satisfies Record<MKey, string>;
+
+export type MT = (key: MKey, vars?: Record<string, string | number>) => string;
+
+export function makeMT(lang: Lang): MT {
+  const dict: Record<MKey, string> = lang === "es" ? es : en;
+  return (key, vars) => {
+    let out = dict[key] ?? en[key] ?? key;
+    if (vars) for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v));
+    return out;
+  };
+}
