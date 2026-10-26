@@ -51,7 +51,9 @@ export default function EntriesTable({
             <th>{t("colProduct")}</th>
             <th>{t("colSo")}</th>
             <th className={s.num}>{t("colFinished")}</th>
+            {balances ? <th className={s.num}>{t("colDoneToDate")}</th> : null}
             {balances ? <th className={s.num}>{t("colSoBalance")}</th> : null}
+            <th className={s.num}>{t("colPeople")}</th>
             <th className={s.num}>{t("colManHours")}</th>
             <th className={s.num}>{t("colGrossUnit")}</th>
             <th className={s.num}>{t("colGross")}</th>
@@ -78,12 +80,12 @@ export default function EntriesTable({
                   <span className={s.sub}>{fmtInt(r.single_units, lang)} {t("colSingles").toLowerCase()}</span>
                 ) : null}
               </td>
+              {balances ? <DoneCell b={balances.get(r.id)} lang={lang} /> : null}
               {balances ? <BalanceCell b={balances.get(r.id)} lang={lang} /> : null}
+              <td className={s.num}>{fmtNum(r.people, lang)}</td>
               <td className={s.num}>
                 {fmtNum(r.man_hours, lang)}
-                {r.people !== null && r.hours !== null ? (
-                  <span className={s.sub}>{fmtNum(r.people, lang)} × {fmtNum(r.hours, lang)}</span>
-                ) : null}
+                {r.hours !== null ? <span className={s.sub}>{t("hoursEach", { h: fmtNum(r.hours, lang) })}</span> : null}
               </td>
               <td className={s.num} title={r.gross_source ? t(`source_${r.gross_source}`) : undefined}>
                 {r.gross_source === "house" ? (
@@ -128,6 +130,20 @@ function BalanceCell({ b, lang }: { b: SoBalance | undefined; lang: Lang }) {
           <span className={s.sub}>{t("balanceOf", { n: fmtInt(b.ordered, lang) })}</span>
         </>
       )}
+    </td>
+  );
+}
+
+// Finished units made so far on this product's sales order(s), through this
+// run -- the running yield against the order.
+function DoneCell({ b, lang }: { b: SoBalance | undefined; lang: Lang }) {
+  const t = makeYT(lang);
+  if (!b) return <td className={s.num}>—</td>;
+  const pct = b.ordered > 0 ? Math.round((b.produced / b.ordered) * 100) : null;
+  return (
+    <td className={s.num} title={t("balanceTitle", { o: fmtInt(b.ordered, lang), p: fmtInt(b.produced, lang) })}>
+      {fmtInt(b.produced, lang)}
+      {pct !== null ? <span className={s.sub}>{t("pctOfOrder", { p: pct })}</span> : null}
     </td>
   );
 }
