@@ -271,7 +271,21 @@ export function diffFields(r: MirrorRow, item: BoardItem): FieldDiff[] {
     const fb = c.pick(r) ?? "";
     const board = item.cols[c.title] ?? "";
     if (norm(fb) === norm(board)) continue;
+    if (c.field === "owner" && sameOwner(fb, board)) continue;
     out.push({ so: r.so_number, item, field: c.field, fishbowl: fb, board });
   }
   return out;
+}
+
+// The mirror carries Fishbowl's salesman USERNAME ("Jairo", "admin"); LilyPad
+// wrote SalesmanFullName ("Jairo Osorno", "Administrator Administrator"). The
+// first live run flagged all 49 owners for that alone. Same person = the board
+// name starts with the username, or both are the admin account.
+export function sameOwner(fishbowl: string, board: string): boolean {
+  const fb = norm(fishbowl);
+  const b = norm(board);
+  if (!fb) return false;
+  const isAdmin = (v: string) => v === "admin" || v.startsWith("administrator");
+  if (isAdmin(fb) && isAdmin(b)) return true;
+  return b === fb || b.startsWith(fb + " ");
 }
