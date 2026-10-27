@@ -71,9 +71,13 @@ export async function POST(request: Request) {
     });
   }
 
+  // skip_existing: insert only sheet rows not already imported, leaving every
+  // existing row untouched -- what the daily sheet sync sends, so SOs or
+  // grosses corrected in the app are never overwritten by the sheet.
+  const skipExisting = (body as { skip_existing?: unknown })?.skip_existing === true;
   const { error, count } = await supabase
     .from("yield_entries")
-    .upsert(rows, { onConflict: "source_row", count: "exact" });
+    .upsert(rows, { onConflict: "source_row", count: "exact", ignoreDuplicates: skipExisting });
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, upserted: count ?? rows.length });
 }
