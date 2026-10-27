@@ -157,10 +157,27 @@ export type Rollup = {
   grossManHours: number; // man-hours on entries that HAVE gross -- the honest denominator
   house: number; // house-brand stock runs: no sale, so no gross, and not missing
   provisional: number; // entries carrying the last run's gross until their order ships
+  singles: number; // single units packed (finished x units per pack for multipacks)
+  revenue: number; // known revenue only: finished units x the SO price per finished unit
+  revenueManHours: number; // man-hours on entries whose revenue is known
+  revenueMissing: number; // entries with finished > 0 and no SO price
 };
 
 export function emptyRollup(): Rollup {
-  return { entries: 0, finished: 0, gross: 0, manHours: 0, grossMissing: 0, grossManHours: 0, house: 0, provisional: 0 };
+  return {
+    entries: 0,
+    finished: 0,
+    gross: 0,
+    manHours: 0,
+    grossMissing: 0,
+    grossManHours: 0,
+    house: 0,
+    provisional: 0,
+    singles: 0,
+    revenue: 0,
+    revenueManHours: 0,
+    revenueMissing: 0,
+  };
 }
 
 export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
@@ -168,6 +185,17 @@ export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
   r.finished += e.finished_units;
   const mh = e.man_hours ?? (e.people !== null && e.hours !== null ? e.people * e.hours : null);
   if (mh !== null) r.manHours += mh;
+  r.singles += e.single_units ?? e.finished_units;
+  // Revenue = finished units x the SO price per finished unit (known before the
+  // order ships). House-brand stock is no sale: known, and $0.
+  if (e.gross_source === "house") {
+    if (mh !== null) r.revenueManHours += mh;
+  } else if (e.unit_price !== null) {
+    r.revenue += e.unit_price * e.finished_units;
+    if (mh !== null) r.revenueManHours += mh;
+  } else if (e.finished_units > 0) {
+    r.revenueMissing += 1;
+  }
   if (e.gross_total !== null) {
     r.gross += e.gross_total;
     if (e.gross_source === "last") r.provisional += 1;
@@ -185,6 +213,10 @@ export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
 // exact state of every day since 2026-09-01.
 export function grossPerManHour(r: Rollup): number | null {
   return r.grossManHours > 0 ? r.gross / r.grossManHours : null;
+}
+
+export function revenuePerManHour(r: Rollup): number | null {
+  return r.revenueManHours > 0 ? r.revenue / r.revenueManHours : null;
 }
 
 export function grossPerManHourOf(e: YieldEntry): number | null {

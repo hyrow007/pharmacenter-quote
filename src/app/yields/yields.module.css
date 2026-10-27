@@ -211,3 +211,21 @@ section.card + section.card { margin-top: 20px; }
 .filterChip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: var(--cream-soft); border: 1px solid var(--stone); font-size: 13px; }
 .balanceDone { color: var(--teal-700); font-weight: 600; }
 .balanceOver { color: #9a5b00; font-weight: 600; }
+
+/* Snapshot panel (top of the log page) */
+.snapshot { margin-bottom: 20px; }
+.segmented { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.segmented > a {
+  padding: 6px 10px;
+  border: 1px solid var(--stone);
+  border-radius: 999px;
+  color: var(--teal-700);
+  text-decoration: none;
+  font-weight: 600;
+  background: #fff;
+}
+.segmented > a:hover { background: var(--cream-soft); }
+.segOn, .segmented > a.segOn { background: var(--teal-700); border-color: var(--teal-700); color: #fff; }
+.segForm { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
+.segForm .input { width: auto; padding: 5px 8px; }
+.subHeading { font-size: 13px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-3); margin: 18px 0 6px; }

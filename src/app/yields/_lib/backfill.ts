@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { grossForEntry, isHouseCustomer, type SoItemLike, type YieldEntry } from "./model";
+import { addDays, eachPrice, grossForEntry, isHouseCustomer, todayInPlant, toNum, type SoItemLike, type YieldEntry } from "./model";
 
 // Production happens before shipping, and Fishbowl only records a line's cost
 // when it ships. So most entries are saved with no gross, and the gross that
@@ -147,6 +147,55 @@ async function fillFromLastRun(supabase: SupabaseClient, pending: YieldEntry[]):
     r.gross_source = "last";
     r.gross_total = r.finished_units * g;
     filled += 1;
+  }
+  return filled;
+}
+
+// SO price per finished unit, for revenue. Unlike gross it does not wait for
+// shipping: the price is on the order from the start. Fills unit_price where
+// it is empty, from the first order the entry names (or that order's "-N"
+// splits) that sells the product at a readable unit and a price above $0.
+// Only runs from the last ~13 months -- older orders are not in the mirror.
+export async function fillMissingPrice(supabase: SupabaseClient, rows: YieldEntry[]): Promise<number> {
+  const cutoff = addDays(todayInPlant(), -400);
+  const pending = rows.filter(
+    (r) =>
+      r.unit_price === null &&
+      r.gross_source !== "house" &&
+      r.finished_units > 0 &&
+      r.so_numbers.length > 0 &&
+      r.run_date >= cutoff,
+  );
+  if (pending.length === 0) return 0;
+  const wanted = Array.from(new Set(pending.flatMap((r) => r.so_numbers))).slice(0, MAX_SOS);
+  const ors = wanted.map((so) => `so_number.eq.${so},so_number.like.${so}-*`).join(",");
+  const { data, error } = await supabase.from("fishbowl_sales_orders").select("so_number, items").or(ors).limit(1000);
+  if (error || !data) return 0;
+  const itemsBySo = new Map<string, SoItemLike[]>();
+  for (const so of data) itemsBySo.set(so.so_number as string, (Array.isArray(so.items) ? so.items : []) as SoItemLike[]);
+  const lineFor = (product: string, so: string) =>
+    (itemsBySo.get(so) ?? []).find((it) => it.product_num === product && (it.type_id === 10 || it.type_id === 30));
+
+  let filled = 0;
+  for (const r of pending) {
+    let price: number | null = null;
+    for (const so of r.so_numbers) {
+      const targets = lineFor(r.product_num, so) ? [so] : [...itemsBySo.keys()].filter((k) => k.startsWith(`${so}-`)).sort();
+      for (const t of targets) {
+        const it = lineFor(r.product_num, t);
+        if (!it) continue;
+        const p = eachPrice(toNum(it.unit_price), it.uom, it.uom_name).each;
+        if (p !== null && p > 0) {
+          price = Math.round(p * 1e6) / 1e6;
+          break;
+        }
+      }
+      if (price !== null) break;
+    }
+    if (price === null) continue;
+    r.unit_price = price; // shown on this load even if the write below is refused
+    filled += 1;
+    await supabase.from("yield_entries").update({ unit_price: price }).eq("id", r.id).is("unit_price", null);
   }
   return filled;
 }

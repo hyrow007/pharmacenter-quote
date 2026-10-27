@@ -8,7 +8,9 @@ import { getLangFromCookie } from "@/lib/i18n/server";
 import { I18nProvider } from "@/lib/i18n/context";
 import { makeYT } from "./_lib/i18n";
 import { loadEntries } from "./_lib/load";
-import { fillMissingGross } from "./_lib/backfill";
+import { fillMissingGross, fillMissingPrice } from "./_lib/backfill";
+import { isSnapKind, snapRange, type SnapKind } from "./_lib/period";
+import Snapshot from "./_components/Snapshot";
 import {
   DAY_OPTIONS,
   DEFAULT_DAYS,
@@ -47,7 +49,7 @@ export const metadata = { title: "Yields" };
 export default async function YieldsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; edit?: string; days?: string; product?: string }>;
+  searchParams: Promise<{ date?: string; edit?: string; days?: string; product?: string; snap?: string; sfrom?: string; sto?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -75,8 +77,35 @@ export default async function YieldsPage({
 
   const byDay = new Map<string, Rollup>();
   for (const r of rows) byDay.set(r.run_date, addToRollup(byDay.get(r.run_date) ?? emptyRollup(), r));
-  const week = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 7);
   const dayTotal = byDay.get(date) ?? emptyRollup();
+
+  // Snapshot: one day (default) or a period, relative to the selected date.
+  const snapKind: SnapKind = isSnapKind(sp.snap) ? sp.snap : "day";
+  let snap = snapRange(snapKind, date, sp.sfrom, sp.sto);
+  if (snapKind === "7d") {
+    const { data: dateRows } = await supabase
+      .from("yield_entries")
+      .select("run_date")
+      .lte("run_date", date)
+      .order("run_date", { ascending: false })
+      .limit(300);
+    const distinct = Array.from(new Set((dateRows ?? []).map((d) => d.run_date as string)));
+    snap = { from: distinct[Math.min(7, distinct.length) - 1] ?? date, to: date };
+  }
+  const inLoaded = snap.from >= addDays(date, -20) && snap.to <= date;
+  const snapRows = inLoaded
+    ? rows.filter((r) => r.run_date >= snap.from && r.run_date <= snap.to)
+    : (await loadEntries(supabase, { from: snap.from, to: snap.to })).rows;
+  if (!inLoaded) await fillMissingGross(supabase, snapRows);
+  await fillMissingPrice(supabase, snapRows);
+  const keep: Record<string, string> = {};
+  for (const k of ["date", "days", "product"] as const) if (sp[k]) keep[k] = sp[k]!;
+  const snapHref = (k: SnapKind) => {
+    const q = new URLSearchParams(keep);
+    if (k !== "day") q.set("snap", k);
+    const qs = q.toString();
+    return qs ? `?${qs}` : "?";
+  };
   // "Every entry": the last N working days (days with entries) up to the
   // selected date -- 10 by default, or all -- optionally one product only.
   const days = (DAY_OPTIONS as readonly string[]).includes(sp.days ?? "") ? sp.days! : DEFAULT_DAYS;
@@ -130,6 +159,16 @@ export default async function YieldsPage({
           </nav>
 
           {error ? <p className={s.error} role="alert">{error}</p> : null}
+
+          <Snapshot
+            rows={snapRows}
+            lang={lang}
+            kind={snapKind}
+            from={snap.from}
+            to={snap.to}
+            hrefFor={snapHref}
+            hidden={keep}
+          />
 
           <div className={s.layout}>
             <section className={s.card}>
@@ -220,36 +259,6 @@ export default async function YieldsPage({
                 {dayTotal.house > 0 ? <p className={s.hint}>{t("houseNote", { n: dayTotal.house })}</p> : null}
               </section>
 
-              <section className={s.card}>
-                <h2 className={s.cardTitle}>{t("weekHeading")}</h2>
-                <div className={s.tableWrap}>
-                  <table className={s.table}>
-                    <thead>
-                      <tr>
-                        <th>{t("colDate")}</th>
-                        <th className={s.num}>{t("colEntries")}</th>
-                        <th className={s.num}>{t("colManHours")}</th>
-                        <th className={s.num}>{t("colGross")}</th>
-                        <th className={s.num}>{t("colGrossMh")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {week.map(([d, r]) => (
-                        <tr key={d} className={d === date ? s.current : undefined}>
-                          <td><Link href={`?date=${d}`}>{fmtDate(d, lang)}</Link></td>
-                          <td className={s.num}>{r.entries}</td>
-                          <td className={s.num}>{fmtNum(r.manHours, lang)}</td>
-                          <td className={s.num}>
-                            {fmtMoney(r.gross, lang)}
-                            {r.grossMissing > 0 ? <span className={s.missingDot} title={t("missingNote", { n: r.grossMissing })}>+{r.grossMissing} {t("missing")}</span> : null}
-                          </td>
-                          <td className={s.num}>{fmtMoney(grossPerManHour(r), lang)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
             </div>
           </div>
 
