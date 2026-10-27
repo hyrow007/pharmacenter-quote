@@ -40,7 +40,11 @@ export async function loadMirror(supabase: AnySupabase): Promise<MirrorRow[]> {
 type RawItem = { id: string; name: string; column_values: { id: string; text: string | null }[] };
 type RawPage = { cursor: string | null; items: RawItem[] };
 
-async function gql<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
+export type Column = { id: string; title: string; type: string };
+export type BoardMeta = { boardId: string; groupId: string | null; columns: Column[] };
+export type Boards = { items: BoardItem[]; meta: Record<BoardKey, BoardMeta> };
+
+export async function gql<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
   const res = await fetch(MONDAY_API_URL, {
     method: "POST",
     headers: { Authorization: token, "Content-Type": "application/json", "API-Version": "2024-10" },
@@ -62,13 +66,13 @@ async function gql<T>(token: string, query: string, variables: Record<string, un
 
 const ITEM_FIELDS = `cursor items { id name column_values { id text } }`;
 
-async function loadBoard(token: string, key: BoardKey): Promise<BoardItem[]> {
+async function loadBoard(token: string, key: BoardKey): Promise<{ items: BoardItem[]; meta: BoardMeta }> {
   const boardId = String(BOARDS[key]);
   const first = await gql<{
-    boards: { columns: { id: string; title: string }[]; items_page: RawPage }[];
+    boards: { columns: Column[]; top_group: { id: string } | null; items_page: RawPage }[];
   }>(
     token,
-    `query ($b: [ID!]) { boards(ids: $b) { columns { id title } items_page(limit: ${PAGE}) { ${ITEM_FIELDS} } } }`,
+    `query ($b: [ID!]) { boards(ids: $b) { columns { id title type } top_group { id } items_page(limit: ${PAGE}) { ${ITEM_FIELDS} } } }`,
     { b: [boardId] },
   );
   const board = first.boards[0];
@@ -87,7 +91,7 @@ async function loadBoard(token: string, key: BoardKey): Promise<BoardItem[]> {
     cursor = next.next_items_page.cursor;
   }
 
-  return raw.map((it) => {
+  const items = raw.map((it) => {
     const cols: Record<string, string | null> = {};
     for (const cv of it.column_values) {
       const title = titleById.get(cv.id);
@@ -101,11 +105,31 @@ async function loadBoard(token: string, key: BoardKey): Promise<BoardItem[]> {
       cols,
     };
   });
+  return { items, meta: { boardId, groupId: board.top_group?.id ?? null, columns: board.columns } };
 }
 
-export async function loadBoards(): Promise<BoardItem[]> {
+export function mondayToken(): string {
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) throw new Error("MONDAY_API_TOKEN is not set");
+  return token;
+}
+
+export async function loadBoards(): Promise<Boards> {
+  const token = mondayToken();
   const [open, fulfilled] = await Promise.all([loadBoard(token, "open"), loadBoard(token, "fulfilled")]);
-  return [...open, ...fulfilled];
+  return { items: [...open.items, ...fulfilled.items], meta: { open: open.meta, fulfilled: fulfilled.meta } };
+}
+
+/** monday_so_links, as item id -> SO number, plus the set of linked item ids. */
+export async function loadLinks(supabase: AnySupabase): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("monday_so_links")
+    .select("so_number, monday_item_id")
+    .is("archived_at", null);
+  if (error) throw new Error(`link table read failed: ${error.message}`);
+  const out = new Map<string, string>();
+  for (const r of (data ?? []) as { so_number: string; monday_item_id: number }[]) {
+    out.set(String(r.monday_item_id), r.so_number);
+  }
+  return out;
 }

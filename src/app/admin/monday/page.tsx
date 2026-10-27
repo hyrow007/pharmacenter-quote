@@ -6,8 +6,11 @@ import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import AppHeader from "../../_components/AppHeader";
-import { loadBoards, loadMirror } from "./_lib/load";
+import { loadBoards, loadLinks, loadMirror } from "./_lib/load";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
+import { mondayWrites, plan, type Action } from "./_lib/plan";
+import { MAX_WRITES, liveEnabled, moveMapping } from "./_lib/push";
+import { pushNow } from "./actions";
 import { makeMT, type MT } from "./_lib/i18n";
 
 // /admin/monday — the Fishbowl → Monday reconciler, read-only.
@@ -41,10 +44,21 @@ export default async function MondayReconcilePage() {
   const t = makeMT(lang);
 
   let report: Report | null = null;
+  let actions: Action[] = [];
+  let drops: string[] = [];
+  let linksOk = true;
   let failure: string | null = null;
   try {
-    const [mirror, items] = await Promise.all([loadMirror(supabase), loadBoards()]);
-    report = reconcile(mirror, items);
+    const [mirror, boards] = await Promise.all([loadMirror(supabase), loadBoards()]);
+    let links = new Map<string, string>();
+    try {
+      links = await loadLinks(supabase);
+    } catch {
+      linksOk = false; // migration not applied yet
+    }
+    report = reconcile(mirror, boards.items, links);
+    actions = plan(report, new Set(links.keys()));
+    drops = moveMapping(boards.meta.open, boards.meta.fulfilled).drops;
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("monday reconcile failed:", failure);
@@ -63,7 +77,13 @@ export default async function MondayReconcilePage() {
           <p className="lede" style={{ marginTop: 4 }}>{t("lede")}</p>
 
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
-          {report ? <Body report={report} t={t} lang={lang} /> : null}
+          {report ? (
+            <>
+              <NextPush actions={actions} drops={drops} linksOk={linksOk} t={t} />
+              <Runs runs={await recentRuns(supabase)} t={t} lang={lang} />
+              <Body report={report} t={t} lang={lang} />
+            </>
+          ) : null}
         </div>
       </main>
     </div>
@@ -228,5 +248,112 @@ function DiffTable({ diffs, t }: { diffs: FieldDiff[]; t: MT }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ---------------------------------------------------------------- the push
+
+type RunRow = {
+  id: string;
+  trigger: string;
+  dry_run: boolean;
+  started_at: string;
+  planned: unknown[];
+  applied: unknown[];
+  errors: { action: { kind: string; so: string }; error: string }[];
+  refused: string | null;
+  started_by: string | null;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function recentRuns(supabase: any): Promise<RunRow[]> {
+  const { data, error } = await supabase
+    .from("monday_push_runs")
+    .select("id, trigger, dry_run, started_at, planned, applied, errors, refused, started_by")
+    .order("started_at", { ascending: false })
+    .limit(5);
+  return error ? [] : ((data ?? []) as RunRow[]);
+}
+
+function describe(a: Action, t: MT): string {
+  switch (a.kind) {
+    case "create":
+      return t("aCreate", { so: a.so, customer: a.values.customer ?? "" });
+    case "move":
+      return t("aMove", { so: a.so });
+    case "archive":
+      return t("aArchive", { so: a.so, status: a.lastStatus ?? "?" });
+    case "rename":
+      return t("aRename", { from: a.from, so: a.so });
+    case "update":
+      return t("aUpdate", {
+        so: a.so,
+        changes: Object.entries(a.values)
+          .map(([k, v]) => `${k}: “${a.before[k as keyof typeof a.before] || "—"}” → “${v}”`)
+          .join("; "),
+      });
+    case "link":
+      return t("aLink", { so: a.so });
+  }
+}
+
+function NextPush({ actions, drops, linksOk, t }: { actions: Action[]; drops: string[]; linksOk: boolean; t: MT }) {
+  const live = liveEnabled();
+  const writes = mondayWrites(actions);
+  const visible = actions.filter((a) => a.kind !== "link");
+  const links = actions.length - visible.length;
+  return (
+    <section style={{ border: "1px solid var(--stone, #e3dcc9)", borderRadius: 10, padding: "12px 14px", margin: "0 0 18px" }}>
+      <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{t("pushTitle")}</h2>
+      <p style={{ fontSize: 13, margin: "0 0 8px" }}>{live ? t("pushLive") : t("pushDry")}</p>
+      {!linksOk ? <Banner tone="warn">{t("noLinks")}</Banner> : null}
+      {drops.length > 0 ? <Banner tone="warn">{t("moveDrops", { cols: drops.join(", ") })}</Banner> : null}
+      {writes > MAX_WRITES ? <Banner tone="bad">{t("tooMany", { n: writes, max: MAX_WRITES })}</Banner> : null}
+      <p style={{ fontSize: 13, margin: "0 0 8px" }}>{t("pushCounts", { writes, links })}</p>
+      {visible.length > 0 ? (
+        <ul style={{ fontSize: 13, margin: "0 0 10px", paddingLeft: 18, lineHeight: 1.6 }}>
+          {visible.map((a, i) => (
+            <li key={i}>{describe(a, t)}</li>
+          ))}
+        </ul>
+      ) : null}
+      <form action={pushNow}>
+        <button type="submit" className="button-primary" disabled={!linksOk}>
+          {live ? t("pushNow") : t("dryRunNow")}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function Runs({ runs, t, lang }: { runs: RunRow[]; t: MT; lang: "en" | "es" }) {
+  if (runs.length === 0) return null;
+  const locale = lang === "es" ? "es-US" : "en-US";
+  return (
+    <section style={{ margin: "0 0 18px" }}>
+      <h2 style={{ fontSize: 16, margin: "0 0 6px" }}>{t("runsTitle")}</h2>
+      <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+        {runs.map((r) => (
+          <li key={r.id}>
+            {new Date(r.started_at).toLocaleString(locale, { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })}
+            {" · "}
+            {r.dry_run ? t("runDry") : t("runLive")}
+            {" · "}
+            {r.trigger === "button" ? t("runButton", { who: r.started_by ?? "?" }) : t("runSchedule")}
+            {" · "}
+            {r.refused
+              ? t("runRefused", { why: r.refused })
+              : t("runSummary", { planned: r.planned.length, applied: r.applied.length, errors: r.errors.length })}
+            {r.errors.length > 0 ? (
+              <ul>
+                {r.errors.map((e, i) => (
+                  <li key={i}>{`${e.action.kind} ${e.action.so}: ${e.error}`}</li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

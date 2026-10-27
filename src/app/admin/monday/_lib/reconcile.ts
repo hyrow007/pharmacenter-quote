@@ -41,7 +41,8 @@ export type BoardItem = {
   cols: Record<string, string | null>;
 };
 
-export type MatchType = "exact" | "format" | "prefix";
+// "link" = matched through monday_so_links, the push's own record.
+export type MatchType = "link" | "exact" | "format" | "prefix";
 
 export type Row = {
   so: string; // the Fishbowl SO number, or the board item name when unmatched
@@ -70,6 +71,8 @@ export type Report = {
   closedOnOpen: Row[]; //      on Open, closed in Fishbowl without being fulfilled
   unknownOnOpen: Row[]; //     on Open, not in the mirror at all
   fieldDiffs: FieldDiff[]; //  matched, but a column disagrees
+  // Every order matched to exactly one item: what the push works from.
+  pairs: Row[];
   // Supporting evidence.
   prefixMatches: Row[]; //     matched only by ignoring format or the M prefix
   duplicates: { so: string; items: BoardItem[] }[];
@@ -128,10 +131,16 @@ export function latestRun(mirror: MirrorRow[]): { id: string | null; at: string 
 /** Board-item -> mirror-row match, strongest rule first. */
 function matchItem(
   item: BoardItem,
+  links: Map<string, string>,
   exact: Map<string, MirrorRow[]>,
   byFormat: Map<string, MirrorRow[]>,
   byBare: Map<string, MirrorRow[]>,
 ): { row: MirrorRow; type: MatchType } | null {
+  const linked = links.get(item.id);
+  if (linked) {
+    const l = exact.get(linked);
+    if (l?.length === 1) return { row: l[0], type: "link" };
+  }
   const name = item.name.trim();
   const e = exact.get(name);
   if (e?.length === 1) return { row: e[0], type: "exact" };
@@ -142,7 +151,12 @@ function matchItem(
   return null;
 }
 
-export function reconcile(mirror: MirrorRow[], items: BoardItem[]): Report {
+/** links: Monday item id -> SO number, from monday_so_links. Optional. */
+export function reconcile(
+  mirror: MirrorRow[],
+  items: BoardItem[],
+  links: Map<string, string> = new Map(),
+): Report {
   const run = latestRun(mirror);
   const inLatest = (r: MirrorRow) => run.id !== null && r.sync_run_id === run.id;
 
@@ -155,7 +169,7 @@ export function reconcile(mirror: MirrorRow[], items: BoardItem[]): Report {
   const unmatched: BoardItem[] = [];
   for (const item of items) {
     if (!item.name.trim()) continue;
-    const m = matchItem(item, exact, byFormat, byBare);
+    const m = matchItem(item, links, exact, byFormat, byBare);
     if (!m) {
       unmatched.push(item);
       continue;
@@ -180,6 +194,7 @@ export function reconcile(mirror: MirrorRow[], items: BoardItem[]): Report {
     closedOnOpen: [],
     unknownOnOpen: [],
     fieldDiffs: [],
+    pairs: [],
     prefixMatches: [],
     duplicates: [],
     fulfilledNeither: [],
@@ -194,12 +209,14 @@ export function reconcile(mirror: MirrorRow[], items: BoardItem[]): Report {
 
     const hits = itemsBySo.get(r.so_number) ?? [];
     for (const h of hits) {
-      if (h.type !== "exact") {
+      if (h.type === "format" || h.type === "prefix") {
         report.prefixMatches.push({ so: r.so_number, mirror: r, item: h.item, matchType: h.type });
       }
     }
     if (hits.length > 1) {
       report.duplicates.push({ so: r.so_number, items: hits.map((h) => h.item) });
+    } else if (hits.length === 1) {
+      report.pairs.push(row(r, hits[0]));
     }
 
     const onOpen = hits.filter((h) => h.item.board === "open");
