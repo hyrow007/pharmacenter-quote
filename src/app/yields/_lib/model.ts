@@ -161,6 +161,7 @@ export type Rollup = {
   revenue: number; // known revenue only: finished units x the SO price per finished unit
   revenueManHours: number; // man-hours on entries whose revenue is known
   revenueMissing: number; // entries with finished > 0 and no SO price
+  revenueWithGross: number; // revenue on entries that also have a gross -- the margin % denominator
 };
 
 export function emptyRollup(): Rollup {
@@ -177,6 +178,7 @@ export function emptyRollup(): Rollup {
     revenue: 0,
     revenueManHours: 0,
     revenueMissing: 0,
+    revenueWithGross: 0,
   };
 }
 
@@ -198,6 +200,7 @@ export function addToRollup(r: Rollup, e: YieldEntry): Rollup {
   }
   if (e.gross_total !== null) {
     r.gross += e.gross_total;
+    if (e.unit_price !== null) r.revenueWithGross += e.unit_price * e.finished_units;
     if (e.gross_source === "last") r.provisional += 1;
     if (mh !== null) r.grossManHours += mh;
   } else if (e.gross_source === "house") {

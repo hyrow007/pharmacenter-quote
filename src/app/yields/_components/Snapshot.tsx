@@ -50,7 +50,9 @@ export default function Snapshot({
   }
   const lineRows = LINES.filter((l) => byLine.has(l)).map((l) => [l, byLine.get(l)!] as const);
   const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  const margin = total.revenue > 0 ? Math.round((total.gross / total.revenue) * 100) : null;
+  // Margin only over runs that have both a price and a gross, so a run still
+  // waiting on its cost does not drag the percentage down.
+  const margin = total.revenueWithGross > 0 ? Math.round((total.gross / total.revenueWithGross) * 100) : null;
   const periodLabel = from === to ? fmtDate(from, lang) : `${fmtDate(from, lang, false)} – ${fmtDate(to, lang, false)}`;
 
   return (
