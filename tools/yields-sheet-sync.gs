@@ -14,8 +14,10 @@
  * Auth: the script sends the installing user's Google token; the app accepts
  * it only for a PharmaCenter admin. No secret is stored here.
  *
- * Setup (once): paste this file, save, run installDailyTrigger, click Allow.
- * Manual run any time: the "Yields" menu in the sheet -> "Sync with app now".
+ * Setup (once): add this as its own file (YieldsSync.gs) in the sheet's
+ * existing Apps Script project ("Jairoo Utilities" -- do NOT replace its
+ * code, it holds the sheet's onEdit), save, run installDailyTrigger, Allow.
+ * Manual run: open the project, pick syncYields, Run.
  */
 
 const APP_URL = 'https://quote.pharmacenter.app/api/yields/sheet-sync';
@@ -102,11 +104,4 @@ function installDailyTrigger() {
     .inTimezone('America/New_York')
     .create();
   syncYields();
-}
-
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Yields')
-    .addItem('Sync with app now', 'syncYields')
-    .addToUi();
 }
