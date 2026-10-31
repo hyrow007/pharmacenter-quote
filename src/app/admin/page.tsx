@@ -102,6 +102,11 @@ export default async function AdminPage() {
           blurb: "The ingredient catalogue the gummy formula calculator prices against.",
         },
         {
+          href: "/admin/overhead",
+          title: "Overhead",
+          blurb: "Rent, indirect labor and other expenses behind every quote, as of today and as of the quote date. Read-only.",
+        },
+        {
           href: "https://packing.pharmacenter.app/admin/customers",
           title: "Customers",
           blurb: "Ship-to defaults and which customers are active.",
