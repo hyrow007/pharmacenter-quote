@@ -18,11 +18,12 @@
 
 import { sameOwner, type BoardItem, type BoardKey, type MirrorRow, type Report } from "./reconcile";
 
-export type Values = Partial<Record<"customer" | "customer po" | "owner", string>>;
+export type Values = Partial<Record<"customer" | "customer po" | "vendor po" | "owner" | "status" | "date", string>>;
 
 export type Action =
   | { kind: "create"; so: string; values: Values }
-  | { kind: "move"; so: string; itemId: string }
+  // values: what LilyPad set on a move: Status "Fulfilled" and Date = DateCompleted.
+  | { kind: "move"; so: string; itemId: string; values: Values }
   | { kind: "archive"; so: string; itemId: string; lastStatus: string | null }
   | { kind: "rename"; so: string; itemId: string; board: BoardKey; from: string }
   | { kind: "update"; so: string; itemId: string; board: BoardKey; values: Values; before: Values }
@@ -56,8 +57,20 @@ function wantedValues(r: MirrorRow, owners: Map<string, string>): Values {
   return {
     customer: (r.customer_name ?? "").trim(),
     "customer po": (r.customer_po ?? "").trim(),
+    "vendor po": (r.vendor_po ?? "").trim(),
     owner: owners.get(user.toLowerCase()) ?? user,
   };
+}
+
+/** Fishbowl's completion date as an Eastern calendar date, YYYY-MM-DD. */
+export function easternDate(iso: string | null | undefined): string {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function movedValues(r: MirrorRow | null): Values {
+  return { status: "Fulfilled", date: easternDate(r?.date_completed) };
 }
 
 export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
@@ -75,7 +88,7 @@ export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
   const leaving = new Set<string>();
   for (const r of report.fulfilledOnOpen) {
     if (!r.item || doubled.has(r.so)) continue;
-    out.push({ kind: "move", so: r.so, itemId: r.item.id });
+    out.push({ kind: "move", so: r.so, itemId: r.item.id, values: movedValues(r.mirror) });
     leaving.add(r.item.id);
   }
   for (const r of report.closedOnOpen) {
@@ -105,7 +118,7 @@ export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
     // Never blank a board value: an empty Fishbowl field may simply never have
     // been filled in, while someone typed it on the board.
     if (!d.fishbowl.trim()) continue;
-    const key = d.field === "customer_po" ? "customer po" : d.field;
+    const key = d.field === "customer_po" ? "customer po" : d.field === "vendor_po" ? "vendor po" : d.field;
     const entry = byItem.get(d.item.id) ?? { so: d.so, item: d.item, values: {}, before: {} };
     entry.values[key] = d.field === "owner" ? owners.get(d.fishbowl.trim().toLowerCase()) ?? d.fishbowl : d.fishbowl;
     entry.before[key] = d.board;

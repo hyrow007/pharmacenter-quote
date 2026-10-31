@@ -221,7 +221,13 @@ function SoTable({ rows, t, showMatch }: { rows: Row[]; t: MT; showMatch?: boole
 }
 
 function fieldLabel(f: FieldDiff["field"], t: MT) {
-  return f === "customer" ? t("fieldCustomer") : f === "customer_po" ? t("fieldCustomerPo") : t("fieldOwner");
+  return f === "customer"
+    ? t("fieldCustomer")
+    : f === "customer_po"
+      ? t("fieldCustomerPo")
+      : f === "vendor_po"
+        ? t("fieldVendorPo")
+        : t("fieldOwner");
 }
 
 function DiffTable({ diffs, t }: { diffs: FieldDiff[]; t: MT }) {
@@ -280,7 +286,7 @@ function describe(a: Action, t: MT): string {
     case "create":
       return t("aCreate", { so: a.so, customer: a.values.customer ?? "" });
     case "move":
-      return t("aMove", { so: a.so });
+      return t("aMove", { so: a.so, date: a.values.date || "—" });
     case "archive":
       return t("aArchive", { so: a.so, status: a.lastStatus ?? "?" });
     case "rename":

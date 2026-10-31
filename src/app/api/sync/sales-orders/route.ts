@@ -52,6 +52,8 @@ type SalesOrderPayload = {
   is_open?: boolean;
   customer_name?: string | null;
   customer_po?: string | null;
+  vendor_po?: string | null;
+  date_completed?: string | null;
   salesman?: string | null;
   note?: string | null;
   date_issued?: string | null;
@@ -165,6 +167,10 @@ export async function POST(request: Request) {
       is_open: v.is_open === undefined ? true : Boolean(v.is_open),
       customer_name: str(v.customer_name),
       customer_po: str(v.customer_po),
+      // Absent from syncs before 2026-10-31; the Monday push writes them to
+      // the board's Vendor PO and Date columns.
+      vendor_po: str(v.vendor_po),
+      date_completed: str(v.date_completed),
       salesman: str(v.salesman),
       note: str(v.note),
       date_issued: str(v.date_issued),

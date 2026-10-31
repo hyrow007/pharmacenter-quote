@@ -88,6 +88,9 @@ export function encode(values: Values, meta: BoardMeta): Record<string, unknown>
       case "status":
         out[c.id] = { label: value };
         break;
+      case "date":
+        out[c.id] = { date: value };
+        break;
       case "dropdown":
         out[c.id] = { labels: [value] };
         break;
@@ -200,6 +203,15 @@ export async function runPush(opts: {
               { b: meta.fulfilled.boardId, g: meta.fulfilled.groupId, i: a.itemId, m: mapping },
             );
             await link({ so_number: a.so, monday_item_id: Number(a.itemId), board: "fulfilled", linked_by: "adopted", archived_at: null });
+            // Then what LilyPad set on arrival: Status "Fulfilled", Date.
+            const after = encode(a.values, meta.fulfilled);
+            if (Object.keys(after).length > 0) {
+              await gql(
+                token,
+                `mutation ($b: ID!, $i: ID!, $v: JSON!) { change_multiple_column_values(board_id: $b, item_id: $i, column_values: $v) { id } }`,
+                { b: meta.fulfilled.boardId, i: a.itemId, v: JSON.stringify(after) },
+              );
+            }
             break;
           }
           case "archive":

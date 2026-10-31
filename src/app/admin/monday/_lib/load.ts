@@ -25,7 +25,7 @@ export async function loadMirror(supabase: AnySupabase): Promise<MirrorRow[]> {
     const { data, error } = await supabase
       .from("fishbowl_sales_orders")
       .select(
-        "so_number, status_id, status_name, is_open, customer_name, customer_po, salesman, sync_run_id, synced_at, date_last_modified",
+        "so_number, status_id, status_name, is_open, customer_name, customer_po, vendor_po, date_completed, salesman, sync_run_id, synced_at, date_last_modified",
       )
       .order("so_number")
       .range(from, from + step - 1);

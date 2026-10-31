@@ -23,6 +23,8 @@ export type MirrorRow = {
   is_open: boolean;
   customer_name: string | null;
   customer_po: string | null;
+  vendor_po: string | null;
+  date_completed: string | null;
   salesman: string | null;
   sync_run_id: string | null;
   synced_at: string | null;
@@ -54,7 +56,7 @@ export type Row = {
 export type FieldDiff = {
   so: string;
   item: BoardItem;
-  field: "customer" | "customer_po" | "owner";
+  field: "customer" | "customer_po" | "vendor_po" | "owner";
   fishbowl: string;
   board: string;
 };
@@ -273,11 +275,12 @@ function row(r: MirrorRow, h: { item: BoardItem; type: MatchType }): Row {
   return { so: r.so_number, mirror: r, item: h.item, matchType: h.type };
 }
 
-// Board column titles -> mirror fields. Vendor PO and Date are not compared:
-// the mirror does not carry vendorPO or dateCompleted yet.
+// Board column titles -> mirror fields. Date is not compared: on the Open
+// board it is empty by design (LilyPad filled it with DateCompleted on move).
 const COMPARED: { field: FieldDiff["field"]; title: string; pick: (r: MirrorRow) => string | null }[] = [
   { field: "customer", title: "customer", pick: (r) => r.customer_name },
   { field: "customer_po", title: "customer po", pick: (r) => r.customer_po },
+  { field: "vendor_po", title: "vendor po", pick: (r) => r.vendor_po },
   { field: "owner", title: "owner", pick: (r) => r.salesman },
 ];
 
