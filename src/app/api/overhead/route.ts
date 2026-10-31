@@ -9,7 +9,14 @@ import { createClient } from "@/lib/supabase/server";
 //
 // Reads the overhead_for_line() function rather than the tables directly: the
 // date-band resolution and the per-line share join belong in one place, and SQL
-// is that place. See sql/overhead_reference.sql.
+// is that place. See pharmacenter-db/archive/quote-sql/overhead_reference.sql
+// (the live definition is captured in pharmacenter-db's baseline migration).
+//
+// THE DEFAULT AS-OF IS NOT TODAY. With no asof, SQL resolves to
+// current_date + overhead_settings.quote_lead_days (60, confirmed by the
+// operator 2026-10-31): quotes are costed at the rent payable when the job
+// RUNS. So status, days_left and the attention list below are all measured
+// from that run date, not from today. asof_used on every row says which.
 //
 // WHAT THIS ROUTE DOES NOT DO
 //
