@@ -9,7 +9,7 @@ import AppHeader from "../../_components/AppHeader";
 import { loadBoards, loadLinks, loadMirror } from "./_lib/load";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
 import { mondayWrites, plan, type Action } from "./_lib/plan";
-import { MAX_WRITES, liveEnabled, moveMapping } from "./_lib/push";
+import { MAX_WRITES, liveEnabled, moveLosses, moveMapping } from "./_lib/push";
 import { pushNow } from "./actions";
 import { makeMT, type MT } from "./_lib/i18n";
 
@@ -58,7 +58,7 @@ export default async function MondayReconcilePage() {
     }
     report = reconcile(mirror, boards.items, links);
     actions = plan(report, new Set(links.keys()));
-    drops = moveMapping(boards.meta.open, boards.meta.fulfilled).drops;
+    drops = moveLosses(actions, boards.items, moveMapping(boards.meta.open, boards.meta.fulfilled).drops);
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("monday reconcile failed:", failure);

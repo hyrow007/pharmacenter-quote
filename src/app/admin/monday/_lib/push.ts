@@ -1,6 +1,6 @@
 import "server-only";
 import { gql, loadBoards, loadLinks, loadMirror, mondayToken, type BoardMeta, type Column } from "./load";
-import { reconcile, type BoardKey, type Report } from "./reconcile";
+import { reconcile, type BoardItem, type BoardKey, type Report } from "./reconcile";
 import { mondayWrites, plan, type Action, type Values } from "./plan";
 
 // Carries out the push plan. One function, used by the cron-style route
@@ -35,8 +35,32 @@ export type PushResult = {
   actions: Action[];
   applied: Action[];
   errors: { action: Action; error: string }[];
-  movesDrop: string[]; // Open-board column titles a move would lose
+  movesDrop: string[]; // moves blocked: "SO: column" pairs that would lose a value
 };
+
+/**
+ * A move maps each Open-board column to the same-titled Fulfilled column.
+ * Columns with no counterpart are dropped by Monday. That only matters when
+ * the item actually holds something there, so check per item: an empty
+ * "Subelementos" on an item with no subitems loses nothing.
+ */
+export function moveLosses(
+  actions: Action[],
+  items: BoardItem[],
+  dropTitles: string[],
+): string[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const out: string[] = [];
+  for (const a of actions) {
+    if (a.kind !== "move") continue;
+    const item = byId.get(a.itemId);
+    for (const title of dropTitles) {
+      const v = item?.cols[title.trim().toLowerCase()];
+      if (v && v.trim()) out.push(`${a.so}: ${title}`);
+    }
+  }
+  return out;
+}
 
 export function liveEnabled(): boolean {
   return process.env.MONDAY_PUSH_LIVE === "1";
@@ -116,6 +140,7 @@ export async function runPush(opts: {
   const report = reconcile(mirror, boards.items, links);
   const actions = plan(report, new Set(links.keys()));
   const { mapping, drops } = moveMapping(boards.meta.open, boards.meta.fulfilled);
+  const losses = moveLosses(actions, boards.items, drops);
 
   const ageH = report.latestRunAt ? (Date.now() - Date.parse(report.latestRunAt)) / 3.6e6 : Infinity;
   if (!refused && mirror.length === 0) refused = "the Fishbowl mirror is empty";
@@ -166,7 +191,8 @@ export async function runPush(opts: {
             break;
           }
           case "move": {
-            if (drops.length > 0) throw new Error(`move would drop columns: ${drops.join(", ")}`);
+            const lost = losses.filter((l) => l.startsWith(`${a.so}: `));
+            if (lost.length > 0) throw new Error(`move would lose: ${lost.join(", ")}`);
             if (!meta.fulfilled.groupId) throw new Error("Fulfilled board has no group");
             await gql(
               token,
@@ -207,5 +233,5 @@ export async function runPush(opts: {
       .eq("id", runId);
   }
 
-  return { runId, live, refused, report, actions, applied, errors, movesDrop: drops };
+  return { runId, live, refused, report, actions, applied, errors, movesDrop: losses };
 }
