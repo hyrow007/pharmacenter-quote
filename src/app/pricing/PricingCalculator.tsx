@@ -1593,11 +1593,13 @@ function computeResults(input: {
   // to auto-compute shipment weight for the delivery tier lookup. When the
   // form is unknown, we fall back to 1 g/unit (see unitWeightForForm).
   unitWeightG?: number;
-  // Domestic v1 (task #157). Only accessorials feeds the math today —
-  // domesticMode, originState, shipmentWeightLb, palletCount, freightClass
-  // are captured on the tab state and persisted to the snapshot but
-  // don't affect landed cost. They're metadata for the lane-history table
-  // that will drive rate-suggestion in a later phase.
+  // Domestic (task #157, rate table added in #339). accessorials and
+  // handling feed the math directly. domesticMode, originState and
+  // shipmentWeightLb are not inputs to this function, but the calculator
+  // runs them through suggestDomesticFreight() and stamps the result into
+  // `freight`, which IS summed — so they reach landed cost by that route.
+  // palletCount and freightClass are still metadata for the lane-history
+  // table that will replace the seed rates with real lane lookups.
   accessorials?: string;
   // Sales commissions (task #352) — % of the sale price, deducted from
   // gross profit. They do NOT change the sale price itself. Optional so
@@ -1619,6 +1621,11 @@ function computeResults(input: {
   const ts = num(input.testing);
   const otherCosts = num(input.otherCosts ?? "");
   const accessorials = num(input.accessorials ?? "");
+  // Handling (domestic) — a USA-only inbound line. It has been collected,
+  // persisted, shown on the Results card and printed on the audit sheet
+  // since task #157, but it was never summed into the landed base, so every
+  // domestic quote carrying a handling charge under-costed by that amount.
+  const handlingDom = isUsa ? num(input.handling) : 0;
   // Commission rates (task #352) — shared by both the USA and international
   // branches below; each computes its dollar amounts off its own revenue.
   const hosRate = num(input.hosCommissionPct ?? "") / 100;
@@ -1628,7 +1635,7 @@ function computeResults(input: {
 
   // ---------- USA / domestic: v1 model (task #157) ----------
   // landed = productCost + freight + accessorials + testing + otherCosts
-  //          + sales commissions (see below).
+  //          + handling + sales commissions (see below).
   // No CBP fees, no broker baseline — domestic broker rates already roll
   // fuel surcharge into the flat quote and there's no border to cross.
   //
@@ -1639,7 +1646,8 @@ function computeResults(input: {
   // Either way the effective margin/markup on the commission-inclusive
   // landed cost comes out exactly what the rep asked for.
   if (isUsa) {
-    const landedBase = productCost + fr + accessorials + ts + otherCosts;
+    const landedBase =
+      productCost + fr + accessorials + ts + otherCosts + handlingDom;
     const landedBasePerUnit = q > 0 ? landedBase / q : 0;
     const commissionRate = hosRate + repRate;
     let salePerUnit = 0;
