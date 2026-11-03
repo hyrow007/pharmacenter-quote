@@ -195,6 +195,49 @@ const TOOLS: Tool[] = [
       </svg>
     ),
   },
+  {
+    key: "pallet",
+    // Host not provisioned yet; set it alongside dropping comingSoon.
+    href: "https://pallet.pharmacenter.app/",
+    titleKey: "hubPalletName",
+    descKey: "hubPalletDesc",
+    comingSoon: true,
+    // Deck plus three blocks, so it reads as a pallet and not a table. The two
+    // stacks are deliberately uneven -- the tool answers what FITS, and a tidy
+    // matched pair would promise the opposite. Same reasoning as the Yields bars.
+    icon: (
+      <svg {...ICON}>
+        <rect x="5" y="11.5" width="6" height="6" rx="1" />
+        <rect x="13" y="9.5" width="6" height="8" rx="1" />
+        <path d="M3 17.5h18" />
+        <path d="M6 17.5v2.5" />
+        <path d="M12 17.5v2.5" />
+        <path d="M18 17.5v2.5" />
+      </svg>
+    ),
+  },
+  {
+    key: "shipping",
+    // Host not provisioned yet; set it alongside dropping comingSoon.
+    href: "https://ship.pharmacenter.app/",
+    titleKey: "hubShippingName",
+    descKey: "hubShippingDesc",
+    comingSoon: true,
+    // One address line over a barcode: a label, not a document. It has to sit
+    // near the Packing Lists box and the Dielines sachet without reading as
+    // either of them.
+    icon: (
+      <svg {...ICON}>
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+        <path d="M7 8.5h7" />
+        <path d="M7 13v4" />
+        <path d="M9.5 13v4" />
+        <path d="M12 13v4" />
+        <path d="M15 13v4" />
+        <path d="M17 13v4" />
+      </svg>
+    ),
+  },
 ];
 
 const VISIBLE_TOOLS = TOOLS.filter((tool) => !tool.hidden);
