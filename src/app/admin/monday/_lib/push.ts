@@ -106,12 +106,18 @@ export function encode(values: Values, meta: BoardMeta): Record<string, unknown>
  * type. Monday drops whatever is mapped to null, so `drops` is reported in the
  * dry run before any move is allowed to happen.
  */
+// Columns Monday will not accept in a move's columns_mapping. Subitems move
+// with their parent on their own (first live push, 2026-11-03: including the
+// subitems column made Monday reject all four moves with "Columns mapping is
+// not in the expected format"); formula columns are computed, not stored.
+const UNMAPPABLE = new Set(["subtasks", "formula"]);
+
 export function moveMapping(open: BoardMeta, fulfilled: BoardMeta) {
   const target = colByTitle(fulfilled);
   const mapping: { source: string; target: string | null }[] = [];
   const drops: string[] = [];
   for (const c of open.columns) {
-    if (c.id === "name") continue;
+    if (c.id === "name" || UNMAPPABLE.has(c.type)) continue;
     const t = target.get(c.title.trim().toLowerCase());
     if (t && t.type === c.type) mapping.push({ source: c.id, target: t.id });
     else {
@@ -201,7 +207,11 @@ export async function runPush(opts: {
               token,
               `mutation ($b: ID!, $g: ID!, $i: ID!, $m: [ColumnMappingInput!]) { move_item_to_board(board_id: $b, group_id: $g, item_id: $i, columns_mapping: $m) { id } }`,
               { b: meta.fulfilled.boardId, g: meta.fulfilled.groupId, i: a.itemId, m: mapping },
-            );
+            ).catch((e: unknown) => {
+              // Say what was sent, so a rejected mapping can be fixed from the run log.
+              const sent = mapping.map((m) => `${m.source}->${m.target ?? "null"}`).join(", ");
+              throw new Error(`${e instanceof Error ? e.message : e} | mapping: ${sent}`);
+            });
             await link({ so_number: a.so, monday_item_id: Number(a.itemId), board: "fulfilled", linked_by: "adopted", archived_at: null });
             // Then what LilyPad set on arrival: Status "Fulfilled", Date.
             const after = encode(a.values, meta.fulfilled);
