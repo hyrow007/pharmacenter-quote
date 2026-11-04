@@ -7,16 +7,17 @@ import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { overheadRowMonthly, type OverheadGroupMode } from "@/lib/bottleCosting";
 import AppHeader from "../../_components/AppHeader";
-import { loadOverhead, type Band, type Group, type OverheadData, type Resolved } from "./_lib/load";
+import { loadCapacity, loadOverhead, type Band, type CapacityData, type Group, type OverheadData, type Proposal, type Resolved } from "./_lib/load";
+import { decide, measureNow } from "./actions";
 import { makeOT, type OT } from "./_lib/i18n";
 
 // /admin/overhead — the plant's overhead figures, read-only.
 //
-// Version 1 of the Overhead app: shows what every quote is costed against,
-// on two dates side by side — today, and the quote date (today +
-// quote_lead_days), which is what the boards actually use. Nothing is written.
-// The propose → diff → approve flow comes next and needs its own migration.
-// See claude/overhead.md.
+// Shows what every quote is costed against, on two dates side by side —
+// today, and the quote date (today + quote_lead_days), which is what the
+// boards actually use. The one thing it writes is the Contract Packaging
+// run-day divisor, measured from Yields and applied only on approval
+// (see migration 20261103200000 and claude/overhead.md).
 //
 // Money comes from overheadRowMonthly() in lib/bottleCosting.ts, the same
 // function the boards use, so this page and a quote cannot disagree.
@@ -51,7 +52,12 @@ function monthlyOf(b: Band): number {
   );
 }
 
-export default async function OverheadAdminPage() {
+export default async function OverheadAdminPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ cap?: string; d?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,9 +73,10 @@ export default async function OverheadAdminPage() {
   const locale = lang === "es" ? "es-US" : "en-US";
 
   let data: OverheadData | null = null;
+  let cap: CapacityData | null = null;
   let failure: string | null = null;
   try {
-    data = await loadOverhead(supabase);
+    [data, cap] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase)]);
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("overhead admin load failed:", failure);
@@ -95,7 +102,7 @@ export default async function OverheadAdminPage() {
           <p className="lede" style={{ marginTop: 4 }}>{t("lede")}</p>
 
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
-          {data ? <Body data={data} t={t} money={money} day={day} /> : null}
+          {data ? <Body data={data} cap={cap} outcome={sp} t={t} money={money} day={day} /> : null}
         </div>
       </main>
     </div>
@@ -104,11 +111,19 @@ export default async function OverheadAdminPage() {
 
 type Fmt = { t: OT; money: (v: number) => string; day: (iso: string | null) => string };
 
-function Body({ data, t, money, day }: { data: OverheadData } & Fmt) {
+function Body({
+  data,
+  cap,
+  outcome,
+  t,
+  money,
+  day,
+}: { data: OverheadData; cap: CapacityData | null; outcome: { cap?: string; d?: string } } & Fmt) {
   return (
     <>
       <Dates data={data} t={t} day={day} />
       <Attention data={data} t={t} money={money} day={day} />
+      {cap ? <Capacity data={data} cap={cap} outcome={outcome} t={t} money={money} day={day} /> : null}
       {GROUPS.map((g) => {
         const rows = data.quote.filter((r) => r.group === g.key);
         if (!rows.length) return null;
@@ -268,6 +283,199 @@ function ItemRow({ r, today, bands, t, money, day }: { r: Resolved; today?: Reso
   );
 }
 
+function Capacity({
+  data,
+  cap,
+  outcome,
+  t,
+  money,
+  day,
+}: { data: OverheadData; cap: CapacityData; outcome: { cap?: string; d?: string } } & Fmt) {
+  const pending = cap.proposals.find((p) => p.status === "pending") ?? null;
+  const earlier = cap.proposals.filter((p) => p !== pending);
+  const gummy = cap.gummyCapacity ?? 0;
+  const supportMonthly = data.quote.filter((r) => cap.supportItems.has(r.itemKey)).reduce((s, r) => s + monthlyOf(r), 0);
+  const fmt1 = (v: number | null) => (v === null ? t("none") : v.toFixed(1));
+  const rate = (monthly: number | null, div: number | null) => (monthly !== null && div && div > 0 ? monthly / div : null);
+  const m = (v: number | null) => (v === null ? t("none") : money(v));
+
+  const banner = (() => {
+    switch (outcome.cap) {
+      case "measured":
+        return <Banner tone="good">{t("rMeasured")}</Banner>;
+      case "approved":
+        return <Banner tone="good">{t("rApproved")}</Banner>;
+      case "rejected":
+        return <Banner tone="good">{t("rRejected")}</Banner>;
+      case "stale":
+        return <Banner tone="warn">{t("rStale")}</Banner>;
+      case "error":
+        return <Banner tone="bad">{t("rError", { detail: outcome.d ?? "" })}</Banner>;
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <section id="capacity" style={{ margin: "0 0 26px" }}>
+      <h2 style={h2}>{t("capTitle")}</h2>
+      <p style={note}>{t("capLede")}</p>
+      {banner}
+      {!cap.migrated ? <Banner tone="warn">{t("capMigrate")}</Banner> : null}
+      {cap.scheduleError ? <Banner tone="warn">{t("capSchedErr", { detail: cap.scheduleError })}</Banner> : null}
+
+      {pending ? (
+        <ProposalCard
+          p={pending}
+          cpNow={cap.cpCapacity}
+          gummy={gummy}
+          cpMonthly={cap.cpMonthly}
+          supportMonthly={supportMonthly}
+          rate={rate}
+          fmt1={fmt1}
+          m={m}
+          t={t}
+          day={day}
+        />
+      ) : cap.migrated ? (
+        <p style={{ ...note, margin: "0 0 10px" }}>
+          {t("capInUse")}: <strong>{t("capPerMonth", { v: fmt1(cap.cpCapacity) })}</strong>. {t("capNoPending")}
+        </p>
+      ) : null}
+
+      {cap.migrated ? (
+        <form action={measureNow} style={{ margin: "0 0 12px" }}>
+          <button type="submit" style={secondaryBtn}>{t("capMeasureNow")}</button>
+        </form>
+      ) : null}
+      <p style={note}>{t("capGummyNote", { v: fmt1(cap.gummyCapacity) })}</p>
+
+      {earlier.length ? (
+        <details>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("capHistory")} ({earlier.length})</summary>
+          <table style={{ ...table, marginTop: 6 }}>
+            <tbody>
+              {earlier.map((p) => (
+                <tr key={p.id}>
+                  <td style={cell}>{t(p.status === "approved" ? "stApproved" : p.status === "rejected" ? "stRejected" : p.status === "superseded" ? "stSuperseded" : "stPending")}</td>
+                  <td style={{ ...cell, fontFamily: "var(--mono, monospace)", whiteSpace: "nowrap" }}>
+                    {fmt1(p.currentValue)} → {fmt1(p.proposedValue)}
+                  </td>
+                  <td style={cell}>{t("capWindow", { from: day(p.windowFrom), to: day(p.windowTo), months: p.windowMonths })}</td>
+                  <td style={cell}>
+                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decidedBy ?? p.createdBy, when: day((p.decidedAt ?? p.createdAt).slice(0, 10)) })}
+                    {p.decisionNote ? <div style={dim}>{p.decisionNote}</div> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+function ProposalCard({
+  p,
+  cpNow,
+  gummy,
+  cpMonthly,
+  supportMonthly,
+  rate,
+  fmt1,
+  m,
+  t,
+  day,
+}: {
+  p: Proposal;
+  cpNow: number | null;
+  gummy: number;
+  cpMonthly: number | null;
+  supportMonthly: number;
+  rate: (monthly: number | null, div: number | null) => number | null;
+  fmt1: (v: number | null) => string;
+  m: (v: number | null) => string;
+  t: OT;
+  day: Fmt["day"];
+}) {
+  const before = cpNow;
+  const after = p.proposedValue;
+  const pct = before ? `${(((after - before) / before) * 100).toFixed(1)}%` : t("none");
+  const lines = p.measured.filter((r) => r.line_key !== "ALL").sort((a, b) => b.run_days - a.run_days);
+  const all = p.measured.find((r) => r.line_key === "ALL");
+  const card: CSSProperties = { border: "1px solid var(--stone, #e3dcc9)", borderRadius: 10, padding: "10px 14px", background: "var(--paper, #fffdf8)", minWidth: 0 };
+  const lab: CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3, #8a9498)" };
+  const big: CSSProperties = { fontFamily: "var(--serif)", fontSize: 22, color: "var(--teal, #0f4a56)" };
+  return (
+    <div style={{ border: "1px solid #8a5a00", borderRadius: 10, padding: 14, margin: "0 0 12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 10 }}>
+        <div style={card}>
+          <div style={lab}>{t("capInUse")}</div>
+          <div style={big}>{t("capPerMonth", { v: fmt1(before) })}</div>
+        </div>
+        <div style={{ ...card, borderColor: "var(--teal-2, #1d6c7b)" }}>
+          <div style={lab}>{t("capMeasured")}</div>
+          <div style={big}>{t("capPerMonth", { v: fmt1(after) })}</div>
+          <div style={dim}>{t("capChange", { pct })} · {t("capWindow", { from: day(p.windowFrom), to: day(p.windowTo), months: p.windowMonths })}</div>
+        </div>
+      </div>
+
+      <table style={{ ...table, marginBottom: 10 }}>
+        <tbody>
+          <tr>
+            <td style={cell}>{t("capRateCp")}</td>
+            <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", whiteSpace: "nowrap" }}>
+              {m(rate(cpMonthly, before))} → <strong>{m(rate(cpMonthly, after))}</strong>
+            </td>
+          </tr>
+          <tr>
+            <td style={cell}>
+              {t("capRateSupport")}
+              <div style={dim}>{t("capSupportDiv", { v: fmt1(after + gummy), g: fmt1(gummy) })}</div>
+            </td>
+            <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", whiteSpace: "nowrap" }}>
+              {m(rate(supportMonthly, before === null ? null : before + gummy))} → <strong>{m(rate(supportMonthly, after + gummy))}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <details style={{ marginBottom: 10 }}>
+        <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("capByLine")}</summary>
+        <table style={{ ...table, marginTop: 6 }}>
+          <thead>
+            <tr>
+              <th style={head}>{t("colLine")}</th>
+              <th style={{ ...head, textAlign: "right" }}>{t("colRunDays")}</th>
+              <th style={{ ...head, textAlign: "right" }}>{t("colPerMonth")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((r) => (
+              <tr key={r.line_key}>
+                <td style={cell}>{r.line_key}</td>
+                <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{r.run_days}</td>
+                <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{fmt1(Number(r.per_month))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {all && all.distinct_days ? (
+          <p style={{ ...dim, margin: "6px 0 0" }}>{t("capParallel", { v: (all.run_days / all.distinct_days).toFixed(2) })}</p>
+        ) : null}
+      </details>
+
+      <form action={decide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <input type="hidden" name="id" value={p.id} />
+        <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
+        <button type="submit" name="verdict" value="approve" className="button-primary">{t("capApprove", { v: fmt1(after) })}</button>
+        <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
+      </form>
+    </div>
+  );
+}
+
 function StatusPill({ status, t }: { status: Resolved["status"]; t: OT }) {
   const color = status === "current" ? "#3f6b1f" : status === "expired" ? "#9b2c2c" : "#8a5a00";
   const key = status === "current" ? "sCurrent" : status === "expired" ? "sExpired" : "sNotYet";
@@ -290,13 +498,11 @@ function Shares({ data, t }: { data: OverheadData; t: OT }) {
               {data.lines.map((l) => (
                 <th key={l} style={{ ...head, textAlign: "right" }}>{l}</th>
               ))}
-              <th style={{ ...head, textAlign: "right" }}>{t("colTotal")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const vals = data.lines.map((l) => pct.get(`${r.itemKey}|${l}`) ?? 0);
-              const sum = vals.reduce((a, b) => a + b, 0);
               return (
                 <tr key={r.itemKey}>
                   <td style={cell}>{r.label}</td>
@@ -305,9 +511,6 @@ function Shares({ data, t }: { data: OverheadData; t: OT }) {
                       {v ? `${v}%` : "—"}
                     </td>
                   ))}
-                  <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", fontWeight: 600, color: Math.abs(sum - 100) > 0.01 && sum > 0 ? "#8a5a00" : undefined }}>
-                    {sum ? `${Math.round(sum * 100) / 100}%` : "—"}
-                  </td>
                 </tr>
               );
             })}
@@ -333,4 +536,5 @@ const head: CSSProperties = { ...cell, fontSize: 11.5, fontWeight: 700, letterSp
 const mini: CSSProperties = { padding: "2px 8px 2px 0", verticalAlign: "top" };
 const dim: CSSProperties = { fontSize: 12, color: "var(--ink-3, #8a9498)" };
 const note: CSSProperties = { margin: "0 0 10px", fontSize: 12.5, color: "var(--ink-3, #8a9498)", lineHeight: 1.5 };
+const secondaryBtn: CSSProperties = { padding: "7px 14px", fontSize: 13, fontWeight: 600, borderRadius: 8, border: "1px solid var(--stone, #e3dcc9)", background: "transparent", color: "var(--teal, #0f4a56)", cursor: "pointer" };
 const h2: CSSProperties = { margin: "0 0 8px", fontSize: 15, fontWeight: 700 };

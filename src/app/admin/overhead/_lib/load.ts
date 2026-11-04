@@ -135,3 +135,112 @@ export async function loadOverhead(supabase: Supa): Promise<OverheadData> {
     lines,
   };
 }
+
+// ------------------------------------------------------------------
+// Capacity from Yields: the Contract Packaging divisor, measured vs in use.
+// ------------------------------------------------------------------
+
+export type Measured = {
+  line_key: string;
+  run_days: number;
+  per_month: number;
+  distinct_days: number;
+  window_from: string;
+  window_to: string;
+  first_entry: string | null;
+  last_entry: string | null;
+};
+
+export type Proposal = {
+  id: string;
+  trigger: "schedule" | "button";
+  period: string | null;
+  windowMonths: number;
+  windowFrom: string;
+  windowTo: string;
+  currentValue: number | null;
+  proposedValue: number;
+  measured: Measured[];
+  status: "pending" | "approved" | "rejected" | "superseded";
+  createdAt: string;
+  createdBy: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+};
+
+export type CapacityData = {
+  cpCapacity: number | null;
+  gummyCapacity: number | null;
+  /** Rent apportioned to the Contract Packaging floor, on the quote date. */
+  cpMonthly: number | null;
+  /** Item keys charged through the production-support pool. */
+  supportItems: Set<string>;
+  proposals: Proposal[];
+  /** Set when the monthly proposal could not be made (e.g. migration not applied). */
+  scheduleError: string | null;
+  migrated: boolean;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toProposal(r: any): Proposal {
+  return {
+    id: r.id,
+    trigger: r.trigger,
+    period: r.period,
+    windowMonths: r.window_months,
+    windowFrom: r.window_from,
+    windowTo: r.window_to,
+    currentValue: n(r.current_value),
+    proposedValue: Number(r.proposed_value),
+    measured: (r.measured ?? []) as Measured[],
+    status: r.status,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+    decidedAt: r.decided_at,
+    decidedBy: r.decided_by,
+    decisionNote: r.decision_note,
+  };
+}
+
+/**
+ * Makes this month's scheduled proposal if there is none yet (the SQL is
+ * idempotent per month), then reads everything the capacity section shows.
+ * Opening the page is what "once a month" hangs on: nobody can approve without
+ * opening it, so a proposal made on first open is waiting exactly when needed.
+ */
+export async function loadCapacity(supabase: Supa): Promise<CapacityData> {
+  let scheduleError: string | null = null;
+  let migrated = true;
+  const sched = await supabase.rpc("overhead_capacity_propose", { p_trigger: "schedule", p_months: 6 });
+  if (sched.error) {
+    scheduleError = sched.error.message;
+    if (/does not exist|schema cache/i.test(sched.error.message)) migrated = false;
+  }
+
+  const [pools, rates, itemPools, props] = await Promise.all([
+    supabase.from("overhead_pools").select("pool_key, capacity_per_month"),
+    supabase.rpc("overhead_pool_rates"),
+    supabase.from("overhead_item_pools").select("item_key, pool_key"),
+    migrated
+      ? supabase.from("overhead_capacity_proposals").select("*").order("created_at", { ascending: false }).limit(8)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (pools.error) throw new Error(pools.error.message);
+
+  const cap = new Map((pools.data ?? []).map((p) => [p.pool_key as string, n(p.capacity_per_month)]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cpRate = ((rates.data ?? []) as any[]).find((r) => r.pool_key === "cp_packaging");
+
+  return {
+    cpCapacity: cap.get("cp_packaging") ?? null,
+    gummyCapacity: cap.get("gummy_manufacturing") ?? null,
+    cpMonthly: cpRate ? n(cpRate.monthly) : null,
+    supportItems: new Set(
+      (itemPools.data ?? []).filter((r) => r.pool_key === "production_support").map((r) => r.item_key as string),
+    ),
+    proposals: ((props.data ?? []) as unknown[]).map(toProposal),
+    scheduleError: migrated ? scheduleError : null,
+    migrated,
+  };
+}
