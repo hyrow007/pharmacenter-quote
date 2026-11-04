@@ -321,8 +321,8 @@ function Capacity({
       <h2 style={h2}>{t("capTitle")}</h2>
       <p style={note}>{t("capLede")}</p>
       {banner}
-      {!cap.migrated ? <Banner tone="warn">{t("capMigrate")}</Banner> : null}
-      {cap.scheduleError ? <Banner tone="warn">{t("capSchedErr", { detail: cap.scheduleError })}</Banner> : null}
+      {!cap.migrated ? <Banner tone="warn">{t("capMigrate", { detail: cap.scheduleError ?? "" })}</Banner> : null}
+      {cap.migrated && cap.scheduleError ? <Banner tone="warn">{t("capSchedErr", { detail: cap.scheduleError })}</Banner> : null}
 
       {pending ? (
         <ProposalCard

@@ -6,7 +6,7 @@ import type { Lang } from "@/lib/i18n/dict";
 const en = {
   eyebrow: "PharmaCenter · Admin",
   title: "Overhead",
-  lede: "The rent, indirect labor and other expenses behind every quote. Read-only for now: changes still go in by hand.",
+  lede: "The rent, indirect labor and other expenses behind every quote. Contract Packaging run-days are measured from Yields and applied on approval; everything else still goes in by hand.",
   backToAdmin: "← Admin",
   loadFailed: "Could not load the overhead figures: {detail}",
 
@@ -54,7 +54,7 @@ const en = {
   sharesNote: "The per-line shares table. Lines are not exclusive (bottle and contract packaging, gummy and gummy manufacturing price the same work), so rows are not meant to add to 100%. Some charges now go through pools instead, as a rate per run-day; those are not shown here yet. Shares are not dated: changing one re-prices every new quote from that moment, with no record of the old figure, so they stay read-only until they have bands of their own.",
   capTitle: "Contract Packaging run-days, from Yields",
   capLede: "The packaging floor's rent, and the production-support salaries and expenses, are divided by how many run-days the plant actually does. That number now comes from the Yields log: every 6 months back, a run-day is one product run on one line on one day. A new measurement is proposed on the first visit each month, and nothing changes until it is approved.",
-  capMigrate: "The capacity tables are not in the database yet. Apply the pharmacenter-db migration 20261103200000, then reload.",
+  capMigrate: "The capacity tables are not in the database yet. Apply the pharmacenter-db migration 20261103200000, then reload. Database said: {detail}",
   capSchedErr: "Could not make this month's measurement: {detail}",
   capInUse: "In use",
   capMeasured: "Measured",
@@ -96,7 +96,7 @@ type OKey = keyof typeof en;
 const es = {
   eyebrow: "PharmaCenter · Admin",
   title: "Gastos generales",
-  lede: "El alquiler, la mano de obra indirecta y los demás gastos detrás de cada cotización. Solo lectura por ahora: los cambios todavía se cargan a mano.",
+  lede: "El alquiler, la mano de obra indirecta y los demás gastos detrás de cada cotización. Los días de producción de Empaque se miden desde Yields y se aplican al aprobarse; todo lo demás todavía se carga a mano.",
   backToAdmin: "← Admin",
   loadFailed: "No se pudieron cargar los gastos generales: {detail}",
 
@@ -144,7 +144,7 @@ const es = {
   sharesNote: "La tabla de porcentajes por línea. Las líneas no son excluyentes (botellas y empaque por contrato, gomitas y fabricación de gomitas cotizan el mismo trabajo), así que las filas no tienen por qué sumar 100%. Algunos cargos ahora pasan por grupos (pools), como una tarifa por día de producción; esos todavía no se muestran aquí. Los porcentajes no tienen fechas: cambiar uno recalcula toda cotización nueva desde ese momento, sin registro del valor anterior, así que siguen en solo lectura hasta que tengan sus propios períodos.",
   capTitle: "Días de producción de Empaque, desde Yields",
   capLede: "El alquiler del piso de empaque, y los salarios y gastos de soporte de producción, se dividen entre los días de producción que la planta realmente hace. Ese número ahora sale del registro de Yields: 6 meses hacia atrás, un día de producción es una corrida de un producto en una línea en un día. Cada mes se propone una nueva medición en la primera visita, y nada cambia hasta que se aprueba.",
-  capMigrate: "Las tablas de capacidad todavía no están en la base de datos. Aplique la migración 20261103200000 de pharmacenter-db y recargue.",
+  capMigrate: "Las tablas de capacidad todavía no están en la base de datos. Aplique la migración 20261103200000 de pharmacenter-db y recargue. La base de datos dijo: {detail}",
   capSchedErr: "No se pudo hacer la medición de este mes: {detail}",
   capInUse: "En uso",
   capMeasured: "Medido",

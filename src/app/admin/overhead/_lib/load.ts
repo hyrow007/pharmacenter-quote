@@ -240,7 +240,7 @@ export async function loadCapacity(supabase: Supa): Promise<CapacityData> {
       (itemPools.data ?? []).filter((r) => r.pool_key === "production_support").map((r) => r.item_key as string),
     ),
     proposals: ((props.data ?? []) as unknown[]).map(toProposal),
-    scheduleError: migrated ? scheduleError : null,
+    scheduleError,
     migrated,
   };
 }
