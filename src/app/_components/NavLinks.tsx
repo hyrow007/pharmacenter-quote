@@ -142,7 +142,7 @@ export default function NavLinks({
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
         href={
-          onFormulaHost || onMeetingHost || onYieldHost || onDielineHost || onShipHost || onKpiHost || onAdminHost
+          onFormulaHost || onMeetingHost || onOrderHost || onYieldHost || onDielineHost || onShipHost || onKpiHost || onAdminHost
             ? `https://quote.pharmacenter.app/feedback?from=${appContext}`
             : appContext === "quote"
               ? "/feedback"

@@ -7,12 +7,13 @@
 > silently dropped excluded files. Retired 2026-09-19. **Anything written
 > into `C:\q` now will not reach production.**
 
-## Read this before writing code here — current as of 2026-09-20
+## Read this before writing code here — current as of 2026-11-05
 
-This repo serves **four identities** behind host rewrites — Quote, Formula,
-Orders, Meetings — plus the **Hub** at `pharmacenter.app`. Three separate
-project chats (Quote Flows, Formulas, Sales Order tracker) all edit this one
-repo, blind to each other. Ownership and the full map are in the project docs
+This repo serves **nine identities** behind host rewrites — Quote, Formula,
+Orders, Meetings, Yields, Dielines, Shipping, KPIs and Admin (which carries
+Monday and Overhead as surfaces inside it) — plus the **Hub** at
+`pharmacenter.app` and `pharmacenter.tools`. Roughly as many separate project
+chats all edit this one repo, blind to each other. Ownership and the full map are in the project docs
 `claude/working-agreement.md` and `claude/ecosystem-registry.md`.
 
 1. **Next.js 15.5 + React 19.** `params` and `searchParams` are Promises —
