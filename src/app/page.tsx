@@ -16,6 +16,7 @@ export async function generateMetadata() {
   if (host.startsWith("dieline.") || host.startsWith("dielines.")) return { title: "Dielines" };
   if (host.startsWith("ship.") || host.startsWith("shipping.")) return { title: "Shipping" };
   if (host.startsWith("kpi.") || host.startsWith("kpis.")) return { title: "KPIs" };
+  if (host.startsWith("admin.")) return { title: "Admin" };
   if (host.startsWith("order.") || host.startsWith("orders.")) return { title: "Sales Orders" };
   if (host.startsWith("formula.") || host.startsWith("formulas.")) return { title: "Formulas" };
   return {};
@@ -51,6 +52,7 @@ export default async function Home({
     hostHeader.startsWith("ship.") || hostHeader.startsWith("shipping.");
   const isKpiHost =
     hostHeader.startsWith("kpi.") || hostHeader.startsWith("kpis.");
+  const isAdminHost = hostHeader.startsWith("admin.");
   // The hub hosts: pharmacenter.app and pharmacenter.tools (www. of either).
   // An exact match after stripping the port and a www. prefix, because every
   // other host ENDS with the apex too.
@@ -65,6 +67,7 @@ export default async function Home({
     if (isDielineHost) redirect("/dielines");
     if (isShipHost) redirect("/shipping");
     if (isKpiHost) redirect("/kpi");
+    if (isAdminHost) redirect("/admin");
     if (isMeetingHost) redirect("/meetings");
     if (isApexHost) redirect("/hub");
     redirect("/workflows");
@@ -130,6 +133,12 @@ export default async function Home({
         titleTop: "KPIs",
         titleSub: "Overview",
         lede: t("signInLedeKpi"),
+      }
+    : isAdminHost
+    ? {
+        titleTop: "Admin",
+        titleSub: "Panel",
+        lede: t("signInLedeAdmin"),
       }
     : isMeetingHost
     ? {

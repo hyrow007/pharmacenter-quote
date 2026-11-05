@@ -31,6 +31,7 @@ export default function NavLinks({
   onDielineHost,
   onShipHost,
   onKpiHost,
+  onAdminHost,
   appContext,
   lang,
 }: {
@@ -45,6 +46,7 @@ export default function NavLinks({
   onDielineHost?: boolean;
   onShipHost?: boolean;
   onKpiHost?: boolean;
+  onAdminHost?: boolean;
   appContext:
     | "quote"
     | "formulas"
@@ -55,6 +57,7 @@ export default function NavLinks({
     | "dielines"
     | "shipping"
     | "kpi"
+    | "admin"
     | "hub";
   lang: Lang;
 }) {
@@ -67,7 +70,10 @@ export default function NavLinks({
   const isFormulas = pathname.startsWith("/formulas");
   const isMeetings = pathname.startsWith("/meetings");
   const isFeedback = pathname.startsWith("/feedback");
-  const isAdmin = pathname.startsWith("/admin");
+  // usePathname() gives the browser's path, not the rewritten one: on
+  // admin.<domain>/users it reads "/users". Without the host flag the admin
+  // link would quietly stop reading as active on its own host.
+  const isAdmin = pathname.startsWith("/admin") || !!onAdminHost;
   const isRoadmap = pathname.startsWith("/roadmap");
 
   return (
@@ -136,7 +142,7 @@ export default function NavLinks({
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
         href={
-          onFormulaHost || onMeetingHost || onYieldHost || onDielineHost || onShipHost || onKpiHost
+          onFormulaHost || onMeetingHost || onYieldHost || onDielineHost || onShipHost || onKpiHost || onAdminHost
             ? `https://quote.pharmacenter.app/feedback?from=${appContext}`
             : appContext === "quote"
               ? "/feedback"

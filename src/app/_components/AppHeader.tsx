@@ -36,6 +36,9 @@ export type AppContext =
   | "dielines"
   | "shipping"
   | "kpi"
+  // admin.pharmacenter.app -- the ecosystem's own index. The panel is an app;
+  // what sits under it (Monday status, overhead bands) are its surfaces.
+  | "admin"
   // The apex, pharmacenter.app. Not a product -- the hub IS PharmaCenter, so
   // it wears the wordmark alone with no product name beside it.
   | "hub";
@@ -65,6 +68,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onDielineHost = host.startsWith("dieline.") || host.startsWith("dielines.");
   const onShipHost = host.startsWith("ship.") || host.startsWith("shipping.");
   const onKpiHost = host.startsWith("kpi.") || host.startsWith("kpis.");
+  const onAdminHost = host.startsWith("admin.");
   // Hub hosts only: pharmacenter.app, pharmacenter.tools and their www.
   // Deliberately NOT a suffix test -- "quote.pharmacenter.app" ends with the
   // apex too.
@@ -89,6 +93,8 @@ export default async function AppHeader({ user, appContext }: Props) {
           ? "shipping"
         : onKpiHost
           ? "kpi"
+        : onAdminHost
+          ? "admin"
         : (appContext ??
       (onFormulaHost
         ? "formulas"
@@ -128,6 +134,10 @@ export default async function AppHeader({ user, appContext }: Props) {
                 ? onKpiHost
                   ? "/"
                   : "https://kpi.pharmacenter.app/"
+              : ctx === "admin"
+                ? onAdminHost
+                  ? "/"
+                  : "https://admin.pharmacenter.app/"
               : ctx === "packing-list"
                 ? "https://packing.pharmacenter.app/lists"
                 : "/workflows";
@@ -146,6 +156,8 @@ export default async function AppHeader({ user, appContext }: Props) {
                 ? "Shipping"
               : ctx === "kpi"
                 ? "KPIs"
+              : ctx === "admin"
+                ? "Admin"
               : ctx === "packing-list"
                 ? "Packing List"
                 : "Quote";
@@ -164,6 +176,8 @@ export default async function AppHeader({ user, appContext }: Props) {
                 ? "Labels"
               : ctx === "kpi"
                 ? "Overview"
+              : ctx === "admin"
+                ? "Panel"
               : ctx === "packing-list"
                 ? "Generator"
                 : "Work Flows";
@@ -226,6 +240,7 @@ export default async function AppHeader({ user, appContext }: Props) {
               onDielineHost={onDielineHost}
               onShipHost={onShipHost}
               onKpiHost={onKpiHost}
+              onAdminHost={onAdminHost}
               appContext={ctx}
               lang={lang}
             />

@@ -72,6 +72,16 @@ function isKpiHost(host: string | null): boolean {
   return host.startsWith("kpi.") || host.startsWith("kpis.");
 }
 
+// admin.pharmacenter.app is the admin panel -- the ecosystem's own index,
+// and the home of the Monday push status and the overhead bands. The panel
+// is an app in its own right, so it gets a host like the others; the things
+// under it are surfaces inside it, not apps needing hosts of their own.
+// Singular only: nobody types "admins.".
+function isAdminHost(host: string | null): boolean {
+  if (!host) return false;
+  return host.startsWith("admin.");
+}
+
 // v48.6: formulas are only reachable on the formula subdomain. A
 // /formulas page request arriving on the quote host gets a permanent
 // redirect to the same path on formula.<domain>. Scoped to hosts that
@@ -141,6 +151,17 @@ function shouldRewriteToShipping(pathname: string): boolean {
   if (pathname.startsWith("/api")) return false;
   if (pathname.startsWith("/auth")) return false;
   if (pathname.startsWith("/shipping")) return false;
+  if (pathname.startsWith("/_next")) return false;
+  return true;
+}
+
+function shouldRewriteToAdmin(pathname: string): boolean {
+  if (pathname.startsWith("/api")) return false;
+  if (pathname.startsWith("/auth")) return false;
+  // Already-prefixed paths pass through. The admin pages carry four
+  // "back to admin" links pointing at /admin; rewriting those would ask
+  // for /admin/admin, which does not exist.
+  if (pathname.startsWith("/admin")) return false;
   if (pathname.startsWith("/_next")) return false;
   return true;
 }
@@ -351,6 +372,29 @@ export async function middleware(request: NextRequest) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname =
         pathname === "/" ? "/kpi" : `/kpi${pathname}`;
+      rewriteUrl.search = search;
+      const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
+      authResponse.cookies.getAll().forEach((cookie) => {
+        rewriteResponse.cookies.set(cookie);
+      });
+      return rewriteResponse;
+    }
+  }
+
+  // admin host -- same rewrite pattern; fronts /admin. So admin.<domain>/
+  // is the index and admin.<domain>/overhead is the overhead surface,
+  // without either needing a host of its own.
+  if (isAdminHost(host)) {
+    const { pathname, search, searchParams } = request.nextUrl;
+    const skipDueToSignInFlag = searchParams.get("showSignIn") === "1";
+    if (
+      shouldRewriteToAdmin(pathname) &&
+      looksSignedIn(request) &&
+      !skipDueToSignInFlag
+    ) {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname =
+        pathname === "/" ? "/admin" : `/admin${pathname}`;
       rewriteUrl.search = search;
       const rewriteResponse = NextResponse.rewrite(rewriteUrl, { request });
       authResponse.cookies.getAll().forEach((cookie) => {
