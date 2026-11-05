@@ -316,6 +316,7 @@ const en = {
   signInLedeQuote: "Internal tool for managing quoting work flows and generating customer-facing quote documents. Sign in with your PharmaCenter Google account to continue.",
   signInLedeFormula: "Internal catalog of PharmaCenter's gummy formulas — bench recipes, scale-up parameters, label claims, and material costing. Sign in with your PharmaCenter Google account to continue.",
   signInLedeOrder: "Every open sales order across Fishbowl, with vendor purchase orders, meeting mentions, Monday chatter, and AI key points at a glance. Sign in with your PharmaCenter Google account to continue.",
+  signInLedeShip: "FedEx labels for anything PharmaCenter sends — tell the assistant what is going where and it fills in the label. Sign in with your PharmaCenter Google account to continue.",
   signInLedeDieline: "The house rules for PharmaCenter sachet film, drawn to scale — pick a size, notch and unwind position and see the film and the finished sachet. Sign in with your PharmaCenter Google account to continue.",
   signInLedeYield: "The daily production log — what each line packed, what it was worth, and what it earned per labor hour. Sign in with your PharmaCenter Google account to continue.",
   signInLedeMeeting: "Internal hub for PharmaCenter's recurring meetings — open sales orders, action items, and cross-referenced Fishbowl state. Sign in with your PharmaCenter Google account to continue.",
@@ -343,7 +344,7 @@ const en = {
   hubDielinesDesc: "Dielines for sachet film, bottle labels and other components — the templates customers build their artwork on.",
   hubKpiDesc: "How the business is doing, section by section — production yields, open sales orders, and the trend behind each number.",
   hubPalletDesc: "Which cases and master boxes to use, and what the finished pallet looks like before anyone stacks it.",
-  hubShippingDesc: "FedEx shipping labels generated from the order, without re-keying the address.",
+  hubShippingDesc: "FedEx labels for samples, lab submissions, vendor returns and orders — one shared address book, so nobody types an address twice.",
   hubMeetingsDesc: "Weekly sales order review — notes and action items.",
   hubSignInLede:
     "One place for the tools we use for work. Sign in with your PharmaCenter Google account to continue.",
@@ -709,6 +710,7 @@ const es: typeof en = {
   signInLedeQuote: "Herramienta interna para gestionar los flujos de cotización y generar los documentos que ve el cliente. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
   signInLedeFormula: "Catálogo interno de las fórmulas de gomitas de PharmaCenter — recetas de laboratorio, parámetros de escalado, declaraciones de etiqueta y costeo de materiales. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
   signInLedeOrder: "Todos los pedidos abiertos en Fishbowl, con órdenes de compra, menciones en reuniones, actividad de Monday y puntos clave de IA a la vista. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
+  signInLedeShip: "Etiquetas de FedEx para todo lo que envía PharmaCenter — dígale al asistente qué va y a dónde y él llena la etiqueta. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
   signInLedeDieline: "Las reglas de la casa para la película de sachet de PharmaCenter, dibujadas a escala — elija tamaño, muesca y posición de desenrollado y vea la película y el sachet terminado. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
   signInLedeYield: "El registro diario de producción — lo que empacó cada línea, cuánto valió y cuánto generó por hora de trabajo. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
   signInLedeMeeting: "Centro interno de las reuniones periódicas de PharmaCenter — pedidos abiertos, tareas pendientes y el estado de Fishbowl relacionado. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",
@@ -736,7 +738,7 @@ const es: typeof en = {
   hubDielinesDesc: "Troqueles para película de sachet, etiquetas de botella y otros componentes — las plantillas sobre las que los clientes arman su arte.",
   hubKpiDesc: "Cómo va el negocio, sección por sección — rendimientos de producción, pedidos abiertos y la tendencia detrás de cada número.",
   hubPalletDesc: "Qué cajas y cajas máster usar, y cómo queda el pallet armado antes de estibarlo.",
-  hubShippingDesc: "Etiquetas de envío de FedEx generadas desde el pedido, sin volver a escribir la dirección.",
+  hubShippingDesc: "Etiquetas de FedEx para muestras, envíos a laboratorio, devoluciones a proveedores y órdenes — una libreta de direcciones compartida, para no escribir una dirección dos veces.",
   hubMeetingsDesc: "Revisión semanal de pedidos — notas y tareas.",
   hubSignInLede:
     "Un solo lugar para las herramientas que usamos para trabajar. Inicie sesión con su cuenta de Google de PharmaCenter para continuar.",

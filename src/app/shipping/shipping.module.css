@@ -1,0 +1,80 @@
+/* Shipping -- page styles. Brand tokens from globals.css; no font family is
+   named literally except the numeric face, as Dielines does. */
+
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.sandbox {
+  flex: none;
+  font: 700 12px var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a5a00;
+  background: #fff4d6;
+  border: 1px solid #f0d58a;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: help;
+}
+.warn { background: #fdf1ef; border: 1px solid #f1c9c2; color: #8a2a1c; border-radius: 8px; padding: 10px 12px; margin: 0 0 16px; font-size: 14px; }
+.success { background: var(--sage-pill-bg); border: 1px solid var(--sage-300); color: var(--sage-700); border-radius: 8px; padding: 10px 12px; margin: 12px 0 0; font-size: 14px; }
+.success a { color: var(--teal-900); font-weight: 700; }
+.muted { color: var(--ink-3); font-size: 13px; margin: 0; }
+.ok { color: var(--sage-700); font-size: 13px; }
+.foot { color: var(--ink-3); font-size: 13px; margin-top: 18px; }
+
+.desk { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 20px; align-items: stretch; margin-bottom: 20px; }
+@media (max-width: 860px) { .desk { grid-template-columns: 1fr; } }
+
+.chat { display: flex; flex-direction: column; min-height: 460px; padding: 0; overflow: hidden; }
+.log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: 560px; }
+.me, .bot { max-width: 85%; padding: 9px 12px; border-radius: 12px; white-space: pre-wrap; font-size: 15px; line-height: 1.45; }
+.me { align-self: flex-end; background: var(--teal-900); color: var(--paper); border-bottom-right-radius: 4px; }
+.bot { align-self: flex-start; background: var(--cream-soft); border: 1px solid var(--stone); color: var(--ink-1); border-bottom-left-radius: 4px; }
+.status { align-self: flex-start; color: var(--ink-3); font-size: 13px; font-style: italic; }
+.compose { border-top: 1px solid var(--stone); padding: 12px; display: grid; gap: 8px; background: var(--paper); }
+.compose textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--stone);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font: 15px var(--sans);
+  background: var(--paper);
+  color: var(--ink-1);
+}
+.composeBtns { display: flex; justify-content: flex-end; gap: 8px; }
+
+.draft { display: flex; flex-direction: column; gap: 10px; }
+.h2 { font: 600 22px var(--serif); color: var(--teal-900); margin: 0 0 4px; }
+.fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; font-size: 14px; }
+.fields dt { color: var(--ink-3); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 2px; }
+.fields dd { margin: 0; color: var(--ink-1); overflow-wrap: anywhere; }
+.cost { font: 600 18px "IBM Plex Mono", ui-monospace, monospace; color: var(--teal-900); }
+.missing { color: #8a5a00; font-size: 13px; margin: 0; }
+.confirm { border-top: 1px solid var(--stone); padding-top: 12px; display: grid; gap: 6px; margin-top: auto; }
+
+.primary, .ghost, .primarySm, .ghostSm {
+  border-radius: 6px;
+  font: 700 14px var(--sans);
+  cursor: pointer;
+  border: 1px solid var(--teal-900);
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+.primary { background: var(--teal-900); color: var(--paper); padding: 10px 16px; }
+.ghost { background: var(--paper); color: var(--teal-900); padding: 10px 14px; }
+.primarySm { background: var(--teal-900); color: var(--paper); padding: 5px 10px; font-size: 13px; }
+.ghostSm { background: var(--paper); color: var(--teal-900); padding: 5px 10px; font-size: 13px; }
+.primary:disabled, .ghost:disabled, .primarySm:disabled, .ghostSm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.block { margin-bottom: 20px; }
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px; border-bottom: 1px solid var(--stone); white-space: nowrap; }
+.table td { padding: 8px; border-bottom: 1px solid var(--stone-2); vertical-align: top; }
+.num { text-align: right; font-family: "IBM Plex Mono", ui-monospace, monospace; white-space: nowrap; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; white-space: nowrap; }
+.actions { white-space: nowrap; text-align: right; }
+.actions > * + * { margin-left: 6px; }
+.dim { opacity: 0.55; }
+.testTag { display: inline-block; font-size: 11px; font-weight: 700; color: #8a5a00; background: #fff4d6; border-radius: 4px; padding: 0 5px; margin-left: 4px; }

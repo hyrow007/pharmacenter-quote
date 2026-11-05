@@ -34,6 +34,7 @@ export type AppContext =
   | "orders"
   | "yields"
   | "dielines"
+  | "shipping"
   // The apex, pharmacenter.app. Not a product -- the hub IS PharmaCenter, so
   // it wears the wordmark alone with no product name beside it.
   | "hub";
@@ -61,6 +62,7 @@ export default async function AppHeader({ user, appContext }: Props) {
   const onOrderHost = host.startsWith("order.") || host.startsWith("orders.");
   const onYieldHost = host.startsWith("yield.") || host.startsWith("yields.");
   const onDielineHost = host.startsWith("dieline.") || host.startsWith("dielines.");
+  const onShipHost = host.startsWith("ship.") || host.startsWith("shipping.");
   // Hub hosts only: pharmacenter.app, pharmacenter.tools and their www.
   // Deliberately NOT a suffix test -- "quote.pharmacenter.app" ends with the
   // apex too.
@@ -81,6 +83,8 @@ export default async function AppHeader({ user, appContext }: Props) {
       ? "yields"
       : onDielineHost
         ? "dielines"
+        : onShipHost
+          ? "shipping"
         : (appContext ??
       (onFormulaHost
         ? "formulas"
@@ -112,6 +116,10 @@ export default async function AppHeader({ user, appContext }: Props) {
               ? onDielineHost
                 ? "/"
                 : "https://dieline.pharmacenter.app/"
+              : ctx === "shipping"
+                ? onShipHost
+                  ? "/"
+                  : "https://ship.pharmacenter.app/"
               : ctx === "packing-list"
                 ? "https://packing.pharmacenter.app/lists"
                 : "/workflows";
@@ -126,6 +134,8 @@ export default async function AppHeader({ user, appContext }: Props) {
             ? "Production"
             : ctx === "dielines"
               ? "Dieline"
+              : ctx === "shipping"
+                ? "Shipping"
               : ctx === "packing-list"
                 ? "Packing List"
                 : "Quote";
@@ -140,6 +150,8 @@ export default async function AppHeader({ user, appContext }: Props) {
             ? "Yields"
             : ctx === "dielines"
               ? "Builder"
+              : ctx === "shipping"
+                ? "Labels"
               : ctx === "packing-list"
                 ? "Generator"
                 : "Work Flows";
@@ -200,6 +212,7 @@ export default async function AppHeader({ user, appContext }: Props) {
               onOrderHost={onOrderHost}
               onYieldHost={onYieldHost}
               onDielineHost={onDielineHost}
+              onShipHost={onShipHost}
               appContext={ctx}
               lang={lang}
             />
