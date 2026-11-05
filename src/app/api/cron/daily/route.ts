@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSyncAuth } from "@/lib/sync-auth";
+import { collectMetrics, writeSnapshots } from "@/app/kpi/_lib/run";
+import { serviceClient } from "@/app/kpi/_lib/service";
 import { askForJson } from "@/lib/sync/anthropic";
 import {
   buildTranslationPrompt,
@@ -315,6 +317,18 @@ async function synthesis(
   };
 }
 
+// KPI snapshots: one row per metric for today (kpi.pharmacenter.app). First and
+// cheap -- no model call, a few queries -- so it never competes with the two
+// model steps for the 60s budget. Every value comes from the owning app's
+// kpi.ts; see src/app/kpi/_lib/sections.ts.
+async function kpiSnapshots(): Promise<StepResult> {
+  const db = serviceClient();
+  if (!db) return { ok: false, error: "server_misconfigured" };
+  const metrics = await collectMetrics(db);
+  const r = await writeSnapshots(db, metrics.values());
+  return r.ok ? { ok: true, written: r.written } : { ok: false, error: r.error };
+}
+
 async function run(request: Request): Promise<NextResponse> {
   const denied = requireSyncAuth(request, "so-synthesis");
   if (denied) return denied;
@@ -329,6 +343,7 @@ async function run(request: Request): Promise<NextResponse> {
     // Sequential on purpose. Both steps call the model, and running them at
     // once doubles the peak against a single 60s ceiling for no gain — the
     // cron runs once a day and has nobody waiting on it.
+    result.kpi = await kpiSnapshots().catch((err: unknown) => ({ ok: false, error: describe(err) }));
     result.translations = await translations(request, controller.signal).catch(
       (err: unknown) => ({ ok: false, error: describe(err) }),
     );
@@ -339,7 +354,7 @@ async function run(request: Request): Promise<NextResponse> {
     clearTimeout(timer);
   }
 
-  const steps = [result.translations, result.synthesis] as StepResult[];
+  const steps = [result.kpi, result.translations, result.synthesis] as StepResult[];
   const ok = steps.every((s) => s?.ok === true);
 
   console.log(

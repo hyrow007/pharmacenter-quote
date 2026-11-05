@@ -30,6 +30,7 @@ export default function NavLinks({
   onYieldHost,
   onDielineHost,
   onShipHost,
+  onKpiHost,
   appContext,
   lang,
 }: {
@@ -43,6 +44,7 @@ export default function NavLinks({
   onYieldHost?: boolean;
   onDielineHost?: boolean;
   onShipHost?: boolean;
+  onKpiHost?: boolean;
   appContext:
     | "quote"
     | "formulas"
@@ -52,6 +54,7 @@ export default function NavLinks({
     | "yields"
     | "dielines"
     | "shipping"
+    | "kpi"
     | "hub";
   lang: Lang;
 }) {
@@ -133,7 +136,7 @@ export default function NavLinks({
           /feedback there would get rewritten into /formulas/feedback. */}
       <Link
         href={
-          onFormulaHost || onMeetingHost || onYieldHost || onDielineHost || onShipHost
+          onFormulaHost || onMeetingHost || onYieldHost || onDielineHost || onShipHost || onKpiHost
             ? `https://quote.pharmacenter.app/feedback?from=${appContext}`
             : appContext === "quote"
               ? "/feedback"

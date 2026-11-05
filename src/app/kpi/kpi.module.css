@@ -1,0 +1,72 @@
+/* KPIs -- page styles. Brand tokens come from globals.css; no literal font
+   families (see app-chrome.css). Numbers use the mono stack so they line up. */
+
+.attention {
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-left: 4px solid #b4532a;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 28px;
+}
+.attentionClear { border-left-color: var(--sage-500); }
+.attentionTitle {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--teal-900);
+  margin: 0 0 8px;
+}
+.attentionList { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.attentionItem a { color: var(--teal-700); font-weight: 600; text-decoration: none; }
+.attentionItem a:hover { text-decoration: underline; }
+.muted { color: var(--ink-2); font-size: 14px; }
+
+.section { margin-bottom: 28px; }
+.sectionTitle {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--teal-900);
+  margin: 0 0 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.card {
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.cardOff { border-color: #d9a68f; box-shadow: inset 4px 0 0 #b4532a; }
+.label { font-size: 14px; font-weight: 700; color: var(--teal-700); margin: 0 0 6px; }
+.value {
+  font-family: var(--mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 32px;
+  color: var(--teal-900);
+  margin: 0 0 4px;
+}
+.change { font-size: 14px; margin: 0 0 10px; }
+.up { color: var(--sage-700); }
+.down { color: #b4532a; }
+.meta { font-size: 13px; color: var(--ink-2); margin: 0 0 4px; }
+.top { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.topRow { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.topName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topVal { font-family: var(--mono, "IBM Plex Mono", ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.link { display: inline-block; margin-top: 12px; color: var(--teal-700); font-weight: 600; font-size: 14px; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.stale {
+  background: #fbeee6;
+  border: 1px solid #e3b9a3;
+  color: #8a3b1b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
