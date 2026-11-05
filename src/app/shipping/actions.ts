@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { shipGate } from "./_lib/gate";
 import { checkDraft, APPROVAL_THRESHOLD_USD, isInternational, type Draft, type DraftRecipient } from "./_lib/draft";
-import { validateAddress, getRates, createShipment, cancelShipment, fedexConfigured, ENVIRONMENT } from "./_lib/fedex";
+import { validateAddress, getRates, createShipment, cancelShipment, fedexConfigured, ENVIRONMENT, LIVE } from "./_lib/fedex";
 
 const BUCKET = "shipping-labels";
 
@@ -113,8 +113,13 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
 
   const v = await validateAddress(draft.recipient);
   if (!v.ok) return { ok: false, error: v.error, detail: v.detail };
-  if (!v.resolved) return { ok: false, error: "address_not_resolved", detail: v.notes.join(", ") };
-  draft.recipient.validated = true;
+  // FedEx's sandbox answers address validation with canned sample data (a
+  // Miami street came back as "Miami, Chile" on 2026-11-05), so it can never
+  // resolve a real address. Live, an unresolved address blocks the label; in
+  // test mode it is recorded as unverified and the label goes ahead.
+  if (!v.resolved && LIVE) return { ok: false, error: "address_not_resolved", detail: v.notes.join(", ") };
+  const addressCheck = v.resolved ? "resolved" : "sandbox_unverified";
+  draft.recipient.validated = v.resolved;
   if (draft.recipient.residential == null) draft.recipient.residential = v.residential;
 
   const rated = await getRates({ recipient: draft.recipient, packages: draft.packages, serviceType: draft.serviceType });
@@ -192,7 +197,7 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
       rated_cost: rate.cost,
       rated_currency: rate.currency,
       rated_at: new Date().toISOString(),
-      rate_detail: { service_name: rate.serviceName, transit: rate.transitDays },
+      rate_detail: { service_name: rate.serviceName, transit: rate.transitDays, address_check: addressCheck },
       requested_by: g.email,
       approval_required: needsApproval,
     })

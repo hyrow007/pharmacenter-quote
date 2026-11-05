@@ -13,6 +13,15 @@ import s from "../shipping.module.css";
 
 type Msg = { role: "user" | "assistant"; text: string };
 
+// Errors with their own sentence in both languages; anything else shows its code.
+const KNOWN_ERRORS = new Set([
+  "address_not_resolved",
+  "fedex_not_configured",
+  "duplicate_just_submitted",
+  "service_not_offered",
+  "international_not_yet",
+]);
+
 const money = (n: number | null | undefined, cur = "USD") =>
   n == null ? "—" : n.toLocaleString("en-US", { style: "currency", currency: cur || "USD" });
 
@@ -247,7 +256,9 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
             <p className={s.warn}>
               {result.error === "incomplete"
                 ? `${t("err_problems")} ${(result.problems ?? []).map((p) => t(`m_${p}` as SKey)).join(", ")}`
-                : t("err_generic", { e: `${result.error}${result.detail ? ` — ${result.detail}` : ""}` })}
+                : KNOWN_ERRORS.has(result.error)
+                  ? t(`err_${result.error}` as SKey)
+                  : t("err_generic", { e: `${result.error}${result.detail ? ` — ${result.detail}` : ""}` })}
             </p>
           )
         ) : null}

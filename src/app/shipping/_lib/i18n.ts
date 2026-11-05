@@ -97,6 +97,11 @@ const en = {
   err_not_admin: "Only an admin can do that.",
   err_changed: "This label was already handled by someone else.",
   err_problems: "The label is not complete yet.",
+  err_address_not_resolved: "FedEx could not verify this address. Check the street, city and ZIP, then try again.",
+  err_fedex_not_configured: "FedEx is not connected yet.",
+  err_duplicate_just_submitted: "You just submitted this shipment. Check the labels below before trying again.",
+  err_service_not_offered: "FedEx no longer offers that service for this shipment. Ask the assistant to quote again.",
+  err_international_not_yet: "International shipping is not available yet.",
   foot: "Every label is recorded with who made it and why. Test labels never count as spend.",
 };
 
@@ -194,6 +199,11 @@ const es = {
   err_not_admin: "Solo un administrador puede hacer eso.",
   err_changed: "Alguien más ya procesó esta etiqueta.",
   err_problems: "La etiqueta todavía no está completa.",
+  err_address_not_resolved: "FedEx no pudo verificar esta dirección. Revise la calle, la ciudad y el código postal e intente de nuevo.",
+  err_fedex_not_configured: "FedEx todavía no está conectado.",
+  err_duplicate_just_submitted: "Acaba de enviar este envío. Revise las etiquetas abajo antes de intentar de nuevo.",
+  err_service_not_offered: "FedEx ya no ofrece ese servicio para este envío. Pídale al asistente que cotice de nuevo.",
+  err_international_not_yet: "Los envíos internacionales todavía no están disponibles.",
   foot: "Cada etiqueta queda registrada con quién la hizo y por qué. Las etiquetas de prueba nunca cuentan como gasto.",
 } satisfies Record<SKey, string>;
 

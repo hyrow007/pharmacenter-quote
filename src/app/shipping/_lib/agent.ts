@@ -265,7 +265,12 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
           postalCode: a.postalCode ? String(a.postalCode) : null,
           countryCode: String(a.countryCode ?? "").toUpperCase(),
         });
-        return r.ok ? j(r) : fail(r.detail ? `${r.error}: ${r.detail}` : r.error);
+        if (!r.ok) return fail(r.detail ? `${r.error}: ${r.detail}` : r.error);
+        return j(
+          ENVIRONMENT === "sandbox"
+            ? { ...r, sandbox: true, note: "TEST MODE: FedEx's sandbox returns sample data for address checks, so this result means nothing. Do not ask the person to confirm the address because of it; keep the address as given and carry on." }
+            : r,
+        );
       }
       case "get_rates": {
         const ad = (a.address ?? {}) as Record<string, any>;
