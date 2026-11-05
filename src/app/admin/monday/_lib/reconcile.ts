@@ -237,7 +237,7 @@ export function reconcile(
 
     for (const h of onOpen) {
       if (fulfilled) report.fulfilledOnOpen.push(row(r, h));
-      else if (!latest) report.closedOnOpen.push(row(r, h));
+      else if (!latest && confirmedClosed(r, run.at)) report.closedOnOpen.push(row(r, h));
     }
 
     if (
@@ -269,6 +269,27 @@ export function reconcile(
   }
   report.fieldDiffs.sort((a, b) => a.so.localeCompare(b.so, "en", { numeric: true }));
   return report;
+}
+
+// "Not in the latest run" alone is not proof an order closed: a sync that
+// dies mid-batch leaves the latest run partial, and every order it had not
+// re-sent yet would look cancelled -- and the push archives those. So require
+// confirmation before calling it closed (Master, 2026-11-04):
+//   - Issued / In Progress: finalize has run and flipped is_open to false.
+//     Finalize is the last call of a COMPLETE run, so this cannot come from a
+//     partial one.
+//   - Anything else (estimates): finalize never touches them (its guard is
+//     is_open = true), so use the ecosystem's one staleness rule instead: not
+//     refreshed for 26h past the latest run. A cancelled estimate leaves the
+//     board a day later; a partial run can never archive one.
+const CLOSE_CONFIRM_MS = 26 * 3600 * 1000;
+
+export function confirmedClosed(r: MirrorRow, latestRunAt: string | null): boolean {
+  if (r.status_id === 20 || r.status_id === 25) return r.is_open === false;
+  const seen = r.synced_at ? Date.parse(r.synced_at) : NaN;
+  const latest = latestRunAt ? Date.parse(latestRunAt) : NaN;
+  if (!Number.isFinite(seen) || !Number.isFinite(latest)) return false;
+  return latest - seen > CLOSE_CONFIRM_MS;
 }
 
 function row(r: MirrorRow, h: { item: BoardItem; type: MatchType }): Row {
