@@ -120,7 +120,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
 
   return (
     <section className={s.desk}>
-      <div className={`card ${s.chat}`}>
+      <div className={`${s.panel} ${s.chat}`}>
         <div className={s.log} ref={logRef} aria-live="polite">
           {msgs.map((m, i) => (
             <div key={i} className={m.role === "user" ? s.me : s.bot}>
@@ -162,7 +162,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
         </form>
       </div>
 
-      <div className={`card ${s.draft}`}>
+      <div className={`${s.panel} ${s.draft}`}>
         <h2 className={s.h2}>{t("draftTitle")}</h2>
         {!draft ? (
           <p className={s.muted}>{t("draftEmpty")}</p>

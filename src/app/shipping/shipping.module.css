@@ -21,6 +21,14 @@
 .ok { color: var(--sage-700); font-size: 13px; }
 .foot { color: var(--ink-3); font-size: 13px; margin-top: 18px; }
 
+/* Own panel style: the global .card is the sign-in card (560px max, 56px padding). */
+.panel {
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(15, 74, 86, 0.06), 0 12px 32px rgba(15, 74, 86, 0.08);
+  min-width: 0;
+}
 .desk { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 20px; align-items: stretch; margin-bottom: 20px; }
 @media (max-width: 860px) { .desk { grid-template-columns: 1fr; } }
 

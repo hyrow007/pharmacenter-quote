@@ -106,7 +106,7 @@ export default function LabelTables({
     <>
       {msg ? <p className={s.warn}>{msg}</p> : null}
 
-      <section className={`card ${s.block}`}>
+      <section className={`${s.panel} ${s.block}`}>
         <h2 className={s.h2}>{t("pendingTitle")}</h2>
         {pending.length === 0 ? (
           <p className={s.muted}>{t("pendingNone")}</p>
@@ -166,7 +166,7 @@ export default function LabelTables({
         )}
       </section>
 
-      <section className={`card ${s.block}`}>
+      <section className={`${s.panel} ${s.block}`}>
         <h2 className={s.h2}>{t("recentTitle")}</h2>
         {recent.length === 0 ? (
           <p className={s.muted}>{t("recentNone")}</p>
