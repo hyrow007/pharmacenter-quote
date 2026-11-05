@@ -17,6 +17,7 @@ import {
 } from "../_lib/model";
 import { SNAP_KINDS, type SnapKind } from "../_lib/period";
 import s from "../yields.module.css";
+import TrendChart from "./TrendChart";
 
 // The top-of-page snapshot: revenue, gross, man-hours and the per-man-hour
 // figures for one day or any period, split by packaging line, and by day when
@@ -99,6 +100,7 @@ export default function Snapshot({
         <p className={s.empty}>{t("noEntries")}</p>
       ) : (
         <>
+          <TrendChart byDay={byDay} lang={lang} />
           <h3 className={s.subHeading}>{t("byLine")}</h3>
           <div className={s.tableWrap}>
             <table className={s.table}>
