@@ -45,9 +45,14 @@ export default async function ShippingPage() {
               <h1 className="page-header__title" style={{ marginBottom: 6 }}>{t("title")}</h1>
               <p className="lede" style={{ marginTop: 4, marginBottom: 0 }}>{t("lede")}</p>
             </div>
-            {LIVE ? null : (
-              <span className={s.sandbox} title={t("sandboxHint")}>{t("sandbox")}</span>
-            )}
+            <div className={s.headSide}>
+              {g.admin ? (
+                <a className={s.ghostSm} href={onShipHost ? "/import" : "/shipping/import"}>{t("impLink")}</a>
+              ) : null}
+              {LIVE ? null : (
+                <span className={s.sandbox} title={t("sandboxHint")}>{t("sandbox")}</span>
+              )}
+            </div>
           </div>
           {cfg.ok ? null : <p className={s.warn}>{t("notConfigured", { list: cfg.missing.join(", ") })}</p>}
           {pending.error || recent.error ? (

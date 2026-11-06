@@ -86,3 +86,8 @@
 .actions > * + * { margin-left: 6px; }
 .dim { opacity: 0.55; }
 .testTag { display: inline-block; font-size: 11px; font-weight: 700; color: #8a5a00; background: #fff4d6; border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+
+.headSide { display: flex; align-items: center; gap: 10px; flex: none; }
+.crumb { color: inherit; text-decoration: none; }
+.crumb:hover { text-decoration: underline; }
+.table select { font: 14px var(--sans); padding: 3px 6px; border: 1px solid var(--stone); border-radius: 6px; background: var(--paper); color: var(--ink-1); }
