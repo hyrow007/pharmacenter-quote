@@ -199,7 +199,10 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
 
   // The $150 rule guards PharmaCenter's money: a receiver-pays label is not on
   // our account, so it never waits for approval.
-  const needsApproval = draft.payer === "shipper" && rate.cost > APPROVAL_THRESHOLD_USD;
+  // A rate not in dollars can't be compared to the $150 limit: send it to an
+  // admin rather than guess an exchange rate.
+  const needsApproval =
+    draft.payer === "shipper" && (rate.currency.toUpperCase() !== "USD" || rate.cost > APPROVAL_THRESHOLD_USD);
   const { data: inserted, error } = await g.service
     .from("shipping_labels")
     .insert({

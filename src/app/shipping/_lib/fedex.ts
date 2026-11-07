@@ -232,6 +232,9 @@ export async function getRates(
       pickupType: "DROPOFF_AT_FEDEX_LOCATION",
       ...(d.serviceType ? { serviceType: d.serviceType } : {}),
       rateRequestType: ["ACCOUNT"],
+      // International rates can come back in the destination's currency (a
+      // Mexico quote arrived in EUR on 2026-11-07). Ask for dollars.
+      preferredCurrency: "USD",
       ...(d.customs ? { customsClearanceDetail: fxCustoms(d.customs, d.packages) } : {}),
       requestedPackageLineItems: fxPackages(d.packages),
     },
@@ -241,8 +244,15 @@ export async function getRates(
   const rates: Rate[] = [];
   for (const r of rows) {
     const details = Array.isArray(r.ratedShipmentDetails) ? r.ratedShipmentDetails : [];
-    // Prefer the account rate; fall back to whatever came first.
-    const pick = details.find((x: any) => x.rateType === "ACCOUNT") ?? details[0];
+    // Prefer the account rate in USD, then any USD rate, then the account
+    // rate, then whatever came first. The $150 rule is in dollars, so a
+    // non-USD rate is flagged and treated as needing approval.
+    const usd = (x: any) => String(x?.currency ?? "").toUpperCase() === "USD";
+    const pick =
+      details.find((x: any) => x.rateType === "ACCOUNT" && usd(x)) ??
+      details.find(usd) ??
+      details.find((x: any) => x.rateType === "ACCOUNT") ??
+      details[0];
     const cost = Number(pick?.totalNetCharge);
     if (!Number.isFinite(cost)) continue;
     rates.push({
