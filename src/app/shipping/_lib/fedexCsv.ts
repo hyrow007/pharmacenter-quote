@@ -147,8 +147,17 @@ export function rowsFromFedexExport(text: string, lists: MatchLists): { rows: Im
     // FedEx keeps a branch as the whole company field: "(PLANTATION)" under
     // the contact "QUICK WEIGHT LOSS CENTER". Put the two back together.
     if (company && /^\(.*\)$/.test(company) && contact) {
-      company = `${clean(get(r, "FullName"))} ${company}`;
-      contact = null;
+      const base = clean(get(r, "FullName")) ?? "";
+      const joined = `${base} ${company}`;
+      // FedEx allows 35 characters for a company; past that, keep the branch
+      // whole on the contact line rather than cutting off its bracket.
+      if (joined.length <= 35) {
+        company = joined;
+        contact = null;
+      } else {
+        contact = company.replace(/^\(|\)$/g, "");
+        company = base;
+      }
     }
     if (company && contact && normName(company) === normName(contact)) contact = null;
     if (!company && !contact) contact = nickname;

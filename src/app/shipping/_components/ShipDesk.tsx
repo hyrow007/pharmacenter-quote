@@ -114,7 +114,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
   // The server validates the address itself on confirm, so that one item
   // does not block the button; everything else does.
   const blocking = problems.filter((p) => p !== "address_not_validated");
-  const overLimit = (draft?.quotedCost ?? 0) > APPROVAL_THRESHOLD_USD;
+  const overLimit = draft?.payer !== "recipient" && (draft?.quotedCost ?? 0) > APPROVAL_THRESHOLD_USD;
   const done = result?.ok && (result.status === "created" || result.status === "pending_approval");
   const r = draft?.recipient;
 

@@ -115,7 +115,10 @@ export function checkDraft(raw: unknown): { draft: Draft; problems: string[] } {
     validated: bool(rc.validated),
   };
   if (!recipient.company && !recipient.contactName) problems.push("recipient_name");
-  if (!recipient.contactName) problems.push("contact_name");
+  // Many address-book entries are company-only (the fedex.com import). FedEx
+  // takes the company name in the contact slot, so a contact is only needed
+  // when there is no company.
+  if (!recipient.contactName && !recipient.company) problems.push("contact_name");
   if (!recipient.phone) problems.push("phone");
   if (streetLines.length === 0) problems.push("street");
   if (!recipient.city) problems.push("city");
