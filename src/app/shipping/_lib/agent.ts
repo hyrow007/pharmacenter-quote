@@ -10,6 +10,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolDef } from "@/app/orders/_lib/anthropicStream";
 import { checkDraft, APPROVAL_THRESHOLD_USD, PURPOSES, RECIPIENT_KINDS, type Draft } from "./draft";
+import { CUSTOMS_ITEMS, CUSTOMS_ITEM_KEYS, DEFAULT_DECLARED_VALUE_USD, MAX_DECLARED_VALUE_USD } from "./customs";
 import { validateAddress, getRates, fedexConfigured, ENVIRONMENT } from "./fedex";
 
 export const MODEL = process.env.SHIPPING_MODEL || "claude-opus-5";
@@ -33,6 +34,27 @@ const packageSchema = {
     presetId: { type: "string" },
   },
   required: ["weightLb"],
+} as const;
+
+const customsSchema = {
+  type: "object",
+  properties: {
+    documentsOnly: { type: "boolean", description: "True only for paperwork with no goods." },
+    lines: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          item: { type: "string", enum: [...CUSTOMS_ITEM_KEYS] },
+          quantity: { type: "number", description: "How many pieces (sachets, bottles, labels...)." },
+          note: { type: "string", description: "Short internal note, e.g. 'mango gummies'. Not printed on the invoice." },
+        },
+        required: ["item", "quantity"],
+      },
+    },
+    declaredValue: { type: "number", description: `Total for the whole shipment in USD. Default ${DEFAULT_DECLARED_VALUE_USD}.` },
+    recipientTaxId: { type: "string", description: "Only if the person gives one." },
+  },
 } as const;
 
 export const TOOLS: ToolDef[] = [
@@ -85,6 +107,7 @@ export const TOOLS: ToolDef[] = [
         address: { type: "object", properties: addressProps, required: ["streetLines", "city", "countryCode"] },
         residential: { type: "boolean" },
         packages: { type: "array", items: packageSchema, minItems: 1 },
+        customs: { ...customsSchema, description: "Required for destinations outside the US and its territories." },
       },
       required: ["address", "packages"],
     },
@@ -125,6 +148,7 @@ export const TOOLS: ToolDef[] = [
         saturdayDelivery: { type: "boolean" },
         quotedCost: { type: "number" },
         quotedCurrency: { type: "string" },
+        customs: customsSchema,
       },
     },
   },
@@ -167,7 +191,17 @@ How shipping works here:
 - Offer box presets (list_package_presets) instead of asking for weight and size. Ask for a weight only if no preset fits.
 - Validate every new or changed address with validate_address before quoting. If FedEx suggests a correction, show it and use it once the person agrees. Pass validated=true in set_draft only for an address that resolved.
 - Quote with get_rates, then recommend one service in a sentence (the cheapest that arrives in time) and let the person choose. Labels PharmaCenter pays for over $${APPROVAL_THRESHOLD_USD} go to an admin for approval; mention it when a rate is over that.
-- v1 ships within the United States only. If the destination is outside the US, say international shipping is the next thing being built and stop there.
+International (anywhere outside the US, Puerto Rico and the US territories) needs customs details. Collect them in the same conversation and put them in set_draft's "customs":
+- What is in the box, as lines from this house list (item key = what it covers):
+${CUSTOMS_ITEM_KEYS.map((k) => `  - ${k} = ${CUSTOMS_ITEMS[k].en} (HS ${CUSTOMS_ITEMS[k].hs})`).join("\n")}
+- Quantity of pieces per line.
+- Declared value: $${DEFAULT_DECLARED_VALUE_USD} for the WHOLE shipment unless the person says otherwise. Never 0. Over $${MAX_DECLARED_VALUE_USD} cannot ship here (it needs an export filing): say so and stop.
+- Duties and taxes are paid by PharmaCenter; the recipient never gets a bill. The commercial invoice prints with the label: tell the person to print both and put the invoice in the clear pouch on the box.
+- GUMMIES: ask whether they contain active ingredients. With actives → supplement_finished. Only a base or placebo with NO actives → gummy_base. If unsure, use supplement_finished.
+- NEVER describe goods as something they are not to get through customs (for example supplement gummies as candy). If someone asks, say plainly that it would be a false customs declaration and that the house descriptions are already neutral and accurate.
+- Recipient tax ID: only if the person mentions one or the destination asks for it. Use the address book's tax_id and customs_defaults when present.
+- Address checks abroad often don't resolve (FedEx covers few countries); say the address is unverified and carry on.
+- Pass the same "customs" to get_rates; international rates need it.
 
 Rules:
 - Call set_draft after every step that changes what you know, with everything known so far. The person sees the draft beside the chat.
@@ -202,7 +236,7 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
         const q = like(a.query);
         const { data, error } = await sb
           .from("shipping_recipients")
-          .select("id, kind, company, contact_name, phone, email, street_lines, city, state_province, postal_code, country_code, residential, validated_at, customer_id, vendor_id, bill_to_account, notes")
+          .select("id, kind, company, contact_name, phone, email, street_lines, city, state_province, postal_code, country_code, residential, validated_at, customer_id, vendor_id, bill_to_account, tax_id, customs_defaults, notes")
           .is("archived_at", null)
           .or(`company.ilike.${q},contact_name.ilike.${q}`)
           .limit(8);
@@ -276,8 +310,8 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
       }
       case "get_rates": {
         const ad = (a.address ?? {}) as Record<string, any>;
-        const { draft } = checkDraft({ recipient: { ...ad, residential: a.residential }, packages: a.packages });
-        const r = await getRates({ recipient: draft.recipient, packages: draft.packages });
+        const { draft } = checkDraft({ recipient: { ...ad, residential: a.residential }, packages: a.packages, customs: a.customs });
+        const r = await getRates({ recipient: draft.recipient, packages: draft.packages, customs: draft.customs });
         if (!r.ok) return fail(r.detail ? `${r.error}: ${r.detail}` : r.error);
         return j({
           rates: r.rates,

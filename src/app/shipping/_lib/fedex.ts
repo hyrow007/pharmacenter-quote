@@ -18,6 +18,7 @@
 
 import "server-only";
 import type { Draft, DraftRecipient, DraftPackage } from "./draft";
+import { CUSTOMS_ITEMS, splitValue, type Customs } from "./customs";
 import { SHIPPER } from "./shipper";
 
 export const LIVE = process.env.SHIPPING_LIVE === "1";
@@ -175,12 +176,51 @@ export async function validateAddress(
   };
 }
 
+// ---------------------------------------------------------------- customs
+
+/**
+ * The customsClearanceDetail block. Duties are billed to PharmaCenter
+ * (SENDER), origin is the US, purpose is a sample, and the shipment's one
+ * declared value is spread across the lines in whole cents.
+ */
+function fxCustoms(c: Customs, packages: DraftPackage[]) {
+  const total = Math.max(0.01, c.declaredValue);
+  const money = (amount: number) => ({ amount, currency: "USD" });
+  const totalLb = packages.reduce((a, p) => a + p.weightLb, 0) || 1;
+  const lines = c.documentsOnly
+    ? [{ description: "Business documents", quantity: 1, weight: totalLb, hs: null as string | null }]
+    : c.lines.map((l, i, all) => ({
+        description: ascii(CUSTOMS_ITEMS[l.item].description).slice(0, 450),
+        quantity: l.quantity,
+        weight: Math.max(0.1, Math.round((totalLb / all.length) * 10) / 10),
+        hs: CUSTOMS_ITEMS[l.item].hs as string | null,
+      }));
+  const values = splitValue(total, lines.length);
+  return {
+    dutiesPayment: { paymentType: "SENDER" },
+    isDocumentOnly: c.documentsOnly,
+    commercialInvoice: { shipmentPurpose: "SAMPLE" },
+    totalCustomsValue: money(total),
+    commodities: lines.map((l, i) => ({
+      description: l.description,
+      countryOfManufacture: "US",
+      quantity: l.quantity,
+      quantityUnits: "PCS",
+      numberOfPieces: 1,
+      unitPrice: money(Math.round((values[i] / l.quantity) * 10000) / 10000),
+      customsValue: money(values[i]),
+      weight: { units: "LB", value: l.weight },
+      ...(l.hs ? { harmonizedCode: l.hs } : {}),
+    })),
+  };
+}
+
 // ---------------------------------------------------------------- rate
 
 export type Rate = { serviceType: string; serviceName: string | null; cost: number; currency: string; transitDays: string | null };
 
 export async function getRates(
-  d: Pick<Draft, "recipient" | "packages"> & { serviceType?: string | null },
+  d: Pick<Draft, "recipient" | "packages"> & { serviceType?: string | null; customs?: Customs | null },
 ): Promise<{ ok: true; rates: Rate[] } | FedexError> {
   const c = creds();
   if (!c) return { ok: false, error: "fedex_not_configured" };
@@ -192,6 +232,7 @@ export async function getRates(
       pickupType: "DROPOFF_AT_FEDEX_LOCATION",
       ...(d.serviceType ? { serviceType: d.serviceType } : {}),
       rateRequestType: ["ACCOUNT"],
+      ...(d.customs ? { customsClearanceDetail: fxCustoms(d.customs, d.packages) } : {}),
       requestedPackageLineItems: fxPackages(d.packages),
     },
   });
@@ -226,6 +267,8 @@ export type Created = {
   ok: true;
   trackingNumber: string;
   labelPdf: Buffer;
+  /** The FedEx-generated commercial invoice, international only. */
+  invoicePdf: Buffer | null;
   netCharge: number | null;
   raw: unknown;
 };
@@ -250,6 +293,9 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
             ...(r.email ? { emailAddress: r.email } : {}),
           },
           address: { ...fxAddress(r), residential: r.residential === true },
+          ...(d.customs?.recipientTaxId
+            ? { tins: [{ number: ascii(d.customs.recipientTaxId), tinType: "BUSINESS_NATIONAL" }] }
+            : {}),
         },
       ],
       shipDatestamp: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
@@ -265,6 +311,15 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
         imageType: "PDF",
         labelStockType: "PAPER_85X11_TOP_HALF_LABEL",
       },
+      ...(d.customs
+        ? {
+            customsClearanceDetail: fxCustoms(d.customs, d.packages),
+            shippingDocumentSpecification: {
+              shippingDocumentTypes: ["COMMERCIAL_INVOICE"],
+              commercialInvoiceDetail: { documentFormat: { stockType: "PAPER_LETTER", docType: "PDF" } },
+            },
+          }
+        : {}),
       requestedPackageLineItems: fxPackages(d.packages).map((p) => ({
         ...p,
         ...(d.signatureRequired
@@ -285,6 +340,11 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
   if (!tracking || !doc?.encodedLabel) {
     return { ok: false, error: "fedex_unexpected_response", detail: JSON.stringify(out.json).slice(0, 500) };
   }
+  // The commercial invoice comes back among the shipment documents.
+  const shipDocs = Array.isArray(ts?.shipmentDocuments) ? ts.shipmentDocuments : [];
+  const inv = shipDocs.find(
+    (x: any) => /COMMERCIAL_INVOICE/i.test(String(x?.contentType ?? x?.docType ?? "")) && x?.encodedLabel,
+  );
   const net = Number(
     ts?.completedShipmentDetail?.shipmentRating?.shipmentRateDetails?.[0]?.totalNetCharge ??
       piece?.netChargeAmount,
@@ -293,6 +353,7 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
     ok: true,
     trackingNumber: tracking,
     labelPdf: Buffer.from(String(doc.encodedLabel), "base64"),
+    invoicePdf: inv ? Buffer.from(String(inv.encodedLabel), "base64") : null,
     netCharge: Number.isFinite(net) ? net : null,
     raw: { serviceType: ts?.serviceType, shipDatestamp: ts?.shipDatestamp, alerts: ts?.alerts ?? out.json?.output?.alerts },
   };

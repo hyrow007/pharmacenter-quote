@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeST, type SKey } from "../_lib/i18n";
 import { APPROVAL_THRESHOLD_USD, type Draft } from "../_lib/draft";
+import { CUSTOMS_ITEMS } from "../_lib/customs";
 import { submitShipment, type ActionResult } from "../actions";
 import s from "../shipping.module.css";
 
@@ -215,6 +216,28 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
                 <dd>{[draft.signatureRequired && t("signature"), draft.saturdayDelivery && t("saturday")].filter(Boolean).join(" · ")}</dd>
               </>
             ) : null}
+            {draft.customs ? (
+              <>
+                <dt>{t("customs")}</dt>
+                <dd>
+                  {draft.customs.documentsOnly ? (
+                    <div>{t("customsDocs")}</div>
+                  ) : (
+                    draft.customs.lines.map((l, i) => (
+                      <div key={i}>
+                        {l.quantity} × {CUSTOMS_ITEMS[l.item][lang === "es" ? "es" : "en"]}
+                        <span className={s.muted}> · HS {CUSTOMS_ITEMS[l.item].hs}</span>
+                      </div>
+                    ))
+                  )}
+                  <div className={s.muted}>{t("customsValue", { v: money(draft.customs.declaredValue) })}</div>
+                  <div className={s.muted}>{t("customsDuties")}</div>
+                  {draft.customs.recipientTaxId ? (
+                    <div className={s.muted}>{t("customsTaxId", { id: draft.customs.recipientTaxId })}</div>
+                  ) : null}
+                </dd>
+              </>
+            ) : null}
             <dt>{t("quoted")}</dt>
             <dd>
               <span className={s.cost}>{money(draft.quotedCost, draft.quotedCurrency ?? "USD")}</span>
@@ -248,6 +271,16 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
                 <a href={`/api/shipping/labels/${result.id}/pdf`} target="_blank" rel="noreferrer">
                   {t("openPdf")}
                 </a>
+                {draft?.customs ? (
+                  <>
+                    {" · "}
+                    <a href={`/api/shipping/labels/${result.id}/pdf?doc=invoice`} target="_blank" rel="noreferrer">
+                      {t("openInvoice")}
+                    </a>
+                    <br />
+                    {t("customsPrint")}
+                  </>
+                ) : null}
               </p>
             ) : result.status === "pending_approval" ? (
               <p className={s.success}>{t("pendingMade", { cost: money(result.cost) })}</p>

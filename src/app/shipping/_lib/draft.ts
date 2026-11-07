@@ -1,3 +1,12 @@
+import {
+  CUSTOMS_ITEM_KEYS,
+  DEFAULT_DECLARED_VALUE_USD,
+  MAX_DECLARED_VALUE_USD,
+  needsCustoms,
+  type Customs,
+  type CustomsItemKey,
+} from "./customs";
+
 // The shipment draft: what the agent fills in and the person confirms.
 //
 // The agent never creates a label. It can only propose a draft with
@@ -66,6 +75,8 @@ export type Draft = {
   /** Last rate the agent fetched for this service -- shown, never trusted. */
   quotedCost: number | null;
   quotedCurrency: string | null;
+  /** Only for destinations that need customs paperwork. */
+  customs: Customs | null;
 };
 
 const str = (v: unknown, max = 200): string | null => {
@@ -81,8 +92,28 @@ const bool = (v: unknown) => v === true;
 const uuid = (v: unknown) =>
   typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
 
+/** Needs customs paperwork (Puerto Rico and the other US territories do not). */
 export function isInternational(d: Pick<Draft, "recipient">): boolean {
-  return d.recipient.countryCode !== "US";
+  return needsCustoms(d.recipient.countryCode);
+}
+
+function checkCustoms(raw: unknown, problems: string[]): Customs {
+  const c = (raw ?? {}) as Record<string, unknown>;
+  const documentsOnly = c.documentsOnly === true;
+  const lines = Array.isArray(c.lines)
+    ? c.lines.slice(0, 10).flatMap((l) => {
+        const o = (l ?? {}) as Record<string, unknown>;
+        const item = CUSTOMS_ITEM_KEYS.includes(o.item as CustomsItemKey) ? (o.item as CustomsItemKey) : null;
+        const quantity = Math.round(num(o.quantity) ?? 0);
+        return item ? [{ item, quantity: quantity > 0 ? quantity : 1, note: str(o.note, 60) }] : [];
+      })
+    : [];
+  const v = num(c.declaredValue);
+  const declaredValue = v == null ? DEFAULT_DECLARED_VALUE_USD : Math.round(v * 100) / 100;
+  if (!documentsOnly && lines.length === 0) problems.push("customs_items");
+  if (!(declaredValue > 0)) problems.push("customs_value");
+  if (declaredValue > MAX_DECLARED_VALUE_USD) problems.push("customs_over_limit");
+  return { documentsOnly, lines: documentsOnly ? [] : lines, declaredValue, recipientTaxId: str(c.recipientTaxId, 30) };
 }
 
 /**
@@ -123,7 +154,7 @@ export function checkDraft(raw: unknown): { draft: Draft; problems: string[] } {
   if (streetLines.length === 0) problems.push("street");
   if (!recipient.city) problems.push("city");
   if (!/^[A-Z]{2}$/.test(country)) problems.push("country");
-  if (country === "US" && (!recipient.stateProvince || !recipient.postalCode)) problems.push("state_zip");
+  if ((country === "US" || country === "PR") && (!recipient.stateProvince || !recipient.postalCode)) problems.push("state_zip");
   if (!recipient.validated) problems.push("address_not_validated");
 
   const purpose = PURPOSES.includes(r.purpose as Purpose) ? (r.purpose as Purpose) : null;
@@ -171,7 +202,8 @@ export function checkDraft(raw: unknown): { draft: Draft; problems: string[] } {
     saturdayDelivery: bool(r.saturdayDelivery),
     quotedCost: num(r.quotedCost),
     quotedCurrency: str(r.quotedCurrency, 3),
+    customs: null,
   };
-  if (isInternational(draft)) problems.push("international_not_yet");
+  if (isInternational(draft)) draft.customs = checkCustoms(r.customs, problems);
   return { draft, problems };
 }

@@ -28,6 +28,7 @@ export type LabelListRow = {
   decision_note: string | null;
   tracking_number: string | null;
   label_path: string | null;
+  invoice_path: string | null;
   fedex_error: { error?: string; detail?: string | null } | null;
 };
 
@@ -208,6 +209,11 @@ export default function LabelTables({
                       {r.label_path && r.status === "created" ? (
                         <a className={s.ghostSm} href={`/api/shipping/labels/${r.id}/pdf`} target="_blank" rel="noreferrer">
                           {t("reprint")}
+                        </a>
+                      ) : null}
+                      {r.invoice_path && r.status === "created" ? (
+                        <a className={s.ghostSm} href={`/api/shipping/labels/${r.id}/pdf?doc=invoice`} target="_blank" rel="noreferrer">
+                          {t("invoice")}
                         </a>
                       ) : null}
                       {r.status === "created" && (admin || r.requested_by === me) ? (

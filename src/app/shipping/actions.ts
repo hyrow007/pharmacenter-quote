@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { shipGate } from "./_lib/gate";
 import { checkDraft, APPROVAL_THRESHOLD_USD, isInternational, type Draft, type DraftRecipient } from "./_lib/draft";
 import { validateAddress, getRates, createShipment, cancelShipment, fedexConfigured, ENVIRONMENT, LIVE } from "./_lib/fedex";
+import type { Customs } from "./_lib/customs";
 
 const BUCKET = "shipping-labels";
 
@@ -23,7 +24,7 @@ export type ActionResult =
   | { ok: false; error: string; detail?: string; problems?: string[] };
 
 const LABEL_COLS =
-  "id, environment, status, purpose, purpose_note, customer_id, vendor_id, so_number, recipient_id, recipient_snapshot, contents, packages, international, service_type, payer, payer_account, signature_required, saturday_delivery, rated_cost, requested_by, approval_required, tracking_number";
+  "id, environment, status, purpose, purpose_note, customer_id, vendor_id, so_number, recipient_id, recipient_snapshot, contents, packages, international, service_type, payer, payer_account, signature_required, saturday_delivery, rated_cost, requested_by, approval_required, tracking_number, customs";
 
 type LabelRow = {
   id: string;
@@ -39,6 +40,7 @@ type LabelRow = {
   contents: string;
   packages: Draft["packages"];
   international: boolean;
+  customs: Customs | null;
   service_type: string;
   payer: "shipper" | "recipient";
   payer_account: string | null;
@@ -69,6 +71,7 @@ function rowToDraft(r: LabelRow): Draft {
     saturdayDelivery: r.saturday_delivery,
     quotedCost: r.rated_cost,
     quotedCurrency: "USD",
+    customs: r.international ? r.customs : null,
   };
 }
 
@@ -84,12 +87,18 @@ async function createAndStore(service: SupabaseClient, row: LabelRow): Promise<A
   }
   const path = `${row.environment}/${row.id}.pdf`;
   const up = await service.storage.from(BUCKET).upload(path, made.labelPdf, { contentType: "application/pdf", upsert: true });
+  // International: the commercial invoice is printed with the label.
+  const invPath = `${row.environment}/${row.id}-invoice.pdf`;
+  const invUp = made.invoicePdf
+    ? await service.storage.from(BUCKET).upload(invPath, made.invoicePdf, { contentType: "application/pdf", upsert: true })
+    : null;
   const { error } = await service
     .from("shipping_labels")
     .update({
       status: "created",
       tracking_number: made.trackingNumber,
       label_path: up.error ? null : path,
+      invoice_path: invUp && !invUp.error ? invPath : null,
       created_label_at: new Date().toISOString(),
       fedex_error: up.error ? { storage: up.error.message } : null,
       ...(made.netCharge != null ? { rate_detail: { net_charge_at_ship: made.netCharge, ...(made.raw as object) } } : {}),
@@ -109,7 +118,6 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
   // The agent's "validated" claim is not trusted: we validate here ourselves.
   const real = problems.filter((p) => p !== "address_not_validated");
   if (real.length) return { ok: false, error: "incomplete", problems: real };
-  if (isInternational(draft)) return { ok: false, error: "international_not_yet" };
 
   const v = await validateAddress(draft.recipient);
   if (!v.ok) return { ok: false, error: v.error, detail: v.detail };
@@ -117,12 +125,21 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
   // Miami street came back as "Miami, Chile" on 2026-11-05), so it can never
   // resolve a real address. Live, an unresolved address blocks the label; in
   // test mode it is recorded as unverified and the label goes ahead.
-  if (!v.resolved && LIVE) return { ok: false, error: "address_not_resolved", detail: v.notes.join(", ") };
-  const addressCheck = v.resolved ? "resolved" : "sandbox_unverified";
+  //
+  // Abroad, FedEx's address validation covers only some countries, so an
+  // unresolved international address is recorded as unverified, not refused.
+  const intl = isInternational(draft);
+  if (!v.resolved && LIVE && !intl) return { ok: false, error: "address_not_resolved", detail: v.notes.join(", ") };
+  const addressCheck = v.resolved ? "resolved" : LIVE ? "unverified_abroad" : "sandbox_unverified";
   draft.recipient.validated = v.resolved;
   if (draft.recipient.residential == null) draft.recipient.residential = v.residential;
 
-  const rated = await getRates({ recipient: draft.recipient, packages: draft.packages, serviceType: draft.serviceType });
+  const rated = await getRates({
+    recipient: draft.recipient,
+    packages: draft.packages,
+    serviceType: draft.serviceType,
+    customs: draft.customs,
+  });
   if (!rated.ok) return { ok: false, error: rated.error, detail: rated.detail };
   const rate = rated.rates.find((r) => r.serviceType === draft.serviceType);
   if (!rate) return { ok: false, error: "service_not_offered", detail: draft.serviceType };
@@ -155,10 +172,17 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
     postal_code: rec.postalCode,
     country_code: rec.countryCode,
     residential: rec.residential,
-    validated_at: new Date().toISOString(),
+    validated_at: v.resolved ? new Date().toISOString() : null,
     customer_id: draft.customerId,
     vendor_id: draft.vendorId,
     ...(draft.payer === "recipient" ? { bill_to_account: draft.payerAccount } : {}),
+    // Remember what went abroad last time, so the next shipment starts there.
+    ...(draft.customs
+      ? {
+          customs_defaults: { lines: draft.customs.lines, declaredValue: draft.customs.declaredValue, documentsOnly: draft.customs.documentsOnly },
+          ...(draft.customs.recipientTaxId ? { tax_id: draft.customs.recipientTaxId } : {}),
+        }
+      : {}),
   };
   let recipientId = draft.recipientId;
   if (recipientId) {
@@ -190,7 +214,8 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
       recipient_snapshot: rec,
       contents: draft.contents,
       packages: draft.packages,
-      international: false,
+      international: intl,
+      customs: draft.customs,
       service_type: draft.serviceType,
       payer: draft.payer,
       payer_account: draft.payerAccount,
