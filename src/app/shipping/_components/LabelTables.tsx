@@ -29,7 +29,7 @@ export type LabelListRow = {
   tracking_number: string | null;
   label_path: string | null;
   invoice_path: string | null;
-  fedex_error: { error?: string; detail?: string | null } | null;
+  fedex_error: { error?: string; detail?: string | null; invoice?: string } | null;
 };
 
 const money = (n: number | null, cur: string | null) =>
@@ -202,6 +202,9 @@ export default function LabelTables({
                     <td>
                       {t(`st_${r.status}` as SKey)}
                       {r.status === "failed" && r.fedex_error?.error ? <div className={s.muted}>{r.fedex_error.error}</div> : null}
+                      {r.status === "created" && r.fedex_error?.invoice ? (
+                        <div className={s.missing}>{t("invoiceMissing")}</div>
+                      ) : null}
                       {r.status === "rejected" && r.decision_note ? <div className={s.muted}>{r.decision_note}</div> : null}
                     </td>
                     <td className={s.mono}>{r.tracking_number ?? "—"}</td>

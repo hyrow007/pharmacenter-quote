@@ -24,7 +24,7 @@ export type ActionResult =
   | { ok: false; error: string; detail?: string; problems?: string[] };
 
 const LABEL_COLS =
-  "id, environment, status, purpose, purpose_note, customer_id, vendor_id, so_number, recipient_id, recipient_snapshot, contents, packages, international, service_type, payer, payer_account, signature_required, saturday_delivery, rated_cost, requested_by, approval_required, tracking_number, customs";
+  "id, environment, status, purpose, purpose_note, customer_id, vendor_id, so_number, recipient_id, recipient_snapshot, contents, packages, international, service_type, payer, payer_account, signature_required, saturday_delivery, rated_cost, requested_by, approval_required, tracking_number, customs, rate_detail";
 
 type LabelRow = {
   id: string;
@@ -41,6 +41,7 @@ type LabelRow = {
   packages: Draft["packages"];
   international: boolean;
   customs: Customs | null;
+  rate_detail: Record<string, unknown> | null;
   service_type: string;
   payer: "shipper" | "recipient";
   payer_account: string | null;
@@ -100,8 +101,13 @@ async function createAndStore(service: SupabaseClient, row: LabelRow): Promise<A
       label_path: up.error ? null : path,
       invoice_path: invUp && !invUp.error ? invPath : null,
       created_label_at: new Date().toISOString(),
-      fedex_error: up.error ? { storage: up.error.message } : null,
-      ...(made.netCharge != null ? { rate_detail: { net_charge_at_ship: made.netCharge, ...(made.raw as object) } } : {}),
+      fedex_error: up.error
+        ? { storage: up.error.message }
+        : row.international && !(invUp && !invUp.error)
+          ? { invoice: made.invoicePdf ? "storage_failed" : "not_returned_by_fedex" }
+          : null,
+      // Keep what submit recorded (service name, address check) and add what FedEx returned.
+      rate_detail: { ...(row.rate_detail ?? {}), net_charge_at_ship: made.netCharge, ...(made.raw as object) },
     })
     .eq("id", row.id);
   if (error) return { ok: false, error: "recorded_label_but_db_failed", detail: `${made.trackingNumber}: ${error.message}` };

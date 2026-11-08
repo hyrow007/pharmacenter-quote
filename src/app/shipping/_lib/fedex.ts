@@ -350,11 +350,17 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
   if (!tracking || !doc?.encodedLabel) {
     return { ok: false, error: "fedex_unexpected_response", detail: JSON.stringify(out.json).slice(0, 500) };
   }
-  // The commercial invoice comes back among the shipment documents.
+  // The commercial invoice usually comes back among the shipment documents,
+  // but look everywhere FedEx returns documents: an Ecuador shipment on
+  // 2026-11-07 came back without one where the Mexico ones had it.
   const shipDocs = Array.isArray(ts?.shipmentDocuments) ? ts.shipmentDocuments : [];
-  const inv = shipDocs.find(
-    (x: any) => /COMMERCIAL_INVOICE/i.test(String(x?.contentType ?? x?.docType ?? "")) && x?.encodedLabel,
+  const pieceDocs = (Array.isArray(ts?.pieceResponses) ? ts.pieceResponses : []).flatMap((p: any) =>
+    Array.isArray(p?.packageDocuments) ? p.packageDocuments : [],
   );
+  const allDocs = [...shipDocs, ...pieceDocs];
+  const kind = (x: any) => String(x?.contentType ?? x?.docType ?? x?.type ?? "");
+  const inv = allDocs.find((x: any) => /INVOICE/i.test(kind(x)) && x?.encodedLabel);
+  const docTypes = allDocs.map((x: any) => `${kind(x) || "?"}${x?.encodedLabel ? "" : "(no data)"}`);
   const net = Number(
     ts?.completedShipmentDetail?.shipmentRating?.shipmentRateDetails?.[0]?.totalNetCharge ??
       piece?.netChargeAmount,
@@ -365,7 +371,12 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
     labelPdf: Buffer.from(String(doc.encodedLabel), "base64"),
     invoicePdf: inv ? Buffer.from(String(inv.encodedLabel), "base64") : null,
     netCharge: Number.isFinite(net) ? net : null,
-    raw: { serviceType: ts?.serviceType, shipDatestamp: ts?.shipDatestamp, alerts: ts?.alerts ?? out.json?.output?.alerts },
+    raw: {
+      serviceType: ts?.serviceType,
+      shipDatestamp: ts?.shipDatestamp,
+      alerts: ts?.alerts ?? out.json?.output?.alerts,
+      documents: docTypes,
+    },
   };
 }
 
