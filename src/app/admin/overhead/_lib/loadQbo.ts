@@ -44,6 +44,7 @@ export type QboData = {
   status: QboStatus | null;
   reconciledThrough: string | null;
   annualAccounts: string | null;
+  autoPct: number | null;
   nextWindow: { from: string; to: string; keys: string[] };
   proposals: ExpenseProposal[];
   log: LogRow[];
@@ -63,9 +64,11 @@ export async function loadQbo(supabase: Supa, email: string): Promise<QboData> {
 
   const { data: settings } = await supabase
     .from("overhead_settings")
-    .select("key, value_text")
-    .in("key", ["qbo_reconciled_through", "qbo_annual_accounts"]);
+    .select("key, value_text, value_num")
+    .in("key", ["qbo_reconciled_through", "qbo_annual_accounts", "auto_apply_pct"]);
   const setting = (k: string) => ((settings ?? []).find((r) => r.key === k)?.value_text as string | null | undefined) ?? null;
+  const autoPctRow = (settings ?? []).find((r) => r.key === "auto_apply_pct");
+  const autoPct = autoPctRow?.value_num != null ? Number(autoPctRow.value_num) : null;
   const reconciledThrough = setting("qbo_reconciled_through");
   const annualAccounts = setting("qbo_annual_accounts");
 
@@ -92,6 +95,7 @@ export async function loadQbo(supabase: Supa, email: string): Promise<QboData> {
     status,
     reconciledThrough,
     annualAccounts,
+    autoPct,
     nextWindow: windowFor(plantToday(), reconciledThrough),
     proposals: (props.data ?? []) as ExpenseProposal[],
     log: (log.data ?? []) as LogRow[],

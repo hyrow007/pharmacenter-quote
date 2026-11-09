@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSyncAuth } from "@/lib/sync-auth";
 import { collectMetrics, writeSnapshots } from "@/app/kpi/_lib/run";
 import { serviceClient } from "@/app/kpi/_lib/service";
+import { overheadDaily } from "@/app/admin/overhead/_lib/auto";
 import { askForJson } from "@/lib/sync/anthropic";
 import {
   buildTranslationPrompt,
@@ -344,6 +345,10 @@ async function run(request: Request): Promise<NextResponse> {
     // once doubles the peak against a single 60s ceiling for no gain — the
     // cron runs once a day and has nobody waiting on it.
     result.kpi = await kpiSnapshots().catch((err: unknown) => ({ ok: false, error: describe(err) }));
+    // Overhead: monthly run-days measurement, QuickBooks pull when the books move,
+    // and auto-apply of changes under 10%. Quick (a few seconds at most); runs
+    // before the model calls so the budget can never starve it.
+    result.overhead = await overheadDaily().catch((err: unknown) => ({ ok: false, error: describe(err) }));
     result.translations = await translations(request, controller.signal).catch(
       (err: unknown) => ({ ok: false, error: describe(err) }),
     );
@@ -354,7 +359,7 @@ async function run(request: Request): Promise<NextResponse> {
     clearTimeout(timer);
   }
 
-  const steps = [result.kpi, result.translations, result.synthesis] as StepResult[];
+  const steps = [result.kpi, result.overhead, result.translations, result.synthesis] as StepResult[];
   const ok = steps.every((s) => s?.ok === true);
 
   console.log(

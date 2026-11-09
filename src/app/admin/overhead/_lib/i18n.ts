@@ -145,6 +145,9 @@ const en = {
   qTickNote: "Tick the lines to apply. Unticked lines stay as they are; the next pull proposes them again.",
   qApplied: "applied",
   oAnnual: "Saved: yearly accounts {d}. Pull now to see them averaged over 12 months.",
+  autoNote: "Changes under {pct}% are applied automatically each month. Bigger changes, $0 figures and accounts QuickBooks can't find wait here for approval.",
+  qAppliedAuto: "applied automatically",
+  byAuto: "automatically",
   none: "—",
 } as const;
 
@@ -292,6 +295,9 @@ const es = {
   qTickNote: "Marque las líneas que quiere aplicar. Las que no marque se quedan como están; la próxima consulta las vuelve a proponer.",
   qApplied: "aplicada",
   oAnnual: "Guardado: cuentas anuales {d}. Presione Traer ahora para verlas promediadas en 12 meses.",
+  autoNote: "Los cambios de menos del {pct}% se aplican automáticamente cada mes. Los cambios mayores, las cifras en $0 y las cuentas que QuickBooks no encuentra esperan aquí la aprobación.",
+  qAppliedAuto: "aplicada automáticamente",
+  byAuto: "automáticamente",
   none: "—",
 } satisfies Record<OKey, string>;
 

@@ -127,7 +127,7 @@ function Body({
     <>
       <Dates data={data} t={t} day={day} />
       <Attention data={data} t={t} money={money} day={day} />
-      {cap ? <Capacity data={data} cap={cap} outcome={outcome} t={t} money={money} day={day} /> : null}
+      {cap ? <Capacity data={data} cap={cap} autoPct={qbo?.autoPct ?? null} outcome={outcome} t={t} money={money} day={day} /> : null}
       {qbo ? <QuickBooks q={qbo} outcome={outcome} t={t} money={money} day={day} /> : null}
       {GROUPS.map((g) => {
         const rows = data.quote.filter((r) => r.group === g.key);
@@ -291,11 +291,12 @@ function ItemRow({ r, today, bands, t, money, day }: { r: Resolved; today?: Reso
 function Capacity({
   data,
   cap,
+  autoPct,
   outcome,
   t,
   money,
   day,
-}: { data: OverheadData; cap: CapacityData; outcome: { cap?: string; d?: string } } & Fmt) {
+}: { data: OverheadData; cap: CapacityData; autoPct: number | null; outcome: { cap?: string; d?: string } } & Fmt) {
   const pending = cap.proposals.find((p) => p.status === "pending") ?? null;
   const earlier = cap.proposals.filter((p) => p !== pending);
   const gummy = cap.gummyCapacity ?? 0;
@@ -325,6 +326,7 @@ function Capacity({
     <section id="capacity" style={{ margin: "0 0 26px" }}>
       <h2 style={h2}>{t("capTitle")}</h2>
       <p style={note}>{t("capLede")}</p>
+      {autoPct != null ? <p style={{ ...note, fontWeight: 600 }}>{t("autoNote", { pct: autoPct })}</p> : null}
       {banner}
       {!cap.migrated ? <Banner tone="warn">{t("capMigrate", { detail: cap.scheduleError ?? "" })}</Banner> : null}
       {cap.migrated && cap.scheduleError ? <Banner tone="warn">{t("capSchedErr", { detail: cap.scheduleError })}</Banner> : null}
@@ -368,7 +370,7 @@ function Capacity({
                   </td>
                   <td style={cell}>{t("capWindow", { from: day(p.windowFrom), to: day(p.windowTo), months: p.windowMonths })}</td>
                   <td style={cell}>
-                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decidedBy ?? p.createdBy, when: day(nyDate(p.decidedAt ?? p.createdAt)) })}
+                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: (p.decidedBy ?? p.createdBy) === "auto" ? t("byAuto") : p.decidedBy ?? p.createdBy, when: day(nyDate(p.decidedAt ?? p.createdAt)) })}
                     {p.decisionNote ? <div style={dim}>{p.decisionNote}</div> : null}
                   </td>
                 </tr>
@@ -513,6 +515,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
     <section id="quickbooks" style={{ margin: "0 0 26px" }}>
       <h2 style={h2}>{t("qTitle")}</h2>
       <p style={note}>{t("qLede")}</p>
+      {q.autoPct != null ? <p style={{ ...note, fontWeight: 600 }}>{t("autoNote", { pct: q.autoPct })}</p> : null}
       {banner}
       {!q.migrated ? <Banner tone="warn">{t("qNotMigrated")}</Banner> : null}
       {q.missingConfig.length ? <Banner tone="warn">{t("qNotConfigured", { vars: q.missingConfig.join(", ") })}</Banner> : null}
@@ -600,7 +603,9 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                   return (
                     <tr key={l.item_key}>
                       <td style={cell}>
-                        {pending.environment === "production" && !l.missing ? (
+                        {l.applied ? (
+                          <span title={t("qAppliedAuto")} style={{ color: "#3f6b1f", fontWeight: 700 }}>✓</span>
+                        ) : pending.environment === "production" && !l.missing ? (
                           <input
                             type="checkbox"
                             form="qbo-decide"
@@ -611,7 +616,10 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                           />
                         ) : null}
                       </td>
-                      <td style={cell}>{l.label}</td>
+                      <td style={cell}>
+                        {l.label}
+                        {l.applied ? <div style={{ ...dim, color: "#3f6b1f" }}>{t("qAppliedAuto")}</div> : null}
+                      </td>
                       <td style={cell}>
                         {l.qb_account}
                         {l.qb_account_name ? <div style={dim}>{l.qb_account_name}</div> : null}
@@ -686,7 +694,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                   <td style={cell}>{t(p.status === "approved" ? "stApproved" : p.status === "rejected" ? "stRejected" : p.status === "superseded" ? "stSuperseded" : "stPending")}</td>
                   <td style={cell}>{day(p.window_from)} – {day(p.window_to)}{p.environment === "sandbox" ? " · sandbox" : ""}</td>
                   <td style={cell}>
-                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decided_by ?? p.created_by, when: when(p.decided_at ?? p.created_at) })}
+                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: (p.decided_by ?? p.created_by) === "auto" ? t("byAuto") : p.decided_by ?? p.created_by, when: when(p.decided_at ?? p.created_at) })}
                     {p.decision_note ? <div style={dim}>{p.decision_note}</div> : null}
                   </td>
                 </tr>
