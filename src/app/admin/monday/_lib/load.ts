@@ -65,13 +65,19 @@ export function soItemLines(items: unknown): string {
     .slice()
     .sort((a, b) => (a.line ?? 0) - (b.line ?? 0))
     .map((it) => {
+      // In PharmaCenter's Fishbowl a line in "Unit" (uom "un") counts
+      // thousands of finished pieces: 0.024 un is 24 pieces. Show pieces.
+      const perThousand = (it.uom ?? "").toLowerCase() === "un";
+      const k = perThousand ? 1000 : 1;
+      const fmt = (n: number) => Math.round(n * k * 1000) / 1000;
+      const unit = perThousand ? "ea" : it.uom ?? "";
       const qty =
         typeof it.qty_ordered === "number"
-          ? [it.qty_ordered.toLocaleString("en-US"), it.uom ?? ""].filter(Boolean).join(" ")
+          ? [fmt(it.qty_ordered).toLocaleString("en-US"), unit].filter(Boolean).join(" ")
           : "";
       const shipped =
         typeof it.qty_fulfilled === "number" && it.qty_fulfilled > 0 && it.qty_fulfilled !== it.qty_ordered
-          ? ` (shipped ${it.qty_fulfilled.toLocaleString("en-US")})`
+          ? ` (shipped ${fmt(it.qty_fulfilled).toLocaleString("en-US")})`
           : "";
       return [qty, it.product_num ?? "", it.description ?? ""].filter(Boolean).join(" · ") + shipped;
     })
