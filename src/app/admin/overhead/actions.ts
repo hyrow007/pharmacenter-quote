@@ -151,3 +151,77 @@ export async function qboSetAnnual(form: FormData): Promise<void> {
   if (error) qboDone("error", error.message);
   qboDone("annual", list.join(", ") || "—");
 }
+
+// ------------------------------------------------------------------
+// Hand-made changes: propose, then approve or reject (the proposer may
+// approve their own — operator decision 2026-11-08). Outcomes: ?man=…
+// ------------------------------------------------------------------
+
+function manDone(outcome: string, detail?: string): never {
+  revalidatePath("/admin/overhead");
+  const q = new URLSearchParams({ man: outcome });
+  if (detail) q.set("d", detail.slice(0, 300));
+  redirect(`/admin/overhead?${q}#changes`);
+}
+
+const BAND_FIELDS = ["monthly", "cam", "cam_estimated", "pay_type", "rate", "qty", "hours", "tax_pct", "wc_pct"] as const;
+
+/** Propose new figures for one rent / labour / expense item, from a date. */
+export async function manualProposeBand(form: FormData): Promise<void> {
+  const supabase = await gate();
+  const values: Record<string, string> = {};
+  for (const k of BAND_FIELDS) {
+    const v = String(form.get(k) ?? "").replace(/[$,\s%]/g, "");
+    if (v) values[k] = v;
+  }
+  if (form.get("cam_estimated_set") === "1") values.cam_estimated = form.get("cam_estimated") === "on" ? "true" : "false";
+  const { error } = await supabase.rpc("overhead_manual_propose", {
+    p_kind: "band",
+    p_item_key: String(form.get("item") ?? ""),
+    p_from: String(form.get("from") ?? "") || null,
+    p_values: values,
+    p_source: String(form.get("source") ?? ""),
+    p_reason: String(form.get("reason") ?? ""),
+  });
+  if (error) manDone("error", error.message.replace(/^overhead: /, ""));
+  manDone("proposed");
+}
+
+export async function manualProposeLead(form: FormData): Promise<void> {
+  const supabase = await gate();
+  const { error } = await supabase.rpc("overhead_manual_propose", {
+    p_kind: "lead_days",
+    p_values: { days: String(form.get("days") ?? "").trim() },
+    p_reason: String(form.get("reason") ?? ""),
+  });
+  if (error) manDone("error", error.message.replace(/^overhead: /, ""));
+  manDone("proposed");
+}
+
+export async function manualProposeShare(form: FormData): Promise<void> {
+  const supabase = await gate();
+  const { error } = await supabase.rpc("overhead_manual_propose", {
+    p_kind: "share",
+    p_item_key: String(form.get("item") ?? ""),
+    p_line_key: String(form.get("line") ?? ""),
+    p_values: { share_pct: String(form.get("share") ?? "").replace(/[%\s]/g, "") },
+    p_reason: String(form.get("reason") ?? ""),
+  });
+  if (error) manDone("error", error.message.replace(/^overhead: /, ""));
+  manDone("proposed");
+}
+
+export async function manualDecide(form: FormData): Promise<void> {
+  const supabase = await gate();
+  const id = String(form.get("id") ?? "");
+  const verdict = form.get("verdict");
+  if (verdict !== "approve" && verdict !== "reject") manDone("error", "no decision received, nothing changed; try again");
+  if (!id) manDone("error", "missing proposal");
+  const { data, error } = await supabase.rpc("overhead_manual_decide", {
+    p_id: id,
+    p_approve: verdict === "approve",
+    p_note: String(form.get("note") ?? ""),
+  });
+  if (error) manDone("error", error.message.replace(/^overhead: /, ""));
+  manDone(String(data ?? verdict));
+}

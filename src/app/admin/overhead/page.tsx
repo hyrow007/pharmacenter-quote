@@ -13,15 +13,18 @@ import { loadQbo, type QboData } from "./_lib/loadQbo";
 import { checkFeed } from "./_lib/feedHealth";
 import { SUPPORT_EMAIL } from "./_lib/qbo";
 import TickedTotal from "./TickedTotal";
+import { EditItem, LeadForm, ManualQueue, ShareForm } from "./ManualChanges";
+import { loadManual, type ManualData } from "./_lib/loadManual";
 import { makeOT, type OT } from "./_lib/i18n";
 
-// /admin/overhead — the plant's overhead figures, read-only.
+// /admin/overhead — the plant's overhead figures.
 //
 // Shows what every quote is costed against, on two dates side by side —
 // today, and the quote date (today + quote_lead_days), which is what the
-// boards actually use. The one thing it writes is the Contract Packaging
-// run-day divisor, measured from Yields and applied only on approval
-// (see migration 20261103200000 and claude/overhead.md).
+// boards actually use. Writes, all propose → approve: the Contract Packaging
+// run-day divisor (from Yields), other expenses (from QuickBooks), and hand
+// changes to any item band, share or the lead time (ManualChanges.tsx,
+// migration 20261109040000). See claude/overhead.md.
 //
 // Money comes from overheadRowMonthly() in lib/bottleCosting.ts, the same
 // function the boards use, so this page and a quote cannot disagree.
@@ -59,7 +62,7 @@ function monthlyOf(b: Band): number {
 export default async function OverheadAdminPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ cap?: string; d?: string; qbo?: string }>;
+  searchParams?: Promise<{ cap?: string; d?: string; qbo?: string; man?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createClient();
@@ -79,6 +82,7 @@ export default async function OverheadAdminPage({
   let data: OverheadData | null = null;
   let cap: CapacityData | null = null;
   let qbo: QboData | null = null;
+  let man: ManualData | null = null;
   let failure: string | null = null;
   // Live, on every visit: what the quoting screens get right now (the cron checks daily too).
   const feed = await checkFeed(supabase).catch((e: unknown) => ({
@@ -86,7 +90,7 @@ export default async function OverheadAdminPage({
     lines: [{ line: "all", ok: false, problem: e instanceof Error ? e.message : String(e) }],
   }));
   try {
-    [data, cap, qbo] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase), loadQbo(supabase, user.email!)]);
+    [data, cap, qbo, man] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase), loadQbo(supabase, user.email!), loadManual(supabase)]);
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("overhead admin load failed:", failure);
@@ -119,7 +123,7 @@ export default async function OverheadAdminPage({
             </Banner>
           )}
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
-          {data ? <Body data={data} cap={cap} qbo={qbo} outcome={sp} t={t} money={money} day={day} /> : null}
+          {data ? <Body data={data} cap={cap} qbo={qbo} man={man} outcome={sp} t={t} money={money} day={day} /> : null}
         </div>
       </main>
     </div>
@@ -132,17 +136,19 @@ function Body({
   data,
   cap,
   qbo,
+  man,
   outcome,
   t,
   money,
   day,
-}: { data: OverheadData; cap: CapacityData | null; qbo: QboData | null; outcome: { cap?: string; d?: string; qbo?: string } } & Fmt) {
+}: { data: OverheadData; cap: CapacityData | null; qbo: QboData | null; man: ManualData | null; outcome: { cap?: string; d?: string; qbo?: string; man?: string } } & Fmt) {
   return (
     <>
       <Dates data={data} t={t} day={day} />
       <Attention data={data} t={t} money={money} day={day} />
       {cap ? <Capacity data={data} cap={cap} autoPct={qbo?.autoPct ?? null} outcome={outcome} t={t} money={money} day={day} /> : null}
       {qbo ? <QuickBooks q={qbo} outcome={outcome} t={t} money={money} day={day} /> : null}
+      {man ? <ManualQueue m={man} outcome={outcome} t={t} money={money} day={day} when={(iso) => day(nyDate(iso))} /> : null}
       {GROUPS.map((g) => {
         const rows = data.quote.filter((r) => r.group === g.key);
         if (!rows.length) return null;
@@ -166,7 +172,7 @@ function Body({
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <ItemRow key={r.itemKey} r={r} today={data.current.get(r.itemKey)} bands={data.bands.get(r.itemKey) ?? []} t={t} money={money} day={day} />
+                    <ItemRow key={r.itemKey} r={r} todayIso={data.today} today={data.current.get(r.itemKey)} bands={data.bands.get(r.itemKey) ?? []} t={t} money={money} day={day} />
                   ))}
                 </tbody>
               </table>
@@ -202,6 +208,7 @@ function Dates({ data, t, day }: { data: OverheadData; t: OT; day: Fmt["day"] })
         </div>
       </div>
       <p style={note}>{data.leadDays ? t("leadNote", { days: data.leadDays }) : t("leadMissing")}</p>
+      <LeadForm leadDays={data.leadDays} t={t} />
     </div>
   );
 }
@@ -237,7 +244,7 @@ function Attention({ data, t, money, day }: { data: OverheadData } & Fmt) {
   );
 }
 
-function ItemRow({ r, today, bands, t, money, day }: { r: Resolved; today?: Resolved; bands: Band[] } & Fmt) {
+function ItemRow({ r, todayIso, today, bands, t, money, day }: { r: Resolved; todayIso: string; today?: Resolved; bands: Band[] } & Fmt) {
   const pct = (v: number | null) => (v === null ? "0" : String(v));
   let detail: ReactNode;
   if (r.group === "rent") {
@@ -283,6 +290,7 @@ function ItemRow({ r, today, bands, t, money, day }: { r: Resolved; today?: Reso
             </table>
           </details>
         ) : null}
+        <EditItem r={today ?? r} today={todayIso} t={t} />
       </td>
       <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", whiteSpace: "nowrap" }}>
         {money(monthlyOf(r))}
@@ -839,6 +847,7 @@ function Shares({ data, t }: { data: OverheadData; t: OT }) {
           </tbody>
         </table>
       </div>
+      <ShareForm data={data} t={t} />
     </section>
   );
 }
