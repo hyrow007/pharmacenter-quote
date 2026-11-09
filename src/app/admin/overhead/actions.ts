@@ -37,7 +37,9 @@ export async function measureNow(): Promise<void> {
 export async function decide(form: FormData): Promise<void> {
   const supabase = await gate();
   const id = String(form.get("id") ?? "");
-  const approve = form.get("verdict") === "approve";
+  const verdict = form.get("verdict");
+  if (verdict !== "approve" && verdict !== "reject") done("error", "no decision received, nothing changed; try again");
+  const approve = verdict === "approve";
   const note = String(form.get("note") ?? "");
   if (!id) done("error", "missing proposal");
   const { data, error } = await supabase.rpc("overhead_capacity_decide", {
@@ -95,7 +97,9 @@ export async function qboPullNow(): Promise<void> {
 export async function qboDecide(form: FormData): Promise<void> {
   const { supabase } = await adminWithEmail();
   const id = String(form.get("id") ?? "");
-  const approve = form.get("verdict") === "approve";
+  const verdict = form.get("verdict");
+  if (verdict !== "approve" && verdict !== "reject") qboDone("error", "no decision received, nothing changed; try again");
+  const approve = verdict === "approve";
   const note = String(form.get("note") ?? "");
   if (!id) qboDone("error", "missing proposal");
   const items = form.getAll("item").map(String).filter(Boolean);

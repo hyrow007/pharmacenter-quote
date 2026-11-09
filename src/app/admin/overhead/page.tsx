@@ -487,12 +487,23 @@ function ProposalCard({
         ) : null}
       </details>
 
-      <form action={decide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        <input type="hidden" name="id" value={p.id} />
-        <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
-        <button type="submit" name="verdict" value="approve" className="button-primary">{t("capApprove", { v: fmt1(after) })}</button>
-        <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
-      </form>
+      {/* Approve and Reject are separate forms, each carrying its verdict as a hidden
+          field. A shared form with name/value on the buttons lost the verdict on submit
+          (2026-11-08: approvals landed as rejections). The server now refuses a missing
+          verdict instead of treating it as a reject. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <form action={decide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", flex: "1 1 320px" }}>
+          <input type="hidden" name="id" value={p.id} />
+          <input type="hidden" name="verdict" value="approve" />
+          <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
+          <button type="submit" className="button-primary">{t("capApprove", { v: fmt1(after) })}</button>
+        </form>
+        <form action={decide}>
+          <input type="hidden" name="id" value={p.id} />
+          <input type="hidden" name="verdict" value="reject" />
+          <button type="submit" style={secondaryBtn}>{t("capReject")}</button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -712,14 +723,22 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
             <p style={{ ...note, color: "#8a5a00" }}>{t("qSandboxNoApprove")}</p>
           ) : null}
           {pending.environment === "production" ? <p style={{ ...note, margin: "0 0 6px" }}>{t("qTickNote")}</p> : null}
-          <form id="qbo-decide" action={qboDecide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <input type="hidden" name="id" value={pending.id} />
-            <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
-            {pending.environment === "production" ? (
-              <button type="submit" name="verdict" value="approve" className="button-primary">{t("qApproveSelected")}</button>
-            ) : null}
-            <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
-          </form>
+          {/* Separate approve / reject forms with hidden verdicts — see the run-days card. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <form id="qbo-decide" action={qboDecide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", flex: "1 1 320px" }}>
+              <input type="hidden" name="id" value={pending.id} />
+              <input type="hidden" name="verdict" value="approve" />
+              <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
+              {pending.environment === "production" ? (
+                <button type="submit" className="button-primary">{t("qApproveSelected")}</button>
+              ) : null}
+            </form>
+            <form action={qboDecide}>
+              <input type="hidden" name="id" value={pending.id} />
+              <input type="hidden" name="verdict" value="reject" />
+              <button type="submit" style={secondaryBtn}>{t("capReject")}</button>
+            </form>
+          </div>
         </div>
       ) : q.migrated ? (
         <p style={note}>{t("qNoPending")}</p>
