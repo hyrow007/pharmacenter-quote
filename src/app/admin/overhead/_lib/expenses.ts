@@ -10,9 +10,13 @@ import { plantToday } from "./load";
 // month. Unreconciled months still move, so they are left out (operator, 2026-11-08).
 // Basis: Accrual (operator decision 2026-11-08).
 // Each overhead_items row with a qb_account is matched to a QuickBooks account by its
-// account number, and gets that account's OWN amount: a parent account's report total
-// includes its sub-accounts, so only Data rows carrying the account's own id are summed
-// (otherwise 5135 "Other Utilities" would also count 5135.05 and 5135.30).
+// account number, and gets that account's amount PLUS all its sub-accounts' amounts —
+// except sub-accounts that are overhead rows of their own. Every posting is attributed
+// to its nearest mapped ancestor-or-self (via ParentRef), so nothing is counted twice:
+// 5135 "Utilities & Services" gets its other children but not Cleaning (5135.05) or
+// Electricity (5135.30), which are their own rows; 5130 "Insurances" gets all its
+// sub-accounts. (First version took only the account's own postings and proposed $0
+// for parents whose spending sits in sub-accounts — caught before approval, 2026-11-08.)
 
 export const WINDOW_MONTHS = 6;
 export const BASIS = "Accrual" as const;
@@ -21,7 +25,7 @@ type Col = { ColTitle?: string; ColType?: string; MetaData?: { Name: string; Val
 type ColData = { value?: string; id?: string };
 type Row = { type?: string; ColData?: ColData[]; Header?: { ColData?: ColData[] }; Rows?: { Row?: Row[] } };
 type PnL = { Columns?: { Column?: Col[] }; Rows?: { Row?: Row[] } };
-type Account = { Id: string; Name: string; AcctNum?: string; FullyQualifiedName?: string };
+type Account = { Id: string; Name: string; AcctNum?: string; FullyQualifiedName?: string; ParentRef?: { value: string } };
 
 export type ExpenseLine = {
   item_key: string;
@@ -135,9 +139,12 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
   if (!conn.data) throw new Error("QuickBooks is not connected");
 
   const accts = await qboGet<{ QueryResponse?: { Account?: Account[] } }>(db, "query", {
-    query: "select Id, Name, AcctNum, FullyQualifiedName from Account MAXRESULTS 1000",
+    // Inactive accounts too: one closed mid-window still has postings in it.
+    query: "select Id, Name, AcctNum, FullyQualifiedName, ParentRef from Account where Active in (true, false) MAXRESULTS 1000",
   });
-  const byNum = new Map((accts.QueryResponse?.Account ?? []).filter((a) => a.AcctNum).map((a) => [a.AcctNum!.trim(), a]));
+  const all = accts.QueryResponse?.Account ?? [];
+  const byNum = new Map(all.filter((a) => a.AcctNum).map((a) => [a.AcctNum!.trim(), a]));
+  const parentOf = new Map(all.map((a) => [a.Id, a.ParentRef?.value ?? null]));
 
   const pnl = await qboGet<PnL>(db, "reports/ProfitAndLoss", {
     start_date: win.from,
@@ -147,11 +154,26 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
   });
   const own = amounts(pnl);
 
+  // Attribute every account's own postings to its nearest mapped ancestor-or-self.
+  const mappedIds = new Set(
+    current.map((b) => byNum.get(String(b.qb_account).trim())?.Id).filter((x): x is string => !!x),
+  );
+  const rolled = new Map<string, Record<string, number>>();
+  for (const [id, rec] of own) {
+    let cur: string | null = id;
+    let guard = 0;
+    while (cur && !mappedIds.has(cur) && guard++ < 20) cur = parentOf.get(cur) ?? null;
+    if (!cur || !mappedIds.has(cur)) continue;
+    const into = rolled.get(cur) ?? {};
+    for (const [m, v] of Object.entries(rec)) into[m] = (into[m] ?? 0) + v;
+    rolled.set(cur, into);
+  }
+
   const lines: ExpenseLine[] = current
     .sort((a, b) => String(a.qb_account).localeCompare(String(b.qb_account)))
     .map((b) => {
       const acct = byNum.get(String(b.qb_account).trim()) ?? null;
-      const rec = acct ? own.get(acct.Id) ?? {} : {};
+      const rec = acct ? rolled.get(acct.Id) ?? {} : {};
       const months: Record<string, number> = {};
       for (const k of win.keys) months[k] = Math.round((rec[k] ?? 0) * 100) / 100;
       const total = win.keys.reduce((s, k) => s + months[k], 0);

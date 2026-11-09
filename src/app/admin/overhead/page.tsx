@@ -368,7 +368,7 @@ function Capacity({
                   </td>
                   <td style={cell}>{t("capWindow", { from: day(p.windowFrom), to: day(p.windowTo), months: p.windowMonths })}</td>
                   <td style={cell}>
-                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decidedBy ?? p.createdBy, when: day((p.decidedAt ?? p.createdAt).slice(0, 10)) })}
+                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decidedBy ?? p.createdBy, when: day(nyDate(p.decidedAt ?? p.createdAt)) })}
                     {p.decisionNote ? <div style={dim}>{p.decisionNote}</div> : null}
                   </td>
                 </tr>
@@ -505,7 +505,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
   const sandbox = (st?.environment ?? q.env) === "sandbox";
   const pending = q.proposals.find((p) => p.status === "pending") ?? null;
   const earlier = q.proposals.filter((p) => p !== pending);
-  const when = (iso: string | null) => (iso ? day(iso.slice(0, 10)) : t("none"));
+  const when = (iso: string | null) => (iso ? day(nyDate(iso)) : t("none"));
 
   return (
     <section id="quickbooks" style={{ margin: "0 0 26px" }}>
@@ -692,6 +692,11 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
       </p>
     </section>
   );
+}
+
+/** A timestamp's calendar date at the plant (an evening in Davie is already tomorrow in UTC). */
+function nyDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(iso));
 }
 
 function StatusPill({ status, t }: { status: Resolved["status"]; t: OT }) {
