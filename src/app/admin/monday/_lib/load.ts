@@ -20,7 +20,7 @@ const PAGE = 500;
 type AnySupabase = any;
 
 const SO_SELECT =
-  "so_number, status_id, status_name, is_open, customer_name, customer_po, vendor_po, date_completed, salesman, sync_run_id, synced_at, date_last_modified";
+  "so_number, status_id, status_name, is_open, customer_name, customer_po, vendor_po, date_completed, salesman, items, sync_run_id, synced_at, date_last_modified";
 const PO_SELECT =
   "po_number, status_id, status_name, is_open, vendor_name, buyer, so_numbers, items, date_issued, date_completed, sync_run_id, synced_at, date_last_modified";
 
@@ -50,6 +50,34 @@ export function poItemLines(items: unknown): string {
     .join("\n");
 }
 
+type SoItem = PoItem & { type_id?: number | null; uom?: string | null; uom_name?: string | null };
+
+// Fishbowl SO line types that are not products: discounts, subtotals,
+// associated prices, shipping, tax, notes.
+const SO_NON_PRODUCT_TYPES = new Set([30, 31, 40, 50, 60, 70, 90]);
+
+/** One line per product on an SO: "5,000 ea · 1928 · Omega 3 Softgels (shipped 2,000)". */
+export function soItemLines(items: unknown): string {
+  if (!Array.isArray(items)) return "";
+  return (items as SoItem[])
+    .filter((it) => !(typeof it.type_id === "number" && SO_NON_PRODUCT_TYPES.has(it.type_id)))
+    .filter((it) => it.product_num || it.description)
+    .slice()
+    .sort((a, b) => (a.line ?? 0) - (b.line ?? 0))
+    .map((it) => {
+      const qty =
+        typeof it.qty_ordered === "number"
+          ? [it.qty_ordered.toLocaleString("en-US"), it.uom ?? ""].filter(Boolean).join(" ")
+          : "";
+      const shipped =
+        typeof it.qty_fulfilled === "number" && it.qty_fulfilled > 0 && it.qty_fulfilled !== it.qty_ordered
+          ? ` (shipped ${it.qty_fulfilled.toLocaleString("en-US")})`
+          : "";
+      return [qty, it.product_num ?? "", it.description ?? ""].filter(Boolean).join(" · ") + shipped;
+    })
+    .join("\n");
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toRow(entity: EntityKey, r: any): MirrorRow {
   if (entity === "so") {
@@ -60,6 +88,9 @@ function toRow(entity: EntityKey, r: any): MirrorRow {
         "customer po": r.customer_po,
         "vendor po": r.vendor_po,
         owner: r.salesman,
+        // Only written and compared once the board has an "Items" column
+        // (added from /admin/monday, 2026-11-09).
+        items: soItemLines(r.items) || null,
       },
     } as MirrorRow;
   }

@@ -5,7 +5,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/workflows";
 import { runPush } from "./_lib/push";
-import { setupPoBoards } from "./_lib/setup";
+import { addSoItemsColumn, setupPoBoards } from "./_lib/setup";
 import type { EntityKey } from "./_lib/entity";
 
 async function adminDb(): Promise<{ db: ReturnType<typeof createServiceClient>; email: string }> {
@@ -36,6 +36,13 @@ export async function pushNow(formData: FormData): Promise<void> {
   const entity: EntityKey = formData.get("entity") === "po" ? "po" : "so";
   const result = await runPush({ db, trigger: "button", startedBy: email, wantLive: true, entity });
   if (result?.live) await queueSync(db, email);
+  revalidatePath("/admin/monday");
+}
+
+/** "Add Items column" on the sales-order tab: one-time, admins only. */
+export async function addItemsColumn(): Promise<void> {
+  await adminDb();
+  await addSoItemsColumn();
   revalidatePath("/admin/monday");
 }
 

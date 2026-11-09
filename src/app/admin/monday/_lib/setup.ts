@@ -1,5 +1,5 @@
 import "server-only";
-import { gql, mondayToken } from "./load";
+import { BOARDS as SO_BOARDS, gql, mondayToken } from "./load";
 import { MONDAY_WORKSPACE_ID, PO_BOARD_NAMES, PO_COLUMNS } from "./entity";
 import type { BoardKey } from "./reconcile";
 
@@ -29,13 +29,21 @@ async function createBoard(token: string, name: string): Promise<string> {
 }
 
 async function ensureColumns(token: string, boardId: string): Promise<void> {
+  await ensureNamedColumns(token, boardId, PO_COLUMNS);
+}
+
+async function ensureNamedColumns(
+  token: string,
+  boardId: string,
+  wanted: { title: string; type: string }[],
+): Promise<void> {
   const res = await gql<{ boards: { columns: Col[] }[] }>(
     token,
     `query ($b: [ID!]) { boards(ids: $b) { columns { id title type } } }`,
     { b: [boardId] },
   );
   const have = res.boards[0]?.columns ?? [];
-  for (const want of PO_COLUMNS) {
+  for (const want of wanted) {
     const exists = have.some(
       (c) => c.title.trim().toLowerCase() === want.title.toLowerCase() && c.type === want.type,
     );
@@ -66,4 +74,17 @@ export async function setupPoBoards(db: AnySupabase): Promise<Record<BoardKey, s
     await ensureColumns(token, ids[role] as string);
   }
   return ids as Record<BoardKey, string>;
+}
+
+/**
+ * Adds an "Items" long-text column to BOTH sales-order boards. Both, because a
+ * move maps columns by title and type: with it on Open only, a move would lose
+ * the Items text, and the push skips any move that would lose a value.
+ * Re-running is a no-op.
+ */
+export async function addSoItemsColumn(): Promise<void> {
+  const token = mondayToken();
+  for (const id of [String(SO_BOARDS.open), String(SO_BOARDS.fulfilled)]) {
+    await ensureNamedColumns(token, id, [{ title: "Items", type: "long_text" }]);
+  }
 }

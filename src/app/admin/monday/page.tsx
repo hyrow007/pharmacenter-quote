@@ -11,7 +11,7 @@ import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./_lib/entity";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
 import { changingWrites, mondayWrites, plan, type Action } from "./_lib/plan";
 import { liveEnabled, moveLosses, moveMapping } from "./_lib/push";
-import { createPoBoards, pushNow } from "./actions";
+import { addItemsColumn, createPoBoards, pushNow } from "./actions";
 import { makeMT, type MT } from "./_lib/i18n";
 
 // /admin/monday — the Fishbowl → Monday reconciler, read-only.
@@ -55,6 +55,7 @@ export default async function MondayReconcilePage({
   let drops: string[] = [];
   let linksOk = true;
   let needsBoards = false;
+  let needsItemsColumn = false;
   let failure: string | null = null;
   try {
     const ids = await loadBoardIds(supabase, entity);
@@ -74,6 +75,9 @@ export default async function MondayReconcilePage({
         maxCreates: MAX_CREATES_PER_RUN,
       });
       drops = moveLosses(actions, boards.items, moveMapping(boards.meta.open, boards.meta.fulfilled).drops);
+      const hasItems = (m: { columns: { title: string }[] }) =>
+        m.columns.some((c) => c.title.trim().toLowerCase() === "items");
+      needsItemsColumn = entity === "so" && !(hasItems(boards.meta.open) && hasItems(boards.meta.fulfilled));
     }
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
@@ -120,6 +124,15 @@ export default async function MondayReconcilePage({
               <p style={{ fontSize: 13, margin: "0 0 10px" }}>{t("poSetupBody")}</p>
               <form action={createPoBoards}>
                 <button type="submit" className="button-primary">{t("poSetupButton")}</button>
+              </form>
+            </section>
+          ) : null}
+          {needsItemsColumn ? (
+            <section style={{ border: "1px solid var(--stone, #e3dcc9)", borderRadius: 10, padding: "12px 14px", margin: "0 0 18px" }}>
+              <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{t("itemsColTitle")}</h2>
+              <p style={{ fontSize: 13, margin: "0 0 10px" }}>{t("itemsColBody")}</p>
+              <form action={addItemsColumn}>
+                <button type="submit" className="button-primary">{t("itemsColButton")}</button>
               </form>
             </section>
           ) : null}

@@ -35,9 +35,18 @@ export function mondayWrites(actions: Action[]): number {
   return actions.filter((a) => a.kind !== "link").length;
 }
 
-/** Writes that change or remove existing items: what the safety limit counts. */
+/**
+ * Writes that change or remove existing items: what the safety limit counts.
+ * Creates do not count, and neither does an update that only fills columns
+ * that are empty on the board -- nothing is lost by it. That is what lets a
+ * new column (Items, 2026-11-09) be filled on every item in one run.
+ */
 export function changingWrites(actions: Action[]): number {
-  return actions.filter((a) => a.kind !== "link" && a.kind !== "create").length;
+  return actions.filter((a) => {
+    if (a.kind === "link" || a.kind === "create") return false;
+    if (a.kind === "update") return Object.values(a.before).some((v) => (v ?? "").trim() !== "");
+    return true;
+  }).length;
 }
 
 /**
