@@ -56,7 +56,7 @@ const en = {
 
   pushTitle: "Next push",
   pushDry: "Dry run: the push plans and records, and writes nothing to Monday. Live writes are switched on separately once a plan has been checked.",
-  pushLive: "Live: “Push now” and the scheduled runs write these changes to Monday.",
+  pushLive: "Live: “Push now” and the scheduled runs write these changes to Monday. “Push now” also asks the office server for a fresh Fishbowl sync, so an order issued since the last sync appears on the board a few minutes later.",
   noLinks: "The link table does not exist yet. Apply the pharmacenter-db migration, then reload.",
   moveDrops: "These moves would lose data the Fulfilled board has no column for, so they will be skipped: {cols}.",
   tooMany: "{n} Monday changes planned; the limit for one run is {max}. The push will refuse to write.",
@@ -133,7 +133,7 @@ const es = {
 
   pushTitle: "Próximo envío",
   pushDry: "Simulación: el envío planifica y registra, pero no escribe nada en Monday. La escritura real se activa aparte, una vez revisado un plan.",
-  pushLive: "Real: “Enviar ahora” y las ejecuciones programadas escriben estos cambios en Monday.",
+  pushLive: "Real: “Enviar ahora” y las ejecuciones programadas escriben estos cambios en Monday. “Enviar ahora” también pide al servidor de la oficina una sincronización nueva de Fishbowl, así que una orden emitida después de la última sincronización aparece en el tablero unos minutos más tarde.",
   noLinks: "La tabla de vínculos aún no existe. Aplica la migración de pharmacenter-db y recarga.",
   moveDrops: "Estos movimientos perderían datos para los que el tablero Fulfilled no tiene columna, así que se omitirán: {cols}.",
   tooMany: "{n} cambios planificados en Monday; el límite por ejecución es {max}. El envío se negará a escribir.",
