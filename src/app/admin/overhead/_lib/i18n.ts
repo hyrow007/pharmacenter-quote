@@ -148,6 +148,9 @@ const en = {
   autoNote: "Changes under {pct}% are applied automatically each month. Bigger changes, $0 figures and accounts QuickBooks can't find wait here for approval.",
   qAppliedAuto: "applied automatically",
   byAuto: "automatically",
+  qTotalAll: "Total per month, all lines",
+  qTotalTicked: "Change per month if the ticked lines are approved",
+  qLocale: "en-US",
   none: "—",
 } as const;
 
@@ -298,6 +301,9 @@ const es = {
   autoNote: "Los cambios de menos del {pct}% se aplican automáticamente cada mes. Los cambios mayores, las cifras en $0 y las cuentas que QuickBooks no encuentra esperan aquí la aprobación.",
   qAppliedAuto: "aplicada automáticamente",
   byAuto: "automáticamente",
+  qTotalAll: "Total por mes, todas las líneas",
+  qTotalTicked: "Cambio por mes si se aprueban las líneas marcadas",
+  qLocale: "es-US",
   none: "—",
 } satisfies Record<OKey, string>;
 

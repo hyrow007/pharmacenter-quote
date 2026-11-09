@@ -11,6 +11,7 @@ import { loadCapacity, loadOverhead, type Band, type CapacityData, type Group, t
 import { decide, measureNow, qboDecide, qboDisconnect, qboPullNow, qboSetAnnual, qboSetReconciled } from "./actions";
 import { loadQbo, type QboData } from "./_lib/loadQbo";
 import { SUPPORT_EMAIL } from "./_lib/qbo";
+import TickedTotal from "./TickedTotal";
 import { makeOT, type OT } from "./_lib/i18n";
 
 // /admin/overhead — the plant's overhead figures, read-only.
@@ -611,6 +612,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                             form="qbo-decide"
                             name="item"
                             value={l.item_key}
+                            data-diff={diff.toFixed(2)}
                             defaultChecked={Math.round(diff * 100) !== 0}
                             aria-label={l.label}
                           />
@@ -638,8 +640,34 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                   );
                 })}
               </tbody>
+              {(() => {
+                const ls = pending.lines.filter((l) => !l.missing);
+                const cur = ls.reduce((a, l) => a + l.current_monthly, 0);
+                const prop = ls.reduce((a, l) => a + l.proposed_monthly, 0);
+                const d = prop - cur;
+                const strong: CSSProperties = { ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", fontWeight: 700, borderBottom: "none", borderTop: "2px solid var(--stone, #e3dcc9)" };
+                return (
+                  <tfoot>
+                    <tr>
+                      <td style={{ ...strong, textAlign: "left" }} />
+                      <td style={{ ...strong, textAlign: "left", fontFamily: "inherit" }} colSpan={3}>{t("qTotalAll")}</td>
+                      <td style={strong}>{money(cur)}</td>
+                      <td style={strong}>{money(prop)}</td>
+                      <td style={{ ...strong, color: d > 0 ? "#9b2c2c" : "#3f6b1f" }}>
+                        {`${d >= 0 ? "+" : ""}${money(d)}`}
+                        {cur ? ` (${((d / cur) * 100).toFixed(1)}%)` : ""}
+                      </td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
             </table>
           </div>
+          {pending.environment === "production" ? (
+            <p style={{ margin: "8px 0 0", textAlign: "right" }}>
+              <TickedTotal label={t("qTotalTicked")} locale={t("qLocale")} none={t("none")} />
+            </p>
+          ) : null}
           <details style={{ margin: "8px 0 10px" }}>
             <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("qMonths")}</summary>
             <div style={{ overflowX: "auto" }}>
