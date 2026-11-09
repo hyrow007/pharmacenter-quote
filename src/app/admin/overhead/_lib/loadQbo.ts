@@ -43,6 +43,7 @@ export type QboData = {
   env: QboEnv | "";
   status: QboStatus | null;
   reconciledThrough: string | null;
+  annualAccounts: string | null;
   nextWindow: { from: string; to: string; keys: string[] };
   proposals: ExpenseProposal[];
   log: LogRow[];
@@ -60,8 +61,13 @@ export async function loadQbo(supabase: Supa, email: string): Promise<QboData> {
   const migrated = !(st.error && /does not exist|schema cache/i.test(st.error.message));
   const status = migrated ? (((st.data ?? []) as QboStatus[])[0] ?? null) : null;
 
-  const { data: rs } = await supabase.from("overhead_settings").select("value_text").eq("key", "qbo_reconciled_through").maybeSingle();
-  const reconciledThrough = (rs?.value_text as string | null) ?? null;
+  const { data: settings } = await supabase
+    .from("overhead_settings")
+    .select("key, value_text")
+    .in("key", ["qbo_reconciled_through", "qbo_annual_accounts"]);
+  const setting = (k: string) => ((settings ?? []).find((r) => r.key === k)?.value_text as string | null | undefined) ?? null;
+  const reconciledThrough = setting("qbo_reconciled_through");
+  const annualAccounts = setting("qbo_annual_accounts");
 
   let scheduleError: string | null = null;
   if (migrated && !cfg.missing.length && status?.status === "connected") {
@@ -85,6 +91,7 @@ export async function loadQbo(supabase: Supa, email: string): Promise<QboData> {
     env: cfg.env,
     status,
     reconciledThrough,
+    annualAccounts,
     nextWindow: windowFor(plantToday(), reconciledThrough),
     proposals: (props.data ?? []) as ExpenseProposal[],
     log: (log.data ?? []) as LogRow[],

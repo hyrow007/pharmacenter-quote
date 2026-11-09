@@ -98,7 +98,14 @@ export async function qboDecide(form: FormData): Promise<void> {
   const approve = form.get("verdict") === "approve";
   const note = String(form.get("note") ?? "");
   if (!id) qboDone("error", "missing proposal");
-  const { data, error } = await supabase.rpc("overhead_expense_decide", { p_id: id, p_approve: approve, p_note: note });
+  const items = form.getAll("item").map(String).filter(Boolean);
+  if (approve && !items.length) qboDone("error", "tick at least one line to approve");
+  const { data, error } = await supabase.rpc("overhead_expense_decide", {
+    p_id: id,
+    p_approve: approve,
+    p_note: note,
+    p_items: approve ? items : null,
+  });
   if (error) qboDone("error", error.message);
   const r = String(data ?? "");
   if (r === "stale") qboDone("stale");
@@ -120,4 +127,23 @@ export async function qboSetReconciled(form: FormData): Promise<void> {
   });
   if (error) qboDone("error", error.message);
   qboDone("reconciled", v);
+}
+
+/** Which QuickBooks accounts are billed yearly and get a 12-month average. */
+export async function qboSetAnnual(form: FormData): Promise<void> {
+  const { supabase, email } = await adminWithEmail();
+  const list = String(form.get("accounts") ?? "")
+    .split(/[\s,;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (list.some((x) => !/^[0-9][0-9.]*$/.test(x))) qboDone("error", "account numbers only, separated by commas");
+  const { error } = await supabase.from("overhead_settings").upsert({
+    key: "qbo_annual_accounts",
+    value_text: list.join(","),
+    notes: "QuickBooks account numbers billed yearly (or in a few large installments): averaged over 12 reconciled months instead of 6. Comma-separated.",
+    updated_at: new Date().toISOString(),
+    updated_by_email: email,
+  });
+  if (error) qboDone("error", error.message);
+  qboDone("annual", list.join(", ") || "—");
 }

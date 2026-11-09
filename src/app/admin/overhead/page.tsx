@@ -8,7 +8,7 @@ import { getLangFromCookie } from "@/lib/i18n/server";
 import { overheadRowMonthly, type OverheadGroupMode } from "@/lib/bottleCosting";
 import AppHeader from "../../_components/AppHeader";
 import { loadCapacity, loadOverhead, type Band, type CapacityData, type Group, type OverheadData, type Proposal, type Resolved } from "./_lib/load";
-import { decide, measureNow, qboDecide, qboDisconnect, qboPullNow, qboSetReconciled } from "./actions";
+import { decide, measureNow, qboDecide, qboDisconnect, qboPullNow, qboSetAnnual, qboSetReconciled } from "./actions";
 import { loadQbo, type QboData } from "./_lib/loadQbo";
 import { SUPPORT_EMAIL } from "./_lib/qbo";
 import { makeOT, type OT } from "./_lib/i18n";
@@ -491,6 +491,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
       case "approved": return <Banner tone="good">{t("oApproved", { d })}</Banner>;
       case "rejected": return <Banner tone="good">{t("oRejected")}</Banner>;
       case "reconciled": return <Banner tone="good">{t("oReconciled", { d })}</Banner>;
+      case "annual": return <Banner tone="good">{t("oAnnual", { d })}</Banner>;
       case "stale": return <Banner tone="warn">{t("oStale")}</Banner>;
       case "csrf": return <Banner tone="bad">{t("oCsrf")}</Banner>;
       case "denied": return <Banner tone="warn">{t("oDenied")}</Banner>;
@@ -505,6 +506,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
   const sandbox = (st?.environment ?? q.env) === "sandbox";
   const pending = q.proposals.find((p) => p.status === "pending") ?? null;
   const earlier = q.proposals.filter((p) => p !== pending);
+  const monthKeys = pending ? [...new Set(pending.lines.flatMap((l) => Object.keys(l.months)))].sort() : [];
   const when = (iso: string | null) => (iso ? day(nyDate(iso)) : t("none"));
 
   return (
@@ -559,6 +561,14 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
           <button type="submit" style={secondaryBtn}>{t("qReconciledSave")}</button>
         </form>
       ) : null}
+      {q.migrated ? (
+        <form action={qboSetAnnual} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", margin: "0 0 2px" }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }} htmlFor="qbo-annual">{t("qAnnual")}</label>
+          <input id="qbo-annual" name="accounts" defaultValue={(q.annualAccounts ?? "").split(",").join(", ")} style={{ padding: "5px 8px", fontSize: 13, minWidth: 0, flex: "0 1 220px" }} />
+          <button type="submit" style={secondaryBtn}>{t("qReconciledSave")}</button>
+        </form>
+      ) : null}
+      {q.migrated ? <p style={{ ...note, margin: "0 0 8px" }}>{t("qAnnualNote")}</p> : null}
       <p style={note}>
         {t("qWindow", { from: day(q.nextWindow.from), to: day(q.nextWindow.to) })}. {t("qWindowNote")}
       </p>
@@ -574,8 +584,10 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
             <table style={table}>
               <thead>
                 <tr>
+                  <th style={{ ...head, width: 28 }} aria-label="apply" />
                   <th style={head}>{t("colItem")}</th>
                   <th style={head}>{t("colAccount")}</th>
+                  <th style={head}>{t("colWindow")}</th>
                   <th style={{ ...head, textAlign: "right" }}>{t("colCurrent")}</th>
                   <th style={{ ...head, textAlign: "right" }}>{t("colProposed")}</th>
                   <th style={{ ...head, textAlign: "right" }}>{t("colChange")}</th>
@@ -587,11 +599,27 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                   const pct = l.current_monthly ? `${((diff / l.current_monthly) * 100).toFixed(1)}%` : t("none");
                   return (
                     <tr key={l.item_key}>
+                      <td style={cell}>
+                        {pending.environment === "production" && !l.missing ? (
+                          <input
+                            type="checkbox"
+                            form="qbo-decide"
+                            name="item"
+                            value={l.item_key}
+                            defaultChecked={Math.round(diff * 100) !== 0}
+                            aria-label={l.label}
+                          />
+                        ) : null}
+                      </td>
                       <td style={cell}>{l.label}</td>
                       <td style={cell}>
                         {l.qb_account}
                         {l.qb_account_name ? <div style={dim}>{l.qb_account_name}</div> : null}
                         {l.missing ? <div style={{ ...dim, color: "#9b2c2c" }}>{t("qMissing", { acct: l.qb_account })}</div> : null}
+                      </td>
+                      <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                        {t("qWindowMonths", { n: l.window_months ?? pending.window_months })}
+                        <div style={dim}>{day(l.window_from ?? pending.window_from)} – {day(l.window_to ?? pending.window_to)}</div>
                       </td>
                       <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{money(l.current_monthly)}</td>
                       <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", fontWeight: 600 }}>{l.missing ? t("none") : money(l.proposed_monthly)}</td>
@@ -611,7 +639,7 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                 <thead>
                   <tr>
                     <th style={head}>{t("colItem")}</th>
-                    {Object.keys(pending.lines[0]?.months ?? {}).map((m) => (
+                    {monthKeys.map((m) => (
                       <th key={m} style={{ ...head, textAlign: "right" }}>{m}</th>
                     ))}
                   </tr>
@@ -620,8 +648,10 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
                   {pending.lines.map((l) => (
                     <tr key={l.item_key}>
                       <td style={cell}>{l.label}</td>
-                      {Object.entries(l.months).map(([m, v]) => (
-                        <td key={m} style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{money(v)}</td>
+                      {monthKeys.map((m) => (
+                        <td key={m} style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", color: m in l.months ? undefined : "var(--ink-3, #8a9498)" }}>
+                          {m in l.months ? money(l.months[m]) : ""}
+                        </td>
                       ))}
                     </tr>
                   ))}
@@ -632,11 +662,12 @@ function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?
           {pending.environment === "sandbox" ? (
             <p style={{ ...note, color: "#8a5a00" }}>{t("qSandboxNoApprove")}</p>
           ) : null}
-          <form action={qboDecide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          {pending.environment === "production" ? <p style={{ ...note, margin: "0 0 6px" }}>{t("qTickNote")}</p> : null}
+          <form id="qbo-decide" action={qboDecide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <input type="hidden" name="id" value={pending.id} />
             <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
             {pending.environment === "production" ? (
-              <button type="submit" name="verdict" value="approve" className="button-primary">{t("qApproveAll")}</button>
+              <button type="submit" name="verdict" value="approve" className="button-primary">{t("qApproveSelected")}</button>
             ) : null}
             <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
           </form>

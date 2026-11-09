@@ -137,6 +137,14 @@ const en = {
   oNotConfigured: "QuickBooks is not configured on the server: {d}.",
   oNotAdmin: "Only admins can manage the QuickBooks link.",
   oError: "QuickBooks: {d}",
+  qAnnual: "Billed yearly (12-month average)",
+  qAnnualNote: "QuickBooks account numbers, separated by commas. A 6-month window that catches one yearly bill would count it twice as much.",
+  colWindow: "Average of",
+  qWindowMonths: "{n} months",
+  qApproveSelected: "Approve ticked lines",
+  qTickNote: "Tick the lines to apply. Unticked lines stay as they are; the next pull proposes them again.",
+  qApplied: "applied",
+  oAnnual: "Saved: yearly accounts {d}. Pull now to see them averaged over 12 months.",
   none: "—",
 } as const;
 
@@ -276,6 +284,14 @@ const es = {
   oNotConfigured: "QuickBooks no está configurado en el servidor: {d}.",
   oNotAdmin: "Solo los administradores pueden manejar la conexión con QuickBooks.",
   oError: "QuickBooks: {d}",
+  qAnnual: "Facturadas una vez al año (promedio de 12 meses)",
+  qAnnualNote: "Números de cuenta de QuickBooks, separados por comas. Una ventana de 6 meses que atrapa una factura anual la contaría el doble.",
+  colWindow: "Promedio de",
+  qWindowMonths: "{n} meses",
+  qApproveSelected: "Aprobar las líneas marcadas",
+  qTickNote: "Marque las líneas que quiere aplicar. Las que no marque se quedan como están; la próxima consulta las vuelve a proponer.",
+  qApplied: "aplicada",
+  oAnnual: "Guardado: cuentas anuales {d}. Presione Traer ahora para verlas promediadas en 12 meses.",
   none: "—",
 } satisfies Record<OKey, string>;
 

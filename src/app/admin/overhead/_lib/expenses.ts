@@ -19,6 +19,8 @@ import { plantToday } from "./load";
 // for parents whose spending sits in sub-accounts — caught before approval, 2026-11-08.)
 
 export const WINDOW_MONTHS = 6;
+/** Accounts listed in overhead_settings.qbo_annual_accounts are averaged over this many months. */
+export const ANNUAL_WINDOW_MONTHS = 12;
 export const BASIS = "Accrual" as const;
 
 type Col = { ColTitle?: string; ColType?: string; MetaData?: { Name: string; Value: string }[] };
@@ -37,6 +39,10 @@ export type ExpenseLine = {
   proposed_monthly: number;
   months: Record<string, number>;
   missing: boolean;
+  window_months: number;
+  window_from: string;
+  window_to: string;
+  applied?: boolean;
 };
 
 function ym(d: Date) {
@@ -99,9 +105,20 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
   const db = serviceDb();
   const { env } = qboConfig();
   const today = plantToday();
-  const { data: rs } = await user.from("overhead_settings").select("value_text").eq("key", "qbo_reconciled_through").maybeSingle();
-  const reconciled = (rs?.value_text as string | null) ?? null;
+  const { data: settings } = await user
+    .from("overhead_settings")
+    .select("key, value_text")
+    .in("key", ["qbo_reconciled_through", "qbo_annual_accounts"]);
+  const setting = (k: string) => (settings ?? []).find((r) => r.key === k)?.value_text as string | null | undefined;
+  const reconciled = setting("qbo_reconciled_through") ?? null;
+  const annual = new Set(
+    (setting("qbo_annual_accounts") ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
+  );
   const win = windowFor(today, reconciled);
+  const winLong = windowFor(today, reconciled, ANNUAL_WINDOW_MONTHS);
   const period = trigger === "schedule" ? today.slice(0, 7) : null;
 
   if (trigger === "schedule") {
@@ -147,8 +164,8 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
   const parentOf = new Map(all.map((a) => [a.Id, a.ParentRef?.value ?? null]));
 
   const pnl = await qboGet<PnL>(db, "reports/ProfitAndLoss", {
-    start_date: win.from,
-    end_date: win.to,
+    start_date: winLong.from, // one report covers both windows
+    end_date: winLong.to,
     summarize_column_by: "Month",
     accounting_method: BASIS,
   });
@@ -174,9 +191,10 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
     .map((b) => {
       const acct = byNum.get(String(b.qb_account).trim()) ?? null;
       const rec = acct ? rolled.get(acct.Id) ?? {} : {};
+      const w = annual.has(String(b.qb_account).trim()) ? winLong : win;
       const months: Record<string, number> = {};
-      for (const k of win.keys) months[k] = Math.round((rec[k] ?? 0) * 100) / 100;
-      const total = win.keys.reduce((s, k) => s + months[k], 0);
+      for (const k of w.keys) months[k] = Math.round((rec[k] ?? 0) * 100) / 100;
+      const total = w.keys.reduce((s, k) => s + months[k], 0);
       return {
         item_key: b.item_key,
         label: b.label,
@@ -184,9 +202,12 @@ export async function pullExpenses(user: SupabaseClient, trigger: "schedule" | "
         qb_account_name: acct?.FullyQualifiedName ?? acct?.Name ?? null,
         current_band_id: b.id,
         current_monthly: Number(b.monthly),
-        proposed_monthly: Math.round((total / WINDOW_MONTHS) * 100) / 100,
+        proposed_monthly: Math.round((total / w.keys.length) * 100) / 100,
         months,
         missing: !acct,
+        window_months: w.keys.length,
+        window_from: w.from,
+        window_to: w.to,
       };
     });
 
