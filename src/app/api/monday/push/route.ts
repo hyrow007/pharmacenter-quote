@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireSyncAuth } from "@/lib/sync-auth";
-import { runPush } from "@/app/admin/monday/_lib/push";
+import { runPush, type PushResult } from "@/app/admin/monday/_lib/push";
 
 // POST /api/monday/push — Fishbowl mirror -> Monday boards.
 //
@@ -32,27 +32,42 @@ export async function POST(request: Request) {
 
   const wantLive = new URL(request.url).searchParams.get("live") === "1";
   try {
-    const r = await runPush({ db, trigger: "schedule", startedBy: null, wantLive });
-    const count = (k: string) => r.actions.filter((a) => a.kind === k).length;
-    return NextResponse.json({
-      ok: r.errors.length === 0 && !r.refused,
-      run_id: r.runId,
-      live: r.live,
-      refused: r.refused,
-      planned: {
-        create: count("create"),
-        move: count("move"),
-        archive: count("archive"),
-        rename: count("rename"),
-        update: count("update"),
-        link: count("link"),
-      },
-      applied: r.applied.length,
-      errors: r.errors.map((e) => `${e.action.kind} ${e.action.so}: ${e.error}`),
-    });
+    // Sales orders first, then purchase orders. The top-level fields stay the
+    // sales-order result, which is what Run-FishbowlSync.ps1 logs; the PO
+    // result rides along under `po` (null until the PO boards exist).
+    const so = summarize(await runPush({ db, trigger: "schedule", startedBy: null, wantLive, entity: "so" }));
+    let po: ReturnType<typeof summarize> | { ok: false; error: string } | null;
+    try {
+      po = summarize(await runPush({ db, trigger: "schedule", startedBy: null, wantLive, entity: "po" }));
+    } catch (e) {
+      // A PO failure must never cost the sales-order run its result.
+      po = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    return NextResponse.json({ ...so, ok: (so?.ok ?? false) && (po?.ok ?? true), po });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("monday push failed:", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
+}
+
+function summarize(r: PushResult | null) {
+  if (!r) return null;
+  const count = (k: string) => r.actions.filter((a) => a.kind === k).length;
+  return {
+    ok: r.errors.length === 0 && !r.refused,
+    run_id: r.runId,
+    live: r.live,
+    refused: r.refused,
+    planned: {
+      create: count("create"),
+      move: count("move"),
+      archive: count("archive"),
+      rename: count("rename"),
+      update: count("update"),
+      link: count("link"),
+    },
+    applied: r.applied.length,
+    errors: r.errors.map((e) => `${e.action.kind} ${e.action.so}: ${e.error}`),
+  };
 }

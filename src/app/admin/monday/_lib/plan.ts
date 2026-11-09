@@ -18,7 +18,8 @@
 
 import { sameOwner, type BoardItem, type BoardKey, type MirrorRow, type Report } from "./reconcile";
 
-export type Values = Partial<Record<"customer" | "customer po" | "vendor po" | "owner" | "status" | "date", string>>;
+// Board column title (lower-cased) -> value to write.
+export type Values = Record<string, string>;
 
 export type Action =
   | { kind: "create"; so: string; values: Values }
@@ -34,6 +35,11 @@ export function mondayWrites(actions: Action[]): number {
   return actions.filter((a) => a.kind !== "link").length;
 }
 
+/** Writes that change or remove existing items: what the safety limit counts. */
+export function changingWrites(actions: Action[]): number {
+  return actions.filter((a) => a.kind !== "link" && a.kind !== "create").length;
+}
+
 /**
  * Fishbowl stores the salesman's username ("Jairo"); LilyPad wrote the full
  * name ("Jairo Osorno"). Learn the full name from items that already agree,
@@ -42,7 +48,7 @@ export function mondayWrites(actions: Action[]): number {
 export function ownerNames(report: Report): Map<string, string> {
   const names = new Map<string, string>();
   for (const p of report.pairs) {
-    const user = (p.mirror?.salesman ?? "").trim();
+    const user = (p.mirror?.fields["owner"] ?? "").trim();
     const board = (p.item?.cols["owner"] ?? "").trim();
     if (!user || !board || !sameOwner(user, board)) continue;
     // Keep the longest form seen: "Jairo Osorno" over a stray "Jairo".
@@ -53,13 +59,13 @@ export function ownerNames(report: Report): Map<string, string> {
 }
 
 function wantedValues(r: MirrorRow, owners: Map<string, string>): Values {
-  const user = (r.salesman ?? "").trim();
-  return {
-    customer: (r.customer_name ?? "").trim(),
-    "customer po": (r.customer_po ?? "").trim(),
-    "vendor po": (r.vendor_po ?? "").trim(),
-    owner: owners.get(user.toLowerCase()) ?? user,
-  };
+  const out: Values = {};
+  for (const [title, value] of Object.entries(r.fields)) {
+    const v = (value ?? "").trim();
+    if (!v) continue;
+    out[title] = title === "owner" ? owners.get(v.toLowerCase()) ?? v : v;
+  }
+  return out;
 }
 
 /** Fishbowl's completion date as an Eastern calendar date, YYYY-MM-DD. */
@@ -69,18 +75,27 @@ export function easternDate(iso: string | null | undefined): string {
   return new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
-function movedValues(r: MirrorRow | null): Values {
-  return { status: "Fulfilled", date: easternDate(r?.date_completed) };
+function movedValues(r: MirrorRow | null, movedStatus: string): Values {
+  return { status: movedStatus, date: easternDate(r?.date_completed) };
 }
 
-export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
+export function plan(
+  report: Report,
+  linkedItemIds: Set<string>,
+  opts: { movedStatus: string; maxCreates: number } = { movedStatus: "Fulfilled", maxCreates: Infinity },
+): Action[] {
   const out: Action[] = [];
   const owners = ownerNames(report);
   const doubled = new Set(report.duplicates.map((d) => d.so));
 
+  // Oldest first is not knowable here, so creates go in report order and the
+  // remainder past maxCreates waits for the next run.
+  let creates = 0;
   for (const r of report.missing) {
     if (!r.mirror || doubled.has(r.so)) continue;
+    if (creates >= opts.maxCreates) break;
     out.push({ kind: "create", so: r.so, values: wantedValues(r.mirror, owners) });
+    creates++;
   }
 
   // Moves and archives first, so later renames and updates are not wasted on
@@ -88,7 +103,7 @@ export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
   const leaving = new Set<string>();
   for (const r of report.fulfilledOnOpen) {
     if (!r.item || doubled.has(r.so)) continue;
-    out.push({ kind: "move", so: r.so, itemId: r.item.id, values: movedValues(r.mirror) });
+    out.push({ kind: "move", so: r.so, itemId: r.item.id, values: movedValues(r.mirror, opts.movedStatus) });
     leaving.add(r.item.id);
   }
   for (const r of report.closedOnOpen) {
@@ -118,7 +133,7 @@ export function plan(report: Report, linkedItemIds: Set<string>): Action[] {
     // Never blank a board value: an empty Fishbowl field may simply never have
     // been filled in, while someone typed it on the board.
     if (!d.fishbowl.trim()) continue;
-    const key = d.field === "customer_po" ? "customer po" : d.field === "vendor_po" ? "vendor po" : d.field;
+    const key = d.field;
     const entry = byItem.get(d.item.id) ?? { so: d.so, item: d.item, values: {}, before: {} };
     entry.values[key] = d.field === "owner" ? owners.get(d.fishbowl.trim().toLowerCase()) ?? d.fishbowl : d.fishbowl;
     entry.before[key] = d.board;

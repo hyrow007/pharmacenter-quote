@@ -1,5 +1,7 @@
 import "server-only";
 import type { BoardItem, BoardKey, MirrorRow } from "./reconcile";
+import { ENTITIES, type EntityKey } from "./entity";
+import { easternDate } from "./plan";
 
 // Reads for the reconciler. Both are reads: the mirror through the signed-in
 // user's client (RLS applies), the boards through Monday's GraphQL API.
@@ -17,24 +19,106 @@ const PAGE = 500;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
 
+const SO_SELECT =
+  "so_number, status_id, status_name, is_open, customer_name, customer_po, vendor_po, date_completed, salesman, sync_run_id, synced_at, date_last_modified";
+const PO_SELECT =
+  "po_number, status_id, status_name, is_open, vendor_name, buyer, so_numbers, items, date_issued, date_completed, sync_run_id, synced_at, date_last_modified";
+
+type PoItem = {
+  line?: number | null;
+  product_num?: string | null;
+  description?: string | null;
+  qty_ordered?: number | null;
+  qty_fulfilled?: number | null;
+};
+
+/** One line per PO item: "500 · PC-RM-0135 · Gelatin 200 Bloom (received 200)". */
+export function poItemLines(items: unknown): string {
+  if (!Array.isArray(items)) return "";
+  return (items as PoItem[])
+    .slice()
+    .sort((a, b) => (a.line ?? 0) - (b.line ?? 0))
+    .map((it) => {
+      const qty = typeof it.qty_ordered === "number" ? it.qty_ordered.toLocaleString("en-US") : "";
+      const got =
+        typeof it.qty_fulfilled === "number" && it.qty_fulfilled > 0 && it.qty_fulfilled !== it.qty_ordered
+          ? ` (received ${it.qty_fulfilled.toLocaleString("en-US")})`
+          : "";
+      return [qty, it.product_num ?? "", it.description ?? ""].filter(Boolean).join(" · ") + got;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toRow(entity: EntityKey, r: any): MirrorRow {
+  if (entity === "so") {
+    return {
+      ...r,
+      fields: {
+        customer: r.customer_name,
+        "customer po": r.customer_po,
+        "vendor po": r.vendor_po,
+        owner: r.salesman,
+      },
+    } as MirrorRow;
+  }
+  return {
+    so_number: r.po_number,
+    status_id: r.status_id,
+    status_name: r.status_name,
+    is_open: r.is_open,
+    customer_name: r.vendor_name, // shown in the report's name column
+    customer_po: null,
+    vendor_po: null,
+    date_completed: r.date_completed,
+    salesman: r.buyer,
+    sync_run_id: r.sync_run_id,
+    synced_at: r.synced_at,
+    date_last_modified: r.date_last_modified,
+    fields: {
+      vendor: r.vendor_name,
+      "linked sos": Array.isArray(r.so_numbers) ? r.so_numbers.join(", ") : null,
+      "issue date": easternDate(r.date_issued) || null,
+      items: poItemLines(r.items) || null,
+    },
+  };
+}
+
 /** Every row in the mirror, paged: PostgREST stops at 1,000 rows per request. */
-export async function loadMirror(supabase: AnySupabase): Promise<MirrorRow[]> {
+export async function loadMirror(supabase: AnySupabase, entity: EntityKey = "so"): Promise<MirrorRow[]> {
+  const spec = ENTITIES[entity];
   const out: MirrorRow[] = [];
   const step = 1000;
   for (let from = 0; ; from += step) {
     const { data, error } = await supabase
-      .from("fishbowl_sales_orders")
-      .select(
-        "so_number, status_id, status_name, is_open, customer_name, customer_po, vendor_po, date_completed, salesman, sync_run_id, synced_at, date_last_modified",
-      )
-      .order("so_number")
+      .from(spec.mirrorTable)
+      .select(entity === "so" ? SO_SELECT : PO_SELECT)
+      .order(spec.numberColumn)
       .range(from, from + step - 1);
     if (error) throw new Error(`mirror read failed: ${error.message}`);
-    const rows = (data ?? []) as MirrorRow[];
-    out.push(...rows);
+    const rows = (data ?? []) as unknown[];
+    out.push(...rows.map((r) => toRow(entity, r)));
     if (rows.length < step) break;
   }
   return out;
+}
+
+/**
+ * Board ids per entity. Sales orders are fixed; the PO boards were created by
+ * the "Create PO boards" button on /admin/monday and recorded in
+ * monday_boards. Null until that has been done.
+ */
+export async function loadBoardIds(
+  supabase: AnySupabase,
+  entity: EntityKey,
+): Promise<Record<BoardKey, string> | null> {
+  if (entity === "so") return { open: String(BOARDS.open), fulfilled: String(BOARDS.fulfilled) };
+  const { data, error } = await supabase.from("monday_boards").select("role, board_id").eq("entity", entity);
+  if (error) throw new Error(`monday_boards read failed: ${error.message}`);
+  const ids: Partial<Record<BoardKey, string>> = {};
+  for (const r of (data ?? []) as { role: BoardKey; board_id: number }[]) ids[r.role] = String(r.board_id);
+  return ids.open && ids.fulfilled ? (ids as Record<BoardKey, string>) : null;
 }
 
 type RawItem = { id: string; name: string; column_values: { id: string; text: string | null }[] };
@@ -66,8 +150,7 @@ export async function gql<T>(token: string, query: string, variables: Record<str
 
 const ITEM_FIELDS = `cursor items { id name column_values { id text } }`;
 
-async function loadBoard(token: string, key: BoardKey): Promise<{ items: BoardItem[]; meta: BoardMeta }> {
-  const boardId = String(BOARDS[key]);
+async function loadBoard(token: string, key: BoardKey, boardId: string): Promise<{ items: BoardItem[]; meta: BoardMeta }> {
   const first = await gql<{
     boards: { columns: Column[]; top_group: { id: string } | null; items_page: RawPage }[];
   }>(
@@ -114,22 +197,28 @@ export function mondayToken(): string {
   return token;
 }
 
-export async function loadBoards(): Promise<Boards> {
+export async function loadBoards(
+  ids: Record<BoardKey, string> = { open: String(BOARDS.open), fulfilled: String(BOARDS.fulfilled) },
+): Promise<Boards> {
   const token = mondayToken();
-  const [open, fulfilled] = await Promise.all([loadBoard(token, "open"), loadBoard(token, "fulfilled")]);
+  const [open, fulfilled] = await Promise.all([
+    loadBoard(token, "open", ids.open),
+    loadBoard(token, "fulfilled", ids.fulfilled),
+  ]);
   return { items: [...open.items, ...fulfilled.items], meta: { open: open.meta, fulfilled: fulfilled.meta } };
 }
 
-/** monday_so_links, as item id -> SO number, plus the set of linked item ids. */
-export async function loadLinks(supabase: AnySupabase): Promise<Map<string, string>> {
+/** The entity's link table, as Monday item id -> order number. */
+export async function loadLinks(supabase: AnySupabase, entity: EntityKey = "so"): Promise<Map<string, string>> {
+  const spec = ENTITIES[entity];
   const { data, error } = await supabase
-    .from("monday_so_links")
-    .select("so_number, monday_item_id")
+    .from(spec.linkTable)
+    .select(`${spec.numberColumn}, monday_item_id`)
     .is("archived_at", null);
   if (error) throw new Error(`link table read failed: ${error.message}`);
   const out = new Map<string, string>();
-  for (const r of (data ?? []) as { so_number: string; monday_item_id: number }[]) {
-    out.set(String(r.monday_item_id), r.so_number);
+  for (const r of (data ?? []) as Record<string, string | number>[]) {
+    out.set(String(r.monday_item_id), String(r[spec.numberColumn]));
   }
   return out;
 }

@@ -49,6 +49,17 @@ const en = {
   fieldCustomerPo: "Customer PO",
   fieldOwner: "Owner",
   fieldVendorPo: "Vendor PO",
+  fieldVendor: "Vendor",
+  fieldLinkedSos: "Linked SOs",
+  fieldIssueDate: "Issue date",
+  fieldItems: "Items",
+  tabSo: "Sales orders",
+  tabPo: "Purchase orders",
+  poSetupTitle: "Purchase order boards",
+  poSetupBody: "The two PO boards do not exist yet. This creates “Open Purchase Orders” and “Received Purchase Orders” beside the sales-order boards, each with Vendor, Linked SOs, Issue date, Items, Status and Date columns. It creates no items: the PO push starts as a dry run.",
+  poSetupButton: "Create PO boards",
+  totalsPo: "{wanted} POs should be on the Open board · Open board has {open} items · Received board has {fulfilled}",
+  noFulfilledPo: "The mirror holds no received POs, so the office server's sync does not send them yet. Until it does, received and cancelled POs cannot be told apart, and the PO push will refuse to write.",
   matchFormat: "spacing / format",
   matchPrefix: "M prefix ignored",
   empty: "(empty)",
@@ -64,7 +75,7 @@ const en = {
   pushNow: "Push now",
   dryRunNow: "Dry run now",
   aCreate: "Create {so} on the Open board ({customer})",
-  aMove: "Move {so} to the Fulfilled board (Status: Fulfilled, Date: {date})",
+  aMove: "Move {so} to the {status} board (Status: {status}, Date: {date})",
   aArchive: "Archive {so} (closed in Fishbowl; last status {status})",
   aRename: "Rename “{from}” to {so}",
   aUpdate: "Update {so}: {changes}",
@@ -126,6 +137,17 @@ const es = {
   fieldCustomerPo: "OC del cliente",
   fieldOwner: "Responsable",
   fieldVendorPo: "OC del proveedor",
+  fieldVendor: "Proveedor",
+  fieldLinkedSos: "OV vinculadas",
+  fieldIssueDate: "Fecha de emisión",
+  fieldItems: "Artículos",
+  tabSo: "Órdenes de venta",
+  tabPo: "Órdenes de compra",
+  poSetupTitle: "Tableros de órdenes de compra",
+  poSetupBody: "Los dos tableros de órdenes de compra aún no existen. Esto crea “Open Purchase Orders” y “Received Purchase Orders” junto a los tableros de órdenes de venta, cada uno con las columnas Vendor, Linked SOs, Issue date, Items, Status y Date. No crea elementos: el envío de órdenes de compra empieza como simulación.",
+  poSetupButton: "Crear tableros de OC",
+  totalsPo: "{wanted} OC deberían estar en el tablero Open · El tablero Open tiene {open} elementos · El tablero Received tiene {fulfilled}",
+  noFulfilledPo: "El espejo no tiene OC recibidas, así que la sincronización del servidor de la oficina aún no las envía. Hasta entonces no se pueden distinguir las recibidas de las canceladas, y el envío de OC se negará a escribir.",
   matchFormat: "espacios / formato",
   matchPrefix: "prefijo M ignorado",
   empty: "(vacío)",
@@ -141,7 +163,7 @@ const es = {
   pushNow: "Enviar ahora",
   dryRunNow: "Simular ahora",
   aCreate: "Crear {so} en el tablero Open ({customer})",
-  aMove: "Mover {so} al tablero Fulfilled (Estado: Fulfilled, Fecha: {date})",
+  aMove: "Mover {so} al tablero {status} (Estado: {status}, Fecha: {date})",
   aArchive: "Archivar {so} (cerrada en Fishbowl; último estado {status})",
   aRename: "Renombrar “{from}” a {so}",
   aUpdate: "Actualizar {so}: {changes}",
@@ -161,7 +183,7 @@ export function makeMT(lang: Lang): MT {
   const dict: Record<MKey, string> = lang === "es" ? es : en;
   return (key, vars) => {
     let out = dict[key] ?? en[key] ?? key;
-    if (vars) for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, String(v));
+    if (vars) for (const [k, v] of Object.entries(vars)) out = out.split(`{${k}}`).join(String(v));
     return out;
   };
 }

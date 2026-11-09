@@ -16,6 +16,8 @@
 //   closed some other way (cancelled, void, closed short, expired, or
 //   fulfilled more than a year ago).
 
+// One order from the mirror, sales or purchase. so_number holds the order
+// number either way (a PO's po_number for POs); the name predates POs.
 export type MirrorRow = {
   so_number: string;
   status_id: number | null;
@@ -29,6 +31,11 @@ export type MirrorRow = {
   sync_run_id: string | null;
   synced_at: string | null;
   date_last_modified: string | null;
+  // What the board's columns should say, keyed by lower-cased column TITLE.
+  // These are compared against the board and written on create. Built by the
+  // loader per entity: Customer / Customer PO / Vendor PO / Owner for sales
+  // orders; Vendor / Linked SOs / Issue date / Items for purchase orders.
+  fields: Record<string, string | null>;
 };
 
 export type BoardKey = "open" | "fulfilled";
@@ -56,7 +63,7 @@ export type Row = {
 export type FieldDiff = {
   so: string;
   item: BoardItem;
-  field: "customer" | "customer_po" | "vendor_po" | "owner";
+  field: string; // the board column title, lower-cased
   fishbowl: string;
   board: string;
 };
@@ -83,6 +90,8 @@ export type Report = {
 
 const WANTED_ON_OPEN = new Set([10, 20, 25]); // Estimate, Issued, In Progress
 const FULFILLED = 60;
+// Closed Short, Void, Cancelled, Expired, Historical.
+const TERMINAL = new Set([70, 80, 85, 90, 95]);
 // LilyPad went live in late January 2026. Fulfilled orders older than that
 // were never expected on either board.
 export const GO_LIVE = "2026-01-27";
@@ -238,6 +247,9 @@ export function reconcile(
     for (const h of onOpen) {
       if (fulfilled) report.fulfilledOnOpen.push(row(r, h));
       else if (!latest && confirmedClosed(r, run.at)) report.closedOnOpen.push(row(r, h));
+      // Still sent, but closed: the PO sync also sends any PO an open sales
+      // order names, whatever its status, so a cancelled PO can arrive here.
+      else if (latest && r.status_id !== null && TERMINAL.has(r.status_id)) report.closedOnOpen.push(row(r, h));
     }
 
     if (
@@ -296,24 +308,17 @@ function row(r: MirrorRow, h: { item: BoardItem; type: MatchType }): Row {
   return { so: r.so_number, mirror: r, item: h.item, matchType: h.type };
 }
 
-// Board column titles -> mirror fields. Date is not compared: on the Open
-// board it is empty by design (LilyPad filled it with DateCompleted on move).
-const COMPARED: { field: FieldDiff["field"]; title: string; pick: (r: MirrorRow) => string | null }[] = [
-  { field: "customer", title: "customer", pick: (r) => r.customer_name },
-  { field: "customer_po", title: "customer po", pick: (r) => r.customer_po },
-  { field: "vendor_po", title: "vendor po", pick: (r) => r.vendor_po },
-  { field: "owner", title: "owner", pick: (r) => r.salesman },
-];
-
+// Compares each of the row's fields with the same-titled board column. Date
+// (Fulfilled / Received) is never a field: it is only written on a move.
 export function diffFields(r: MirrorRow, item: BoardItem): FieldDiff[] {
   const out: FieldDiff[] = [];
-  for (const c of COMPARED) {
-    if (!(c.title in item.cols)) continue; // column not on this board
-    const fb = c.pick(r) ?? "";
-    const board = item.cols[c.title] ?? "";
+  for (const [title, value] of Object.entries(r.fields)) {
+    if (!(title in item.cols)) continue; // column not on this board
+    const fb = value ?? "";
+    const board = item.cols[title] ?? "";
     if (norm(fb) === norm(board)) continue;
-    if (c.field === "owner" && sameOwner(fb, board)) continue;
-    out.push({ so: r.so_number, item, field: c.field, fishbowl: fb, board });
+    if (title === "owner" && sameOwner(fb, board)) continue;
+    out.push({ so: r.so_number, item, field: title, fishbowl: fb, board });
   }
   return out;
 }

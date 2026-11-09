@@ -1,7 +1,8 @@
 import "server-only";
-import { gql, loadBoards, loadLinks, loadMirror, mondayToken, type BoardMeta, type Column } from "./load";
+import { gql, loadBoardIds, loadBoards, loadLinks, loadMirror, mondayToken, type BoardMeta, type Column } from "./load";
+import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./entity";
 import { reconcile, type BoardItem, type BoardKey, type Report } from "./reconcile";
-import { mondayWrites, plan, type Action, type Values } from "./plan";
+import { changingWrites, plan, type Action, type Values } from "./plan";
 
 // Carries out the push plan. One function, used by the cron-style route
 // (/api/monday/push, called by the office server after each Fishbowl sync) and
@@ -17,7 +18,11 @@ import { mondayWrites, plan, type Action, type Values } from "./plan";
 //   - the mirror holds no fulfilled orders (office sync older than 5c192bf, so
 //     fulfilled and cancelled cannot be told apart)
 //   - the link table cannot be read
-//   - the plan has more than MAX_WRITES Monday writes
+//   - the plan changes or removes more than MAX_WRITES existing items
+//     (creates are not counted; they are capped per run instead)
+//
+// Sales orders and purchase orders run through this same function, each with
+// its own boards, link table and live switch (entity.ts).
 
 export const MAX_WRITES = 60;
 const STALE_HOURS = 26;
@@ -62,8 +67,8 @@ export function moveLosses(
   return out;
 }
 
-export function liveEnabled(): boolean {
-  return process.env.MONDAY_PUSH_LIVE === "1";
+export function liveEnabled(entity: EntityKey = "so"): boolean {
+  return process.env[ENTITIES[entity].liveEnv] === "1";
 }
 
 function colByTitle(meta: BoardMeta): Map<string, Column> {
@@ -133,21 +138,31 @@ export async function runPush(opts: {
   trigger: Trigger;
   startedBy: string | null;
   wantLive: boolean;
-}): Promise<PushResult> {
+  entity?: EntityKey;
+}): Promise<PushResult | null> {
   const { db } = opts;
-  const live = opts.wantLive && liveEnabled();
+  const entity = opts.entity ?? "so";
+  const spec = ENTITIES[entity];
+  const live = opts.wantLive && liveEnabled(entity);
 
-  const [mirror, boards] = await Promise.all([loadMirror(db), loadBoards()]);
+  // PO boards exist only once someone has pressed "Create PO boards".
+  const ids = await loadBoardIds(db, entity);
+  if (!ids) return null;
+
+  const [mirror, boards] = await Promise.all([loadMirror(db, entity), loadBoards(ids)]);
   let links = new Map<string, string>();
   let refused: string | null = null;
   try {
-    links = await loadLinks(db);
+    links = await loadLinks(db, entity);
   } catch (e) {
     refused = `link table unavailable (${e instanceof Error ? e.message : e})`;
   }
 
   const report = reconcile(mirror, boards.items, links);
-  const actions = plan(report, new Set(links.keys()));
+  const actions = plan(report, new Set(links.keys()), {
+    movedStatus: spec.movedStatus,
+    maxCreates: MAX_CREATES_PER_RUN,
+  });
   const { mapping, drops } = moveMapping(boards.meta.open, boards.meta.fulfilled);
   const losses = moveLosses(actions, boards.items, drops);
 
@@ -156,12 +171,13 @@ export async function runPush(opts: {
   if (!refused && ageH > STALE_HOURS) refused = `the Fishbowl data is ${Math.round(ageH)} hours old`;
   if (!refused && report.fulfilledInMirror === 0)
     refused = "the mirror holds no fulfilled orders, so fulfilled and cancelled cannot be told apart";
-  if (!refused && mondayWrites(actions) > MAX_WRITES)
-    refused = `${mondayWrites(actions)} Monday writes planned; the limit is ${MAX_WRITES}`;
+  if (!refused && changingWrites(actions) > spec.maxWrites)
+    refused = `${changingWrites(actions)} changes to existing items planned; the limit is ${spec.maxWrites}`;
 
   const { data: runRow } = await db
     .from("monday_push_runs")
     .insert({
+      entity,
       trigger: opts.trigger,
       dry_run: !live,
       mirror_as_of: report.latestRunAt,
@@ -180,7 +196,11 @@ export async function runPush(opts: {
     const token = mondayToken();
     const meta = boards.meta;
     const link = async (row: Record<string, unknown>) => {
-      const { error } = await db.from("monday_so_links").upsert(row, { onConflict: "so_number" });
+      // Rows are written with so_number as the key; map it to the table's own.
+      const { so_number, ...rest } = row as { so_number: string } & Record<string, unknown>;
+      const { error } = await db
+        .from(spec.linkTable)
+        .upsert({ [spec.numberColumn]: so_number, ...rest }, { onConflict: spec.numberColumn });
       if (error) throw new Error(`link write failed: ${error.message}`);
     };
 
@@ -193,7 +213,7 @@ export async function runPush(opts: {
           case "create": {
             const res = await gql<{ create_item: { id: string } }>(
               token,
-              `mutation ($b: ID!, $g: String, $n: String!, $v: JSON) { create_item(board_id: $b, group_id: $g, item_name: $n, column_values: $v) { id } }`,
+              `mutation ($b: ID!, $g: String, $n: String!, $v: JSON) { create_item(board_id: $b, group_id: $g, item_name: $n, column_values: $v, create_labels_if_missing: true) { id } }`,
               { b: meta.open.boardId, g: meta.open.groupId, n: a.so, v: JSON.stringify(encode(a.values, meta.open)) },
             );
             await link({ so_number: a.so, monday_item_id: Number(res.create_item.id), board: "open", linked_by: "created", archived_at: null });
@@ -218,7 +238,7 @@ export async function runPush(opts: {
             if (Object.keys(after).length > 0) {
               await gql(
                 token,
-                `mutation ($b: ID!, $i: ID!, $v: JSON!) { change_multiple_column_values(board_id: $b, item_id: $i, column_values: $v) { id } }`,
+                `mutation ($b: ID!, $i: ID!, $v: JSON!) { change_multiple_column_values(board_id: $b, item_id: $i, column_values: $v, create_labels_if_missing: true) { id } }`,
                 { b: meta.fulfilled.boardId, i: a.itemId, v: JSON.stringify(after) },
               );
             }
@@ -235,7 +255,7 @@ export async function runPush(opts: {
             if (Object.keys(values).length === 0) break;
             await gql(
               token,
-              `mutation ($b: ID!, $i: ID!, $v: JSON!) { change_multiple_column_values(board_id: $b, item_id: $i, column_values: $v) { id } }`,
+              `mutation ($b: ID!, $i: ID!, $v: JSON!) { change_multiple_column_values(board_id: $b, item_id: $i, column_values: $v, create_labels_if_missing: true) { id } }`,
               { b: m.boardId, i: a.itemId, v: JSON.stringify(values) },
             );
             break;

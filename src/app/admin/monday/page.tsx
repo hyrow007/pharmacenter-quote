@@ -6,11 +6,12 @@ import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import AppHeader from "../../_components/AppHeader";
-import { loadBoards, loadLinks, loadMirror } from "./_lib/load";
+import { loadBoardIds, loadBoards, loadLinks, loadMirror } from "./_lib/load";
+import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./_lib/entity";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
-import { mondayWrites, plan, type Action } from "./_lib/plan";
-import { MAX_WRITES, liveEnabled, moveLosses, moveMapping } from "./_lib/push";
-import { pushNow } from "./actions";
+import { changingWrites, mondayWrites, plan, type Action } from "./_lib/plan";
+import { liveEnabled, moveLosses, moveMapping } from "./_lib/push";
+import { createPoBoards, pushNow } from "./actions";
 import { makeMT, type MT } from "./_lib/i18n";
 
 // /admin/monday — the Fishbowl → Monday reconciler, read-only.
@@ -29,7 +30,13 @@ export const maxDuration = 60;
 
 const STALE_HOURS = 26;
 
-export default async function MondayReconcilePage() {
+export default async function MondayReconcilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const entity: EntityKey = (await searchParams).tab === "po" ? "po" : "so";
+  const spec = ENTITIES[entity];
   const supabase = await createClient();
   const {
     data: { user },
@@ -47,18 +54,27 @@ export default async function MondayReconcilePage() {
   let actions: Action[] = [];
   let drops: string[] = [];
   let linksOk = true;
+  let needsBoards = false;
   let failure: string | null = null;
   try {
-    const [mirror, boards] = await Promise.all([loadMirror(supabase), loadBoards()]);
-    let links = new Map<string, string>();
-    try {
-      links = await loadLinks(supabase);
-    } catch {
-      linksOk = false; // migration not applied yet
+    const ids = await loadBoardIds(supabase, entity);
+    if (!ids) {
+      needsBoards = true;
+    } else {
+      const [mirror, boards] = await Promise.all([loadMirror(supabase, entity), loadBoards(ids)]);
+      let links = new Map<string, string>();
+      try {
+        links = await loadLinks(supabase, entity);
+      } catch {
+        linksOk = false; // migration not applied yet
+      }
+      report = reconcile(mirror, boards.items, links);
+      actions = plan(report, new Set(links.keys()), {
+        movedStatus: spec.movedStatus,
+        maxCreates: MAX_CREATES_PER_RUN,
+      });
+      drops = moveLosses(actions, boards.items, moveMapping(boards.meta.open, boards.meta.fulfilled).drops);
     }
-    report = reconcile(mirror, boards.items, links);
-    actions = plan(report, new Set(links.keys()));
-    drops = moveLosses(actions, boards.items, moveMapping(boards.meta.open, boards.meta.fulfilled).drops);
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("monday reconcile failed:", failure);
@@ -76,12 +92,42 @@ export default async function MondayReconcilePage() {
           <h1 className="page-header__title" style={{ marginBottom: 6 }}>{t("title")}</h1>
           <p className="lede" style={{ marginTop: 4 }}>{t("lede")}</p>
 
+          <nav style={{ display: "flex", gap: 8, margin: "0 0 16px" }}>
+            {(["so", "po"] as EntityKey[]).map((k) => (
+              <a
+                key={k}
+                href={k === "so" ? "/admin/monday" : "/admin/monday?tab=po"}
+                aria-current={k === entity ? "page" : undefined}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  border: "1px solid var(--stone, #e3dcc9)",
+                  background: k === entity ? "var(--teal-900, #0f4a56)" : "transparent",
+                  color: k === entity ? "#fff" : "inherit",
+                  textDecoration: "none",
+                }}
+              >
+                {k === "so" ? t("tabSo") : t("tabPo")}
+              </a>
+            ))}
+          </nav>
+
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
+          {needsBoards ? (
+            <section style={{ border: "1px solid var(--stone, #e3dcc9)", borderRadius: 10, padding: "12px 14px", margin: "0 0 18px" }}>
+              <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{t("poSetupTitle")}</h2>
+              <p style={{ fontSize: 13, margin: "0 0 10px" }}>{t("poSetupBody")}</p>
+              <form action={createPoBoards}>
+                <button type="submit" className="button-primary">{t("poSetupButton")}</button>
+              </form>
+            </section>
+          ) : null}
           {report ? (
             <>
-              <NextPush actions={actions} drops={drops} linksOk={linksOk} t={t} />
-              <Runs runs={await recentRuns(supabase)} t={t} lang={lang} />
-              <Body report={report} t={t} lang={lang} />
+              <NextPush entity={entity} actions={actions} drops={drops} linksOk={linksOk} t={t} />
+              <Runs runs={await recentRuns(supabase, entity)} t={t} lang={lang} />
+              <Body report={report} t={t} lang={lang} entity={entity} />
             </>
           ) : null}
         </div>
@@ -90,7 +136,7 @@ export default async function MondayReconcilePage() {
   );
 }
 
-function Body({ report, t, lang }: { report: Report; t: MT; lang: "en" | "es" }) {
+function Body({ report, t, lang, entity }: { report: Report; t: MT; lang: "en" | "es"; entity: EntityKey }) {
   const locale = lang === "es" ? "es-US" : "en-US";
   const when = report.latestRunAt
     ? new Date(report.latestRunAt).toLocaleString(locale, {
@@ -114,14 +160,16 @@ function Body({ report, t, lang }: { report: Report; t: MT; lang: "en" | "es" })
     <>
       <p style={{ fontSize: 13, color: "var(--ink-3, #8a9498)", margin: "0 0 4px" }}>{t("asOf", { when })}</p>
       <p style={{ fontSize: 13, color: "var(--ink-3, #8a9498)", margin: "0 0 14px" }}>
-        {t("totals", {
+        {t(entity === "po" ? "totalsPo" : "totals", {
           wanted: report.counts.mirrorWanted,
           open: report.counts.openItems,
           fulfilled: report.counts.fulfilledItems,
         })}
       </p>
       {ageH > STALE_HOURS ? <Banner tone="warn">{t("stale")}</Banner> : null}
-      {report.fulfilledInMirror === 0 ? <Banner tone="warn">{t("noFulfilled")}</Banner> : null}
+      {report.fulfilledInMirror === 0 ? (
+        <Banner tone="warn">{t(entity === "po" ? "noFulfilledPo" : "noFulfilled")}</Banner>
+      ) : null}
       {problems === 0 ? <Banner tone="good">{t("allClear")}</Banner> : null}
 
       <Section title={t("sMissing")} hint={t("hMissing")} n={report.missing.length} open>
@@ -151,9 +199,11 @@ function Body({ report, t, lang }: { report: Report; t: MT; lang: "en" | "es" })
       <Section title={t("sPrefix")} hint={t("hPrefix")} n={report.prefixMatches.length}>
         <SoTable rows={report.prefixMatches} t={t} showMatch />
       </Section>
-      <Section title={t("sFulfilledNeither")} hint={t("hFulfilledNeither")} n={report.fulfilledNeither.length}>
-        <SoTable rows={report.fulfilledNeither} t={t} />
-      </Section>
+      {entity === "so" ? (
+        <Section title={t("sFulfilledNeither")} hint={t("hFulfilledNeither")} n={report.fulfilledNeither.length}>
+          <SoTable rows={report.fulfilledNeither} t={t} />
+        </Section>
+      ) : null}
     </>
   );
 }
@@ -221,13 +271,17 @@ function SoTable({ rows, t, showMatch }: { rows: Row[]; t: MT; showMatch?: boole
 }
 
 function fieldLabel(f: FieldDiff["field"], t: MT) {
-  return f === "customer"
-    ? t("fieldCustomer")
-    : f === "customer_po"
-      ? t("fieldCustomerPo")
-      : f === "vendor_po"
-        ? t("fieldVendorPo")
-        : t("fieldOwner");
+  const known: Record<string, Parameters<MT>[0]> = {
+    customer: "fieldCustomer",
+    "customer po": "fieldCustomerPo",
+    "vendor po": "fieldVendorPo",
+    owner: "fieldOwner",
+    vendor: "fieldVendor",
+    "linked sos": "fieldLinkedSos",
+    "issue date": "fieldIssueDate",
+    items: "fieldItems",
+  };
+  return known[f] ? t(known[f]) : f;
 }
 
 function DiffTable({ diffs, t }: { diffs: FieldDiff[]; t: MT }) {
@@ -272,10 +326,11 @@ type RunRow = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function recentRuns(supabase: any): Promise<RunRow[]> {
+async function recentRuns(supabase: any, entity: EntityKey): Promise<RunRow[]> {
   const { data, error } = await supabase
     .from("monday_push_runs")
     .select("id, trigger, dry_run, started_at, planned, applied, errors, refused, started_by")
+    .eq("entity", entity)
     .order("started_at", { ascending: false })
     .limit(5);
   return error ? [] : ((data ?? []) as RunRow[]);
@@ -284,9 +339,9 @@ async function recentRuns(supabase: any): Promise<RunRow[]> {
 function describe(a: Action, t: MT): string {
   switch (a.kind) {
     case "create":
-      return t("aCreate", { so: a.so, customer: a.values.customer ?? "" });
+      return t("aCreate", { so: a.so, customer: a.values.customer ?? a.values.vendor ?? "" });
     case "move":
-      return t("aMove", { so: a.so, date: a.values.date || "—" });
+      return t("aMove", { so: a.so, status: a.values.status ?? "", date: a.values.date || "—" });
     case "archive":
       return t("aArchive", { so: a.so, status: a.lastStatus ?? "?" });
     case "rename":
@@ -303,9 +358,23 @@ function describe(a: Action, t: MT): string {
   }
 }
 
-function NextPush({ actions, drops, linksOk, t }: { actions: Action[]; drops: string[]; linksOk: boolean; t: MT }) {
-  const live = liveEnabled();
+function NextPush({
+  entity,
+  actions,
+  drops,
+  linksOk,
+  t,
+}: {
+  entity: EntityKey;
+  actions: Action[];
+  drops: string[];
+  linksOk: boolean;
+  t: MT;
+}) {
+  const live = liveEnabled(entity);
+  const max = ENTITIES[entity].maxWrites;
   const writes = mondayWrites(actions);
+  const changing = changingWrites(actions);
   const visible = actions.filter((a) => a.kind !== "link");
   const links = actions.length - visible.length;
   return (
@@ -314,7 +383,7 @@ function NextPush({ actions, drops, linksOk, t }: { actions: Action[]; drops: st
       <p style={{ fontSize: 13, margin: "0 0 8px" }}>{live ? t("pushLive") : t("pushDry")}</p>
       {!linksOk ? <Banner tone="warn">{t("noLinks")}</Banner> : null}
       {drops.length > 0 ? <Banner tone="warn">{t("moveDrops", { cols: drops.join(", ") })}</Banner> : null}
-      {writes > MAX_WRITES ? <Banner tone="bad">{t("tooMany", { n: writes, max: MAX_WRITES })}</Banner> : null}
+      {changing > max ? <Banner tone="bad">{t("tooMany", { n: changing, max })}</Banner> : null}
       <p style={{ fontSize: 13, margin: "0 0 8px" }}>{t("pushCounts", { writes, links })}</p>
       {visible.length > 0 ? (
         <ul style={{ fontSize: 13, margin: "0 0 10px", paddingLeft: 18, lineHeight: 1.6 }}>
@@ -324,6 +393,7 @@ function NextPush({ actions, drops, linksOk, t }: { actions: Action[]; drops: st
         </ul>
       ) : null}
       <form action={pushNow}>
+        <input type="hidden" name="entity" value={entity} />
         <button type="submit" className="button-primary" disabled={!linksOk}>
           {live ? t("pushNow") : t("dryRunNow")}
         </button>

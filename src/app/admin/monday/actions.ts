@@ -5,6 +5,20 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/workflows";
 import { runPush } from "./_lib/push";
+import { setupPoBoards } from "./_lib/setup";
+import type { EntityKey } from "./_lib/entity";
+
+async function adminDb(): Promise<{ db: ReturnType<typeof createServiceClient>; email: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email || !(await isAdmin(supabase, user.email))) throw new Error("admins only");
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("server misconfigured");
+  return { db: createServiceClient(url, key, { auth: { persistSession: false } }), email: user.email };
+}
 
 /**
  * "Push now" on /admin/monday. Admins only. Live only if MONDAY_PUSH_LIVE=1.
@@ -17,20 +31,18 @@ import { runPush } from "./_lib/push";
  * every successful sync ends with a push, so the new order lands on the board
  * a few minutes later without anyone needing to know the plumbing.
  */
-export async function pushNow(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email || !(await isAdmin(supabase, user.email))) throw new Error("admins only");
+export async function pushNow(formData: FormData): Promise<void> {
+  const { db, email } = await adminDb();
+  const entity: EntityKey = formData.get("entity") === "po" ? "po" : "so";
+  const result = await runPush({ db, trigger: "button", startedBy: email, wantLive: true, entity });
+  if (result?.live) await queueSync(db, email);
+  revalidatePath("/admin/monday");
+}
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("server misconfigured");
-  const db = createServiceClient(url, key, { auth: { persistSession: false } });
-
-  const result = await runPush({ db, trigger: "button", startedBy: user.email, wantLive: true });
-  if (result.live) await queueSync(db, user.email);
+/** "Create PO boards": one-time, admins only. Safe to press twice. */
+export async function createPoBoards(): Promise<void> {
+  const { db } = await adminDb();
+  await setupPoBoards(db);
   revalidatePath("/admin/monday");
 }
 
