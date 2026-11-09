@@ -25,6 +25,7 @@
  * stale number that looks authoritative.
  */
 
+import OverheadFeedWarning from "@/app/components/OverheadFeedWarning";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   computeBlisterCosting,
@@ -3857,6 +3858,7 @@ export default function BlisterCostingBoard({
       className="bc-print-root"
       style={{ display: "flex", flexDirection: "column", gap: 14 }}
     >
+      <OverheadFeedWarning line="contract_packaging" />
       {/* Page geometry + footer margin boxes. Interpolated at render time
           because the @bottom-center identity strip carries the quote number
           and product; quotes/backslashes/newlines are stripped so the value

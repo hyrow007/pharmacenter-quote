@@ -1,5 +1,6 @@
 "use client";
 
+import OverheadFeedWarning from "@/app/components/OverheadFeedWarning";
 import { useLang } from "@/lib/i18n/context";
 import { makeTr } from "@/lib/i18n/labels";
 
@@ -3086,6 +3087,7 @@ export default function FormulaEditor({
 
   return (
     <div className={printing ? "fe-print-mode" : undefined}>
+      <OverheadFeedWarning line="gummy_manufacturing" />
       {/* Print stylesheet — scoped via `@media print` so on-screen editing
           is unaffected. When the user clicks Print / Save PDF we (a) flip
           `printing` state so tabs, notes, and audit render expanded, and

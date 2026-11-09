@@ -10,6 +10,7 @@ import AppHeader from "../../_components/AppHeader";
 import { loadCapacity, loadOverhead, type Band, type CapacityData, type Group, type OverheadData, type Proposal, type Resolved } from "./_lib/load";
 import { decide, measureNow, qboDecide, qboDisconnect, qboPullNow, qboSetAnnual, qboSetReconciled } from "./actions";
 import { loadQbo, type QboData } from "./_lib/loadQbo";
+import { checkFeed } from "./_lib/feedHealth";
 import { SUPPORT_EMAIL } from "./_lib/qbo";
 import TickedTotal from "./TickedTotal";
 import { makeOT, type OT } from "./_lib/i18n";
@@ -79,6 +80,11 @@ export default async function OverheadAdminPage({
   let cap: CapacityData | null = null;
   let qbo: QboData | null = null;
   let failure: string | null = null;
+  // Live, on every visit: what the quoting screens get right now (the cron checks daily too).
+  const feed = await checkFeed(supabase).catch((e: unknown) => ({
+    ok: false,
+    lines: [{ line: "all", ok: false, problem: e instanceof Error ? e.message : String(e) }],
+  }));
   try {
     [data, cap, qbo] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase), loadQbo(supabase, user.email!)]);
   } catch (err) {
@@ -105,6 +111,13 @@ export default async function OverheadAdminPage({
           <h1 className="page-header__title" style={{ marginBottom: 6 }}>{t("title")}</h1>
           <p className="lede" style={{ marginTop: 4 }}>{t("lede")}</p>
 
+          {feed.ok ? (
+            <Banner tone="good">{t("feedOk")}</Banner>
+          ) : (
+            <Banner tone="bad">
+              {t("feedBad", { detail: feed.lines.filter((l) => !l.ok).map((l) => `${l.line}: ${l.problem}`).join("; ") })}
+            </Banner>
+          )}
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
           {data ? <Body data={data} cap={cap} qbo={qbo} outcome={sp} t={t} money={money} day={day} /> : null}
         </div>

@@ -151,6 +151,8 @@ const en = {
   qTotalAll: "Total per month, all lines",
   qTotalTicked: "Change per month if the ticked lines are approved",
   qLocale: "en-US",
+  feedOk: "Quotes' overhead feed: OK. Packaging and gummy quotes are reading these figures right now.",
+  feedBad: "Quotes' overhead feed is DOWN. Every packaging or gummy quote opened now falls back to built-in figures from summer 2026 (the boards show a red warning). Detail: {detail}",
   none: "—",
 } as const;
 
@@ -304,6 +306,8 @@ const es = {
   qTotalAll: "Total por mes, todas las líneas",
   qTotalTicked: "Cambio por mes si se aprueban las líneas marcadas",
   qLocale: "es-US",
+  feedOk: "Fuente de gastos generales para cotizaciones: OK. Las cotizaciones de empaque y gomitas están leyendo estas cifras ahora.",
+  feedBad: "La fuente de gastos generales para cotizaciones está CAÍDA. Toda cotización de empaque o gomitas abierta ahora usa cifras fijas del verano de 2026 (los tableros muestran un aviso rojo). Detalle: {detail}",
   none: "—",
 } satisfies Record<OKey, string>;
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { pullExpenses } from "./expenses";
-import { qboConfig, serviceDb } from "./qbo";
+import { checkFeed } from "./feedHealth";
+import { log, qboConfig, serviceDb } from "./qbo";
 
 // The Overhead step of /api/cron/daily (operator decision 2026-11-08, "option 2").
 //
@@ -10,6 +11,8 @@ import { qboConfig, serviceDb } from "./qbo";
 //      moved past the last pull (and only if the link is connected);
 //   3. overhead_auto_apply() then applies every change under auto_apply_pct (10%) and
 //      leaves bigger ones, $0s and unknown accounts waiting on /admin/overhead.
+//   4. feed health: overhead_for_line() must give real rent/indirect/other rows for the
+//      two keys the quoting screens read; if not, this step goes red and it is logged.
 // Each part fails on its own; one failing never stops the others or the rest of the cron.
 
 export async function overheadDaily(): Promise<Record<string, unknown>> {
@@ -38,6 +41,13 @@ export async function overheadDaily(): Promise<Record<string, unknown>> {
 
   const auto = await db.rpc("overhead_auto_apply");
   out.auto_apply = auto.error ? `error: ${auto.error.message}` : auto.data;
+
+  const feed = await checkFeed(db).catch((e: unknown) => ({ ok: false, lines: [{ line: "all", ok: false, problem: (e as Error).message }] }));
+  out.quote_feed = feed.ok ? "ok" : feed.lines.filter((l) => !l.ok).map((l) => `${l.line}: ${l.problem}`).join("; ");
+  if (!feed.ok) {
+    out.ok = false;
+    await log(db, { level: "error", action: "quote_feed_check", message: String(out.quote_feed), actor: "auto" });
+  }
 
   if (String(out.run_days_measure).startsWith("error") || String(out.auto_apply).startsWith("error")) out.ok = false;
   return out;
