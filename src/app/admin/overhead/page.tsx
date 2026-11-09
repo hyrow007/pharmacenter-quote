@@ -8,7 +8,9 @@ import { getLangFromCookie } from "@/lib/i18n/server";
 import { overheadRowMonthly, type OverheadGroupMode } from "@/lib/bottleCosting";
 import AppHeader from "../../_components/AppHeader";
 import { loadCapacity, loadOverhead, type Band, type CapacityData, type Group, type OverheadData, type Proposal, type Resolved } from "./_lib/load";
-import { decide, measureNow } from "./actions";
+import { decide, measureNow, qboDecide, qboDisconnect, qboPullNow, qboSetReconciled } from "./actions";
+import { loadQbo, type QboData } from "./_lib/loadQbo";
+import { SUPPORT_EMAIL } from "./_lib/qbo";
 import { makeOT, type OT } from "./_lib/i18n";
 
 // /admin/overhead — the plant's overhead figures, read-only.
@@ -55,7 +57,7 @@ function monthlyOf(b: Band): number {
 export default async function OverheadAdminPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ cap?: string; d?: string }>;
+  searchParams?: Promise<{ cap?: string; d?: string; qbo?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createClient();
@@ -74,9 +76,10 @@ export default async function OverheadAdminPage({
 
   let data: OverheadData | null = null;
   let cap: CapacityData | null = null;
+  let qbo: QboData | null = null;
   let failure: string | null = null;
   try {
-    [data, cap] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase)]);
+    [data, cap, qbo] = await Promise.all([loadOverhead(supabase), loadCapacity(supabase), loadQbo(supabase, user.email!)]);
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
     console.error("overhead admin load failed:", failure);
@@ -102,7 +105,7 @@ export default async function OverheadAdminPage({
           <p className="lede" style={{ marginTop: 4 }}>{t("lede")}</p>
 
           {failure ? <Banner tone="bad">{t("loadFailed", { detail: failure })}</Banner> : null}
-          {data ? <Body data={data} cap={cap} outcome={sp} t={t} money={money} day={day} /> : null}
+          {data ? <Body data={data} cap={cap} qbo={qbo} outcome={sp} t={t} money={money} day={day} /> : null}
         </div>
       </main>
     </div>
@@ -114,16 +117,18 @@ type Fmt = { t: OT; money: (v: number) => string; day: (iso: string | null) => s
 function Body({
   data,
   cap,
+  qbo,
   outcome,
   t,
   money,
   day,
-}: { data: OverheadData; cap: CapacityData | null; outcome: { cap?: string; d?: string } } & Fmt) {
+}: { data: OverheadData; cap: CapacityData | null; qbo: QboData | null; outcome: { cap?: string; d?: string; qbo?: string } } & Fmt) {
   return (
     <>
       <Dates data={data} t={t} day={day} />
       <Attention data={data} t={t} money={money} day={day} />
       {cap ? <Capacity data={data} cap={cap} outcome={outcome} t={t} money={money} day={day} /> : null}
+      {qbo ? <QuickBooks q={qbo} outcome={outcome} t={t} money={money} day={day} /> : null}
       {GROUPS.map((g) => {
         const rows = data.quote.filter((r) => r.group === g.key);
         if (!rows.length) return null;
@@ -473,6 +478,219 @@ function ProposalCard({
         <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
       </form>
     </div>
+  );
+}
+
+function QuickBooks({ q, outcome, t, money, day }: { q: QboData; outcome: { qbo?: string; d?: string } } & Fmt) {
+  const d = outcome.d ?? "";
+  const banner = (() => {
+    switch (outcome.qbo) {
+      case "connected": return <Banner tone="good">{t("oConnected", { d })}</Banner>;
+      case "disconnected_here": return <Banner tone="good">{t("oDisconnected")}</Banner>;
+      case "pulled": return <Banner tone="good">{t("oPulled")}</Banner>;
+      case "approved": return <Banner tone="good">{t("oApproved", { d })}</Banner>;
+      case "rejected": return <Banner tone="good">{t("oRejected")}</Banner>;
+      case "reconciled": return <Banner tone="good">{t("oReconciled", { d })}</Banner>;
+      case "stale": return <Banner tone="warn">{t("oStale")}</Banner>;
+      case "csrf": return <Banner tone="bad">{t("oCsrf")}</Banner>;
+      case "denied": return <Banner tone="warn">{t("oDenied")}</Banner>;
+      case "wrong_company": return <Banner tone="bad">{t("oWrongCompany", { d })}</Banner>;
+      case "not_configured": return <Banner tone="warn">{t("oNotConfigured", { d })}</Banner>;
+      case "not_admin": return <Banner tone="bad">{t("oNotAdmin")}</Banner>;
+      case "error": return <Banner tone="bad">{t("oError", { d })}</Banner>;
+      default: return null;
+    }
+  })();
+  const st = q.status;
+  const sandbox = (st?.environment ?? q.env) === "sandbox";
+  const pending = q.proposals.find((p) => p.status === "pending") ?? null;
+  const earlier = q.proposals.filter((p) => p !== pending);
+  const when = (iso: string | null) => (iso ? day(iso.slice(0, 10)) : t("none"));
+
+  return (
+    <section id="quickbooks" style={{ margin: "0 0 26px" }}>
+      <h2 style={h2}>{t("qTitle")}</h2>
+      <p style={note}>{t("qLede")}</p>
+      {banner}
+      {!q.migrated ? <Banner tone="warn">{t("qNotMigrated")}</Banner> : null}
+      {q.missingConfig.length ? <Banner tone="warn">{t("qNotConfigured", { vars: q.missingConfig.join(", ") })}</Banner> : null}
+      {q.scheduleError ? <Banner tone="warn">{t("qSchedErr", { detail: q.scheduleError })}</Banner> : null}
+
+      <div style={{ border: "1px solid var(--stone, #e3dcc9)", borderRadius: 10, padding: "10px 14px", margin: "0 0 12px", background: "var(--paper, #fffdf8)" }}>
+        {sandbox && (st || !q.missingConfig.length) ? (
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", color: "#8a5a00", marginBottom: 6 }}>{t("qSandbox")}</div>
+        ) : null}
+        {st ? (
+          <>
+            <div style={{ fontWeight: 600 }}>
+              {st.status === "connected" ? t("qConnected", { company: st.company_name ?? st.realm_id }) : t("qNeedsReconnect")}
+              {!sandbox ? <span style={{ ...dim, marginLeft: 8 }}>· {t("qProduction")}</span> : null}
+            </div>
+            <div style={dim}>{t("qBy", { who: st.connected_by, when: when(st.connected_at) })}</div>
+            <div style={dim}>{t("qRefreshed", { when: when(st.last_refreshed_at) })}</div>
+            {st.refresh_expires_at ? <div style={dim}>{t("qExpires", { when: when(st.refresh_expires_at) })}</div> : null}
+          </>
+        ) : (
+          <div style={{ fontWeight: 600 }}>{t("qNotConnected")}</div>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          {q.migrated && !q.missingConfig.length ? (
+            <a className="button-primary" href="/api/overhead/quickbooks/connect">
+              {st ? t("qReconnect") : t("qConnect")}
+            </a>
+          ) : null}
+          {st ? (
+            <form action={qboDisconnect}>
+              <button type="submit" style={secondaryBtn}>{t("qDisconnect")}</button>
+            </form>
+          ) : null}
+          {st?.status === "connected" ? (
+            <form action={qboPullNow}>
+              <button type="submit" style={secondaryBtn}>{t("qPullNow")}</button>
+            </form>
+          ) : null}
+        </div>
+      </div>
+
+      {q.migrated ? (
+        <form action={qboSetReconciled} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", margin: "0 0 6px" }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }} htmlFor="qbo-rec">{t("qReconciled")}</label>
+          <input id="qbo-rec" type="month" name="month" defaultValue={q.reconciledThrough ?? ""} style={{ padding: "5px 8px", fontSize: 13 }} />
+          <button type="submit" style={secondaryBtn}>{t("qReconciledSave")}</button>
+        </form>
+      ) : null}
+      <p style={note}>
+        {t("qWindow", { from: day(q.nextWindow.from), to: day(q.nextWindow.to) })}. {t("qWindowNote")}
+      </p>
+
+      {pending ? (
+        <div style={{ border: "1px solid #8a5a00", borderRadius: 10, padding: 14, margin: "0 0 12px" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{t("qPending")}</div>
+          <div style={{ ...dim, marginBottom: 8 }}>
+            {pending.company_name ?? ""} · {pending.basis} · {day(pending.window_from)} – {day(pending.window_to)}
+            {pending.environment === "sandbox" ? ` · ${t("qSandbox")}` : ""}
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={head}>{t("colItem")}</th>
+                  <th style={head}>{t("colAccount")}</th>
+                  <th style={{ ...head, textAlign: "right" }}>{t("colCurrent")}</th>
+                  <th style={{ ...head, textAlign: "right" }}>{t("colProposed")}</th>
+                  <th style={{ ...head, textAlign: "right" }}>{t("colChange")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.lines.map((l) => {
+                  const diff = l.proposed_monthly - l.current_monthly;
+                  const pct = l.current_monthly ? `${((diff / l.current_monthly) * 100).toFixed(1)}%` : t("none");
+                  return (
+                    <tr key={l.item_key}>
+                      <td style={cell}>{l.label}</td>
+                      <td style={cell}>
+                        {l.qb_account}
+                        {l.qb_account_name ? <div style={dim}>{l.qb_account_name}</div> : null}
+                        {l.missing ? <div style={{ ...dim, color: "#9b2c2c" }}>{t("qMissing", { acct: l.qb_account })}</div> : null}
+                      </td>
+                      <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{money(l.current_monthly)}</td>
+                      <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", fontWeight: 600 }}>{l.missing ? t("none") : money(l.proposed_monthly)}</td>
+                      <td style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)", color: l.missing ? undefined : diff > 0 ? "#9b2c2c" : "#3f6b1f" }}>
+                        {l.missing ? t("none") : `${diff >= 0 ? "+" : ""}${money(diff)} (${pct})`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <details style={{ margin: "8px 0 10px" }}>
+            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("qMonths")}</summary>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ ...table, marginTop: 6, fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={head}>{t("colItem")}</th>
+                    {Object.keys(pending.lines[0]?.months ?? {}).map((m) => (
+                      <th key={m} style={{ ...head, textAlign: "right" }}>{m}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pending.lines.map((l) => (
+                    <tr key={l.item_key}>
+                      <td style={cell}>{l.label}</td>
+                      {Object.entries(l.months).map(([m, v]) => (
+                        <td key={m} style={{ ...cell, textAlign: "right", fontFamily: "var(--mono, monospace)" }}>{money(v)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {pending.environment === "sandbox" ? (
+            <p style={{ ...note, color: "#8a5a00" }}>{t("qSandboxNoApprove")}</p>
+          ) : null}
+          <form action={qboDecide} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input type="hidden" name="id" value={pending.id} />
+            <input name="note" placeholder={t("capNote")} maxLength={2000} style={{ flex: "1 1 220px", minWidth: 0, padding: "6px 8px", fontSize: 13 }} />
+            {pending.environment === "production" ? (
+              <button type="submit" name="verdict" value="approve" className="button-primary">{t("qApproveAll")}</button>
+            ) : null}
+            <button type="submit" name="verdict" value="reject" style={secondaryBtn}>{t("capReject")}</button>
+          </form>
+        </div>
+      ) : q.migrated ? (
+        <p style={note}>{t("qNoPending")}</p>
+      ) : null}
+
+      {earlier.length ? (
+        <details style={{ marginBottom: 8 }}>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("qHistory")} ({earlier.length})</summary>
+          <table style={{ ...table, marginTop: 6 }}>
+            <tbody>
+              {earlier.map((p) => (
+                <tr key={p.id}>
+                  <td style={cell}>{t(p.status === "approved" ? "stApproved" : p.status === "rejected" ? "stRejected" : p.status === "superseded" ? "stSuperseded" : "stPending")}</td>
+                  <td style={cell}>{day(p.window_from)} – {day(p.window_to)}{p.environment === "sandbox" ? " · sandbox" : ""}</td>
+                  <td style={cell}>
+                    {t("capBy", { trigger: t(p.trigger === "schedule" ? "trSchedule" : "trButton"), who: p.decided_by ?? p.created_by, when: when(p.decided_at ?? p.created_at) })}
+                    {p.decision_note ? <div style={dim}>{p.decision_note}</div> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
+
+      {q.log.length ? (
+        <details style={{ marginBottom: 8 }}>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t("qLog")}</summary>
+          <table style={{ ...table, marginTop: 6, fontSize: 12 }}>
+            <tbody>
+              {q.log.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ ...cell, whiteSpace: "nowrap" }}>{new Date(r.at).toLocaleString("en-US", { timeZone: "America/New_York" })}</td>
+                  <td style={{ ...cell, color: r.level === "error" ? "#9b2c2c" : undefined }}>{r.action}{r.http_status ? ` · ${r.http_status}` : ""}</td>
+                  <td style={cell}>
+                    {r.message ?? ""}
+                    {r.intuit_tid ? <div style={dim}>{t("qTid", { tid: r.intuit_tid })}</div> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
+
+      <p style={note}>
+        {t("qSupport", { email: SUPPORT_EMAIL }).split(SUPPORT_EMAIL)[0]}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+        {t("qSupport", { email: SUPPORT_EMAIL }).split(SUPPORT_EMAIL)[1]}
+      </p>
+    </section>
   );
 }
 
