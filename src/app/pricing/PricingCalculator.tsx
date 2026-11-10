@@ -692,8 +692,9 @@ export function buildQuoteHtml(args: {
   /* Version tab bar -------------------------------------------------
      Excel-style strip above the quote sheet. Each chip is one saved
      version. The active chip is highlighted; the + chip adds a fresh
-     clone of the current tab; double-click a chip to rename; the small
-     x deletes (with confirm). Hidden in print. */
+     clone of the current tab; the pencil on the active chip renames it
+     (double-click renames any chip); the small x deletes (with confirm).
+     Hidden in print. */
   .q-tabs {
     position: sticky; top: 0; z-index: 80;
     background: var(--cream-soft);
@@ -732,6 +733,17 @@ export function buildQuoteHtml(args: {
     opacity: 0.55;
   }
   .q-tabs__chip .q-tabs__x:hover { opacity: 1; }
+  /* Rename affordance. Renaming has always worked by double-clicking a
+     chip, and nobody found it -- a title tooltip is not an affordance. It
+     shows on the ACTIVE chip only, so the strip stays readable when there
+     are six versions; double-click still renames any of them. */
+  .q-tabs__chip .q-tabs__pen {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px;
+    font-size: 11px; line-height: 1;
+    opacity: 0.65;
+  }
+  .q-tabs__chip .q-tabs__pen:hover { opacity: 1; }
   .q-tabs__add {
     background: transparent; border: 1px dashed var(--line);
     color: var(--teal-900, #0f4a56);
@@ -1177,6 +1189,17 @@ Davie, FL 33331
             var label = document.createElement("span");
             label.textContent = v.label;
             chip.appendChild(label);
+            if (v.id === activeId) {
+              var pen = document.createElement("span");
+              pen.className = "q-tabs__pen";
+              pen.textContent = "✎";
+              pen.title = "Rename this version";
+              pen.addEventListener("click", function (e) {
+                e.stopPropagation();
+                renameVersion(v.id);
+              });
+              chip.appendChild(pen);
+            }
             if (versions.length > 1) {
               var x = document.createElement("span");
               x.className = "q-tabs__x";
