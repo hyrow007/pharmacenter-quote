@@ -14,7 +14,7 @@ import { makeT } from "@/lib/i18n/dict";
 // the client board which owns search / sort / pagination / include-
 // closed toggle / print.
 
-export const metadata = { title: "Meetings · Open Sales Orders" };
+export const metadata = { title: "Sales Orders" };
 
 const COLS =
   "fb_so_id, so_number, status_id, status_name, is_open, customer_name, " +
