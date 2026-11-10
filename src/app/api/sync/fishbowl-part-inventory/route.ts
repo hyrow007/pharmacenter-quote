@@ -52,6 +52,10 @@ type PartInventoryPayload = {
   qty_drop_ship?: number | null;
   qty_on_order?: number | null;
   qty_available?: number | null;
+  // partcost.avgCost, RAW, denominated in avg_cost_uom. The agent sends it
+  // unconverted on purpose; see the per-each note above the conversion below.
+  avg_cost?: number | null;
+  avg_cost_uom?: string | null;
   by_location_group?: LocationGroupPayload[];
 };
 
@@ -85,6 +89,34 @@ function isPart(v: unknown): v is PartInventoryPayload {
 // and the board renders them differently.
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+// How many eaches are in one purchase unit. Fishbowl prices bulk per
+// thousand ("un") and most everything else per each. This is the same table
+// /api/sync/packaging-components keeps, deliberately duplicated rather than
+// shared: these two routes receive from the same agent but answer to
+// different tables, and a single edit that silently changed both is a worse
+// failure than two tables that have to be changed together.
+const EACHES_PER_PURCHASE_UOM: Record<string, number> = {
+  un: 1000,
+  ea: 1,
+  each: 1,
+  ct: 1,
+};
+
+// A UOM we cannot decode nulls the per-each cost. It does NOT fall back to
+// 1:1 -- that is how a $22.50-per-thousand bulk becomes a $22.50-per-dose
+// one, and the costing model treats a null as unresolved and blanks the
+// line, which is the outcome we want. kg, mm, lbs and hr all land here and
+// all should.
+function perEach(
+  cost: number | null,
+  uom: string | null | undefined,
+): number | null {
+  if (cost === null || !uom) return null;
+  const factor = EACHES_PER_PURCHASE_UOM[uom.trim().toLowerCase()];
+  if (!factor) return null;
+  return cost / factor;
 }
 
 export async function POST(request: Request) {
@@ -193,6 +225,16 @@ export async function POST(request: Request) {
       qty_drop_ship: num(raw.qty_drop_ship),
       qty_on_order: num(raw.qty_on_order),
       qty_available: num(raw.qty_available),
+      avg_cost: num(raw.avg_cost),
+      avg_cost_uom: raw.avg_cost_uom ?? raw.uom ?? null,
+      // Converted here, once, so no consumer has to know the UOM table. No
+      // owner rule is applied: a CA- part's $0 is a fact about free issue,
+      // not about Fishbowl's ledger, and belongs to whoever is building a
+      // quote -- which is where it already lives.
+      avg_cost_per_each: perEach(
+        num(raw.avg_cost),
+        raw.avg_cost_uom ?? raw.uom ?? null,
+      ),
       by_location_group: Array.isArray(raw.by_location_group)
         ? raw.by_location_group
         : [],

@@ -42,6 +42,113 @@ const SLOTS = new Set([
 const categoryForSlot = (slot: string) =>
   slot === "inner_pack" ? "master_box" : slot;
 
+// ---------------------------------------------------------------------------
+// The part-inventory fallback.
+//
+// Two tables answer "what can I put on this line", and until now the picker
+// only read one of each pair: `products` for bulk, `packaging_components_costed`
+// for everything else. A Fishbowl code that exists only as a PART appears in
+// neither, however much stock sits against it — PC-BK-0143 VITAMIN C 1000MG
+// TABLET, 300 on hand, invisible to a rep who could see it in Fishbowl and
+// could not pick it in a quote.
+//
+// `fishbowl_part_inventory` already mirrors every part carrying an inventory
+// row (no WHERE clause on qtyinventorytotals), and since the avg-cost columns
+// landed it carries a price too. So it is the backstop: searched second,
+// ranked below the costed tables, and deduped against them so a part that
+// exists in both is shown once, from the richer source.
+//
+// It is a FALLBACK, never a replacement. The costed view knows things this
+// table does not — the admin cost override, last-order price, the effective
+// units-per-purchase-unit factor. A row from here is the plain Fishbowl
+// ledger and says so through its cost_status.
+// ---------------------------------------------------------------------------
+
+type MirrorRow = {
+  part_num: string;
+  description: string | null;
+  uom: string | null;
+  avg_cost: number | null;
+  avg_cost_per_each: number | null;
+  qty_on_hand: number | null;
+  qty_available: number | null;
+};
+
+async function searchPartMirror(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  words: string[],
+  infixes: string[],
+  exclude: Set<string>,
+) {
+  // With no search term this would return the whole mirror ranked by nothing,
+  // which is noise in a picker that already has a populated first page.
+  if (!words.length) return [];
+
+  let mq = supabase
+    .from("fishbowl_part_inventory")
+    .select(
+      "part_num, description, uom, avg_cost, avg_cost_per_each, qty_on_hand, qty_available",
+    );
+
+  // Two .or() calls AND together in PostgREST, which is exactly the shape
+  // wanted: (one of these infixes) AND (one of these words).
+  mq = mq.or(infixes.map((i) => `part_num.ilike.%${i}%`).join(","));
+  mq = mq.or(
+    words
+      .flatMap((w) => [`part_num.ilike.%${w}%`, `description.ilike.%${w}%`])
+      .join(","),
+  );
+
+  const { data, error } = await mq.limit(200);
+  // A fallback that fails must not take the primary results down with it.
+  // The picker is still useful without it; an error page is useful to nobody.
+  if (error) {
+    console.error("part mirror search failed:", error.message);
+    return [];
+  }
+
+  const rank = (r: MirrorRow) => {
+    const hay = `${r.part_num} ${r.description ?? ""}`.toLowerCase();
+    return -words.filter((w) => hay.includes(w.toLowerCase())).length * 50;
+  };
+
+  return ((data ?? []) as MirrorRow[])
+    .filter((r) => !exclude.has(r.part_num.trim().toUpperCase()))
+    .sort((a, b) => rank(a) - rank(b) || a.part_num.localeCompare(b.part_num))
+    .slice(0, 25)
+    .map((r) => {
+      const customer = r.part_num.trim().toUpperCase().startsWith("CA");
+      // uom_unresolved, not no_cost, when Fishbowl HAS a price we could not
+      // convert: the distinction tells the rep whether to go find a number or
+      // to fix a UOM, and the boards already render the two differently.
+      const status = customer
+        ? "customer_asset"
+        : r.avg_cost_per_each !== null
+          ? "ok"
+          : r.avg_cost !== null
+            ? "uom_unresolved"
+            : "no_cost";
+      return {
+        fp_code: r.part_num.trim(),
+        name: r.description || r.part_num.trim(),
+        category: null,
+        owner: customer ? "customer" : "pharmacenter",
+        effective_cost_per_unit: customer ? 0 : r.avg_cost_per_each,
+        cost_status: status,
+        last_order_cost_per_unit: null,
+        inventory_cost_per_purchase_unit: customer ? 0 : r.avg_cost,
+        last_order_cost_per_purchase_unit: null,
+        inventory_cost_uom: r.uom,
+        // Not rendered today. Carried because the question a rep asks the
+        // moment a part appears from the inventory mirror is "is any of it
+        // actually free", and the answer is already in hand here.
+        qty_on_hand: r.qty_on_hand,
+        qty_available: r.qty_available,
+        from_part_inventory: true,
+      };
+    });
+}
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const {
@@ -255,7 +362,16 @@ export async function GET(request: Request) {
           inventory_cost_uom: r.default_unit,
         };
       });
-    return NextResponse.json({ ok: true, rows: bkRows });
+    // Bulk codes that exist only as Fishbowl parts. The products table is the
+    // better source when it has the code — it carries the active flag and the
+    // product-costs sync — so those win and these fill the gap behind them.
+    const bulkMirror = await searchPartMirror(
+      supabase,
+      bulkWords,
+      ["-BK-"],
+      new Set(bkRows.map((r) => r.fp_code.trim().toUpperCase())),
+    );
+    return NextResponse.json({ ok: true, rows: [...bkRows, ...bulkMirror] });
   }
 
   let query = supabase
@@ -379,5 +495,15 @@ export async function GET(request: Request) {
       inventory_cost_uom: r.inventory_cost_uom,
     }));
 
-  return NextResponse.json({ ok: true, rows });
+  // Packaging parts missing from the costed view. Scoped to the three
+  // packaging infixes the sync itself uses, so a raw material or a bulk code
+  // cannot wander into a closure picker.
+  const mirror = await searchPartMirror(
+    supabase,
+    words,
+    ["-PK-", "-LL-", "-UC-"],
+    new Set(rows.map((r) => r.fp_code.trim().toUpperCase())),
+  );
+
+  return NextResponse.json({ ok: true, rows: [...rows, ...mirror] });
 }
