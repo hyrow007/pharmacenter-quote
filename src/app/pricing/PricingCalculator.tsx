@@ -836,7 +836,7 @@ Davie, FL 33331
         <dl class="q-title__meta">
           <dt>Prepared Date</dt><dd contenteditable="true">${htmlEscape(fmtDate(today))}</dd>
           <dt>Valid Until</dt><dd contenteditable="true">${htmlEscape(fmtDate(validUntil))}</dd>
-          <dt>Quote&nbsp;#</dt><dd contenteditable="true">${htmlEscape(quoteNumber)}</dd>
+          <dt>Quote&nbsp;#</dt><dd class="q-quote-no" contenteditable="true">${htmlEscape(quoteNumber)}</dd>
         </dl>
       </section>
 
@@ -1038,6 +1038,11 @@ Davie, FL 33331
 
       var saveEnabled = ${args.saveEnabled ? "true" : "false"};
       var issuingNew = ${issuingNewJson};
+      // The workflow's quote number ("Q0062") and the rest of the document
+      // title. The title is what the browser offers as the PDF filename, so
+      // it has to follow the active version, not the sheet it was built with.
+      var quoteBase = ${JSON.stringify(quoteNumber)};
+      var quoteTitleTail = ${JSON.stringify(" \u00b7 " + (args.customerName ?? "PharmaCenter"))};
       var autoSaveOnOpen = ${args.autoSaveOnOpen ? "true" : "false"};
       var versions = [];
       var activeId = null;
@@ -1126,6 +1131,7 @@ Davie, FL 33331
         sheetEl.innerHTML = next.sheetHtml;
         bindSheetHandlers();
         renderChips();
+        syncDocTitle();
         // Scroll to top so the user sees the freshly-loaded version.
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1136,6 +1142,72 @@ Davie, FL 33331
         var clone = { id: newId(), label: nextLabel, sheetHtml: src ? src.sheetHtml : (sheetEl ? sheetEl.innerHTML : ""), savedAt: "" };
         versions.push(clone);
         switchTo(clone.id);
+        // The clone carried the source version's number over with it.
+        renumberVersions();
+      }
+      // ---- Issued numbers -------------------------------------------
+      // Every version carries its own: Q0062-1, Q0062-2, ... The bare
+      // workflow number is never shown on a sheet, because a quote that
+      // went out the door should say which version it was.
+      //
+      // Numbering follows POSITION, so deleting a version renumbers the
+      // ones after it. That keeps the strip honest about what is in front
+      // of you. If a number ever has to survive being sent to a customer,
+      // this is the line to change -- issue max+1 at creation and leave it
+      // alone instead.
+      function numberingOn() {
+        return !!quoteBase && quoteBase !== "\u2014";
+      }
+      // Ours to overwrite: the bare number, or the bare number plus a
+      // dash and digits. Anything else somebody typed into the field by
+      // hand, and a typed quote number outranks a generated one.
+      function isIssuedNumber(text) {
+        var t = String(text == null ? "" : text).trim();
+        if (t === quoteBase) return true;
+        var prefix = quoteBase + "-";
+        if (t.indexOf(prefix) !== 0) return false;
+        var tail = t.slice(prefix.length);
+        if (tail.length === 0) return false;
+        for (var i = 0; i < tail.length; i++) {
+          if (tail[i] < "0" || tail[i] > "9") return false;
+        }
+        return true;
+      }
+      function stampSheetHtml(html, n) {
+        var box = document.createElement("div");
+        box.innerHTML = html;
+        var cell = box.querySelector(".q-quote-no");
+        if (!cell || !isIssuedNumber(cell.textContent)) return html;
+        cell.textContent = quoteBase + "-" + n;
+        return box.innerHTML;
+      }
+      function syncDocTitle() {
+        // Read the LIVE sheet, not the stored copy. The number is
+        // contenteditable, and someone who types one and prints straight
+        // away should get that number on the file, not the one from the
+        // last snapshot.
+        var shown = quoteBase;
+        var cell = sheetEl ? sheetEl.querySelector(".q-quote-no") : null;
+        var txt = cell ? String(cell.textContent || "").trim() : "";
+        if (txt) shown = txt;
+        document.title = "Quote " + shown + quoteTitleTail;
+      }
+      function renumberVersions() {
+        if (numberingOn()) {
+          for (var i = 0; i < versions.length; i++) {
+            versions[i].sheetHtml = stampSheetHtml(versions[i].sheetHtml, i + 1);
+          }
+          // The visible sheet is a copy of the active version, so it needs
+          // the same treatment or the page and the saved HTML disagree.
+          var idx = activeIndex();
+          if (idx >= 0 && sheetEl) {
+            var live = sheetEl.querySelector(".q-quote-no");
+            if (live && isIssuedNumber(live.textContent)) {
+              live.textContent = quoteBase + "-" + (idx + 1);
+            }
+          }
+        }
+        syncDocTitle();
       }
       function renameVersion(id) {
         for (var i = 0; i < versions.length; i++) {
@@ -1173,6 +1245,8 @@ Davie, FL 33331
             bindSheetHandlers();
           }
         }
+        // Positions shifted, so the numbers after the gap are now wrong.
+        renumberVersions();
         renderChips();
       }
       function renderChips() {
@@ -1215,9 +1289,16 @@ Davie, FL 33331
           })(versions[i]);
         }
       }
+      renumberVersions();
       renderChips();
 
       if (tabsAddBtn) tabsAddBtn.addEventListener("click", addVersion);
+
+      // The browser names the PDF after document.title. The Print button
+      // lives in the other script block and cannot reach syncDocTitle, and
+      // the number is editable anyway, so catch it at the one moment that
+      // is guaranteed to come before the file is named.
+      window.addEventListener("beforeprint", syncDocTitle);
 
       // Save → postMessage to the opener (the calculator window), which
       // owns the API/cookie context and persists the array on the
