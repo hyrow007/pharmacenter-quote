@@ -31,11 +31,15 @@ function rateBody(account: string, o: { shipper?: object; recipient?: object; re
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await shipGate();
   if (!g.ok || !g.admin) return NextResponse.json({ ok: false, error: "admin_only" }, { status: 403 });
   if (LIVE) return NextResponse.json({ ok: false, error: "sandbox_only" }, { status: 400 });
-  const account = process.env.FEDEX_ACCOUNT_NUMBER ?? "";
+  // ?account= tries another SANDBOX test account with the same test keys
+  // (FedEx support, 2026-11-12: 740561073 is Ground-enabled; newer test
+  // accounts like 740980114 are not rated for Ground).
+  const asked = new URL(req.url).searchParams.get("account");
+  const account = asked && /^\d{9}$/.test(asked) ? asked : (process.env.FEDEX_ACCOUNT_NUMBER ?? "");
 
   const variants: Array<[string, object]> = [
     ["A all services (as the app asks)", {}],
@@ -70,5 +74,5 @@ export async function GET() {
       alerts: (Array.isArray(out.alerts) ? out.alerts : []).map((a: any) => `${a.code ?? ""} ${a.message ?? ""}`.trim()),
     });
   }
-  return NextResponse.json({ ok: true, environment: "sandbox", accountLast4: accountLast4(), results }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ ok: true, environment: "sandbox", accountLast4: account.slice(-4) || accountLast4(), results }, { headers: { "cache-control": "no-store" } });
 }
