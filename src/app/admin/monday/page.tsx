@@ -6,7 +6,7 @@ import { isAdmin as checkIsAdmin } from "@/lib/workflows";
 import { HUB_HOSTS } from "@/lib/hub-hosts";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import AppHeader from "../../_components/AppHeader";
-import { loadBoardIds, loadBoards, loadLinks, loadMirror } from "./_lib/load";
+import { loadBoardIds, loadBoards, loadLinks, loadMirror, loadRunLog } from "./_lib/load";
 import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./_lib/entity";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
 import { changingWrites, mondayWrites, plan, type Action } from "./_lib/plan";
@@ -62,14 +62,18 @@ export default async function MondayReconcilePage({
     if (!ids) {
       needsBoards = true;
     } else {
-      const [mirror, boards] = await Promise.all([loadMirror(supabase, entity), loadBoards(ids)]);
+      const [mirror, boards, runLog] = await Promise.all([
+        loadMirror(supabase, entity),
+        loadBoards(ids),
+        loadRunLog(supabase, entity),
+      ]);
       let links = new Map<string, string>();
       try {
         links = await loadLinks(supabase, entity);
       } catch {
         linksOk = false; // migration not applied yet
       }
-      report = reconcile(mirror, boards.items, links);
+      report = reconcile(mirror, boards.items, links, runLog);
       actions = plan(report, new Set(links.keys()), {
         movedStatus: spec.movedStatus,
         maxCreates: MAX_CREATES_PER_RUN,

@@ -1,5 +1,5 @@
 import "server-only";
-import { gql, loadBoardIds, loadBoards, loadLinks, loadMirror, mondayToken, type BoardMeta, type Column } from "./load";
+import { gql, loadBoardIds, loadBoards, loadLinks, loadMirror, loadRunLog, mondayToken, type BoardMeta, type Column } from "./load";
 import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./entity";
 import { reconcile, type BoardItem, type BoardKey, type Report } from "./reconcile";
 import { changingWrites, plan, type Action, type Values } from "./plan";
@@ -149,7 +149,7 @@ export async function runPush(opts: {
   const ids = await loadBoardIds(db, entity);
   if (!ids) return null;
 
-  const [mirror, boards] = await Promise.all([loadMirror(db, entity), loadBoards(ids)]);
+  const [mirror, boards, runLog] = await Promise.all([loadMirror(db, entity), loadBoards(ids), loadRunLog(db, entity)]);
   let links = new Map<string, string>();
   let refused: string | null = null;
   try {
@@ -158,7 +158,7 @@ export async function runPush(opts: {
     refused = `link table unavailable (${e instanceof Error ? e.message : e})`;
   }
 
-  const report = reconcile(mirror, boards.items, links);
+  const report = reconcile(mirror, boards.items, links, runLog);
   const actions = plan(report, new Set(links.keys()), {
     movedStatus: spec.movedStatus,
     maxCreates: MAX_CREATES_PER_RUN,

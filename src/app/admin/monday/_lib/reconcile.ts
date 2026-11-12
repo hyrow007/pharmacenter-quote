@@ -167,9 +167,11 @@ export function reconcile(
   mirror: MirrorRow[],
   items: BoardItem[],
   links: Map<string, string> = new Map(),
+  runLog: (string | null)[] = [],
 ): Report {
   const run = latestRun(mirror);
   const inLatest = (r: MirrorRow) => run.id !== null && r.sync_run_id === run.id;
+  const previousAt = previousSyncAt(runLog, run.at);
 
   const exact = index(mirror, (r) => r.so_number.trim());
   const byFormat = index(mirror, (r) => formatKey(r.so_number));
@@ -246,7 +248,7 @@ export function reconcile(
 
     for (const h of onOpen) {
       if (fulfilled) report.fulfilledOnOpen.push(row(r, h));
-      else if (!latest && confirmedClosed(r, run.at)) report.closedOnOpen.push(row(r, h));
+      else if (!latest && confirmedClosed(r, run.at, previousAt)) report.closedOnOpen.push(row(r, h));
       // Still sent, but closed: the PO sync also sends any PO an open sales
       // order names, whatever its status, so a cancelled PO can arrive here.
       else if (latest && r.status_id !== null && TERMINAL.has(r.status_id)) report.closedOnOpen.push(row(r, h));
@@ -291,17 +293,48 @@ export function reconcile(
 //     Finalize is the last call of a COMPLETE run, so this cannot come from a
 //     partial one.
 //   - Anything else (estimates): finalize never touches them (its guard is
-//     is_open = true), so use the ecosystem's one staleness rule instead: not
-//     refreshed for 26h past the latest run. A cancelled estimate leaves the
-//     board a day later; a partial run can never archive one.
+//     is_open = true). So require the order to be missing from TWO syncs in a
+//     row: the latest, and the one before it. One sync dying halfway is
+//     possible; two in a row with the same order missing is not a realistic
+//     failure. previousRunAt comes from monday_push_runs.mirror_as_of, which
+//     records every sync the push has seen.
+//     Until 2026-11-12 this was "not refreshed for 26h", which kept a
+//     cancelled estimate (14986) on the board for a day on a weekday with a
+//     sync every two hours. 26h remains the fallback when there is no record
+//     of the previous sync.
 const CLOSE_CONFIRM_MS = 26 * 3600 * 1000;
+// Rows of one sync are written over a few minutes; anything this much older
+// than that sync's newest row was not part of it.
+const RUN_SPREAD_MS = 30 * 60 * 1000;
 
-export function confirmedClosed(r: MirrorRow, latestRunAt: string | null): boolean {
+export function confirmedClosed(
+  r: MirrorRow,
+  latestRunAt: string | null,
+  previousRunAt: string | null = null,
+): boolean {
   if (r.status_id === 20 || r.status_id === 25) return r.is_open === false;
   const seen = r.synced_at ? Date.parse(r.synced_at) : NaN;
   const latest = latestRunAt ? Date.parse(latestRunAt) : NaN;
   if (!Number.isFinite(seen) || !Number.isFinite(latest)) return false;
+  const previous = previousRunAt ? Date.parse(previousRunAt) : NaN;
+  if (Number.isFinite(previous) && previous < latest - RUN_SPREAD_MS) {
+    return seen < previous - RUN_SPREAD_MS;
+  }
   return latest - seen > CLOSE_CONFIRM_MS;
+}
+
+/**
+ * The sync before the latest one, from the run log's mirror_as_of values
+ * (newest first, repeats allowed: several pushes can see one sync).
+ */
+export function previousSyncAt(mirrorAsOf: (string | null)[], latestRunAt: string | null): string | null {
+  const latest = latestRunAt ? Date.parse(latestRunAt) : NaN;
+  if (!Number.isFinite(latest)) return null;
+  for (const v of mirrorAsOf) {
+    const t = v ? Date.parse(v) : NaN;
+    if (Number.isFinite(t) && t < latest - RUN_SPREAD_MS) return v;
+  }
+  return null;
 }
 
 function row(r: MirrorRow, h: { item: BoardItem; type: MatchType }): Row {

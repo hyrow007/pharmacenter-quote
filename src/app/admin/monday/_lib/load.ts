@@ -245,6 +245,18 @@ export async function loadBoards(
   return { items: [...open.items, ...fulfilled.items], meta: { open: open.meta, fulfilled: fulfilled.meta } };
 }
 
+/** mirror_as_of of the entity's recent push runs, newest first. */
+export async function loadRunLog(supabase: AnySupabase, entity: EntityKey = "so"): Promise<(string | null)[]> {
+  const { data, error } = await supabase
+    .from("monday_push_runs")
+    .select("mirror_as_of")
+    .eq("entity", entity)
+    .order("started_at", { ascending: false })
+    .limit(50);
+  if (error) return []; // falls back to the 26h rule
+  return ((data ?? []) as { mirror_as_of: string | null }[]).map((r) => r.mirror_as_of);
+}
+
 /** The entity's link table, as Monday item id -> order number. */
 export async function loadLinks(supabase: AnySupabase, entity: EntityKey = "so"): Promise<Map<string, string>> {
   const spec = ENTITIES[entity];
