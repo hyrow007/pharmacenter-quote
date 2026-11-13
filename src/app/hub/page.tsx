@@ -218,11 +218,10 @@ const TOOLS: Tool[] = [
   },
   {
     key: "shipping",
-    // Host not provisioned yet; set it alongside dropping comingSoon.
+    // Live on real FedEx credentials since 2026-11-13.
     href: "https://ship.pharmacenter.app/",
     titleKey: "hubShippingName",
     descKey: "hubShippingDesc",
-    comingSoon: true,
     // One address line over a barcode: a label, not a document. It has to sit
     // near the Packing Lists box and the Dielines sachet without reading as
     // either of them.
