@@ -4507,22 +4507,12 @@ export default function PricingCalculator({
                   autoComplete="off"
                 />
               </div>
-              {/* Domestic v1 auto-calc hint (task #339). Shows the current
-                  zone-based rate breakdown so the rep can see how the
-                  suggestion was derived. Overriding the freight silences
-                  the auto-fill on subsequent metadata edits. */}
-              {shippingOrigin === "usa" && domesticSuggestion ? (
-                <span
-                  style={{
-                    marginTop: 4,
-                    fontSize: 11,
-                    color: "var(--ink-3, #6b7280)",
-                  }}
-                >
-                  Auto: {num(shipmentWeightLb).toLocaleString()} lb × ${domesticSuggestion.ratePerLb.toFixed(2)}/lb (
-                  {domesticMode.toUpperCase()} {domesticSuggestion.zone}) = ${domesticSuggestion.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              ) : null}
+              {/* The task #339 rate breakdown used to hang here, in flow
+                  inside this cell. At two lines it made the Freight cell
+                  the tallest in the row, and align-items:end then dropped
+                  Lab testing, Other costs and Handling a line to meet its
+                  bottom edge. It reads under the card now, with the weight
+                  derivation it depends on. */}
             </label>
           ) : null}
           {visibility.insurance ? (
@@ -4693,6 +4683,20 @@ export default function PricingCalculator({
             {" = "}
             {suggestedWeight.totalLb.toLocaleString()} lb
             {weightIsAuto ? " — type a weight to override." : "."}
+          </p>
+        ) : null}
+        {shippingOrigin === "usa" && domesticSuggestion ? (
+          <p className="pricing__hint">
+            Freight: {num(shipmentWeightLb).toLocaleString()} lb × $
+            {domesticSuggestion.ratePerLb.toFixed(2)}/lb ({domesticMode.toUpperCase()}{" "}
+            {domesticSuggestion.zone}) = $
+            {domesticSuggestion.total.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+            {freight === lastAutoFilledFreightRef.current
+              ? " — type a freight total to override."
+              : " (overridden above)."}
           </p>
         ) : null}
         <p className="pricing__hint">
