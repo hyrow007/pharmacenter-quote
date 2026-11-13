@@ -38,6 +38,80 @@ const ZONE_LABELS: Record<string, string> = {
   midwest: "Midwest",
   southeast: "Southeast",
 };
+const LB_PER_KG = 2.20462;
+// A 48x40 GMA wooden pallet, dry. Freight is billed on gross weight, so
+// leaving the pallets out understates every load: two pallets is 74 lb,
+// and on an LTL southeast lane at $0.55/lb that is $40 of freight the
+// quote was absorbing. Named in the derivation line under the card rather
+// than buried, because a plastic pallet is nearer 50 lb and this number
+// should be arguable.
+const PALLET_TARE_LB = 37;
+// The assumed piece weight when nobody has typed one. A flat 1 g, by
+// operator decision 2026-11-13, rather than the dosage-form median.
+// DEFAULT_UNIT_WEIGHT_G still backs the international delivery tier; it
+// just no longer guesses on this form, where the rep is standing right
+// there and can say. A gummy is 3.0 g, so a gummy load defaults to a
+// third of its real weight until someone types the number -- the field is
+// the fix for that, not the default.
+const ASSUMED_PIECE_WEIGHT_G = 1;
+
+// Shipment weight from the tab's own figures. Module-level and pure so the
+// live calculation and the did-we-write-this check below cannot drift:
+// they are the same function, not two copies of a formula.
+function deriveShipmentWeight(
+  quantity: string,
+  pieceWeightG: string,
+  palletCount: string,
+) {
+  const q = num(quantity);
+  if (!(q > 0)) return null;
+  const typed = num(pieceWeightG);
+  const g = typed > 0 ? typed : ASSUMED_PIECE_WEIGHT_G;
+  // quantity x unitWeightG is kilograms: a bulk unit is 1,000 eaches and
+  // the weight is grams per each, so the thousands cancel.
+  const productLb = q * g * LB_PER_KG;
+  const pallets = num(palletCount);
+  const palletLb = pallets > 0 ? pallets * PALLET_TARE_LB : 0;
+  return {
+    productLb,
+    pallets,
+    palletLb,
+    totalLb: Math.round((productLb + palletLb) * 100) / 100,
+  };
+}
+
+// Was the figure saved on this tab one WE wrote, or one the rep typed?
+//
+// Both auto-fills back off as soon as the box holds something that is not
+// our last suggestion, and the ref holding that suggestion is empty on
+// every fresh mount. So a saved freight of "1440.00" matched neither
+// "blank" nor "ours", the effect bailed, and the field froze: changing the
+// origin state moved the derivation line under the card and left the
+// Freight box alone. Q0064.
+//
+// Nothing extra is persisted to tell them apart. Re-derive from the tab's
+// own saved metadata instead: if the stored figure is exactly what we
+// would have produced from it, we produced it. A rep's own number will not
+// coincide to the cent, and if it ever does, we would only overwrite it
+// with the identical value.
+function seedWeightRef(t: TabState | undefined): string {
+  if (!t) return "";
+  const derived = deriveShipmentWeight(t.quantity, t.pieceWeightG, t.palletCount);
+  if (!derived) return "";
+  return String(derived.totalLb) === t.shipmentWeightLb ? t.shipmentWeightLb : "";
+}
+
+function seedFreightRef(t: TabState | undefined): string {
+  if (!t) return "";
+  const suggestion = suggestDomesticFreight(
+    t.domesticMode,
+    t.originState,
+    num(t.shipmentWeightLb),
+  );
+  if (!suggestion) return "";
+  return suggestion.total.toFixed(2) === t.freight ? t.freight : "";
+}
+
 const STATES_BY_ZONE = Object.entries(ZONE_LABELS).map(([zone, label]) => ({
   zone,
   label,
@@ -2382,7 +2456,7 @@ export default function PricingCalculator({
     if (shippingOrigin !== "usa") return null;
     return suggestDomesticFreight(domesticMode, originState, num(shipmentWeightLb));
   }, [shippingOrigin, domesticMode, originState, shipmentWeightLb]);
-  const lastAutoFilledFreightRef = useRef<string>("");
+  const lastAutoFilledFreightRef = useRef<string>(seedFreightRef(tabs[0]));
   useEffect(() => {
     if (!domesticSuggestion) return;
     const suggestionStr = String(domesticSuggestion.total.toFixed(2));
@@ -2406,14 +2480,14 @@ export default function PricingCalculator({
   // Worth knowing what it costs: a gummy is 3.0 g, so a gummy load
   // defaults to a third of its real weight until someone types the
   // number. The field is the fix for that, not the default.
-  const formUnitWeightG = 1;
+  const formUnitWeightG = ASSUMED_PIECE_WEIGHT_G;
   // What the weight maths actually uses. A typed piece weight wins over the
-  // dosage-form median, and it feeds the international delivery tier as
-  // well as the domestic pounds -- it is one physical fact, not two.
+  // assumption, and it feeds the international delivery tier as well as the
+  // domestic pounds -- it is one physical fact, not two.
   const unitWeightG = useMemo(() => {
     const typed = num(pieceWeightG);
-    return typed > 0 ? typed : formUnitWeightG;
-  }, [pieceWeightG, formUnitWeightG]);
+    return typed > 0 ? typed : ASSUMED_PIECE_WEIGHT_G;
+  }, [pieceWeightG]);
   const pieceWeightIsTyped = num(pieceWeightG) > 0;
 
   // Shipment weight, derived the same way the international delivery tier
@@ -2425,28 +2499,10 @@ export default function PricingCalculator({
   // blank weight makes suggestDomesticFreight() return null, which is why
   // a USA quote could sit at $0.00 freight with every other field filled
   // in and nothing saying what was missing.
-  const LB_PER_KG = 2.20462;
-  // A 48x40 GMA wooden pallet, dry. Freight is billed on gross weight, so
-  // leaving the pallets out understates every load: two pallets is 74 lb,
-  // and on an LTL southeast lane at $0.55/lb that is $40 of freight the
-  // quote was absorbing. Named in the derivation line under the card
-  // rather than buried, because a plastic pallet is nearer 50 lb and this
-  // number should be arguable.
-  const PALLET_TARE_LB = 37;
   const suggestedWeight = useMemo(() => {
     if (shippingOrigin !== "usa") return null;
-    const q = num(quantity);
-    if (!(q > 0)) return null;
-    const productLb = q * unitWeightG * LB_PER_KG;
-    const pallets = num(palletCount);
-    const palletLb = pallets > 0 ? pallets * PALLET_TARE_LB : 0;
-    return {
-      productLb,
-      pallets,
-      palletLb,
-      totalLb: Math.round((productLb + palletLb) * 100) / 100,
-    };
-  }, [shippingOrigin, quantity, unitWeightG, palletCount]);
+    return deriveShipmentWeight(quantity, pieceWeightG, palletCount);
+  }, [shippingOrigin, quantity, pieceWeightG, palletCount]);
   const suggestedWeightLb = suggestedWeight ? suggestedWeight.totalLb : null;
 
   // Same back-off rule as the freight auto-fill below: stamp the field
@@ -2454,7 +2510,7 @@ export default function PricingCalculator({
   // the rep types their own figure, stop touching it. A weight read off a
   // real packing list beats one derived from an average piece weight, and
   // the rep should never have to fight the form for it.
-  const lastAutoFilledWeightRef = useRef<string>("");
+  const lastAutoFilledWeightRef = useRef<string>(seedWeightRef(tabs[0]));
   useEffect(() => {
     if (suggestedWeightLb === null) return;
     const next = String(suggestedWeightLb);
@@ -2709,11 +2765,12 @@ export default function PricingCalculator({
     setOriginState(t.originState);
     setShipmentWeightLb(t.shipmentWeightLb);
     setPieceWeightG(t.pieceWeightG);
-    // Forget what we auto-filled on the tab we just left. Without this the
-    // incoming tab's saved weight is compared against the OTHER tab's
-    // suggestion, and on a match the auto-fill would overwrite a figure the
-    // rep typed -- the one thing the back-off rule exists to prevent.
-    lastAutoFilledWeightRef.current = "";
+    // Re-seed from the incoming tab; never carry the outgoing tab's
+    // suggestion across. Compared against the wrong tab's number this
+    // either freezes a field we should be updating or overwrites one the
+    // rep typed.
+    lastAutoFilledWeightRef.current = seedWeightRef(t);
+    lastAutoFilledFreightRef.current = seedFreightRef(t);
     setPalletCount(t.palletCount);
     setFreightClass(t.freightClass);
     setAccessorials(t.accessorials);
