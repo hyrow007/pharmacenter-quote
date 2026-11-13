@@ -2377,6 +2377,48 @@ export default function PricingCalculator({
     [workflowDosageForm],
   );
 
+  // Shipment weight, derived the same way the international delivery tier
+  // has always derived it: shipmentKg = quantity x unitWeightG. The units
+  // cancel because a bulk "unit" is 1,000 eaches and unitWeightG is grams
+  // per each -- 1,000 x g = kg. See DEFAULT_UNIT_WEIGHT_G.
+  //
+  // The domestic side never got this. The rep typed pounds by hand, and a
+  // blank weight makes suggestDomesticFreight() return null, which is why
+  // a USA quote could sit at $0.00 freight with every other field filled
+  // in and nothing saying what was missing.
+  const LB_PER_KG = 2.20462;
+  const suggestedWeightLb = useMemo(() => {
+    if (shippingOrigin !== "usa") return null;
+    const q = num(quantity);
+    if (!(q > 0)) return null;
+    const kg = q * unitWeightG;
+    return Math.round(kg * LB_PER_KG * 100) / 100;
+  }, [shippingOrigin, quantity, unitWeightG]);
+
+  // Same back-off rule as the freight auto-fill below: stamp the field
+  // while it is blank or still holds our last suggestion, and the moment
+  // the rep types their own figure, stop touching it. A weight read off a
+  // real packing list beats one derived from an average piece weight, and
+  // the rep should never have to fight the form for it.
+  const lastAutoFilledWeightRef = useRef<string>("");
+  useEffect(() => {
+    if (suggestedWeightLb === null) return;
+    const next = String(suggestedWeightLb);
+    const isEmpty = !shipmentWeightLb || shipmentWeightLb.trim() === "";
+    const matchesLast = shipmentWeightLb === lastAutoFilledWeightRef.current;
+    if (isEmpty || matchesLast) {
+      setShipmentWeightLb(next);
+      lastAutoFilledWeightRef.current = next;
+    }
+  }, [suggestedWeightLb]);
+
+  // True when the figure in the box is ours rather than the rep's, which
+  // is the difference between "derived, here is how" and "you typed this".
+  const weightIsAuto =
+    suggestedWeightLb !== null &&
+    shipmentWeightLb === lastAutoFilledWeightRef.current &&
+    shipmentWeightLb.trim() !== "";
+
   // Which buyer-side cost inputs to show for the current shipping mode.
   // For USA we hide everything Incoterm-related and only keep freight +
   // testing + other fees. For international we let the Incoterm decide.
@@ -2611,6 +2653,11 @@ export default function PricingCalculator({
     setDomesticMode(t.domesticMode);
     setOriginState(t.originState);
     setShipmentWeightLb(t.shipmentWeightLb);
+    // Forget what we auto-filled on the tab we just left. Without this the
+    // incoming tab's saved weight is compared against the OTHER tab's
+    // suggestion, and on a match the auto-fill would overwrite a figure the
+    // rep typed -- the one thing the back-off rule exists to prevent.
+    lastAutoFilledWeightRef.current = "";
     setPalletCount(t.palletCount);
     setFreightClass(t.freightClass);
     setAccessorials(t.accessorials);
@@ -4332,7 +4379,11 @@ export default function PricingCalculator({
                   style={{ maxWidth: 80 }}
                 />
               </label>
-              <label className="pricing__field">
+              {/* position: relative anchors the caption below. Inline
+                  rather than in globals.css because .pricing__field is
+                  shared by every field on the page and only this one needs
+                  it -- and that file belongs to Master. */}
+              <label className="pricing__field" style={{ position: "relative" }}>
                 <span className="pricing__label">Weight (lb)</span>
                 <input
                   type="text"
@@ -4344,6 +4395,26 @@ export default function PricingCalculator({
                   autoComplete="off"
                   style={{ maxWidth: 120 }}
                 />
+                {/* Say where the number came from, and that it is yours to
+                    replace. Absolutely positioned so it cannot lift this
+                    cell out of the row the way an in-flow caption does. */}
+                {suggestedWeightLb !== null ? (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      whiteSpace: "nowrap",
+                      marginTop: 2,
+                      fontSize: 11,
+                      color: "var(--ink-3, #6b7280)",
+                    }}
+                  >
+                    {weightIsAuto
+                      ? `Auto: ${num(quantity).toLocaleString()} x ${unitWeightG} g/ea - type to override`
+                      : `Auto would be ${suggestedWeightLb.toLocaleString()} lb`}
+                  </span>
+                ) : null}
               </label>
               <label className="pricing__field">
                 <span className="pricing__label">Pallets</span>
