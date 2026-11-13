@@ -82,17 +82,6 @@ async function call(method: "POST" | "PUT", path: string, body: unknown): Promis
   return { ok: true, json };
 }
 
-/** Diagnostics only (sandbox): send a raw body and return FedEx's raw reply. */
-export async function rawFedex(method: "POST" | "PUT", path: string, body: unknown) {
-  return call(method, path, body);
-}
-
-/** The sandbox/live account number in use, for diagnostics (last 4 only). */
-export function accountLast4(): string | null {
-  const a = process.env.FEDEX_ACCOUNT_NUMBER;
-  return a ? a.slice(-4) : null;
-}
-
 // FedEx rejects non-ASCII in Create Shipment. The address book keeps the real
 // spelling ("María Núñez"); only what is sent is folded ("Maria Nunez").
 export function ascii(s: string | null | undefined): string {
