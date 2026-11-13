@@ -4,9 +4,9 @@ import AppHeader from "../_components/AppHeader";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { shipGate } from "./_lib/gate";
 import { makeST } from "./_lib/i18n";
-import { fedexConfigured, LIVE } from "./_lib/fedex";
+import { fedexConfigured, LIVE, ENVIRONMENT } from "./_lib/fedex";
 import ShipDesk from "./_components/ShipDesk";
-import LabelTables, { type LabelListRow } from "./_components/LabelTables";
+import LabelTables, { type LabelListRow, type ExternalListRow } from "./_components/LabelTables";
 import s from "./shipping.module.css";
 
 // /shipping -- served at ship.pharmacenter.app/ by the host rewrite.
@@ -15,6 +15,9 @@ import s from "./shipping.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Shipping" };
+
+const EXT_COLS =
+  "id, master_tracking_number, piece_tracking_numbers, ship_date, service_type, reference, po_number, payment_type, recipient_contact, recipient_company, recipient_city, recipient_state, recipient_country, packages, estimated_cost";
 
 const LIST_COLS =
   "id, environment, status, purpose, so_number, recipient_snapshot, contents, service_type, rated_cost, rated_currency, requested_by, requested_at, approval_required, approved_by, decision_note, tracking_number, label_path, invoice_path, created_label_at, voided_at, fedex_error";
@@ -29,9 +32,16 @@ export default async function ShippingPage() {
   const t = makeST(lang);
   const cfg = fedexConfigured();
 
-  const [pending, recent] = await Promise.all([
-    g.supabase.from("shipping_labels").select(LIST_COLS).eq("status", "pending_approval").order("requested_at").limit(50),
-    g.supabase.from("shipping_labels").select(LIST_COLS).neq("status", "pending_approval").order("requested_at", { ascending: false }).limit(30),
+  // Only labels from the environment the app is running in: once live, the
+  // sandbox test labels (FedEx validation samples etc.) drop out of the log.
+  const [pending, recent, external] = await Promise.all([
+    g.supabase.from("shipping_labels").select(LIST_COLS).eq("environment", ENVIRONMENT).eq("status", "pending_approval").order("requested_at").limit(50),
+    g.supabase.from("shipping_labels").select(LIST_COLS).eq("environment", ENVIRONMENT).neq("status", "pending_approval").order("requested_at", { ascending: false }).limit(30),
+    // Shipments made on fedex.com (imported from Ship Manager's report). Only
+    // real ones exist, so they show only once the app itself is live.
+    LIVE
+      ? g.supabase.from("shipping_external_shipments").select(EXT_COLS).order("ship_date", { ascending: false }).limit(40)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
   ]);
 
   return (
@@ -67,6 +77,7 @@ export default async function ShippingPage() {
             admin={g.admin}
             pending={(pending.data ?? []) as unknown as LabelListRow[]}
             recent={(recent.data ?? []) as unknown as LabelListRow[]}
+            external={(external.data ?? []) as unknown as ExternalListRow[]}
           />
           <p className={s.foot}>{t("foot")}</p>
         </div>

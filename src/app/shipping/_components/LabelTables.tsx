@@ -32,6 +32,30 @@ export type LabelListRow = {
   fedex_error: { error?: string; detail?: string | null; invoice?: string } | null;
 };
 
+// A shipment made on fedex.com and imported from Ship Manager's report:
+// read-only, no PDF or void here (those live on fedex.com).
+export type ExternalListRow = {
+  id: string;
+  master_tracking_number: string;
+  piece_tracking_numbers: string[];
+  ship_date: string | null;
+  service_type: string | null;
+  reference: string | null;
+  po_number: string | null;
+  payment_type: string | null;
+  recipient_contact: string | null;
+  recipient_company: string | null;
+  recipient_city: string | null;
+  recipient_state: string | null;
+  recipient_country: string | null;
+  packages: number | null;
+  estimated_cost: number | null;
+};
+
+type LogItem = { at: string; app: LabelListRow; ext?: undefined } | { at: string; ext: ExternalListRow; app?: undefined };
+
+const trackUrl = (n: string) => `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(n)}`;
+
 const money = (n: number | null, cur: string | null) =>
   n == null ? "—" : n.toLocaleString("en-US", { style: "currency", currency: cur || "USD" });
 const when = (iso: string, lang: Lang) =>
@@ -56,12 +80,14 @@ export default function LabelTables({
   admin,
   pending,
   recent,
+  external = [],
 }: {
   lang: Lang;
   me: string;
   admin: boolean;
   pending: LabelListRow[];
   recent: LabelListRow[];
+  external?: ExternalListRow[];
 }) {
   const t = makeST(lang);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -102,6 +128,69 @@ export default function LabelTables({
     </>
   );
   const test = (r: LabelListRow) => (r.environment === "sandbox" ? <span className={s.testTag}>{t("test")}</span> : null);
+
+  // One log, newest first: the app's labels and fedex.com shipments together.
+  // A tracking number the app already has is not shown twice.
+  const appTracking = new Set(recent.map((r) => r.tracking_number).filter(Boolean));
+  const log: LogItem[] = [
+    ...recent.map((r) => ({ at: r.requested_at, app: r })),
+    ...external
+      .filter((e) => !appTracking.has(e.master_tracking_number))
+      // ship_date is a calendar day; noon Eastern keeps it on the right date.
+      .map((e) => ({ at: e.ship_date ? `${e.ship_date}T12:00:00-05:00` : "1970-01-01T00:00:00Z", ext: e })),
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 50);
+  const day = (d: string | null) =>
+    d
+      ? new Date(`${d}T12:00:00-05:00`).toLocaleDateString(lang === "es" ? "es-US" : "en-US", {
+          timeZone: "America/New_York",
+          month: "short",
+          day: "numeric",
+        })
+      : "—";
+  const extRow = (e: ExternalListRow) => (
+    <tr key={`x-${e.id}`}>
+      <td>
+        {day(e.ship_date)} <span className={s.srcTag} title={t("srcFedexHint")}>{t("srcFedex")}</span>
+      </td>
+      <td>
+        <b>{e.recipient_company || e.recipient_contact || "—"}</b>
+        {e.recipient_company && e.recipient_contact && e.recipient_contact !== e.recipient_company ? (
+          <div>{e.recipient_contact}</div>
+        ) : null}
+        <div className={s.muted}>
+          {[e.recipient_city, e.recipient_state, e.recipient_country].filter(Boolean).join(", ")}
+        </div>
+      </td>
+      <td>
+        {e.reference || e.po_number ? (
+          <>
+            {e.reference ? <div>{e.reference}</div> : null}
+            {e.po_number ? <div className={s.muted}>PO {e.po_number}</div> : null}
+          </>
+        ) : (
+          <span className={s.muted}>—</span>
+        )}
+      </td>
+      <td>
+        {e.service_type ? service(e.service_type) : "—"}
+        {e.packages && e.packages > 1 ? <div className={s.muted}>{t("packagesN", { n: e.packages })}</div> : null}
+      </td>
+      <td className={s.num}>
+        {money(e.estimated_cost, "USD")}
+        {e.payment_type && e.payment_type !== "SENDER" ? <div className={s.muted}>{t("billedRecipientShort")}</div> : null}
+      </td>
+      <td className={s.muted}>{t("srcFedex")}</td>
+      <td>{t("shippedOn")}</td>
+      <td className={s.mono}>{e.master_tracking_number}</td>
+      <td className={s.actions}>
+        <a className={s.ghostSm} href={trackUrl(e.master_tracking_number)} target="_blank" rel="noreferrer">
+          {t("track")}
+        </a>
+      </td>
+    </tr>
+  );
 
   return (
     <>
@@ -168,9 +257,9 @@ export default function LabelTables({
       </section>
 
       <section className={`${s.panel} ${s.block}`}>
-        <h2 className={s.h2}>{t("recentTitle")}</h2>
-        {recent.length === 0 ? (
-          <p className={s.muted}>{t("recentNone")}</p>
+        <h2 className={s.h2}>{t("recentShipTitle")}</h2>
+        {log.length === 0 ? (
+          <p className={s.muted}>{t("recentShipNone")}</p>
         ) : (
           <div className={s.tableWrap}>
             <table className={s.table}>
@@ -188,7 +277,10 @@ export default function LabelTables({
                 </tr>
               </thead>
               <tbody>
-                {recent.map((r) => (
+                {log.map((item) => {
+                  if (item.ext) return extRow(item.ext);
+                  const r = item.app;
+                  return (
                   <tr key={r.id} className={r.status === "voided" || r.status === "rejected" ? s.dim : undefined}>
                     <td>{when(r.requested_at, lang)} {test(r)}</td>
                     <td>{to(r)}</td>
@@ -233,7 +325,8 @@ export default function LabelTables({
                       ) : null}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

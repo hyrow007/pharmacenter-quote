@@ -248,6 +248,7 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
           .from("shipping_labels")
           .select("created_at, purpose, contents, packages, service_type, payer, rated_cost, status")
           .eq("recipient_id", String(a.recipient_id ?? ""))
+          .eq("environment", ENVIRONMENT)
           .order("created_at", { ascending: false })
           .limit(5);
         if (error) return fail(error.message);

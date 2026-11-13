@@ -256,6 +256,8 @@ export async function approveShipment(id: string): Promise<ActionResult> {
     .update({ status: "approved", approved_by: g.email, approved_at: new Date().toISOString() })
     .eq("id", id)
     .eq("status", "pending_approval")
+    // A test request left pending must never become a real, billed label.
+    .eq("environment", ENVIRONMENT)
     .select(LABEL_COLS);
   if (error) return { ok: false, error: "record_failed", detail: error.message };
   if (!data?.length) return { ok: false, error: "changed" };

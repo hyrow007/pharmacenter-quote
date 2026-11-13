@@ -85,6 +85,7 @@
 .actions { white-space: nowrap; text-align: right; }
 .actions > * + * { margin-left: 6px; }
 .dim { opacity: 0.55; }
+.srcTag { display: inline-block; font-size: 11px; font-weight: 700; color: #4d148c; background: #efe7f8; border-radius: 4px; padding: 0 5px; margin-left: 4px; }
 .testTag { display: inline-block; font-size: 11px; font-weight: 700; color: #8a5a00; background: #fff4d6; border-radius: 4px; padding: 0 5px; margin-left: 4px; }
 
 .headSide { display: flex; align-items: center; gap: 10px; flex: none; }
