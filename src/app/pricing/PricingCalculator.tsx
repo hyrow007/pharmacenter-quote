@@ -2409,13 +2409,28 @@ export default function PricingCalculator({
   // a USA quote could sit at $0.00 freight with every other field filled
   // in and nothing saying what was missing.
   const LB_PER_KG = 2.20462;
-  const suggestedWeightLb = useMemo(() => {
+  // A 48x40 GMA wooden pallet, dry. Freight is billed on gross weight, so
+  // leaving the pallets out understates every load: two pallets is 74 lb,
+  // and on an LTL southeast lane at $0.55/lb that is $40 of freight the
+  // quote was absorbing. Named in the derivation line under the card
+  // rather than buried, because a plastic pallet is nearer 50 lb and this
+  // number should be arguable.
+  const PALLET_TARE_LB = 37;
+  const suggestedWeight = useMemo(() => {
     if (shippingOrigin !== "usa") return null;
     const q = num(quantity);
     if (!(q > 0)) return null;
-    const kg = q * unitWeightG;
-    return Math.round(kg * LB_PER_KG * 100) / 100;
-  }, [shippingOrigin, quantity, unitWeightG]);
+    const productLb = q * unitWeightG * LB_PER_KG;
+    const pallets = num(palletCount);
+    const palletLb = pallets > 0 ? pallets * PALLET_TARE_LB : 0;
+    return {
+      productLb,
+      pallets,
+      palletLb,
+      totalLb: Math.round((productLb + palletLb) * 100) / 100,
+    };
+  }, [shippingOrigin, quantity, unitWeightG, palletCount]);
+  const suggestedWeightLb = suggestedWeight ? suggestedWeight.totalLb : null;
 
   // Same back-off rule as the freight auto-fill below: stamp the field
   // while it is blank or still holds our last suggestion, and the moment
@@ -4406,8 +4421,13 @@ export default function PricingCalculator({
               </label>
               {/* Piece weight sits immediately before the weight it
                   feeds, because the derived pounds are only as good as
-                  this number and the rep should see that. */}
-              <label className="pricing__field" style={{ position: "relative" }}>
+                  this number. NEITHER field carries a caption of its own:
+                  .pricing__row is a 180px auto-fit grid with
+                  align-items:end, so an in-flow note bottom-aligns every
+                  other cell in the row against it, and an absolute one
+                  either overflows its 110px column or lands on the Pallets
+                  row 14px below. The derivation goes under the card. */}
+              <label className="pricing__field">
                 <span className="pricing__label">Piece weight (g)</span>
                 <input
                   type="text"
@@ -4423,29 +4443,8 @@ export default function PricingCalculator({
                   autoComplete="off"
                   style={{ maxWidth: 110 }}
                 />
-                <span
-                  style={{
-                    position: "absolute",
-                    top: "100%",
-                    left: 0,
-                    whiteSpace: "nowrap",
-                    marginTop: 2,
-                    fontSize: 11,
-                    color: pieceWeightIsTyped
-                      ? "var(--ink-3, #6b7280)"
-                      : "#8a5a00",
-                  }}
-                >
-                  {pieceWeightIsTyped
-                    ? "Per each, as weighed"
-                    : `Assuming ${formUnitWeightG} g — ${workflowDosageForm ?? "generic"} average`}
-                </span>
               </label>
-              {/* position: relative anchors the caption below. Inline
-                  rather than in globals.css because .pricing__field is
-                  shared by every field on the page and only this one needs
-                  it -- and that file belongs to Master. */}
-              <label className="pricing__field" style={{ position: "relative" }}>
+              <label className="pricing__field">
                 <span className="pricing__label">Weight (lb)</span>
                 <input
                   type="text"
@@ -4457,26 +4456,6 @@ export default function PricingCalculator({
                   autoComplete="off"
                   style={{ maxWidth: 120 }}
                 />
-                {/* Say where the number came from, and that it is yours to
-                    replace. Absolutely positioned so it cannot lift this
-                    cell out of the row the way an in-flow caption does. */}
-                {suggestedWeightLb !== null ? (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      whiteSpace: "nowrap",
-                      marginTop: 2,
-                      fontSize: 11,
-                      color: "var(--ink-3, #6b7280)",
-                    }}
-                  >
-                    {weightIsAuto
-                      ? `${num(quantity).toLocaleString()} × 1,000 × ${unitWeightG} g — type to override`
-                      : `Derived weight would be ${suggestedWeightLb.toLocaleString()} lb`}
-                  </span>
-                ) : null}
               </label>
               <label className="pricing__field">
                 <span className="pricing__label">Pallets</span>
@@ -4693,6 +4672,29 @@ export default function PricingCalculator({
             </label>
           ) : null}
         </div>
+        {/* How the weight was arrived at, in flow at the bottom of the
+            card where a long line is harmless -- unlike inside the grid
+            above. Every assumption it leans on is named, because the
+            dosage-form median and the pallet tare are both averages and
+            the rep is the one who knows better. */}
+        {suggestedWeight ? (
+          <p
+            className="pricing__hint"
+            style={{ color: pieceWeightIsTyped ? undefined : "#8a5a00" }}
+          >
+            {weightIsAuto ? "Weight: " : "Derived weight would be "}
+            {num(quantity).toLocaleString()} × 1,000 × {unitWeightG} g
+            {pieceWeightIsTyped
+              ? " (as weighed)"
+              : ` (${workflowDosageForm ?? "generic"} average — set the piece weight)`}
+            {suggestedWeight.pallets > 0
+              ? ` + ${suggestedWeight.pallets} pallet${suggestedWeight.pallets === 1 ? "" : "s"} × ${PALLET_TARE_LB} lb`
+              : ""}
+            {" = "}
+            {suggestedWeight.totalLb.toLocaleString()} lb
+            {weightIsAuto ? " — type a weight to override." : "."}
+          </p>
+        ) : null}
         <p className="pricing__hint">
           {visibility.duties
             ? "Duties are applied as a percent of the product cost. All other inbound costs are total dollar amounts distributed across the full quantity."
