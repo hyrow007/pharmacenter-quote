@@ -877,7 +877,7 @@ Davie, FL 33331
         <div class="q-notes__heading">Notes</div>
         <ul contenteditable="true">
           <li>All pricing is ex-works PharmaCenter LLC (Davie, FL).</li>
-          <li>Pallet fee of $15.00 will be applied per pallet unless replacements in good condition are provided.</li>
+          <li>Pallet fee of $18.00 will be applied per pallet unless replacements in good condition are provided.</li>
         </ul>
       </div>
 
