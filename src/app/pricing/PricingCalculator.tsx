@@ -1146,9 +1146,10 @@ Davie, FL 33331
         renumberVersions();
       }
       // ---- Issued numbers -------------------------------------------
-      // Every version carries its own: Q0062-1, Q0062-2, ... The bare
-      // workflow number is never shown on a sheet, because a quote that
-      // went out the door should say which version it was.
+      // The first version IS the quote: Q0062. Revisions of it carry the
+      // dash -- Q0062-1, Q0062-2 -- so the suffix counts revisions, not
+      // versions, and the original keeps the number the customer already
+      // knows it by.
       //
       // Numbering follows POSITION, so deleting a version renumbers the
       // ones after it. That keeps the strip honest about what is in front
@@ -1173,12 +1174,17 @@ Davie, FL 33331
         }
         return true;
       }
-      function stampSheetHtml(html, n) {
+      // Position 0 is the quote itself and takes no suffix; every position
+      // after it is revision N.
+      function numberForIndex(i) {
+        return i <= 0 ? quoteBase : quoteBase + "-" + i;
+      }
+      function stampSheetHtml(html, i) {
         var box = document.createElement("div");
         box.innerHTML = html;
         var cell = box.querySelector(".q-quote-no");
         if (!cell || !isIssuedNumber(cell.textContent)) return html;
-        cell.textContent = quoteBase + "-" + n;
+        cell.textContent = numberForIndex(i);
         return box.innerHTML;
       }
       function syncDocTitle() {
@@ -1195,7 +1201,7 @@ Davie, FL 33331
       function renumberVersions() {
         if (numberingOn()) {
           for (var i = 0; i < versions.length; i++) {
-            versions[i].sheetHtml = stampSheetHtml(versions[i].sheetHtml, i + 1);
+            versions[i].sheetHtml = stampSheetHtml(versions[i].sheetHtml, i);
           }
           // The visible sheet is a copy of the active version, so it needs
           // the same treatment or the page and the saved HTML disagree.
@@ -1203,7 +1209,7 @@ Davie, FL 33331
           if (idx >= 0 && sheetEl) {
             var live = sheetEl.querySelector(".q-quote-no");
             if (live && isIssuedNumber(live.textContent)) {
-              live.textContent = quoteBase + "-" + (idx + 1);
+              live.textContent = numberForIndex(idx);
             }
           }
         }
@@ -1465,6 +1471,7 @@ type TabState = {
   domesticMode: DomesticMode;
   originState: string;
   shipmentWeightLb: string;
+  pieceWeightG: string;
   palletCount: string;
   freightClass: string;
   accessorials: string;
@@ -1538,6 +1545,7 @@ function blankTab(commissionSeed?: { hos: string; rep: string }): TabState {
     domesticMode: "ftl",
     originState: "",
     shipmentWeightLb: "",
+    pieceWeightG: "",
     palletCount: "",
     freightClass: "",
     accessorials: "",
@@ -1588,6 +1596,7 @@ function tabFromSnapshot(snap: PricingSnapshot): TabState {
     domesticMode: snap.domesticMode ?? "ftl",
     originState: snap.originState ?? "",
     shipmentWeightLb: snap.shipmentWeightLb ?? "",
+    pieceWeightG: snap.pieceWeightG ?? "",
     palletCount: snap.palletCount ?? "",
     freightClass: snap.freightClass ?? "",
     accessorials: snap.accessorials ?? "",
@@ -2327,6 +2336,11 @@ export default function PricingCalculator({
   const [shipmentWeightLb, setShipmentWeightLb] = useState<string>(
     () => tabs[0]?.shipmentWeightLb ?? "",
   );
+  // Grams per each for this product. Blank means "use the dosage form's
+  // median", which is all DEFAULT_UNIT_WEIGHT_G can offer.
+  const [pieceWeightG, setPieceWeightG] = useState<string>(
+    () => tabs[0]?.pieceWeightG ?? "",
+  );
   const [palletCount, setPalletCount] = useState<string>(
     () => tabs[0]?.palletCount ?? "",
   );
@@ -2372,10 +2386,18 @@ export default function PricingCalculator({
     if (!workflowState) return null;
     return workflowState.form ?? workflowState.dosage ?? null;
   }, [workflowState]);
-  const unitWeightG = useMemo(
+  const formUnitWeightG = useMemo(
     () => unitWeightForForm(workflowDosageForm),
     [workflowDosageForm],
   );
+  // What the weight maths actually uses. A typed piece weight wins over the
+  // dosage-form median, and it feeds the international delivery tier as
+  // well as the domestic pounds -- it is one physical fact, not two.
+  const unitWeightG = useMemo(() => {
+    const typed = num(pieceWeightG);
+    return typed > 0 ? typed : formUnitWeightG;
+  }, [pieceWeightG, formUnitWeightG]);
+  const pieceWeightIsTyped = num(pieceWeightG) > 0;
 
   // Shipment weight, derived the same way the international delivery tier
   // has always derived it: shipmentKg = quantity x unitWeightG. The units
@@ -2612,6 +2634,7 @@ export default function PricingCalculator({
       domesticMode,
       originState,
       shipmentWeightLb,
+      pieceWeightG,
       palletCount,
       freightClass,
       accessorials,
@@ -2653,6 +2676,7 @@ export default function PricingCalculator({
     setDomesticMode(t.domesticMode);
     setOriginState(t.originState);
     setShipmentWeightLb(t.shipmentWeightLb);
+    setPieceWeightG(t.pieceWeightG);
     // Forget what we auto-filled on the tab we just left. Without this the
     // incoming tab's saved weight is compared against the OTHER tab's
     // suggestion, and on a match the auto-fill would overwrite a figure the
@@ -2918,6 +2942,7 @@ export default function PricingCalculator({
       domesticMode: t.domesticMode,
       originState: t.originState,
       shipmentWeightLb: t.shipmentWeightLb,
+      pieceWeightG: t.pieceWeightG,
       palletCount: t.palletCount,
       freightClass: t.freightClass,
       accessorials: t.accessorials,
@@ -4379,6 +4404,43 @@ export default function PricingCalculator({
                   style={{ maxWidth: 80 }}
                 />
               </label>
+              {/* Piece weight sits immediately before the weight it
+                  feeds, because the derived pounds are only as good as
+                  this number and the rep should see that. */}
+              <label className="pricing__field" style={{ position: "relative" }}>
+                <span className="pricing__label">Piece weight (g)</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="pricing__input"
+                  value={pieceWeightG}
+                  // formatPercentInput despite the name: it keeps four
+                  // decimals where formatValueInput caps at two, and a
+                  // small tablet at 0.125 g would be truncated to 0.12 --
+                  // a 4% error on every pound of a shipment.
+                  onChange={(e) => setPieceWeightG(formatPercentInput(e.target.value))}
+                  placeholder={String(formUnitWeightG)}
+                  autoComplete="off"
+                  style={{ maxWidth: 110 }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    whiteSpace: "nowrap",
+                    marginTop: 2,
+                    fontSize: 11,
+                    color: pieceWeightIsTyped
+                      ? "var(--ink-3, #6b7280)"
+                      : "#8a5a00",
+                  }}
+                >
+                  {pieceWeightIsTyped
+                    ? "Per each, as weighed"
+                    : `Assuming ${formUnitWeightG} g — ${workflowDosageForm ?? "generic"} average`}
+                </span>
+              </label>
               {/* position: relative anchors the caption below. Inline
                   rather than in globals.css because .pricing__field is
                   shared by every field on the page and only this one needs
@@ -4411,8 +4473,8 @@ export default function PricingCalculator({
                     }}
                   >
                     {weightIsAuto
-                      ? `Auto: ${num(quantity).toLocaleString()} x ${unitWeightG} g/ea - type to override`
-                      : `Auto would be ${suggestedWeightLb.toLocaleString()} lb`}
+                      ? `${num(quantity).toLocaleString()} × 1,000 × ${unitWeightG} g — type to override`
+                      : `Derived weight would be ${suggestedWeightLb.toLocaleString()} lb`}
                   </span>
                 ) : null}
               </label>

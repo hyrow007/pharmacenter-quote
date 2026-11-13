@@ -878,7 +878,13 @@ export type PricingSnapshot = {
   //   originState:     2-letter US state code of the shipment origin. Used
   //                    to key rate history for lane-level suggestions.
   //   shipmentWeightLb: total shipment weight in pounds — auto-computed from
-  //                    unitWeightG × qty when known, or rep-typed.
+  //                    the piece weight × qty, or rep-typed (typing wins).
+  //   pieceWeightG:    grams per each for THIS product, when the rep knows
+  //                    it. DEFAULT_UNIT_WEIGHT_G holds a median per dosage
+  //                    form (softgel 0.8 g) and a real tablet ranges well
+  //                    either side of it, so the average sizes a freight
+  //                    estimate and nothing more. Blank = use the form's
+  //                    default.
   //   palletCount:     # of pallets on the shipment (metadata; helps rate
   //                    lookup and freight-class inference).
   //   freightClass:    NMFC class for LTL shipments (65, 70, 85, etc.).
@@ -889,6 +895,7 @@ export type PricingSnapshot = {
   domesticMode?: "ftl" | "ltl";
   originState?: string;
   shipmentWeightLb?: string;
+  pieceWeightG?: string;
   palletCount?: string;
   freightClass?: string;
   accessorials?: string;
