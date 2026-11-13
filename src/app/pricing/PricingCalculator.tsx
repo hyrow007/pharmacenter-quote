@@ -22,9 +22,29 @@ import {
   HMF_RATE,
   MPF_MAX,
   MPF_RATE,
+  STATE_TO_ZONE,
   suggestDomesticFreight,
   unitWeightForForm,
 } from "@/lib/pricing-defaults";
+
+// The origin-state picker, grouped by the freight zone each state keys
+// into, built from the rate table's own mapping. Grouping is the point:
+// the zone is what sets the rate, so a rep choosing CA can see it is a
+// West lane rather than discovering it in the derived number.
+const ZONE_LABELS: Record<string, string> = {
+  west: "West",
+  central: "Central",
+  northeast: "Northeast",
+  midwest: "Midwest",
+  southeast: "Southeast",
+};
+const STATES_BY_ZONE = Object.entries(ZONE_LABELS).map(([zone, label]) => ({
+  zone,
+  label,
+  states: Object.keys(STATE_TO_ZONE)
+    .filter((st) => STATE_TO_ZONE[st] === zone)
+    .sort(),
+}));
 
 // Pricing calculator client component. All math is dollar-and-percent simple
 // arithmetic, derived from input strings live as the user types. Inputs are
@@ -2377,19 +2397,16 @@ export default function PricingCalculator({
     }
   }, [domesticSuggestion]);
 
-  // Per-unit weight in grams — driven by the workflow's dosage form (bulk
-  // uses state.form, contract-packaging uses state.dosage). Falls back to a
-  // conservative 1 g when the form isn't set yet so the delivery tier check
-  // still evaluates. See DEFAULT_UNIT_WEIGHT_G in /lib/pricing-defaults.ts
-  // for the source-of-truth values and how they were derived.
-  const workflowDosageForm = useMemo(() => {
-    if (!workflowState) return null;
-    return workflowState.form ?? workflowState.dosage ?? null;
-  }, [workflowState]);
-  const formUnitWeightG = useMemo(
-    () => unitWeightForForm(workflowDosageForm),
-    [workflowDosageForm],
-  );
+  // The assumed piece weight when nobody has typed one. A flat 1 g, by
+  // operator decision 2026-11-13, rather than the dosage-form median.
+  // DEFAULT_UNIT_WEIGHT_G still backs the international delivery tier; it
+  // just no longer guesses on this form, where the rep is standing right
+  // there and can say.
+  //
+  // Worth knowing what it costs: a gummy is 3.0 g, so a gummy load
+  // defaults to a third of its real weight until someone types the
+  // number. The field is the fix for that, not the default.
+  const formUnitWeightG = 1;
   // What the weight maths actually uses. A typed piece weight wins over the
   // dosage-form median, and it feeds the international delivery tier as
   // well as the domestic pounds -- it is one physical fact, not two.
@@ -4408,16 +4425,28 @@ export default function PricingCalculator({
               </div>
               <label className="pricing__field">
                 <span className="pricing__label">Origin state</span>
-                <input
-                  type="text"
+                {/* A picker, not a text box. The rate keys off the state's
+                    zone, and a typo or a state missing from the table
+                    silently fell through to the "default" rate -- which is
+                    the most expensive one in the LTL row. Grouped by zone
+                    so the lane is visible at the moment of choosing. */}
+                <select
                   className="pricing__input"
                   value={originState}
-                  onChange={(e) => setOriginState(e.target.value.toUpperCase().slice(0, 2))}
-                  placeholder="CA"
-                  maxLength={2}
-                  autoComplete="off"
-                  style={{ maxWidth: 80 }}
-                />
+                  onChange={(e) => setOriginState(e.target.value)}
+                  style={{ maxWidth: 160 }}
+                >
+                  <option value="">Select…</option>
+                  {STATES_BY_ZONE.map((g) => (
+                    <optgroup key={g.zone} label={g.label}>
+                      {g.states.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               </label>
               {/* Piece weight sits immediately before the weight it
                   feeds, because the derived pounds are only as good as
@@ -4676,7 +4705,7 @@ export default function PricingCalculator({
             {num(quantity).toLocaleString()} × 1,000 × {unitWeightG} g
             {pieceWeightIsTyped
               ? " (as weighed)"
-              : ` (${workflowDosageForm ?? "generic"} average — set the piece weight)`}
+              : " (assumed — set the piece weight)"}
             {suggestedWeight.pallets > 0
               ? ` + ${suggestedWeight.pallets} pallet${suggestedWeight.pallets === 1 ? "" : "s"} × ${PALLET_TARE_LB} lb`
               : ""}

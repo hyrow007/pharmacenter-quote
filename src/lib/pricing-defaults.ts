@@ -145,7 +145,13 @@ export const DOMESTIC_LANE_RATES: Record<
 };
 
 // US state → freight zone. Undefined states fall through to "default" rate.
-const STATE_TO_ZONE: Record<string, keyof typeof DOMESTIC_LANE_RATES["ftl"]> = {
+export type FreightZone = keyof typeof DOMESTIC_LANE_RATES["ftl"];
+
+// Exported so the pricing calculator can build its origin-state picker
+// from the same mapping the rate lookup uses. A second copy of this list
+// in the UI would drift the first time a state moved zone, and the only
+// symptom would be a quote priced off a zone the picker never showed.
+export const STATE_TO_ZONE: Record<string, FreightZone> = {
   // West
   CA: "west", OR: "west", WA: "west", NV: "west", AZ: "west",
   UT: "west", ID: "west", MT: "west", WY: "west", CO: "west",
