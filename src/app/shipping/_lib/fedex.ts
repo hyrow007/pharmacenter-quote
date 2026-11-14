@@ -215,6 +215,24 @@ function fxCustoms(c: Customs, packages: DraftPackage[]) {
   };
 }
 
+// The ship date FedEx is told. Ground and Home Delivery do not move on a
+// weekend, and FedEx answers a Saturday/Sunday Ground request with
+// "REQUESTEDSHIPMENT.SERVICETYPE.REQUIRED -- Service type is missing or
+// invalid" (first seen live 2026-11-14, a Saturday). So a label made on a
+// weekend is dated the next Monday -- it is dropped off then anyway. Rates are
+// asked for the same date so the quote and the label agree. Express Saturday
+// pickups are not something PharmaCenter does.
+export function shipDate(now = new Date()): string {
+  const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const dow = et.getDay(); // 0 Sun .. 6 Sat
+  const add = dow === 6 ? 2 : dow === 0 ? 1 : 0;
+  et.setDate(et.getDate() + add);
+  const y = et.getFullYear();
+  const m = String(et.getMonth() + 1).padStart(2, "0");
+  const d = String(et.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 // ---------------------------------------------------------------- rate
 
 export type Rate = { serviceType: string; serviceName: string | null; cost: number; currency: string; transitDays: string | null };
@@ -230,6 +248,7 @@ export async function getRates(
       shipper: { address: fxAddress(SHIPPER) },
       recipient: { address: { ...fxAddress(d.recipient), residential: d.recipient.residential === true } },
       pickupType: "DROPOFF_AT_FEDEX_LOCATION",
+      shipDateStamp: shipDate(),
       ...(d.serviceType ? { serviceType: d.serviceType } : {}),
       rateRequestType: ["ACCOUNT"],
       // International rates can come back in the destination's currency (a
@@ -308,7 +327,7 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
             : {}),
         },
       ],
-      shipDatestamp: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
+      shipDatestamp: shipDate(),
       serviceType: d.serviceType,
       packagingType: "YOUR_PACKAGING",
       pickupType: "DROPOFF_AT_FEDEX_LOCATION",
