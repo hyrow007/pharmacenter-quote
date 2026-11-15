@@ -98,7 +98,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
           else if (ev.t === "draft" && ev.draft) {
             setDraft(ev.draft);
             setProblems(ev.problems ?? []);
-          } else if (ev.t === "replies" && Array.isArray(ev.options)) setReplies(ev.options.slice(0, 5));
+          } else if (ev.t === "replies" && Array.isArray(ev.options)) setReplies(ev.options.slice(0, 6));
           else if (ev.t === "error") append(`\n\n(${t("chatError")} ${ev.error ?? ""})`);
         }
       }
