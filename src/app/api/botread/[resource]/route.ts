@@ -76,6 +76,18 @@ const RESOURCES: Record<string, Spec> = {
       p_limit: limitOf(sp),
     }),
   },
+  // Quotes are read-only and carry no money: the costing lives in
+  // workflows.state->'form' and ->'products', and botread.quotes lifts only
+  // flat descriptive scalars out of that blob. Scope set by the user
+  // 2026-11-15: "read quotes and status only".
+  quotes: {
+    fn: "botread_quotes",
+    build: (sp) => ({
+      p_status: sp.get("status"),
+      p_since: sinceOf(sp),
+      p_limit: limitOf(sp),
+    }),
+  },
 };
 
 // Constant-time compare so the token cannot be guessed a character at a time.
