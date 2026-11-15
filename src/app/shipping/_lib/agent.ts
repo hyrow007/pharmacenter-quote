@@ -234,7 +234,8 @@ Rules:
 - You cannot create, approve or void a label and must never say you did. When the draft has nothing missing, tell them to check it and press the button under the label.
 - Ask only for what you cannot look up, one or two things at a time. Keep replies short: this is a busy workplace.
 - Bubbles for almost every question: end each turn that asks something with offer_replies (2-6 short options, in the person's language). Skip them only when the answer can only be typed (a new address, a phone number, an exact weight over 3 lb, a tax ID). Do not repeat the options in your text beyond what is needed to understand them. Usual sets:
-  - Who it's going to (when not said yet): call frequent_recipients and offer the top names, plus "Someone new".
+  - Who it's going to (when not said yet): call frequent_recipients and offer the top names, plus "Someone new". When one is picked, follow that tool's note: address-book entry if there is one, else the lastAddress it returned (say "same address as last time: …" and validate it); don't tell the person it isn't on file.
+  - Recipient phone unknown: "Use PharmaCenter's number" / "I'll type it". PharmaCenter's number is (954) 384-8728.
   - Several address-book matches: one bubble per match (name and city).
   - FedEx corrected the address: "Use FedEx's version" / "Keep mine".
   - Purpose: "Sample to a customer", "Sample to a prospect", "Lab submission", "Vendor return", "Customer order", "Documents" (plus typing for anything else = other).
@@ -362,37 +363,87 @@ export async function runTool(name: string, input: unknown, ctx: ToolCtx): Promi
         const [ext, app] = await Promise.all([
           sb
             .from("shipping_external_shipments")
-            .select("recipient_company, recipient_contact, recipient_city, service_type")
+            .select(
+              "ship_date, recipient_company, recipient_contact, recipient_street_lines, recipient_city, recipient_state, recipient_postal_code, recipient_country, recipient_residential, service_type",
+            )
             .gte("ship_date", since)
+            .order("ship_date", { ascending: false })
             .limit(2000),
           sb
             .from("shipping_labels")
-            .select("recipient_snapshot, contents, service_type")
+            .select("requested_at, recipient_id, recipient_snapshot, contents, service_type")
             .eq("environment", ENVIRONMENT)
             .eq("status", "created")
             .gte("requested_at", since)
+            .order("requested_at", { ascending: false })
             .limit(2000),
         ]);
         if (ext.error) return fail(ext.error.message);
         if (app.error) return fail(app.error.message);
-        const tally = new Map<string, { name: string; city: string | null; count: number; contents: string[]; services: string[] }>();
-        const add = (name: string | null | undefined, city: string | null | undefined, contents: string | null, service: string | null) => {
+        type Last = {
+          company: string | null;
+          contactName: string | null;
+          streetLines: string[];
+          city: string | null;
+          stateProvince: string | null;
+          postalCode: string | null;
+          countryCode: string | null;
+          residential: boolean | null;
+        };
+        type Row = { name: string; count: number; lastShipped: string; recipientId: string | null; lastAddress: Last; contents: string[]; services: string[] };
+        const tally = new Map<string, Row>();
+        // Rows arrive newest first, so the first one seen per name is the latest address.
+        const add = (name: string | null | undefined, at: string, addr: Last, recipientId: string | null, contents: string | null, service: string | null) => {
           const n = (name ?? "").trim();
           if (!n) return;
           const key = n.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-          const row = tally.get(key) ?? { name: n, city: city ?? null, count: 0, contents: [], services: [] };
+          let row = tally.get(key);
+          if (!row) {
+            row = { name: n, count: 0, lastShipped: at, recipientId, lastAddress: addr, contents: [], services: [] };
+            tally.set(key, row);
+          } else if (at > row.lastShipped) {
+            row.lastShipped = at;
+            row.lastAddress = addr;
+            if (recipientId) row.recipientId = recipientId;
+          }
+          if (!row.recipientId && recipientId) row.recipientId = recipientId;
           row.count++;
           if (contents && !row.contents.includes(contents) && row.contents.length < 3) row.contents.push(contents);
           if (service && !row.services.includes(service) && row.services.length < 3) row.services.push(service);
-          tally.set(key, row);
         };
-        for (const r of ext.data ?? []) add(r.recipient_company || r.recipient_contact, r.recipient_city, null, r.service_type);
-        for (const r of app.data ?? []) {
-          const snap = (r.recipient_snapshot ?? {}) as { company?: string | null; contactName?: string | null; city?: string };
-          add(snap.company || snap.contactName, snap.city ?? null, r.contents ?? null, r.service_type);
+        for (const r of ext.data ?? []) {
+          add(r.recipient_company || r.recipient_contact, String(r.ship_date ?? ""), {
+            company: r.recipient_company ?? null,
+            contactName: r.recipient_contact ?? null,
+            streetLines: (r.recipient_street_lines as string[] | null) ?? [],
+            city: r.recipient_city ?? null,
+            stateProvince: r.recipient_state ?? null,
+            postalCode: r.recipient_postal_code ?? null,
+            countryCode: r.recipient_country ?? null,
+            residential: r.recipient_residential ?? null,
+          }, null, null, r.service_type ?? null);
         }
-        const top = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 8);
-        return j({ recipients: top, note: "Names as shipped; look the chosen one up in the address book with search_address_book." });
+        for (const r of app.data ?? []) {
+          const snap = (r.recipient_snapshot ?? {}) as Partial<{
+            company: string | null; contactName: string | null; streetLines: string[]; city: string;
+            stateProvince: string | null; postalCode: string | null; countryCode: string; residential: boolean | null;
+          }>;
+          add(snap.company || snap.contactName, String(r.requested_at ?? "").slice(0, 10), {
+            company: snap.company ?? null,
+            contactName: snap.contactName ?? null,
+            streetLines: snap.streetLines ?? [],
+            city: snap.city ?? null,
+            stateProvince: snap.stateProvince ?? null,
+            postalCode: snap.postalCode ?? null,
+            countryCode: snap.countryCode ?? null,
+            residential: snap.residential ?? null,
+          }, (r.recipient_id as string | null) ?? null, r.contents ?? null, r.service_type ?? null);
+        }
+        const top = [...tally.values()].sort((a, b) => b.count - a.count || (a.lastShipped < b.lastShipped ? 1 : -1)).slice(0, 8);
+        return j({
+          recipients: top,
+          note: "If recipientId is set, use that address-book entry. Otherwise search_address_book by name; if not there, use lastAddress (where it last went), validate it, and treat them as a new address-book entry. Phone is not kept from fedex.com shipments.",
+        });
       }
       case "offer_replies": {
         const opts = (Array.isArray(a.options) ? a.options : [])
