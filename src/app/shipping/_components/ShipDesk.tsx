@@ -23,6 +23,9 @@ const KNOWN_ERRORS = new Set([
   "international_not_yet",
 ]);
 
+// Bubbles shown before the first message: the shipments that come up most.
+const STARTERS: SKey[] = ["start_customer", "start_lab", "start_vendor", "start_intl", "start_recipientPays"];
+
 const money = (n: number | null | undefined, cur = "USD") =>
   n == null ? "—" : n.toLocaleString("en-US", { style: "currency", currency: cur || "USD" });
 
@@ -35,14 +38,17 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [result, setResult] = useState<ActionResult | null>(null);
+  // Answer bubbles the assistant offered for its last question; cleared on send.
+  const [replies, setReplies] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const logRef = useRef<HTMLDivElement>(null);
 
   const scroll = () => requestAnimationFrame(() => logRef.current?.scrollTo({ top: 1e9 }));
 
-  async function send() {
-    const text = input.trim();
+  async function send(preset?: string) {
+    const text = (preset ?? input).trim();
     if (!text || busy) return;
+    setReplies([]);
     const next: Msg[] = [...msgs, { role: "user", text }, { role: "assistant", text: "" }];
     setMsgs(next);
     setInput("");
@@ -75,7 +81,15 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
-          const ev = JSON.parse(line) as { t: string; d?: string; label?: string; draft?: Draft; problems?: string[]; error?: string };
+          const ev = JSON.parse(line) as {
+            t: string;
+            d?: string;
+            label?: string;
+            draft?: Draft;
+            problems?: string[];
+            error?: string;
+            options?: string[];
+          };
           if (ev.t === "text" && ev.d) {
             append(ev.d);
             setStatus(null);
@@ -84,7 +98,8 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
           else if (ev.t === "draft" && ev.draft) {
             setDraft(ev.draft);
             setProblems(ev.problems ?? []);
-          } else if (ev.t === "error") append(`\n\n(${t("chatError")} ${ev.error ?? ""})`);
+          } else if (ev.t === "replies" && Array.isArray(ev.options)) setReplies(ev.options.slice(0, 5));
+          else if (ev.t === "error") append(`\n\n(${t("chatError")} ${ev.error ?? ""})`);
         }
       }
     } catch {
@@ -97,6 +112,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
   }
 
   function reset() {
+    setReplies([]);
     setMsgs([]);
     setDraft(null);
     setProblems([]);
@@ -131,6 +147,16 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
             </div>
           ))}
           {status ? <div className={s.status}>{status}</div> : null}
+          {!busy && (msgs.length === 0 || replies.length) ? (
+            <div className={s.chips}>
+              {msgs.length === 0 ? <p className={s.chipsLead}>{t("startersLead")}</p> : null}
+              {(msgs.length === 0 ? STARTERS.map((k) => t(k)) : replies).map((o) => (
+                <button key={o} type="button" className={s.chip} onClick={() => void send(o)}>
+                  {o}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <form
           className={s.compose}

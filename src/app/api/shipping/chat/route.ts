@@ -8,7 +8,8 @@ import { checkDraft } from "@/app/shipping/_lib/draft";
 //
 // POST { messages: [{ role, text }], draft, lang } -> NDJSON:
 //   {"t":"text","d":"…"}  {"t":"status","label":"…"}
-//   {"t":"draft","draft":{…},"problems":[…]}  {"t":"done"}  {"t":"error","error":"…"}
+//   {"t":"draft","draft":{…},"problems":[…]}  {"t":"replies","options":["…"]}
+//   {"t":"done"}  {"t":"error","error":"…"}
 //
 // Stateless: the browser holds the conversation for one shipment and sends it
 // back each turn. Nothing here can create a label -- see _lib/agent.ts.
@@ -100,10 +101,11 @@ export async function POST(req: Request) {
           if (result.stopReason !== "tool_use" || calls.length === 0) break;
           const results: ContentBlock[] = [];
           for (const call of calls) {
-            send({ t: "status", label: `${TOOL_LABELS[call.name]?.[lang] ?? call.name}…` });
+            if (call.name !== "offer_replies") send({ t: "status", label: `${TOOL_LABELS[call.name]?.[lang] ?? call.name}…` });
             const out = await runTool(call.name, call.input, {
               supabase: g.supabase,
               onDraft: (d) => send({ t: "draft", draft: d.draft, problems: d.problems }),
+              onReplies: (options) => send({ t: "replies", options }),
             });
             results.push({ type: "tool_result", tool_use_id: call.id, content: out.content, ...(out.isError ? { is_error: true } : {}) });
           }

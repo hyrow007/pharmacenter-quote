@@ -37,6 +37,15 @@
 .me, .bot { max-width: 85%; padding: 9px 12px; border-radius: 12px; white-space: pre-wrap; font-size: 15px; line-height: 1.45; }
 .me { align-self: flex-end; background: var(--teal-900); color: var(--paper); border-bottom-right-radius: 4px; }
 .bot { align-self: flex-start; background: var(--cream-soft); border: 1px solid var(--stone); color: var(--ink-1); border-bottom-left-radius: 4px; }
+.chips { align-self: stretch; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.chipsLead { width: 100%; margin: 0 0 2px; color: var(--ink-3); font-size: 13px; }
+.chip {
+  border: 1px solid var(--teal-900); background: var(--paper); color: var(--teal-900);
+  border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 14px; line-height: 1.2; cursor: pointer;
+  text-align: left;
+}
+.chip:hover { background: var(--teal-900); color: var(--paper); }
+.chip:focus-visible { outline: 2px solid var(--teal-900); outline-offset: 2px; }
 .status { align-self: flex-start; color: var(--ink-3); font-size: 13px; font-style: italic; }
 .compose { border-top: 1px solid var(--stone); padding: 12px; display: grid; gap: 8px; background: var(--paper); }
 .compose textarea {
