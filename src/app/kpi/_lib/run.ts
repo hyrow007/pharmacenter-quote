@@ -109,8 +109,9 @@ export function judge(m: Metric, c: Comparison | undefined): Verdict {
   if (!m.target && !m.alarm) return { off: false };
   if (m.value === null) return { off: true, reason: "unknown" };
   if (m.target) {
-    if (m.target.kind === "min" && m.value < m.target.value) return { off: true, reason: "below" };
+    if ((m.target.kind === "min" || m.target.kind === "range") && m.value < m.target.value) return { off: true, reason: "below" };
     if (m.target.kind === "max" && m.value > m.target.value) return { off: true, reason: "above" };
+    if (m.target.kind === "range" && m.value > m.target.high) return { off: true, reason: "above" };
   }
   if (m.alarm && c?.changePct !== null && c?.changePct !== undefined && Math.abs(c.changePct) > m.alarm.changePct) {
     return { off: true, reason: "moved", changePct: c.changePct };

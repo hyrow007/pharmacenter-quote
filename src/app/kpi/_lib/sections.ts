@@ -6,8 +6,9 @@
 
 import type { Bilingual, MetricSource } from "./contract";
 import { ordersMetrics } from "@/app/orders/_lib/kpi";
+import { capacityMetrics } from "./capacity";
 
-export const SOURCES: MetricSource[] = [ordersMetrics];
+export const SOURCES: MetricSource[] = [ordersMetrics, capacityMetrics];
 
 export type Section = { id: string; title: Bilingual; metrics: string[] };
 
@@ -16,6 +17,16 @@ export const SECTIONS: Section[] = [
     id: "sales-orders",
     title: { en: "Sales orders", es: "Órdenes de venta" },
     metrics: ["orders.open_value"],
+  },
+  {
+    id: "revenue",
+    title: { en: "Revenue", es: "Ingresos" },
+    metrics: ["orders.revenue_30d", "orders.new_customers_3m"],
+  },
+  {
+    id: "capacity",
+    title: { en: "Capacity", es: "Capacidad" },
+    metrics: ["capacity.utilization_last_month"],
   },
   {
     id: "estimates",

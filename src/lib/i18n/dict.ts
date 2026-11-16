@@ -26,6 +26,10 @@ const en = {
   navAdmin: "Admin",
   navYieldsLog: "Log",
   navYieldsHistory: "History",
+  navKpiOverview: "Overview",
+  navKpiHistory: "History",
+  navKpiSales: "Sales",
+  navKpiCapacity: "Capacity",
 
   // ---- Formulas catalog ----
   catalogTitle: "Gummy Formula Catalog",
@@ -441,6 +445,10 @@ const es: typeof en = {
   navAdmin: "Admin",
   navYieldsLog: "Registro",
   navYieldsHistory: "Historial",
+  navKpiOverview: "Resumen",
+  navKpiHistory: "Historial",
+  navKpiSales: "Ventas",
+  navKpiCapacity: "Capacidad",
 
   // ---- Formulas catalog ----
   catalogTitle: "Catálogo de Fórmulas de Gomitas",

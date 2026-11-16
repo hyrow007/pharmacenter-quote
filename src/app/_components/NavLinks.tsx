@@ -136,6 +136,32 @@ export default function NavLinks({
           </Link>
         </>
       ) : null}
+      {appContext === "kpi" ? (
+        <>
+          {/* On the kpi host "/" is the overview and "/sales" etc. rewrite to
+              /kpi/sales; elsewhere the full /kpi paths are used. */}
+          {(
+            [
+              ["/", "navKpiOverview"],
+              ["/history", "navKpiHistory"],
+              ["/sales", "navKpiSales"],
+              ["/capacity", "navKpiCapacity"],
+            ] as const
+          ).map(([path, key]) => {
+            const full = path === "/" ? "/kpi" : `/kpi${path}`;
+            const active = path === "/" ? pathname === "/" || pathname === "/kpi" : pathname === path || pathname === full;
+            return (
+              <Link
+                key={path}
+                href={onKpiHost ? path : full}
+                className={`app-nav__link${active ? " app-nav__link--active" : ""}`}
+              >
+                {t(key)}
+              </Link>
+            );
+          })}
+        </>
+      ) : null}
       {/* v49: Feedback and Admin are canonical on the quote host and
           shared by all PharmaCenter apps (packing list links here too).
           From the formula subdomain they're absolute URLs — a relative

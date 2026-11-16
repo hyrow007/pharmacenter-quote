@@ -1,15 +1,12 @@
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../_components/AppHeader";
-import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT, type Lang } from "@/lib/i18n/dict";
 import { describeFreshness } from "@/lib/freshness";
 import type { Metric } from "./_lib/contract";
 import { SECTIONS } from "./_lib/sections";
 import { addDays, collectMetrics, judge, loadComparisons, plantToday, writeSnapshots, type Comparison, type Verdict } from "./_lib/run";
 import { serviceClient } from "./_lib/service";
-import { makeKT, type KT } from "./_lib/i18n";
+import { type KT } from "./_lib/i18n";
+import { kpiPage } from "./_lib/pageCtx";
 import s from "./kpi.module.css";
 
 // /kpi -- served at kpi.pharmacenter.app/ by the host rewrite in middleware.ts.
@@ -37,6 +34,10 @@ function fmtValue(m: Metric, lang: Lang): string {
   }
 }
 
+function fmtMonthName(ym: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(lang === "es" ? "es-US" : "en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${ym}-15T12:00:00Z`));
+}
+
 function fmtUsd(n: number, lang: Lang): string {
   return new Intl.NumberFormat(lang === "es" ? "es-US" : "en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 }
@@ -51,26 +52,19 @@ function fmtPct(p: number): string {
 
 function reasonText(m: Metric, v: Verdict, t: KT, lang: Lang): string {
   if (!v.off) return "";
-  if (v.reason === "unknown") return t("unknownNote");
+  if (v.reason === "unknown") return m.note?.[lang] ?? t("unknownNote");
   if (v.reason === "below") return t("belowTarget", { target: fmtValue({ ...m, value: m.target!.value }, lang) });
-  if (v.reason === "above") return t("aboveTarget", { target: fmtValue({ ...m, value: m.target!.value }, lang) });
+  if (v.reason === "above") {
+    const tg = m.target!;
+    return t("aboveTarget", { target: fmtValue({ ...m, value: tg.kind === "range" ? tg.high : tg.value }, lang) });
+  }
   const n = m.alarm?.vsDays ?? 30;
   const pct = `${Math.abs(v.changePct ?? 0).toFixed(1)}%`;
   return (v.changePct ?? 0) >= 0 ? t("movedUp", { pct, n }) : t("movedDown", { pct, n });
 }
 
 export default async function KpiPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !user.email?.endsWith("@pharmacenterusa.com")) {
-    const host = (await headers()).get("host") ?? "";
-    redirect(host.startsWith("kpi.") || host.startsWith("kpis.") ? "/?showSignIn=1" : "/");
-  }
-
-  const lang = await getLangFromCookie();
-  const t = makeKT(lang);
+  const { supabase, email, lang, t, href } = await kpiPage();
   const today = plantToday();
 
   const metrics = await collectMetrics(supabase);
@@ -95,7 +89,7 @@ export default async function KpiPage() {
 
   return (
     <div className="app-shell">
-      <AppHeader user={{ email: user.email! }} appContext="kpi" />
+      <AppHeader user={{ email }} appContext="kpi" />
       <main className="page">
         <div className="page__inner">
           <div style={{ marginBottom: 20 }}>
@@ -131,7 +125,7 @@ export default async function KpiPage() {
                 <h2 id={`sec-${sec.id}`} className={s.sectionTitle}>{sec.title[lang]}</h2>
                 <div className={s.grid}>
                   {ms.map((m) => (
-                    <MetricCard key={m.id} m={m} c={comparisons.get(m.id)} v={verdicts.get(m.id)!} t={t} lang={lang} />
+                    <MetricCard key={m.id} m={m} c={comparisons.get(m.id)} v={verdicts.get(m.id)!} t={t} lang={lang} href={href} />
                   ))}
                 </div>
               </section>
@@ -143,8 +137,17 @@ export default async function KpiPage() {
   );
 }
 
-function MetricCard({ m, c, v, t, lang }: { m: Metric; c?: Comparison; v: Verdict; t: KT; lang: Lang }) {
-  const d = (m.detail ?? {}) as { orders?: number; unpriced?: number; top_customers?: { customer: string; value: number }[] };
+function MetricCard({ m, c, v, t, lang, href }: { m: Metric; c?: Comparison; v: Verdict; t: KT; lang: Lang; href: (p: string) => string }) {
+  const d = (m.detail ?? {}) as {
+    orders?: number;
+    unpriced?: number;
+    top_customers?: { customer: string; value: number }[];
+    revenue?: number;
+    gross?: number;
+    month?: string;
+    used?: number;
+    available?: number;
+  };
   const vsDays = m.alarm?.vsDays ?? 30;
   let changeLine: React.ReactNode;
   if (c?.priorDate && c.changePct !== null) {
@@ -168,6 +171,17 @@ function MetricCard({ m, c, v, t, lang }: { m: Metric; c?: Comparison; v: Verdic
       {changeLine}
       {typeof d.orders === "number" ? <p className={s.meta}>{t("orders", { n: d.orders })}</p> : null}
       {d.unpriced ? <p className={s.meta}>{t("unpriced", { n: d.unpriced })}</p> : null}
+      {typeof d.revenue === "number" && typeof d.gross === "number" ? (
+        <p className={s.meta}>{t("newDetail", { rev: fmtUsd(d.revenue, lang), gross: fmtUsd(d.gross, lang) })}</p>
+      ) : null}
+      {typeof d.month === "string" && typeof d.used === "number" ? (
+        <p className={s.meta}>
+          {d.available
+            ? t("capDetail", { used: d.used, avail: d.available, month: fmtMonthName(d.month, lang) })
+            : t("capDetailNone", { used: d.used, month: fmtMonthName(d.month, lang) })}
+        </p>
+      ) : null}
+      {m.note ? <p className={s.meta}>{m.note[lang]}</p> : null}
       {m.alarm ? <p className={s.meta}>{t("alarmRule", { pct: m.alarm.changePct, n: m.alarm.vsDays })}</p> : null}
       {d.top_customers && d.top_customers.length > 0 ? (
         <>
@@ -182,7 +196,7 @@ function MetricCard({ m, c, v, t, lang }: { m: Metric; c?: Comparison; v: Verdic
           </ul>
         </>
       ) : null}
-      {m.href ? <a className={s.link} href={m.href}>{t("openIn", { app: lang === "es" ? "Órdenes" : "Sales Orders" })}</a> : null}
+      {m.href ? <a className={s.link} href={href(m.href)}>{m.hrefLabel ? `${m.hrefLabel[lang]} →` : t("openIn", { app: "" })}</a> : null}
     </article>
   );
 }

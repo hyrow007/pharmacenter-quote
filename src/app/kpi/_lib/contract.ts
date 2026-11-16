@@ -16,12 +16,15 @@ export type Metric = {
   value: number | null;            // null = unknown, never 0
   unit: MetricUnit;
   direction: "up" | "down";        // which way is good
-  target?: { value: number; kind: "min" | "max" };
+  // "min"/"max": one bound. "range": healthy between value and high (both
+  // too low and too high are bad, e.g. capacity utilization).
+  target?: { value: number; kind: "min" | "max" } | { value: number; high: number; kind: "range" };
   alarm?: { changePct: number; vsDays: number }; // "off" if it moved more than this
   coverage?: { known: number; total: number };   // how much of the data the value rests on
   note?: Bilingual;                // the "why this is off" line
   detail?: Record<string, unknown>; // stored with the snapshot (counts, top customers…)
-  href?: string;                   // drill-down into the owning app
+  href?: string;                   // drill-down: absolute URL, or a KPI-host path ("/sales")
+  hrefLabel?: Bilingual;           // the link's words, e.g. "See history"
   dataAsOf?: string | null;        // ISO time of the data the value was computed from
 };
 
