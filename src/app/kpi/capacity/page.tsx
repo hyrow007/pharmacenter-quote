@@ -35,6 +35,7 @@ export default async function CapacityPage({ searchParams }: { searchParams: Pro
           {cap ? <p className={s.note}>{t("capMonth", { month: fmtMonth(cap.month, lang) })}</p> : null}
           {saved ? <p className={s.ok}>{t("savedOk")}</p> : null}
           {err ? <p className={s.err}>{t("saveFailed", { err })}</p> : null}
+          {!cap ? <p className={s.err}>{t("capLoadFailed")}</p> : null}
 
           {cap ? (
             <div className={s.stats}>
