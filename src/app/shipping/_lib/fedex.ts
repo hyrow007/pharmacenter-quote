@@ -183,7 +183,18 @@ export async function validateAddress(
  * (SENDER), origin is the US, purpose is a sample, and the shipment's one
  * declared value is spread across the lines in whole cents.
  */
-function fxCustoms(c: Customs, packages: DraftPackage[]) {
+// US export paperwork (EEI). Under $2,500 per HS line no EEI is filed; the
+// shipment must instead CITE the Foreign Trade Regulations exemption. Live
+// FedEx refused a China shipment on 2026-11-17 without one ("SHIPMENTVALIDATION
+// .EEIEDIT.ERROR The FTR Exemption or AES Citation you provided is not valid
+// for EEI"); the sandbox had filled "NO EEI 30.37(a)" in by itself. So we
+// state it: 30.37(a) = low value; Canada has its own, 30.36. The app refuses
+// anything over $2,500 (customs.ts), so a filed EEI never applies here.
+function eeiExemption(countryCode: string): string {
+  return countryCode === "CA" ? "30.36" : "30.37(a)";
+}
+
+function fxCustoms(c: Customs, packages: DraftPackage[], countryCode: string) {
   const total = Math.max(0.01, c.declaredValue);
   const money = (amount: number) => ({ amount, currency: "USD" });
   const totalLb = packages.reduce((a, p) => a + p.weightLb, 0) || 1;
@@ -200,6 +211,7 @@ function fxCustoms(c: Customs, packages: DraftPackage[]) {
     dutiesPayment: { paymentType: "SENDER" },
     isDocumentOnly: c.documentsOnly,
     commercialInvoice: { shipmentPurpose: "SAMPLE" },
+    exportDetail: { exportComplianceStatement: eeiExemption(countryCode) },
     totalCustomsValue: money(total),
     commodities: lines.map((l, i) => ({
       description: l.description,
@@ -254,7 +266,7 @@ export async function getRates(
       // International rates can come back in the destination's currency (a
       // Mexico quote arrived in EUR on 2026-11-07). Ask for dollars.
       preferredCurrency: "USD",
-      ...(d.customs ? { customsClearanceDetail: fxCustoms(d.customs, d.packages) } : {}),
+      ...(d.customs ? { customsClearanceDetail: fxCustoms(d.customs, d.packages, d.recipient.countryCode) } : {}),
       requestedPackageLineItems: fxPackages(d.packages),
     },
   });
@@ -342,7 +354,7 @@ export async function createShipment(d: Draft): Promise<Created | FedexError> {
       },
       ...(d.customs
         ? {
-            customsClearanceDetail: fxCustoms(d.customs, d.packages),
+            customsClearanceDetail: fxCustoms(d.customs, d.packages, d.recipient.countryCode),
             shippingDocumentSpecification: {
               shippingDocumentTypes: ["COMMERCIAL_INVOICE"],
               commercialInvoiceDetail: { documentFormat: { stockType: "PAPER_LETTER", docType: "PDF" } },
