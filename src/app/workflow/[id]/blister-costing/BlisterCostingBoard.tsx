@@ -1582,7 +1582,12 @@ export type SavedState = {
   packoutRequired: boolean | null;
   /** Units per minute PER PERSON on packout. Only read when packout is on. */
   packoutSpeed: number | null;
-  /** Units per minute PER PERSON on cartoning / carton printing. */
+  /**
+   * Cartoning rate PER PERSON, typed in whatever cartoning actually
+   * handles: BUNDLES when the job bundles (cartoning runs after it, on
+   * displays rather than on packs), finished units when it does not.
+   * Converted to a per-unit rate on the way into the model.
+   */
   cartoningSpeed: number | null;
   /** Bundling FOR THIS COSTING. null = follow the form's "Bundling
    *  required?"; true/false = overridden here, never written back. */
@@ -2497,18 +2502,27 @@ function backfillDosesPerBlister<T extends Omit<SavedState, "scenarios">>(s: T):
  * Only bundling moves the number: with packout alone the finished unit IS
  * the retail pack, which is already the outermost one.
  */
-function backfillOuterQty<T extends Omit<SavedState, "scenarios">>(s: T): T {
+function backfillOuterBasis<T extends Omit<SavedState, "scenarios">>(s: T): T {
   if (s.qtyIsOuter) return s;
   const per = s.bottlesPerInnerPack;
   // bundlingRequired null means "follow the form", and the form is not in
-  // scope here. Only an explicit yes is safe to divide on: guessing wrong
+  // scope here. Only an explicit yes is safe to convert on: guessing wrong
   // would silently shrink a saved quote by the bundle count.
   const bundling = s.bundlingRequired === true;
+  if (!bundling || !per || per <= 0) return { ...s, qtyIsOuter: true };
+
   const q = s.quantityOverride;
-  if (!bundling || !per || per <= 0 || q === null || q === undefined) {
-    return { ...s, qtyIsOuter: true };
-  }
-  return { ...s, quantityOverride: q / per, qtyIsOuter: true };
+  // Cartoning speed used to be typed per finished unit and is now typed
+  // per bundle, so a saved figure means `per` times fewer bundles a
+  // minute than it looks. Divide it to the new basis or the job suddenly
+  // cartons `per` times faster than it was quoted at.
+  const cart = s.cartoningSpeed;
+  return {
+    ...s,
+    quantityOverride: q === null || q === undefined ? q : q / per,
+    cartoningSpeed: cart === null || cart === undefined ? cart : cart / per,
+    qtyIsOuter: true,
+  };
 }
 
 /** Build the working state for one product: its saved costing hydrated
@@ -2602,13 +2616,18 @@ function hydrateSaved(
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       blistersPerUnit: initial.blistersPerUnit ?? blank.blistersPerUnit,
       dosesPerBlister: backfillDosesPerBlister(initial).dosesPerBlister,
-      quantityOverride: backfillOuterQty(initial).quantityOverride,
+      // Both fields the outer-basis migration touches have to be READ from
+      // it, not just the one. Taking quantityOverride alone and letting
+      // cartoningSpeed fall through to the spread below would migrate half
+      // the state and leave the other half meaning the old thing.
+      quantityOverride: backfillOuterBasis(initial).quantityOverride,
+      cartoningSpeed: backfillOuterBasis(initial).cartoningSpeed,
       qtyIsOuter: true,
       // Scenarios are loaded raw by selectTab — they never pass through this
       // function again — so each one is migrated HERE or not at all.
       scenarios: (initial.scenarios ?? blank.scenarios).map((sc) =>
         sc && sc.state
-          ? { ...sc, state: backfillOuterQty(backfillDosesPerBlister(sc.state)) }
+          ? { ...sc, state: backfillOuterBasis(backfillDosesPerBlister(sc.state)) }
           : sc,
       ),
       // Costings saved before these questions: follow the form, UNLESS the
@@ -3420,7 +3439,19 @@ export default function BlisterCostingBoard({
         speedPenaltyPct: st.speedPenaltyPct,
         blistersPerUnit: st.blistersPerUnit,
         packoutSpeed: packoutOn ? st.packoutSpeed : null,
-        cartoningSpeed: st.cartoningSpeed,
+        // Cartoning happens to BUNDLES, not to finished units: by the time
+        // it runs, twelve retail packs are already one display. So the
+        // speed is typed per bundle and converted to the per-unit rate the
+        // model works in -- bundles/min x packs/bundle = packs/min.
+        //
+        // The conversion is the whole point. Feeding a bundle rate straight
+        // in would charge the job for cartoning all 36,000 packs when only
+        // 3,000 displays are ever handled: twelve times the hours, and the
+        // floor-days and overhead that ride on them.
+        cartoningSpeed:
+          st.cartoningSpeed !== null && packsPerBundle > 1
+            ? st.cartoningSpeed * packsPerBundle
+            : st.cartoningSpeed,
         bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
         setup: {
           hours: st.setupHours,
@@ -4568,7 +4599,13 @@ export default function BlisterCostingBoard({
               />
             </ParamBlock>
           )}
-          <ParamBlock label="Cartoning speed (units / min / person)">
+          <ParamBlock
+            label={
+              packsPerBundle > 1
+                ? "Cartoning speed (bundles / min / person)"
+                : "Cartoning speed (units / min / person)"
+            }
+          >
             <NumField
               value={st.cartoningSpeed}
               onChange={(v) => set("cartoningSpeed", v)}
