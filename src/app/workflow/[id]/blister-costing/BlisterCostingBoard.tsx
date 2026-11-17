@@ -6246,7 +6246,7 @@ export default function BlisterCostingBoard({
           <LeaseBreakdownTable
             rows={overheadMeta.leaseBreakdown}
             jobDays={jobDays}
-            quantity={qty}
+            quantity={outerQty}
             effRate={leaseRateEff}
             dec={st.displayDec}
             unit="unit"
@@ -6260,7 +6260,7 @@ export default function BlisterCostingBoard({
             onChange={(next) => set("overheadRent", next)}
             jobDays={jobDays}
             workingDays={st.workingDaysPerMonth}
-            quantity={qty}
+            quantity={outerQty}
             perRunDayRate={leaseRateEff}
             dec={st.displayDec}
           />
@@ -6271,7 +6271,7 @@ export default function BlisterCostingBoard({
           <IndirectBreakdownTable
             rows={overheadMeta.indirectBreakdown}
             jobDays={jobDays}
-            quantity={qty}
+            quantity={outerQty}
             effRate={indirectRateEff}
             dec={st.displayDec}
             unit="unit"
@@ -6285,7 +6285,7 @@ export default function BlisterCostingBoard({
             onChange={(next) => set("overheadIndirect", next)}
             jobDays={jobDays}
             workingDays={st.workingDaysPerMonth}
-            quantity={qty}
+            quantity={outerQty}
             perRunDayRate={null}
             dec={st.displayDec}
           />
@@ -6294,7 +6294,7 @@ export default function BlisterCostingBoard({
           <OtherBreakdownTable
             rows={overheadMeta.otherBreakdown}
             jobDays={jobDays}
-            quantity={qty}
+            quantity={outerQty}
             effRate={otherRateEff}
             dec={st.displayDec}
             unit="unit"
@@ -6308,7 +6308,7 @@ export default function BlisterCostingBoard({
             onChange={(next) => set("overheadOther", next)}
             jobDays={jobDays}
             workingDays={st.workingDaysPerMonth}
-            quantity={qty}
+            quantity={outerQty}
             perRunDayRate={null}
             dec={st.displayDec}
           />
@@ -6601,7 +6601,7 @@ export default function BlisterCostingBoard({
                 title={g.title}
                 list={st[g.key]}
                 onChange={(next) => set(g.key, next)}
-                quantity={qty}
+                quantity={outerQty}
                 dec={st.displayDec}
               />
             ))}
@@ -6902,8 +6902,15 @@ export default function BlisterCostingBoard({
               }}
             >
               Set to break-even
+              {/* Shown per quoted unit like every other price on the card;
+                  the click still solves on the model's per-finished-unit
+                  figure. Unscaled it read $0.3439 a retail pack beside a
+                  price field quoting bundles -- the same number in two
+                  units, a dozen-fold apart, on one button. */}
               {breakEvenPrice !== null
-                ? ` ($${breakEvenPrice.toFixed(Math.max(st.displayDec, 2))})`
+                ? ` ($${(breakEvenPrice * packsPerBundle).toFixed(
+                    Math.max(st.displayDec, 2),
+                  )})`
                 : ""}
             </button>
           </ParamBlock>
