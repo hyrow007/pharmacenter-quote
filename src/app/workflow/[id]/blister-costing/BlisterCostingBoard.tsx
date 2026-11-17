@@ -1570,6 +1570,17 @@ export type SavedState = {
    */
   qtyIsOuter?: boolean;
   /**
+   * Does `bottlesPerMasterBox` count BUNDLES, or finished units?
+   *
+   * Bundles, on a bundling job, since the shipper holds displays. It
+   * counted finished units before 2026-11-17 and a saved figure read the
+   * new way makes the box hold packsPerBundle times more than it does --
+   * so the same once-only conversion as the quantity, behind its own
+   * marker because the quantity's was already spent on states loaded
+   * earlier today.
+   */
+  boxCountsBundles?: boolean;
+  /**
    * Doses in ONE blister card — the packaging form's
    * "Count (doses per card)".
    *
@@ -1938,6 +1949,7 @@ export function blankState(
     blistersPerUnit: bpu,
     dosesPerBlister,
     qtyIsOuter: true,
+    boxCountsBundles: true,
     // null = follow the packaging form.
     packoutRequired: null,
     packoutSpeed: null,
@@ -2532,6 +2544,29 @@ function backfillOuterBasis<T extends Omit<SavedState, "scenarios">>(s: T): T {
   };
 }
 
+/**
+ * Convert a master-box count from finished units to bundles.
+ *
+ * Separate from backfillOuterBasis and separately marked: that one's flag
+ * was already set on every state loaded earlier today, so piggybacking
+ * would skip exactly the costings that need this.
+ */
+function backfillBoxBasis<T extends Omit<SavedState, "scenarios">>(s: T): T {
+  if (s.boxCountsBundles) return s;
+  const per = s.bottlesPerInnerPack;
+  const box = s.bottlesPerMasterBox;
+  if (
+    s.bundlingRequired !== true ||
+    !per ||
+    per <= 1 ||
+    box === null ||
+    box === undefined
+  ) {
+    return { ...s, boxCountsBundles: true };
+  }
+  return { ...s, bottlesPerMasterBox: box / per, boxCountsBundles: true };
+}
+
 /** Build the working state for one product: its saved costing hydrated
  *  over a spec-seeded blank, with every pre-list save shape migrated.
  *  Extracted verbatim from the old useState initializer when the board
@@ -2629,12 +2664,19 @@ function hydrateSaved(
       // the state and leave the other half meaning the old thing.
       quantityOverride: backfillOuterBasis(initial).quantityOverride,
       cartoningSpeed: backfillOuterBasis(initial).cartoningSpeed,
+      bottlesPerMasterBox: backfillBoxBasis(initial).bottlesPerMasterBox,
       qtyIsOuter: true,
+      boxCountsBundles: true,
       // Scenarios are loaded raw by selectTab — they never pass through this
       // function again — so each one is migrated HERE or not at all.
       scenarios: (initial.scenarios ?? blank.scenarios).map((sc) =>
         sc && sc.state
-          ? { ...sc, state: backfillOuterBasis(backfillDosesPerBlister(sc.state)) }
+          ? {
+              ...sc,
+              state: backfillBoxBasis(
+                backfillOuterBasis(backfillDosesPerBlister(sc.state)),
+              ),
+            }
           : sc,
       ),
       // Costings saved before these questions: follow the form, UNLESS the
@@ -3366,7 +3408,17 @@ export default function BlisterCostingBoard({
   const bottlesPerMasterBoxEffective = useMemo(() => {
     if (!hasInnerPack) {
       const n = st.bottlesPerMasterBox;
-      return n && n > 0 ? n : null;
+      if (!n || n <= 0) return null;
+      // On a bundling job the box is the SHIPPER and what goes into it is
+      // displays, so its count is bundles per box and the finished units it
+      // holds is that times the bundle size.
+      //
+      // Without this the two nestings collapse: twelve packs per bundle
+      // beside twelve "units" per box made one whole master box per
+      // display, at $1.04 a bundle instead of $0.0867. The box here holds
+      // 12 displays -- 144 retail packs -- and that is a different number
+      // from the 12 beside it, however alike they look.
+      return packsPerBundle > 1 ? n * packsPerBundle : n;
     }
     const per = st.bottlesPerInnerPack;
     const inners = st.innersPerMasterBox;
@@ -5061,7 +5113,9 @@ export default function BlisterCostingBoard({
                         {line.slot === "master_box"
                           ? hasInnerPack
                             ? "inner packs per box"
-                            : "units per box"
+                            : packsPerBundle > 1
+                              ? "bundles per box"
+                              : "units per box"
                           : line.slot === "inner_pack"
                             ? "units per inner pack"
                             : "units"}
