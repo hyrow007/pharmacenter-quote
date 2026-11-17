@@ -21,7 +21,49 @@ export type ActionResult =
   | { ok: true; status: "created"; id: string; trackingNumber: string }
   | { ok: true; status: "pending_approval"; id: string; cost: number }
   | { ok: true; status: "rejected" | "voided"; id: string }
-  | { ok: false; error: string; detail?: string; problems?: string[] };
+  | { ok: false; error: string; detail?: string; problems?: string[]; earlier?: EarlierLabel };
+
+/** Another label to the same recipient that is waiting or was made recently. */
+export type EarlierLabel = { status: string; trackingNumber: string | null; at: string; by: string };
+
+const RECENT_HOURS = 6;
+
+// A second label to the same place within a few hours is usually the same
+// box asked for twice (2026-11-17: a China request was made again two minutes
+// later while the first was still waiting, and nearly approved twice). Not an
+// error -- sometimes it really is a second box -- so the person is asked.
+async function earlierToSameRecipient(
+  service: SupabaseClient,
+  r: { recipientId: string | null; company: string | null; contactName: string | null; city: string; postalCode: string | null },
+  exceptId?: string,
+): Promise<EarlierLabel | null> {
+  const since = new Date(Date.now() - RECENT_HOURS * 3600_000).toISOString();
+  let q = service
+    .from("shipping_labels")
+    .select("id, status, tracking_number, requested_at, created_label_at, requested_by, recipient_id, recipient_snapshot")
+    .eq("environment", ENVIRONMENT)
+    .in("status", ["pending_approval", "approved", "created"])
+    .gte("requested_at", since)
+    .order("requested_at", { ascending: false })
+    .limit(50);
+  if (exceptId) q = q.neq("id", exceptId);
+  const { data } = await q;
+  const norm = (x: unknown) => String(x ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const hit = (data ?? []).find((row) => {
+    if (r.recipientId && row.recipient_id === r.recipientId) return true;
+    const snap = (row.recipient_snapshot ?? {}) as { company?: string | null; contactName?: string | null; city?: string; postalCode?: string | null };
+    const sameName = norm(snap.company || snap.contactName) === norm(r.company || r.contactName);
+    const samePlace = norm(snap.city) === norm(r.city) && (!snap.postalCode || !r.postalCode || norm(snap.postalCode).slice(0, 5) === norm(r.postalCode).slice(0, 5));
+    return sameName && samePlace;
+  });
+  if (!hit) return null;
+  return {
+    status: hit.status as string,
+    trackingNumber: (hit.tracking_number as string | null) ?? null,
+    at: (hit.created_label_at as string | null) ?? (hit.requested_at as string),
+    by: String(hit.requested_by ?? "").replace(/@.*/, ""),
+  };
+}
 
 const LABEL_COLS =
   "id, environment, status, purpose, purpose_note, customer_id, vendor_id, so_number, recipient_id, recipient_snapshot, contents, packages, international, service_type, payer, payer_account, signature_required, saturday_delivery, rated_cost, requested_by, approval_required, tracking_number, customs, rate_detail";
@@ -114,7 +156,7 @@ async function createAndStore(service: SupabaseClient, row: LabelRow): Promise<A
   return { ok: true, status: "created", id: row.id, trackingNumber: made.trackingNumber };
 }
 
-export async function submitShipment(raw: unknown): Promise<ActionResult> {
+export async function submitShipment(raw: unknown, confirmSecond = false): Promise<ActionResult> {
   const g = await shipGate();
   if (!g.ok) return { ok: false, error: g.error };
   const cfg = fedexConfigured();
@@ -162,6 +204,16 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
     ? await dupQ.eq("recipient_id", draft.recipientId)
     : await dupQ.eq("recipient_snapshot->>city", draft.recipient.city);
   if (dup?.length) return { ok: false, error: "duplicate_just_submitted" };
+  if (!confirmSecond) {
+    const earlier = await earlierToSameRecipient(g.service, {
+      recipientId: draft.recipientId,
+      company: draft.recipient.company,
+      contactName: draft.recipient.contactName,
+      city: draft.recipient.city,
+      postalCode: draft.recipient.postalCode,
+    });
+    if (earlier) return { ok: false, error: "possible_duplicate", earlier };
+  }
 
   // The address book: reuse the entry, refreshing it with the checked address,
   // or add the new recipient so nobody types this address again.
@@ -247,10 +299,32 @@ export async function submitShipment(raw: unknown): Promise<ActionResult> {
   return out;
 }
 
-export async function approveShipment(id: string): Promise<ActionResult> {
+export async function approveShipment(id: string, confirmSecond = false): Promise<ActionResult> {
   const g = await shipGate();
   if (!g.ok) return { ok: false, error: g.error };
   if (!g.admin) return { ok: false, error: "not_admin" };
+  if (!confirmSecond) {
+    const { data: me } = await g.service
+      .from("shipping_labels")
+      .select("recipient_id, recipient_snapshot")
+      .eq("id", id)
+      .maybeSingle();
+    const snap = (me?.recipient_snapshot ?? {}) as { company?: string | null; contactName?: string | null; city?: string; postalCode?: string | null };
+    if (me) {
+      const earlier = await earlierToSameRecipient(
+        g.service,
+        {
+          recipientId: (me.recipient_id as string | null) ?? null,
+          company: snap.company ?? null,
+          contactName: snap.contactName ?? null,
+          city: snap.city ?? "",
+          postalCode: snap.postalCode ?? null,
+        },
+        id,
+      );
+      if (earlier) return { ok: false, error: "possible_duplicate", earlier };
+    }
+  }
   const { data, error } = await g.service
     .from("shipping_labels")
     .update({ status: "approved", approved_by: g.email, approved_at: new Date().toISOString() })

@@ -6,6 +6,7 @@ import { makeST, type SKey } from "../_lib/i18n";
 import { approveShipment, rejectShipment, voidShipment, type ActionResult } from "../actions";
 import s from "../shipping.module.css";
 import SendSteps from "./SendSteps";
+import TrackingCell from "./TrackingCell";
 
 // Waiting for approval (admins act; everyone sees) and the recent label log,
 // with reprint and void. Every button calls a server action that re-checks
@@ -99,12 +100,26 @@ export default function LabelTables({
   const [msg, setMsg] = useState<string | null>(null);
   const [, start] = useTransition();
 
-  const run = (id: string, fn: () => Promise<ActionResult>) => {
+  const run = (id: string, fn: () => Promise<ActionResult>, retrySecond?: () => Promise<ActionResult>) => {
     setBusyId(id);
     setMsg(null);
     start(async () => {
       const r = await fn();
       setBusyId(null);
+      // Approving when a label to the same recipient already exists: ask.
+      if (!r.ok && r.error === "possible_duplicate" && r.earlier && retrySecond) {
+        const e = r.earlier;
+        const ok = window.confirm(
+          t("dupApprove", {
+            status: t(`st_word_${e.status}` as SKey),
+            when: new Date(e.at).toLocaleString(lang === "es" ? "es-US" : "en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", month: "short", day: "numeric" }),
+            by: e.by,
+            tracking: e.trackingNumber ? ` (${e.trackingNumber})` : "",
+          }),
+        );
+        if (ok) run(id, retrySecond);
+        return;
+      }
       if (!r.ok)
         setMsg(
           r.error === "not_admin"
@@ -188,7 +203,9 @@ export default function LabelTables({
       </td>
       <td className={s.muted}>{t("srcFedex")}</td>
       <td>{t("shippedOn")}</td>
-      <td className={s.mono}>{e.master_tracking_number}</td>
+      <td className={s.mono}>
+        <TrackingCell number={e.master_tracking_number} copyLabel={t("copyTracking")} copiedLabel={t("copied")} />
+      </td>
       <td className={s.actions}>
         <a className={s.ghostSm} href={trackUrl(e.master_tracking_number)} target="_blank" rel="noreferrer">
           {t("track")}
@@ -235,7 +252,7 @@ export default function LabelTables({
                             type="button"
                             className={s.primarySm}
                             disabled={busyId === r.id}
-                            onClick={() => run(r.id, () => approveShipment(r.id))}
+                            onClick={() => run(r.id, () => approveShipment(r.id), () => approveShipment(r.id, true))}
                           >
                             {t("approve")}
                           </button>
@@ -305,7 +322,18 @@ export default function LabelTables({
                       ) : null}
                       {r.status === "rejected" && r.decision_note ? <div className={s.muted}>{r.decision_note}</div> : null}
                     </td>
-                    <td className={s.mono}>{r.tracking_number ?? "—"}</td>
+                    <td className={s.mono}>
+                      {r.tracking_number ? (
+                        <TrackingCell
+                          number={r.tracking_number}
+                          link={r.environment === "live"}
+                          copyLabel={t("copyTracking")}
+                          copiedLabel={t("copied")}
+                        />
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className={s.actions}>
                       {r.label_path && r.status === "created" ? (
                         <a className={s.ghostSm} href={`/api/shipping/labels/${r.id}/pdf`} target="_blank" rel="noreferrer">
@@ -315,6 +343,11 @@ export default function LabelTables({
                       {(r.invoice_path || r.international) && r.status === "created" ? (
                         <a className={s.ghostSm} href={`/api/shipping/labels/${r.id}/pdf?doc=invoice`} target="_blank" rel="noreferrer">
                           {t("invoice")}
+                        </a>
+                      ) : null}
+                      {r.tracking_number && r.environment === "live" && r.status === "created" ? (
+                        <a className={s.ghostSm} href={trackUrl(r.tracking_number)} target="_blank" rel="noreferrer">
+                          {t("track")}
                         </a>
                       ) : null}
                       {r.status === "created" ? (

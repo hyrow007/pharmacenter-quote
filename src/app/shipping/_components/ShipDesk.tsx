@@ -120,10 +120,10 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
     setResult(null);
   }
 
-  function confirm() {
+  function confirm(second = false) {
     if (!draft) return;
     startTransition(async () => {
-      const r = await submitShipment(draft);
+      const r = await submitShipment(draft, second);
       setResult(r);
       if (r.ok && r.status === "created") window.open(`/api/shipping/labels/${r.id}/pdf`, "_blank");
     });
@@ -283,7 +283,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
 
         {draft && !done ? (
           <div className={s.confirm}>
-            <button type="button" className={s.primary} onClick={confirm} disabled={pending || busy || blocking.length > 0}>
+            <button type="button" className={s.primary} onClick={() => confirm()} disabled={pending || busy || blocking.length > 0}>
               {pending ? t("confirming") : overLimit ? t("confirmApproval") : t("confirm")}
             </button>
             <p className={s.muted}>
@@ -319,6 +319,30 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
             ) : result.status === "pending_approval" ? (
               <p className={s.success}>{t("pendingMade", { cost: money(result.cost) })}</p>
             ) : null
+          ) : result.error === "possible_duplicate" && result.earlier ? (
+            <div className={s.warn}>
+              <b>{t("dupTitle")}</b>
+              <div style={{ margin: "4px 0 10px" }}>
+                {t("dupBody", {
+                  status: t(`st_word_${result.earlier.status}` as SKey).replace(/^./, (c) => c.toUpperCase()),
+                  when: new Date(result.earlier.at).toLocaleString(lang === "es" ? "es-US" : "en-US", {
+                    timeZone: "America/New_York",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    month: "short",
+                    day: "numeric",
+                  }),
+                  by: result.earlier.by,
+                  tracking: result.earlier.trackingNumber ? ` (${result.earlier.trackingNumber})` : "",
+                })}
+              </div>
+              <button type="button" className={s.primarySm} disabled={pending} onClick={() => confirm(true)}>
+                {t("dupYes")}
+              </button>{" "}
+              <button type="button" className={s.ghostSm} disabled={pending} onClick={() => setResult(null)}>
+                {t("dupNo")}
+              </button>
+            </div>
           ) : (
             <p className={s.warn}>
               {result.error === "incomplete"
