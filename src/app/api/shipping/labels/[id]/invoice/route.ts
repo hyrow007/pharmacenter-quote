@@ -189,7 +189,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   @media print { .noprint { display: none; } .page { padding: 0; } @page { size: letter; margin: 0.5in; } }
 </style></head>
 <body>
-<div class="noprint"><button onclick="window.print()">Print</button> Print 3 copies: 2 in the clear pouch on the box, 1 for the file.</div>
+<div class="noprint"><button onclick="window.print()">Print</button> Print 4: 3 go in the clear FedEx pouch behind the label pages (1 original + 2 copies), 1 stays on file. Nothing goes inside the sealed box.</div>
 <div class="page">
   ${test ? '<div class="test">TEST LABEL — NOT A REAL SHIPMENT</div>' : ""}
   <h1>COMMERCIAL INVOICE</h1>

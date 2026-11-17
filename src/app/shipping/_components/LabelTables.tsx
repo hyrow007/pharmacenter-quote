@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import type { Lang } from "@/lib/i18n/dict";
 import { makeST, type SKey } from "../_lib/i18n";
 import { approveShipment, rejectShipment, voidShipment, type ActionResult } from "../actions";
 import s from "../shipping.module.css";
+import SendSteps from "./SendSteps";
 
 // Waiting for approval (admins act; everyone sees) and the recent label log,
 // with reprint and void. Every button calls a server action that re-checks
@@ -30,6 +31,8 @@ export type LabelListRow = {
   label_path: string | null;
   invoice_path: string | null;
   international?: boolean;
+  signature_required?: boolean;
+  payer?: string | null;
   fedex_error: { error?: string; detail?: string | null; invoice?: string } | null;
 };
 
@@ -92,6 +95,7 @@ export default function LabelTables({
 }) {
   const t = makeST(lang);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [howId, setHowId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [, start] = useTransition();
 
@@ -282,7 +286,8 @@ export default function LabelTables({
                   if (item.ext) return extRow(item.ext);
                   const r = item.app;
                   return (
-                  <tr key={r.id} className={r.status === "voided" || r.status === "rejected" ? s.dim : undefined}>
+                  <Fragment key={r.id}>
+                  <tr className={r.status === "voided" || r.status === "rejected" ? s.dim : undefined}>
                     <td>{when(r.requested_at, lang)} {test(r)}</td>
                     <td>{to(r)}</td>
                     <td>{purpose(r)}</td>
@@ -312,6 +317,11 @@ export default function LabelTables({
                           {t("invoice")}
                         </a>
                       ) : null}
+                      {r.status === "created" ? (
+                        <button type="button" className={s.ghostSm} onClick={() => setHowId(howId === r.id ? null : r.id)}>
+                          {t("howToSend")}
+                        </button>
+                      ) : null}
                       {r.status === "created" && (admin || r.requested_by === me) ? (
                         <button
                           type="button"
@@ -326,6 +336,21 @@ export default function LabelTables({
                       ) : null}
                     </td>
                   </tr>
+                  {howId === r.id ? (
+                    <tr>
+                      <td colSpan={9}>
+                        <SendSteps
+                          lang={lang}
+                          international={!!r.international}
+                          signature={!!r.signature_required}
+                          recipientPays={r.payer === "recipient"}
+                          appInvoice={!r.invoice_path}
+                          service={r.service_type}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                   );
                 })}
               </tbody>

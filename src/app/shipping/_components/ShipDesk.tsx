@@ -6,6 +6,7 @@ import { makeST, type SKey } from "../_lib/i18n";
 import { APPROVAL_THRESHOLD_USD, type Draft } from "../_lib/draft";
 import { CUSTOMS_ITEMS } from "../_lib/customs";
 import { submitShipment, type ActionResult } from "../actions";
+import SendSteps from "./SendSteps";
 import s from "../shipping.module.css";
 
 // The assistant and the label it fills in. The conversation lives in this tab
@@ -294,7 +295,7 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
         {result ? (
           result.ok ? (
             result.status === "created" ? (
-              <p className={s.success}>
+              <div className={s.success}>
                 {t("created", { tracking: result.trackingNumber })}{" "}
                 <a href={`/api/shipping/labels/${result.id}/pdf`} target="_blank" rel="noreferrer">
                   {t("openPdf")}
@@ -305,11 +306,16 @@ export default function ShipDesk({ lang }: { lang: Lang }) {
                     <a href={`/api/shipping/labels/${result.id}/pdf?doc=invoice`} target="_blank" rel="noreferrer">
                       {t("openInvoice")}
                     </a>
-                    <br />
-                    {t("customsPrint")}
                   </>
                 ) : null}
-              </p>
+                <SendSteps
+                  lang={lang}
+                  international={!!draft?.customs}
+                  signature={!!draft?.signatureRequired}
+                  recipientPays={draft?.payer === "recipient"}
+                  service={draft?.serviceType}
+                />
+              </div>
             ) : result.status === "pending_approval" ? (
               <p className={s.success}>{t("pendingMade", { cost: money(result.cost) })}</p>
             ) : null
