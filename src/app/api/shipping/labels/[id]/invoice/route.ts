@@ -16,6 +16,38 @@ import { SHIPPER } from "@/app/shipping/_lib/shipper";
 
 export const runtime = "nodejs";
 
+// Job titles for the "Name and title" line, from PharmaCenter's staff
+// directory (Directory.xlsx, "Updated 11/05/25", given by the user
+// 2026-11-17). Matched by sign-in name, then by the email's local part
+// (directory emails are @pharmacenter.health; sign-ins @pharmacenterusa.com --
+// same local parts). Anyone not listed signs as "PharmaCenter LLC".
+const STAFF: Array<{ name: string; title: string; emails: string[] }> = [
+  { name: "Andrea Acurero", title: "Operations Manager", emails: ["andrea"] },
+  { name: "Andreina Nunez", title: "Secondary Packaging Leader", emails: ["andreina"] },
+  { name: "Dionel Davila", title: "Maintenance Technician", emails: ["dionel"] },
+  { name: "Elvira Odoardi", title: "Quality Associate", emails: ["elvira"] },
+  { name: "Glendy Acosta", title: "Office Admin / Controller", emails: ["glendy"] },
+  { name: "Jairo Osorno", title: "President", emails: ["jairo", "josorno"] },
+  { name: "Jay Salerno", title: "Warehouse Manager", emails: ["warehouse", "jay"] },
+  { name: "Jessica Medri", title: "Sales Department Manager", emails: ["jessica", "jessicam"] },
+  { name: "Leonardo Lacruz", title: "Manufacturing Team Member", emails: ["leonardo"] },
+  { name: "Luisa Sosa", title: "Warehouse Assistant", emails: ["luisa"] },
+  { name: "Maria Williams", title: "Quality Control Floor Inspector", emails: ["maria"] },
+  { name: "Mario Medri", title: "Managing Member / CTO", emails: ["mmedri", "mario"] },
+  { name: "Melissa Medri", title: "HR Manager / Sales Rep", emails: ["melissa", "melissam", "hr"] },
+  { name: "Rosie Gutierrez", title: "Purchasing/Logistics Coordinator", emails: ["rosie"] },
+  { name: "Sebastian Garcia", title: "Manufacturing Coordinator", emails: ["sebastian"] },
+  { name: "Wilmer Torres", title: "Quality Assurance Manager", emails: ["wilmer"] },
+];
+const norm = (x: string) => x.normalize("NFD").replace(/[^a-z]/gi, "").toLowerCase();
+function staffFor(name: string | null, email: string) {
+  const local = email.toLowerCase().replace(/@.*/, "");
+  return (
+    (name ? STAFF.find((p) => norm(p.name) === norm(name)) : undefined) ??
+    STAFF.find((p) => p.emails.includes(local))
+  );
+}
+
 const esc = (s: unknown) =>
   String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -35,7 +67,7 @@ type Snap = {
   postalCode?: string | null;
   countryCode?: string;
 };
-type Pkg = { weightLb?: number; weight_lb?: number };
+type Pkg = { weightLb?: number; weight_lb?: number; lengthIn?: number; widthIn?: number; heightIn?: number; length_in?: number; width_in?: number; height_in?: number };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await shipGate();
@@ -44,7 +76,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ ok: false, error: "bad_id" }, { status: 400 });
   const { data: row } = await g.supabase
     .from("shipping_labels")
-    .select("id, status, environment, international, customs, recipient_snapshot, packages, service_type, tracking_number, created_label_at, requested_at, requested_by, so_number")
+    .select("id, status, environment, international, customs, recipient_snapshot, packages, service_type, tracking_number, created_label_at, requested_at, requested_by, so_number, purpose, purpose_note, contents")
     .eq("id", id)
     .maybeSingle();
   if (!row) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
@@ -59,7 +91,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ? [{ description: "Business documents, no commercial value", hs: "", qty: 1 }]
     : customs.lines.map((l) => {
         const item = CUSTOMS_ITEMS[l.item as CustomsItemKey];
-        return { description: item?.description ?? String(l.item), hs: item?.hs ?? "", qty: Number(l.quantity) || 1 };
+        // The person's own words for the item (e.g. "250cc PET bottle, yellow,
+        // 45/400 neck") when given; the house wording otherwise.
+        const note = (l.note ?? "").trim();
+        return {
+          description: note ? `${note}${/sample/i.test(note) ? "" : ". Sample."}` : item?.description ?? String(l.item),
+          hs: item?.hs ?? "",
+          qty: Number(l.quantity) || 1,
+        };
       });
   const values = splitValue(total, lines.length);
   const date = new Date(row.created_label_at ?? row.requested_at).toLocaleDateString("en-US", {
@@ -77,6 +116,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       [a.city, a.stateProvince, a.postalCode].filter(Boolean).join(", "),
       a.countryCode,
       a.phone ? `Tel. ${a.phone}` : null,
+      a.email ? `Email: ${a.email}` : null,
     ]
       .filter(Boolean)
       .map(esc)
@@ -92,6 +132,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     phone: "(954) 384-8728",
   });
   const eei = to.countryCode === "CA" ? "NO EEI 30.36" : "NO EEI 30.37(a)";
+  const dims = pkgs
+    .map((p) => [p.lengthIn ?? p.length_in, p.widthIn ?? p.width_in, p.heightIn ?? p.height_in])
+    .filter((d) => d.every((x) => Number(x) > 0))
+    .map((d) => d.join(" × ") + " in");
+  const stamp = new Date(row.created_label_at ?? row.requested_at)
+    .toLocaleDateString("en-CA", { timeZone: "America/New_York" })
+    .replace(/-/g, "");
+  const nameTag = String(to.company || to.contactName || "SHIP")
+    .normalize("NFD")
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim()
+    .split(" ")[0]
+    .toUpperCase()
+    .slice(0, 10);
+  const invoiceNo = `CI-${stamp}-${nameTag}`;
+  // Signed by the person printing it -- they are the one attesting to the
+  // declaration. A typed signature ("/s/ Name"), the usual electronic form;
+  // there is no handwritten signature image on file. Title from the signer
+  // list below, else the company.
+  const staff = staffFor(g.name, g.email);
+  const signer =
+    staff?.name || g.name?.trim() || g.email.replace(/@.*/, "").replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const title = staff?.title ?? "PharmaCenter LLC";
+  const signedOn = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "long", day: "numeric" });
+  const reference = [row.so_number ? `SO ${row.so_number}` : null, row.purpose_note || null].filter(Boolean).join(" · ");
   const test = row.environment !== "live";
 
   const html = `<!doctype html>
@@ -114,8 +179,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   td.n, th.n { text-align: right; white-space: nowrap; }
   .tot td { font-weight: bold; }
   .decl { margin-top: 16px; }
-  .sig { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-top: 34px; }
+  .sig { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 24px; margin-top: 34px; }
   .line { border-top: 1px solid #222; padding-top: 4px; font-size: 10px; color: #444; }
+  .val { min-height: 18px; padding: 0 2px 3px; font-size: 13px; }
+  .sigval { font-family: "Brush Script MT", "Segoe Script", cursive; font-size: 18px; }
   .test { border: 2px solid #b00; color: #b00; font-weight: bold; padding: 6px 10px; margin-bottom: 12px; text-align: center; }
   .noprint { margin: 0 auto 12px; max-width: 8in; padding: 12px 0.45in 0; font-family: Arial, sans-serif; }
   .noprint button { font: inherit; padding: 6px 14px; cursor: pointer; }
@@ -126,16 +193,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 <div class="page">
   ${test ? '<div class="test">TEST LABEL — NOT A REAL SHIPMENT</div>' : ""}
   <h1>COMMERCIAL INVOICE</h1>
-  <div class="sub">Samples · No commercial value · Not for sale</div>
+  <div class="sub">Samples, no commercial value. ${row.contents ? `${esc(row.contents)}. ` : ""}Not for resale.</div>
   <div class="grid">
     <div class="cell"><div class="k">Shipper / Exporter</div>${shipper}</div>
     <div class="cell"><div class="k">Consignee</div>${addr(to)}${customs.recipientTaxId ? `<br>Tax ID: ${esc(customs.recipientTaxId)}` : ""}</div>
     <div class="cell"><div class="k">Date</div>${esc(date)}</div>
-    <div class="cell"><div class="k">FedEx tracking / air waybill</div>${esc(row.tracking_number ?? "—")}</div>
-    <div class="cell"><div class="k">Service</div>${esc(String(row.service_type ?? "").replace(/_/g, " "))}</div>
-    <div class="cell"><div class="k">Reason for export</div>Sample${row.so_number ? ` · SO ${esc(row.so_number)}` : ""}</div>
-    <div class="cell"><div class="k">Terms of sale · Duties and taxes</div>DDP — duties and taxes paid by shipper</div>
-    <div class="cell"><div class="k">Packages · Total weight</div>${pkgs.length || 1} · ${weight ? `${weight} lb (${(weight * 0.4536).toFixed(2)} kg)` : "—"}</div>
+    <div class="cell"><div class="k">Air waybill / FedEx tracking no.</div>${esc(row.tracking_number ?? "—")}</div>
+    <div class="cell"><div class="k">Invoice no.</div>${esc(invoiceNo)}</div>
+    <div class="cell"><div class="k">Carrier / service</div>FedEx ${esc(String(row.service_type ?? "").replace(/^FEDEX_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))}</div>
+    <div class="cell"><div class="k">Reference</div>${reference ? esc(reference) : "—"}</div>
+    <div class="cell"><div class="k">Reason for export</div>Samples</div>
+    <div class="cell"><div class="k">Packages · Dimensions</div>${pkgs.length || 1} box${(pkgs.length || 1) > 1 ? "es" : ""}${dims.length ? ` · ${esc(dims.join("; "))}` : ""}</div>
+    <div class="cell"><div class="k">Total gross weight</div>${weight ? `${weight.toFixed(2)} lb (${(weight * 0.4536).toFixed(2)} kg)` : "—"}</div>
+    <div class="cell"><div class="k">Duties and taxes · Transportation</div>Billed to shipper (PharmaCenter) · Billed to shipper (PharmaCenter)</div>
+    <div class="cell"><div class="k">Terms of sale · Currency</div>DDP · USD</div>
     <div class="cell" style="border-bottom:0"><div class="k">Country of origin</div>United States</div>
     <div class="cell" style="border-bottom:0"><div class="k">Export statement</div>${eei}</div>
   </div>
@@ -145,7 +216,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ${lines
         .map(
           (l, i) =>
-            `<tr><td>${esc(l.description)}</td><td>${esc(hs(l.hs))}</td><td>US</td><td class="n">${l.qty} PCS</td><td class="n">${usd(values[i] / l.qty)}</td><td class="n">${usd(values[i])}</td></tr>`,
+            `<tr><td>${esc(l.description)}</td><td>${esc(hs(l.hs))}</td><td>US</td><td class="n">${l.qty} ${l.qty === 1 ? "pc" : "pcs"}</td><td class="n">${usd(values[i] / l.qty)}</td><td class="n">${usd(values[i])}</td></tr>`,
         )
         .join("")}
       <tr class="tot"><td colspan="5" class="n">Total declared value (USD)</td><td class="n">${usd(total)}</td></tr>
@@ -156,8 +227,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   shipment are as stated above. These commodities, technology or software were exported from the United States in
   accordance with the Export Administration Regulations. Diversion contrary to U.S. law is prohibited.</p>
   <div class="sig">
-    <div class="line">Name and signature of shipper</div>
-    <div class="line">Date</div>
+    <div><div class="val sigval">/s/ ${esc(signer)}</div><div class="line">Signature</div></div>
+    <div><div class="val">${esc(signer)}, ${esc(title)}</div><div class="line">Name and title</div></div>
+    <div><div class="val">${esc(signedOn)}</div><div class="line">Date</div></div>
   </div>
 </div>
 <script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });</script>

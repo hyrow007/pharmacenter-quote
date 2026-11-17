@@ -47,7 +47,7 @@ const customsSchema = {
         properties: {
           item: { type: "string", enum: [...CUSTOMS_ITEM_KEYS] },
           quantity: { type: "number", description: "How many pieces (sachets, bottles, labels...)." },
-          note: { type: "string", description: "Short internal note, e.g. 'mango gummies'. Not printed on the invoice." },
+          note: { type: "string", description: "Specific, accurate description of this line, printed on the commercial invoice if FedEx sends none: what it is, size, color, fit, e.g. 'Empty PET bottle, 250cc, yellow, 45/400 neck' or 'Mango-flavored gummy samples'. Never describe goods as something they are not." },
         },
         required: ["item", "quantity"],
       },
