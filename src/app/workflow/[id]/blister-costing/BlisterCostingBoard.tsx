@@ -1552,6 +1552,17 @@ export type SavedState = {
    */
   blistersPerUnit: number | null;
   /**
+   * Is `quantityOverride` the OUTER pack count, or finished units?
+   *
+   * Quantity on this board is now the largest pack the job actually makes:
+   * bundles when it bundles, retail packs when it only packs out, bare
+   * cards otherwise (operator rule, 2026-11-17). It used to be finished
+   * units always. Absent on every costing saved before that, and those
+   * have to be divided back down rather than silently reinterpreted --
+   * a saved 3,000 would become 3,000 displays, twelve times the job.
+   */
+  qtyIsOuter?: boolean;
+  /**
    * Doses in ONE blister card — the packaging form's
    * "Count (doses per card)".
    *
@@ -1914,6 +1925,7 @@ export function blankState(
     speedPenaltyPct: DEFAULT_SPEED_PENALTY_PCT,
     blistersPerUnit: bpu,
     dosesPerBlister,
+    qtyIsOuter: true,
     // null = follow the packaging form.
     packoutRequired: null,
     packoutSpeed: null,
@@ -2474,6 +2486,31 @@ function backfillDosesPerBlister<T extends Omit<SavedState, "scenarios">>(s: T):
   return { ...s, dosesPerBlister: q !== null && q > 0 ? q / bpu : null };
 }
 
+/**
+ * Convert a pre-rule quantity to the outer pack count.
+ *
+ * Quantity used to mean finished units. It now means the outermost pack
+ * the job makes, so a bundling job's saved figure is packsPerBundle times
+ * too large when read under the new rule. Divide it back out once, and
+ * mark the state so it is never divided twice.
+ *
+ * Only bundling moves the number: with packout alone the finished unit IS
+ * the retail pack, which is already the outermost one.
+ */
+function backfillOuterQty<T extends Omit<SavedState, "scenarios">>(s: T): T {
+  if (s.qtyIsOuter) return s;
+  const per = s.bottlesPerInnerPack;
+  // bundlingRequired null means "follow the form", and the form is not in
+  // scope here. Only an explicit yes is safe to divide on: guessing wrong
+  // would silently shrink a saved quote by the bundle count.
+  const bundling = s.bundlingRequired === true;
+  const q = s.quantityOverride;
+  if (!bundling || !per || per <= 0 || q === null || q === undefined) {
+    return { ...s, qtyIsOuter: true };
+  }
+  return { ...s, quantityOverride: q / per, qtyIsOuter: true };
+}
+
 /** Build the working state for one product: its saved costing hydrated
  *  over a spec-seeded blank, with every pre-list save shape migrated.
  *  Extracted verbatim from the old useState initializer when the board
@@ -2565,11 +2602,13 @@ function hydrateSaved(
       speedPenaltyPct: initial.speedPenaltyPct ?? blank.speedPenaltyPct,
       blistersPerUnit: initial.blistersPerUnit ?? blank.blistersPerUnit,
       dosesPerBlister: backfillDosesPerBlister(initial).dosesPerBlister,
+      quantityOverride: backfillOuterQty(initial).quantityOverride,
+      qtyIsOuter: true,
       // Scenarios are loaded raw by selectTab — they never pass through this
       // function again — so each one is migrated HERE or not at all.
       scenarios: (initial.scenarios ?? blank.scenarios).map((sc) =>
         sc && sc.state
-          ? { ...sc, state: backfillDosesPerBlister(sc.state) }
+          ? { ...sc, state: backfillOuterQty(backfillDosesPerBlister(sc.state)) }
           : sc,
       ),
       // Costings saved before these questions: follow the form, UNLESS the
@@ -3220,13 +3259,40 @@ export default function BlisterCostingBoard({
   // `st` is the working copy of whichever tab is active, so the ordinary
   // derivation is already scenario-aware. Base's quantity comes from the
   // stash while a scenario is on screen (for the Base pill's label).
-  const qty = st.quantityOverride ?? quantity;
+  const packoutFromForm = (spec?.retailRequired ?? "") === "yes";
+  const packoutOn = st.packoutRequired ?? packoutFromForm;
+  const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
+  const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
+
+  /**
+   * Quantity is the OUTERMOST pack this job makes (operator rule,
+   * 2026-11-17): bundles when it bundles, retail packs when it only packs
+   * out, bare cards when it does neither. That is the number the customer
+   * asks for and the number the quote goes out in.
+   *
+   * The model underneath still runs entirely on FINISHED UNITS, so the
+   * conversion happens here, once, and nothing downstream changes. Only
+   * bundling moves it -- with packout alone the finished unit already IS
+   * the retail pack.
+   */
+  const outerQty = st.quantityOverride ?? quantity;
+  const packsPerBundle =
+    bundlingOn && st.bottlesPerInnerPack && st.bottlesPerInnerPack > 0
+      ? st.bottlesPerInnerPack
+      : 1;
+  const qty = outerQty === null ? null : outerQty * packsPerBundle;
+  /** What one unit of the quoted quantity is called, for labels. */
+  const outerUnitLabel = bundlingOn
+    ? "bundles"
+    : packoutOn
+      ? "retail packs"
+      : "blister cards";
   /** Every quantity this product's request asked for. Empty on an old
    *  workflow whose rows predate the tier list. */
   const tiers = products[activeBaseIdx]?.quantities ?? [];
   const baseQty =
     activeScenarioId === null
-      ? qty
+      ? outerQty
       : (baseStashRef.current?.quantityOverride ?? quantity);
 
   /**
@@ -3336,10 +3402,6 @@ export default function BlisterCostingBoard({
 
   // Packout and bundling follow the packaging form unless this costing
   // overrides them (see SavedState.packoutRequired / bundlingRequired).
-  const packoutFromForm = (spec?.retailRequired ?? "") === "yes";
-  const packoutOn = st.packoutRequired ?? packoutFromForm;
-  const bundlingFromForm = (spec?.bundlingRequired ?? "") === "yes";
-  const bundlingOn = st.bundlingRequired ?? bundlingFromForm;
 
   const inputs: BlisterCostingInputs = useMemo(
     () => ({
@@ -3680,12 +3742,17 @@ export default function BlisterCostingBoard({
       );
       return;
     }
+    // The customer buys the outer pack, so that is what the quote says:
+    // 3,000 displays at the display price, not 36,000 retail packs at a
+    // twelfth of it. Revenue is identical either way -- salePerUnit x
+    // finished units == (salePerUnit x packsPerBundle) x outerQty -- so
+    // this changes the wording of the document and nothing about the money.
     const lineItems: QuoteLineItem[] = [
       {
         itemRef: "ITEM 1",
         description: productName,
-        quantity: qty ?? 0,
-        unitPrice: r.salePerUnit,
+        quantity: outerQty ?? 0,
+        unitPrice: r.salePerUnit * packsPerBundle,
       },
     ];
     const backUrl =
@@ -4213,7 +4280,10 @@ export default function BlisterCostingBoard({
               writes to quantityOverride, NOT back to the workflow — what the
               customer asked for is a fact, and trying 24,000 here must not
               quietly rewrite it. Blank restores the workflow's figure. */}
-          <ParamBlock label="QTY (Finished units)" nowrap>
+          <ParamBlock
+            label={`QTY (${outerUnitLabel})`}
+            nowrap
+          >
             {/* Text input, not type=number, so the thousands separator can
                 render: 12,000 reads as twelve thousand at a glance where
                 12000 has to be counted. Digits only; commas are chrome. */}
@@ -4307,6 +4377,33 @@ export default function BlisterCostingBoard({
                 : "—"}
             </div>
           </ParamBlock>
+          {/* What the quantity above actually comes to in the units the model
+              runs on. Only shown when the two differ -- with no bundling the
+              quoted pack IS the finished unit and a second identical number
+              would just be noise. Read-only in the Line speed style: derived,
+              never typed. */}
+          {bundlingOn && packsPerBundle > 1 ? (
+            <ParamBlock label="Finished units (derived)">
+              <div
+                style={{
+                  ...numInput,
+                  border: "1px dashed var(--line, #cfc7b4)",
+                  background: "transparent",
+                  color: "var(--teal-900, #0f4a56)",
+                  fontWeight: 700,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  height: 33,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
+              >
+                {qty !== null ? qty.toLocaleString("en-US") : "—"}
+              </div>
+            </ParamBlock>
+          ) : null}
           {/* How many doses go in ONE blister card — the packaging form's
               "Count (doses per card)". Together with the field beside it this is what the
               Bulk row is priced on; neither number alone says how much bulk
@@ -4337,7 +4434,12 @@ export default function BlisterCostingBoard({
               packoutOn, not the raw form answer, so overriding packout ON
               here reveals the field rather than stranding it. */}
           {packoutOn || (st.blistersPerUnit ?? 1) !== 1 ? (
-            <ParamBlock label="Blisters / finished unit" nowrap>
+            <ParamBlock
+              label={
+                packoutOn ? "Blisters / secondary pack" : "Blisters / finished unit"
+              }
+              nowrap
+            >
               <FieldNote
                 tone="warn"
                 wrap
@@ -4349,6 +4451,35 @@ export default function BlisterCostingBoard({
                   value={st.blistersPerUnit}
                   onChange={(v) => set("blistersPerUnit", v)}
                   placeholder="1"
+                />
+              </FieldNote>
+            </ParamBlock>
+          ) : null}
+          {/* Secondary packs per bundle. The same number the inner-pack row
+              in Material Costs edits -- one piece of state, asked in both
+              places, because it is two different questions to the same
+              person: "how many go in a display" while sizing the job, and
+              "how many does this box hold" while picking the box.
+
+              It is also the divisor between what is quoted and what is
+              made, so it belongs where the quantity is. Without it a
+              bundling job's QTY and its finished-unit count are the same
+              number, which is the twelve-fold error on Q0080. */}
+          {bundlingOn ? (
+            <ParamBlock label="Secondary packs / bundle" nowrap>
+              <FieldNote
+                tone="warn"
+                wrap
+                note={
+                  !st.bottlesPerInnerPack || st.bottlesPerInnerPack <= 0
+                    ? "Required — the quantity above is bundles."
+                    : null
+                }
+              >
+                <NumField
+                  value={st.bottlesPerInnerPack}
+                  onChange={(v) => set("bottlesPerInnerPack", v)}
+                  placeholder="required"
                 />
               </FieldNote>
             </ParamBlock>
