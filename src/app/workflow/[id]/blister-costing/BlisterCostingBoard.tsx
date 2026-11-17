@@ -4581,8 +4581,12 @@ export default function BlisterCostingBoard({
               straight into the neighbouring label. Wrapping to two lines is
               the fix, not smaller words — "units / min / person" is the unit
               and it stays. */}
+          {/* "Units" was ambiguous the moment QTY started counting bundles:
+              on a job like Q0080 the card speaks in displays at the top and
+              this speed meant retail packs, with nothing saying which.
+              Packout is what MAKES the retail pack, so name it. */}
           {packoutOn && (
-            <ParamBlock label="Packout speed (units / min / person)">
+            <ParamBlock label="Packout speed (retail packs / min / person)">
               <NumField
                 value={st.packoutSpeed}
                 onChange={(v) => set("packoutSpeed", v)}
