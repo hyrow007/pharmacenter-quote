@@ -418,12 +418,18 @@ function CardTotal({
   quantity,
   dec = 4,
   picker,
+  // What the quantity counts. "units" was unambiguous until QTY started
+  // counting bundles; now a card reading "$4,954.25 for 36,000 units" sits
+  // under a header reading QTY (BUNDLES) 3,000, and the two words do not
+  // mean the same thing. Callers that know the noun should pass it.
+  unitNoun = "units",
 }: {
   label: string;
   perUnit: number | null;
   quantity: number | null;
   dec?: number;
   picker?: React.ReactNode;
+  unitNoun?: string;
 }) {
   const total =
     perUnit !== null && quantity !== null && quantity > 0
@@ -488,7 +494,8 @@ function CardTotal({
               marginTop: 2,
             }}
           >
-            {money(total, 2)} for {quantity!.toLocaleString("en-US")} units
+            {money(total, 2)} for {quantity!.toLocaleString("en-US")}{" "}
+            {unitNoun}
           </div>
         )}
       </span>
@@ -3300,6 +3307,14 @@ export default function BlisterCostingBoard({
       ? st.bottlesPerInnerPack
       : 1;
   const qty = outerQty === null ? null : outerQty * packsPerBundle;
+  /**
+   * What ONE FINISHED UNIT is called. Distinct from outerUnitLabel below:
+   * the model counts finished units and the quote counts the outer pack,
+   * and on a bundling job those differ by the bundle size. Every card that
+   * says "per unit" means this one.
+   */
+  const unitNoun = packoutOn ? "retail packs" : "blister cards";
+  const unitNounSingular = packoutOn ? "retail pack" : "blister card";
   /** What one unit of the quoted quantity is called, for labels. */
   const outerUnitLabel = bundlingOn
     ? "bundles"
@@ -4795,7 +4810,7 @@ export default function BlisterCostingBoard({
             <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
               Waste %
             </div>
-            <div style={{ textAlign: "right" }}>$ / unit</div>
+            <div style={{ textAlign: "right" }}>$ / {unitNounSingular}</div>
           </div>
           {st.bom.map((line) => {
             const slotLabel =
@@ -5732,9 +5747,10 @@ export default function BlisterCostingBoard({
           </div>
         </div>
         <CardTotal
-          label="Material cost / unit"
+          label={`Material cost / ${unitNounSingular}`}
           perUnit={r.materialsPerUnit}
           quantity={qty}
+          unitNoun={unitNoun}
           dec={st.displayDec}
           picker={
             <DecimalPicker
