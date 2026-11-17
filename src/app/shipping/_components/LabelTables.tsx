@@ -29,6 +29,7 @@ export type LabelListRow = {
   tracking_number: string | null;
   label_path: string | null;
   invoice_path: string | null;
+  international?: boolean;
   fedex_error: { error?: string; detail?: string | null; invoice?: string } | null;
 };
 
@@ -295,7 +296,7 @@ export default function LabelTables({
                       {t(`st_${r.status}` as SKey)}
                       {r.status === "failed" && r.fedex_error?.error ? <div className={s.muted}>{r.fedex_error.error}</div> : null}
                       {r.status === "created" && r.fedex_error?.invoice ? (
-                        <div className={s.missing}>{t("invoiceMissing")}</div>
+                        <div className={s.muted}>{t("invoiceAppMade")}</div>
                       ) : null}
                       {r.status === "rejected" && r.decision_note ? <div className={s.muted}>{r.decision_note}</div> : null}
                     </td>
@@ -306,7 +307,7 @@ export default function LabelTables({
                           {t("reprint")}
                         </a>
                       ) : null}
-                      {r.invoice_path && r.status === "created" ? (
+                      {(r.invoice_path || r.international) && r.status === "created" ? (
                         <a className={s.ghostSm} href={`/api/shipping/labels/${r.id}/pdf?doc=invoice`} target="_blank" rel="noreferrer">
                           {t("invoice")}
                         </a>

@@ -20,6 +20,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     .maybeSingle();
   const r = row as { label_path?: string | null; invoice_path?: string | null } | null;
   const path = invoice ? r?.invoice_path : r?.label_path;
+  // No FedEx invoice for this label: the app builds one from what was declared.
+  if (!path && invoice) return NextResponse.redirect(new URL(`/api/shipping/labels/${id}/invoice`, req.url));
   if (!path) return NextResponse.json({ ok: false, error: "no_label" }, { status: 404 });
   const { data, error } = await g.service.storage.from("shipping-labels").download(path);
   if (error || !data) return NextResponse.json({ ok: false, error: "storage" }, { status: 502 });

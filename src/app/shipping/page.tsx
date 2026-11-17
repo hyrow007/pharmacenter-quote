@@ -20,7 +20,7 @@ const EXT_COLS =
   "id, master_tracking_number, piece_tracking_numbers, ship_date, service_type, reference, po_number, payment_type, recipient_contact, recipient_company, recipient_city, recipient_state, recipient_country, packages, estimated_cost";
 
 const LIST_COLS =
-  "id, environment, status, purpose, so_number, recipient_snapshot, contents, service_type, rated_cost, rated_currency, requested_by, requested_at, approval_required, approved_by, decision_note, tracking_number, label_path, invoice_path, created_label_at, voided_at, fedex_error";
+  "id, environment, status, purpose, so_number, recipient_snapshot, contents, service_type, rated_cost, rated_currency, requested_by, requested_at, approval_required, approved_by, decision_note, tracking_number, label_path, invoice_path, international, created_label_at, voided_at, fedex_error";
 
 export default async function ShippingPage() {
   const g = await shipGate();
