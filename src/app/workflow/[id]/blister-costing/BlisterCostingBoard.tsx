@@ -4313,7 +4313,12 @@ export default function BlisterCostingBoard({
             >
             <input
               inputMode="numeric"
-              value={qty?.toLocaleString("en-US") ?? ""}
+              // outerQty, not qty. This box writes quantityOverride, which
+              // IS the outer count -- showing the derived finished units in
+              // it meant every keystroke was re-multiplied by the bundle
+              // size: type 3,000 and read back 36,000, type again and get
+              // 432,000. The derived figure has its own read-only block.
+              value={outerQty?.toLocaleString("en-US") ?? ""}
               placeholder="required"
               onChange={(e) => {
                 const digits = e.target.value.replace(/[^0-9]/g, "");
