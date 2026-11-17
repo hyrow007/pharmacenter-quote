@@ -1610,7 +1610,12 @@ export type SavedState = {
   /** Bundling FOR THIS COSTING. null = follow the form's "Bundling
    *  required?"; true/false = overridden here, never written back. */
   bundlingRequired: boolean | null;
-  /** Units per minute PER PERSON on bundling. Only read when bundling is on. */
+  /**
+   * Bundling rate PER PERSON, in whatever bundling produces: BUNDLES when
+   * there is a bundle size to produce them in, finished units otherwise.
+   * Converted to a per-unit rate on the way into the model, same as
+   * cartoning. Only read when bundling is on.
+   */
   bundlingSpeed: number | null;
   /**
    * WEB YIELDS — the bridge between how Fishbowl prices the webs and how the
@@ -3527,7 +3532,15 @@ export default function BlisterCostingBoard({
           st.cartoningSpeed !== null && packsPerBundle > 1
             ? st.cartoningSpeed * packsPerBundle
             : st.cartoningSpeed,
-        bundlingSpeed: bundlingOn ? st.bundlingSpeed : null,
+        // Bundling is quoted per BUNDLE, like cartoning: "3 a minute" means
+        // three displays assembled, not three packs handled. Converted to
+        // the per-unit rate the model counts in.
+        bundlingSpeed:
+          bundlingOn && st.bundlingSpeed !== null && packsPerBundle > 1
+            ? st.bundlingSpeed * packsPerBundle
+            : bundlingOn
+              ? st.bundlingSpeed
+              : null,
         setup: {
           hours: st.setupHours,
           leaders: st.setupLeaders,
@@ -4701,7 +4714,13 @@ export default function BlisterCostingBoard({
             </ParamBlock>
           )}
           {bundlingOn && (
-            <ParamBlock label="Bundling speed (units / min / person)">
+            <ParamBlock
+              label={
+                packsPerBundle > 1
+                  ? "Bundling speed (bundles / min / person)"
+                  : "Bundling speed (units / min / person)"
+              }
+            >
               <NumField
                 value={st.bundlingSpeed}
                 onChange={(v) => set("bundlingSpeed", v)}
