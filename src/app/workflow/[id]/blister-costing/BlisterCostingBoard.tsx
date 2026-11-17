@@ -4326,6 +4326,140 @@ export default function BlisterCostingBoard({
             />
             </FieldNote>
           </ParamBlock>
+          {/* ORDER. Each question comes after the answer that decides
+              whether to ask it, and the groups run quantity -> what a pack
+              IS -> what goes in a blister -> the machine -> the web -> the
+              hand stations. Anything added here goes after its gate, not
+              before it: a field that asks how many blisters are in a
+              secondary pack is unanswerable until you know there is one. */}
+
+          {/* Pack structure. These two answers decide what QTY above counts,
+              so they are asked before anything that depends on them. */}
+          <ParamBlock label="Secondary packaging (packout)?">
+            <FormYesNo
+              on={packoutOn}
+              fromForm={packoutFromForm}
+              overridden={st.packoutRequired !== null}
+              onChange={(v) => set("packoutRequired", v)}
+            />
+          </ParamBlock>
+          {/* Only asked when there IS secondary packaging. Without it a bare
+              blister card IS the finished unit, so the answer can only be 1 and a
+              field that can only hold one value is noise.
+
+              The guard also tests the stored value, and that is the load-
+              bearing half: hiding a count that is NOT 1 would leave a number
+              nobody can see driving the price. A costing whose packout was
+              overridden off here, or whose form answer changed after it was
+              saved, keeps the field on screen with a note saying so. Hiding
+              is therefore incapable of moving a total — it only ever happens
+              when the value is already the 1 the model would use anyway.
+
+              packoutOn, not the raw form answer, so overriding packout ON
+              here reveals the field rather than stranding it. */}
+          {packoutOn || (st.blistersPerUnit ?? 1) !== 1 ? (
+            <ParamBlock
+              label={
+                packoutOn ? "Blisters / secondary pack" : "Blisters / finished unit"
+              }
+              nowrap
+            >
+              <FieldNote
+                tone="warn"
+                wrap
+                note={
+                  !packoutOn ? "No secondary packaging — should this be 1?" : null
+                }
+              >
+                <NumField
+                  value={st.blistersPerUnit}
+                  onChange={(v) => set("blistersPerUnit", v)}
+                  placeholder="1"
+                />
+              </FieldNote>
+            </ParamBlock>
+          ) : null}
+          <ParamBlock label="Bundling?">
+            <FormYesNo
+              on={bundlingOn}
+              fromForm={bundlingFromForm}
+              overridden={st.bundlingRequired !== null}
+              onChange={(v) => set("bundlingRequired", v)}
+            />
+          </ParamBlock>
+          {/* Secondary packs per bundle. The same number the inner-pack row
+              in Material Costs edits -- one piece of state, asked in both
+              places, because it is two different questions to the same
+              person: "how many go in a display" while sizing the job, and
+              "how many does this box hold" while picking the box.
+
+              It is also the divisor between what is quoted and what is
+              made, so it belongs where the quantity is. Without it a
+              bundling job's QTY and its finished-unit count are the same
+              number, which is the twelve-fold error on Q0080. */}
+          {bundlingOn ? (
+            <ParamBlock label="Secondary packs / bundle" nowrap>
+              <FieldNote
+                tone="warn"
+                wrap
+                note={
+                  !st.bottlesPerInnerPack || st.bottlesPerInnerPack <= 0
+                    ? "Required — the quantity above is bundles."
+                    : null
+                }
+              >
+                <NumField
+                  value={st.bottlesPerInnerPack}
+                  onChange={(v) => set("bottlesPerInnerPack", v)}
+                  placeholder="required"
+                />
+              </FieldNote>
+            </ParamBlock>
+          ) : null}
+          {/* What the quantity above actually comes to in the units the model
+              runs on. Only shown when the two differ -- with no bundling the
+              quoted pack IS the finished unit and a second identical number
+              would just be noise. Read-only in the Line speed style: derived,
+              never typed. */}
+          {bundlingOn && packsPerBundle > 1 ? (
+            <ParamBlock label="Finished units (derived)">
+              <div
+                style={{
+                  ...numInput,
+                  border: "1px dashed var(--line, #cfc7b4)",
+                  background: "transparent",
+                  color: "var(--teal-900, #0f4a56)",
+                  fontWeight: 700,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  height: 33,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
+              >
+                {qty !== null ? qty.toLocaleString("en-US") : "—"}
+              </div>
+            </ParamBlock>
+          ) : null}
+          {/* How many doses go in ONE blister card — the packaging form's
+              "Count (doses per card)". Together with the field above this is what the
+              Bulk row is priced on; neither number alone says how much bulk
+              a finished unit holds. */}
+          <ParamBlock
+            label="Doses / blister"
+            nowrap
+            hint="Doses in one blister card. Bulk quantity = this x blisters per finished unit."
+          >
+            <NumField
+              value={st.dosesPerBlister}
+              onChange={(v) => set("dosesPerBlister", v)}
+              placeholder="required"
+            />
+          </ParamBlock>
+
+          {/* The machine. */}
           <ParamBlock label="Strokes / minute" nowrap>
             <NumField
               value={st.strokesPerMinute}
@@ -4377,113 +4511,6 @@ export default function BlisterCostingBoard({
                 : "—"}
             </div>
           </ParamBlock>
-          {/* What the quantity above actually comes to in the units the model
-              runs on. Only shown when the two differ -- with no bundling the
-              quoted pack IS the finished unit and a second identical number
-              would just be noise. Read-only in the Line speed style: derived,
-              never typed. */}
-          {bundlingOn && packsPerBundle > 1 ? (
-            <ParamBlock label="Finished units (derived)">
-              <div
-                style={{
-                  ...numInput,
-                  border: "1px dashed var(--line, #cfc7b4)",
-                  background: "transparent",
-                  color: "var(--teal-900, #0f4a56)",
-                  fontWeight: 700,
-                  textAlign: "right",
-                  fontVariantNumeric: "tabular-nums",
-                  height: 33,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                }}
-              >
-                {qty !== null ? qty.toLocaleString("en-US") : "—"}
-              </div>
-            </ParamBlock>
-          ) : null}
-          {/* How many doses go in ONE blister card — the packaging form's
-              "Count (doses per card)". Together with the field beside it this is what the
-              Bulk row is priced on; neither number alone says how much bulk
-              a finished unit holds. */}
-          <ParamBlock
-            label="Doses / blister"
-            nowrap
-            hint="Doses in one blister card. Bulk quantity = this x blisters per finished unit."
-          >
-            <NumField
-              value={st.dosesPerBlister}
-              onChange={(v) => set("dosesPerBlister", v)}
-              placeholder="required"
-            />
-          </ParamBlock>
-          {/* Only asked when there IS secondary packaging. Without it a bare
-              blister card IS the finished unit, so the answer can only be 1 and a
-              field that can only hold one value is noise.
-
-              The guard also tests the stored value, and that is the load-
-              bearing half: hiding a count that is NOT 1 would leave a number
-              nobody can see driving the price. A costing whose packout was
-              overridden off here, or whose form answer changed after it was
-              saved, keeps the field on screen with a note saying so. Hiding
-              is therefore incapable of moving a total — it only ever happens
-              when the value is already the 1 the model would use anyway.
-
-              packoutOn, not the raw form answer, so overriding packout ON
-              here reveals the field rather than stranding it. */}
-          {packoutOn || (st.blistersPerUnit ?? 1) !== 1 ? (
-            <ParamBlock
-              label={
-                packoutOn ? "Blisters / secondary pack" : "Blisters / finished unit"
-              }
-              nowrap
-            >
-              <FieldNote
-                tone="warn"
-                wrap
-                note={
-                  !packoutOn ? "No secondary packaging — should this be 1?" : null
-                }
-              >
-                <NumField
-                  value={st.blistersPerUnit}
-                  onChange={(v) => set("blistersPerUnit", v)}
-                  placeholder="1"
-                />
-              </FieldNote>
-            </ParamBlock>
-          ) : null}
-          {/* Secondary packs per bundle. The same number the inner-pack row
-              in Material Costs edits -- one piece of state, asked in both
-              places, because it is two different questions to the same
-              person: "how many go in a display" while sizing the job, and
-              "how many does this box hold" while picking the box.
-
-              It is also the divisor between what is quoted and what is
-              made, so it belongs where the quantity is. Without it a
-              bundling job's QTY and its finished-unit count are the same
-              number, which is the twelve-fold error on Q0080. */}
-          {bundlingOn ? (
-            <ParamBlock label="Secondary packs / bundle" nowrap>
-              <FieldNote
-                tone="warn"
-                wrap
-                note={
-                  !st.bottlesPerInnerPack || st.bottlesPerInnerPack <= 0
-                    ? "Required — the quantity above is bundles."
-                    : null
-                }
-              >
-                <NumField
-                  value={st.bottlesPerInnerPack}
-                  onChange={(v) => set("bottlesPerInnerPack", v)}
-                  placeholder="required"
-                />
-              </FieldNote>
-            </ParamBlock>
-          ) : null}
           {/* Web yields: Fishbowl prices film and foil per UOM (a roll, a kg,
               a foot — whatever the part is stocked in), and these convert
               that price to per-blister. Required before the film and foil
@@ -4503,23 +4530,17 @@ export default function BlisterCostingBoard({
               placeholder="required"
             />
           </ParamBlock>
-          {/* Per PERSON, unlike the line speed. The hand stations scale with
-              headcount: two people pack twice as fast, whereas the line runs
-              at its own pace whoever is watching it. Blank = the job skips
-              that station. */}
-          {/* No `nowrap` on these three: the labels are the longest on the
+
+          {/* The hand stations, each behind the answer that turns it on.
+              Per PERSON, unlike the line speed: two people pack twice as
+              fast, whereas the line runs at its own pace whoever is
+              watching it.
+
+              No `nowrap` on these three: the labels are the longest on the
               board and a forced single line overflows a 200px grid track
               straight into the neighbouring label. Wrapping to two lines is
               the fix, not smaller words — "units / min / person" is the unit
               and it stays. */}
-          <ParamBlock label="Secondary packaging (packout)?">
-            <FormYesNo
-              on={packoutOn}
-              fromForm={packoutFromForm}
-              overridden={st.packoutRequired !== null}
-              onChange={(v) => set("packoutRequired", v)}
-            />
-          </ParamBlock>
           {packoutOn && (
             <ParamBlock label="Packout speed (units / min / person)">
               <NumField
@@ -4533,14 +4554,6 @@ export default function BlisterCostingBoard({
             <NumField
               value={st.cartoningSpeed}
               onChange={(v) => set("cartoningSpeed", v)}
-            />
-          </ParamBlock>
-          <ParamBlock label="Bundling?">
-            <FormYesNo
-              on={bundlingOn}
-              fromForm={bundlingFromForm}
-              overridden={st.bundlingRequired !== null}
-              onChange={(v) => set("bundlingRequired", v)}
             />
           </ParamBlock>
           {bundlingOn && (
