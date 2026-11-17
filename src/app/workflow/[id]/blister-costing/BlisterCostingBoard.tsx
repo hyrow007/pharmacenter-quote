@@ -3313,8 +3313,16 @@ export default function BlisterCostingBoard({
    * and on a bundling job those differ by the bundle size. Every card that
    * says "per unit" means this one.
    */
-  const unitNoun = packoutOn ? "retail packs" : "blister cards";
-  const unitNounSingular = packoutOn ? "retail pack" : "blister card";
+  const unitNoun = bundlingOn
+    ? "bundles"
+    : packoutOn
+      ? "retail packs"
+      : "blister cards";
+  const unitNounSingular = bundlingOn
+    ? "bundle"
+    : packoutOn
+      ? "retail pack"
+      : "blister card";
   /** What one unit of the quoted quantity is called, for labels. */
   const outerUnitLabel = bundlingOn
     ? "bundles"
@@ -3553,6 +3561,37 @@ export default function BlisterCostingBoard({
   );
 
   const r = useMemo(() => computeBlisterCosting(inputs), [inputs]);
+
+  /**
+   * The same result, per the unit being QUOTED.
+   *
+   * The model works in finished units because that is how materials are
+   * consumed -- one blister's film, one carton. The cards are read by
+   * someone selling bundles, and a screen that mixes the two is unreadable
+   * even when every figure on it is right: "$0.1376 per unit" above
+   * "3,000 bundles" invites exactly the wrong multiplication.
+   *
+   * So every per-unit figure the cards show comes from here, scaled once,
+   * rather than from `r`. Job totals (totalCost, totalRevenue, the
+   * commissions) are NOT scaled -- they are already whole-job numbers and
+   * multiplying them would be a straightforward error.
+   *
+   * `r` itself stays the source of truth for logic: null checks, the
+   * margin solve, and the quote, which does its own conversion.
+   */
+  const rq = useMemo(() => {
+    if (packsPerBundle <= 1) return r;
+    const x = (v: number | null) => (v === null ? null : v * packsPerBundle);
+    return {
+      ...r,
+      materialsPerUnit: x(r.materialsPerUnit),
+      laborPerUnit: x(r.laborPerUnit),
+      overheadPerUnit: x(r.overheadPerUnit),
+      labTestingPerUnit: x(r.labTestingPerUnit),
+      costPerUnit: x(r.costPerUnit),
+      salePerUnit: x(r.salePerUnit),
+    };
+  }, [r, packsPerBundle]);
 
   /**
    * The labour matrix, computed once by the model and merely rendered by the
@@ -5638,7 +5677,14 @@ export default function BlisterCostingBoard({
                             const w = wasteFactor(line);
                             if (c === null || q === null || w === null)
                               return "—";
-                            return money(q * c * w, st.displayDec);
+                            // Scaled to the quoted unit like every other
+                            // figure on the card -- the column heading says
+                            // so, and a header in one unit over values in
+                            // another is the mix this change exists to end.
+                            return money(
+                              q * c * w * packsPerBundle,
+                              st.displayDec,
+                            );
                           })()}
                   </ReadOnly>
                   {/* Show the working, not just the answer. The figure above
@@ -5748,8 +5794,8 @@ export default function BlisterCostingBoard({
         </div>
         <CardTotal
           label={`Material cost / ${unitNounSingular}`}
-          perUnit={r.materialsPerUnit}
-          quantity={qty}
+          perUnit={rq.materialsPerUnit}
+          quantity={outerQty}
           unitNoun={unitNoun}
           dec={st.displayDec}
           picker={
@@ -6055,7 +6101,10 @@ export default function BlisterCostingBoard({
                       <td style={labTd}>{labMoney(role.total, 2)}</td>
                       <td style={labTd}>
                         {qty && qty > 0
-                          ? labMoney(role.total / qty, st.displayDec)
+                          ? labMoney(
+                              (role.total / qty) * packsPerBundle,
+                              st.displayDec,
+                            )
                           : labSum(null)}
                       </td>
                     </tr>
@@ -6077,9 +6126,10 @@ export default function BlisterCostingBoard({
           </>
         )}
         <CardTotal
-          label="Direct labor / unit"
-          perUnit={r.laborPerUnit}
-          quantity={qty}
+          label={`Direct labor / ${unitNounSingular}`}
+          perUnit={rq.laborPerUnit}
+              unitNoun={unitNoun}
+          quantity={outerQty}
           dec={st.displayDec}
           picker={
             <DecimalPicker
@@ -6381,9 +6431,10 @@ export default function BlisterCostingBoard({
         </div>
 
         <CardTotal
-          label="Overhead / unit"
-          perUnit={r.overheadPerUnit}
-          quantity={qty}
+          label={`Overhead / ${unitNounSingular}`}
+          perUnit={rq.overheadPerUnit}
+              unitNoun={unitNoun}
+          quantity={outerQty}
           dec={st.displayDec}
           picker={
             <DecimalPicker
@@ -6473,9 +6524,10 @@ export default function BlisterCostingBoard({
             ))}
 
             <CardTotal
-              label="Lab testing / unit"
-              perUnit={r.labTestingPerUnit}
-              quantity={qty}
+              label={`Lab testing / ${unitNounSingular}`}
+              perUnit={rq.labTestingPerUnit}
+              unitNoun={unitNoun}
+              quantity={outerQty}
               dec={st.displayDec}
               picker={
                 <DecimalPicker
@@ -6542,14 +6594,15 @@ export default function BlisterCostingBoard({
               onChange={(v) => set("repCommissionPct", v)}
             />
           </ParamBlock>
-          <ParamBlock label="Commissions / unit" nowrap>
+          <ParamBlock label={`Commissions / ${unitNounSingular}`} nowrap>
             <ReadOnly>
               {r.hosCommission !== null &&
               r.repCommission !== null &&
               qty &&
               qty > 0
                 ? money(
-                    (r.hosCommission + r.repCommission) / qty,
+                    ((r.hosCommission + r.repCommission) / qty) *
+                      packsPerBundle,
                     st.displayDec,
                   )
                 : "—"}
@@ -6582,45 +6635,45 @@ export default function BlisterCostingBoard({
           />
         </div>
         <div style={metricGrid}>
-          <ParamBlock label="Material cost / unit" nowrap>
+          <ParamBlock label={`Material cost / ${unitNounSingular}`} nowrap>
             <ReadOnly>
-              {r.materialsPerUnit !== null ? (
+              {rq.materialsPerUnit !== null ? (
                 <>
-                  {money(r.materialsPerUnit, st.displayDec)}
-                  {pctOf(r.materialsPerUnit)}
+                  {money(rq.materialsPerUnit, st.displayDec)}
+                  {pctOf(rq.materialsPerUnit)}
                 </>
               ) : (
                 "—"
               )}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Direct labor / unit" nowrap>
+          <ParamBlock label={`Direct labor / ${unitNounSingular}`} nowrap>
             <ReadOnly>
-              {r.laborPerUnit !== null ? (
+              {rq.laborPerUnit !== null ? (
                 <>
-                  {money(r.laborPerUnit, st.displayDec)}
-                  {pctOf(r.laborPerUnit)}
+                  {money(rq.laborPerUnit, st.displayDec)}
+                  {pctOf(rq.laborPerUnit)}
                 </>
               ) : (
                 "—"
               )}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Overhead / unit" nowrap>
+          <ParamBlock label={`Overhead / ${unitNounSingular}`} nowrap>
             <ReadOnly>
-              {r.overheadPerUnit !== null ? (
+              {rq.overheadPerUnit !== null ? (
                 <>
-                  {money(r.overheadPerUnit, st.displayDec)}
-                  {pctOf(r.overheadPerUnit)}
+                  {money(rq.overheadPerUnit, st.displayDec)}
+                  {pctOf(rq.overheadPerUnit)}
                 </>
               ) : (
                 "—"
               )}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="Lab testing / unit" nowrap>
+          <ParamBlock label={`Lab testing / ${unitNounSingular}`} nowrap>
             <ReadOnly>
-              {r.labTestingPerUnit !== null ? money(r.labTestingPerUnit, st.displayDec) : "—"}
+              {rq.labTestingPerUnit !== null ? money(rq.labTestingPerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
           {/* Display-only: commission is a % of the SALE price, so it lives
@@ -6628,22 +6681,23 @@ export default function BlisterCostingBoard({
               make-cost. It appears here so the card shows every per-bottle
               dollar the job carries in one place. Blank until a price
               exists, since without one there is nothing to take a % of. */}
-          <ParamBlock label="Commissions / unit" nowrap>
+          <ParamBlock label={`Commissions / ${unitNounSingular}`} nowrap>
             <ReadOnly>
               {r.hosCommission !== null &&
               r.repCommission !== null &&
               qty &&
               qty > 0
                 ? money(
-                    (r.hosCommission + r.repCommission) / qty,
+                    ((r.hosCommission + r.repCommission) / qty) *
+                      packsPerBundle,
                     st.displayDec,
                   )
                 : "—"}
             </ReadOnly>
           </ParamBlock>
-          <ParamBlock label="True Cost / unit" nowrap>
+          <ParamBlock label={`True Cost / ${unitNounSingular}`} nowrap>
             <ReadOnly>
-              {r.costPerUnit !== null ? money(r.costPerUnit, st.displayDec) : "—"}
+              {rq.costPerUnit !== null ? money(rq.costPerUnit, st.displayDec) : "—"}
             </ReadOnly>
           </ParamBlock>
           <ParamBlock label="Total Job Cost" nowrap>
@@ -6724,17 +6778,21 @@ export default function BlisterCostingBoard({
           </ParamBlock>
         </div>
         <div style={metricGrid}>
-          <ParamBlock label="Price / unit" nowrap>
+          <ParamBlock label={`Price / ${unitNounSingular}`} nowrap>
             {/* Editable: quoting sometimes starts from the number the
                 customer will see. Typing here back-solves the margin above,
                 so profit, operating margin and the break-even banner all
                 move together. */}
             <PriceField
-              value={r.salePerUnit}
+              value={rq.salePerUnit}
               dec={Math.max(st.displayDec, 2)}
               disabled={r.costPerUnit === null}
               onCommit={(p) => {
-                const m = marginFromPrice(p);
+                // Typed per quoted unit, solved per finished unit. The
+                // margin maths runs on the model's basis, so a price typed
+                // against bundles has to come back down before it is used
+                // or the solve reads a twelve-times margin.
+                const m = marginFromPrice(p / packsPerBundle);
                 if (m !== null) set("marginPct", m);
               }}
             />
@@ -6802,11 +6860,11 @@ export default function BlisterCostingBoard({
             hint="Gross margin on MATERIALS ONLY = (price − material cost) ÷ price. Ignores labor, overhead, lab testing and commissions — the classic manufacturing gross margin, useful for comparing against industry benchmarks. Always higher than the operating margin."
           >
             <ReadOnly>
-              {r.salePerUnit !== null &&
-              r.salePerUnit > 0 &&
-              r.materialsPerUnit !== null
+              {rq.salePerUnit !== null &&
+              rq.salePerUnit > 0 &&
+              rq.materialsPerUnit !== null
                 ? `${(
-                    ((r.salePerUnit - r.materialsPerUnit) / r.salePerUnit) *
+                    ((rq.salePerUnit - rq.materialsPerUnit) / rq.salePerUnit) *
                     100
                   ).toFixed(1)}%`
                 : "—"}
