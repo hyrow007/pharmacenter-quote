@@ -4536,7 +4536,11 @@ export default function BlisterCostingBoard({
             />
           </ParamBlock>
 
-          {/* The hand stations, each behind the answer that turns it on.
+          {/* The hand stations, in the order the floor does them: pack out
+              into the retail pack, bundle those into a display, carton the
+              displays. Not alphabetical and not gated-first -- a rep
+              reading down this card is walking the job.
+
               Per PERSON, unlike the line speed: two people pack twice as
               fast, whereas the line runs at its own pace whoever is
               watching it.
@@ -4555,12 +4559,6 @@ export default function BlisterCostingBoard({
               />
             </ParamBlock>
           )}
-          <ParamBlock label="Cartoning speed (units / min / person)">
-            <NumField
-              value={st.cartoningSpeed}
-              onChange={(v) => set("cartoningSpeed", v)}
-            />
-          </ParamBlock>
           {bundlingOn && (
             <ParamBlock label="Bundling speed (units / min / person)">
               <NumField
@@ -4570,6 +4568,12 @@ export default function BlisterCostingBoard({
               />
             </ParamBlock>
           )}
+          <ParamBlock label="Cartoning speed (units / min / person)">
+            <NumField
+              value={st.cartoningSpeed}
+              onChange={(v) => set("cartoningSpeed", v)}
+            />
+          </ParamBlock>
           {/* What the request actually asked for, measured against what this
               tab is pricing.
 
