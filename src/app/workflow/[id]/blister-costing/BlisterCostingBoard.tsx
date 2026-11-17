@@ -5051,9 +5051,19 @@ export default function BlisterCostingBoard({
                             // would put 72 in a box the user called 12 inners.
                             line.slot === "master_box" && hasInnerPack
                               ? (st.innersPerMasterBox ?? "")
-                              : line.qtyPerUnit !== null && line.qtyPerUnit > 0
-                                ? Math.round(1 / line.qtyPerUnit)
-                                : ""
+                              : // Same reason on a bundling job: the box counts
+                                // BUNDLES and qtyPerUnit is per finished unit,
+                                // so 1/qtyPerUnit is 144 where the user typed
+                                // 12. Showing it put the derived figure back in
+                                // the box that writes the raw one, and every
+                                // keystroke multiplied again.
+                                line.slot === "master_box" &&
+                                  packsPerBundle > 1
+                                ? (st.bottlesPerMasterBox ?? "")
+                                : line.qtyPerUnit !== null &&
+                                    line.qtyPerUnit > 0
+                                  ? Math.round(1 / line.qtyPerUnit)
+                                  : ""
                           }
                           onFocus={(e) => {
                             // Chrome does not select a number input's contents
