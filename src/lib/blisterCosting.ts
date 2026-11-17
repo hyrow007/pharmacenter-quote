@@ -209,22 +209,30 @@ export function blisterLaborBreakdown(
   };
 
   // Process order: set up, run the line, and while it runs the hand stations
-  // pack out, carton and bundle what comes off it; then clean down.
+  // pack out into the retail pack, bundle those into a display, then carton
+  // the displays; clean down at the end.
+  //
+  // Cartoning sits AFTER bundling because that is when it happens -- it
+  // handles displays, not packs, which is also why its speed is quoted per
+  // bundle. The Considerations card asks in this same order.
+  //
+  // Order is presentation only: every consumer either sums the array or
+  // filters it by label, and nothing indexes it by position.
   const phases = [
     mk("Setup", setupHours, labor.setup.leaders, labor.setup.operators),
     mk("Blister Line", lineHours, labor.line.leaders, labor.line.operators),
     mk("Packout", packoutHours, labor.packout.leaders, labor.packout.operators),
     mk(
-      "Cartoning",
-      cartoningHours,
-      labor.cartoning.leaders,
-      labor.cartoning.operators,
-    ),
-    mk(
       "Bundling",
       bundlingHours,
       labor.bundling.leaders,
       labor.bundling.operators,
+    ),
+    mk(
+      "Cartoning",
+      cartoningHours,
+      labor.cartoning.leaders,
+      labor.cartoning.operators,
     ),
     mk("Cleaning", cleanHours, labor.cleaning.leaders, labor.cleaning.operators),
   ];
