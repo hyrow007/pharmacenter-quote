@@ -148,6 +148,7 @@ export default function WorkflowTable({ rows }: Props) {
   // While a delete is in flight we want to disable the button (and dim it)
   // to prevent double-fires; failing that we'd send two DELETEs back to back.
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const visibleRows = useMemo(
     () => (removedIds.size === 0 ? rows : rows.filter((r) => !removedIds.has(r.id))),
@@ -289,6 +290,39 @@ export default function WorkflowTable({ rows }: Props) {
       }
     },
     [deletingId, router],
+  );
+
+  /** Copy a workflow and open the copy.
+   *
+   *  The server does the copying; this only asks. Opening the new one is
+   *  the point -- a duplicate you then have to find in the list is a
+   *  duplicate you made for no reason. */
+  const duplicateRow = useCallback(
+    async (id: string) => {
+      if (duplicatingId) return;
+      setError(null);
+      setDuplicatingId(id);
+      try {
+        const res = await fetch(`/api/workflows/${id}/duplicate`, {
+          method: "POST",
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          workflow?: { id: string };
+        };
+        if (!res.ok || !json.ok || !json.workflow) {
+          setError(json.error || "duplicate_failed");
+          setDuplicatingId(null);
+          return;
+        }
+        router.push(`/workflow/${json.workflow.id}`);
+      } catch {
+        setError("duplicate_failed");
+        setDuplicatingId(null);
+      }
+    },
+    [duplicatingId, router],
   );
 
   const commitDraft = useCallback(
@@ -449,6 +483,27 @@ export default function WorkflowTable({ rows }: Props) {
                         {row.salesOrdersTotalLabel}
                       </span>
                     ) : null}
+                    {/* Sits with delete, and stops the click reaching the
+                        parent <Link> the same way -- otherwise Next
+                        navigates to the ORIGINAL before the copy is even
+                        requested. */}
+                    <button
+                      type="button"
+                      className="row-delete"
+                      aria-label={t("duplicateNamed", {
+                        name: row.quoteNumberLabel,
+                      })}
+                      title={t("duplicateWorkflow")}
+                      disabled={duplicatingId === row.id}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        duplicateRow(row.id);
+                      }}
+                    >
+                      {duplicatingId === row.id ? "…" : "⧉"}
+                    </button>
                     {row.canDelete ? (
                       <button
                         type="button"
