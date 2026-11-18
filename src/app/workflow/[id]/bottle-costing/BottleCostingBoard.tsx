@@ -2713,6 +2713,50 @@ export default function BottleCostingBoard({
     setSt({ ...cur, scenarios });
     setActiveScenarioId(id);
   };
+  /** "Scenario 2" -> "Scenario 2 copy" -> "Scenario 2 copy 2". Never
+   *  silently reuses a name: two pills reading the same thing is how you
+   *  price the wrong one. */
+  const copyScenarioName = (base: string, taken: string[]) => {
+    const first = `${base} copy`;
+    if (!taken.includes(first)) return first;
+    let n = 2;
+    while (taken.includes(`${first} ${n}`)) n += 1;
+    return `${first} ${n}`;
+  };
+
+  /** Copy one scenario, whichever is on screen. `+ Scenario` can only
+   *  clone what you are looking at; this clones the one you point at and
+   *  drops the copy beside it. */
+  const duplicateScenario = (id: string) => {
+    const cur = stripScenarios(st);
+    let scenarios = st.scenarios ?? [];
+    // Write the screen back first, exactly as addScenario does: the active
+    // scenario's edits live in `st`, not in the list, so cloning straight
+    // from the list would copy a state the user has already moved past.
+    if (activeScenarioId === null) {
+      baseStashRef.current = cur;
+    } else {
+      scenarios = scenarios.map((sc) =>
+        sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+      );
+    }
+    const idx = scenarios.findIndex((sc) => sc.id === id);
+    if (idx < 0) return;
+    const src = scenarios[idx];
+    const newId = "sc_" + Math.random().toString(36).slice(2, 9);
+    const name = copyScenarioName(
+      src.name || "Scenario",
+      scenarios.map((sc) => sc.name),
+    );
+    scenarios = [
+      ...scenarios.slice(0, idx + 1),
+      { id: newId, name, state: src.state },
+      ...scenarios.slice(idx + 1),
+    ];
+    setSt({ ...src.state, scenarios });
+    setActiveScenarioId(newId);
+  };
+
   const deleteScenario = (id: string) => {
     const scenarios = (st.scenarios ?? []).filter((x) => x.id !== id);
     if (activeScenarioId === id) {
@@ -3999,6 +4043,54 @@ export default function BottleCostingBoard({
                           {hoveredScenarioId === sc.id ? (
                             <span
                               role="button"
+                              aria-label="Duplicate scenario"
+                              title="Duplicate this scenario"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isActiveProduct) duplicateScenario(sc.id);
+                                else {
+                                  // A product that is not on screen has no
+                                  // live state to fold in, so its list is the
+                                  // whole truth and the copy goes straight
+                                  // beside the original.
+                                  const list = bundles[i].scenarios ?? [];
+                                  const at = list.findIndex(
+                                    (x) => x.id === sc.id,
+                                  );
+                                  if (at < 0) return;
+                                  bundles[i] = {
+                                    ...bundles[i],
+                                    scenarios: [
+                                      ...list.slice(0, at + 1),
+                                      {
+                                        ...list[at],
+                                        id:
+                                          "sc_" +
+                                          Math.random().toString(36).slice(2, 9),
+                                        name: copyScenarioName(
+                                          list[at].name || "Scenario",
+                                          list.map((x) => x.name),
+                                        ),
+                                      },
+                                      ...list.slice(at + 1),
+                                    ],
+                                  };
+                                  forcePillRefresh((v) => v + 1);
+                                }
+                                setHoveredScenarioId(null);
+                              }}
+                              style={{
+                                marginLeft: 8,
+                                fontWeight: 700,
+                                opacity: 0.75,
+                              }}
+                            >
+                              ⧉
+                            </span>
+                          ) : null}
+                          {hoveredScenarioId === sc.id ? (
+                            <span
+                              role="button"
                               aria-label="Delete scenario"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -4035,6 +4127,7 @@ export default function BottleCostingBoard({
         <button
           type="button"
           onClick={addScenario}
+          title="Starts from a copy of whatever you are viewing"
           style={{
             padding: "6px 12px",
             borderRadius: 999,
