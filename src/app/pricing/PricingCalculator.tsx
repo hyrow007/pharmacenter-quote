@@ -2915,6 +2915,11 @@ export default function PricingCalculator({
   // scroll away inside the active tab — the name should be editable where
   // it is read. null = nobody is renaming.
   const [renamingTab, setRenamingTab] = useState<number | null>(null);
+  /** Which tab the pointer is over. Rename and duplicate show on the active
+   *  tab and on whichever one you are pointing at -- the strip stays a row
+   *  of names rather than a row of icons, and you can still act on a tab
+   *  without switching to it first. */
+  const [hoveredTab, setHoveredTab] = useState<number | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
 
   function beginRename(index: number, currentDisplay: string) {
@@ -3560,6 +3565,10 @@ export default function PricingCalculator({
               role="tab"
               aria-selected={active}
               onClick={() => switchTab(i)}
+              onMouseEnter={() => setHoveredTab(i)}
+              onMouseLeave={() =>
+                setHoveredTab((cur) => (cur === i ? null : cur))
+              }
               // Not draggable mid-rename: the browser would drag the tab
               // instead of letting you select text in the input.
               draggable={renamingTab !== i}
@@ -3703,11 +3712,11 @@ export default function PricingCalculator({
                   {label}
                 </span>
               )}
-              {/* Rename affordance. Only on the active tab — a pencil on
-                  every tab turns the strip into a row of icons, and a
-                  double-click alone is too well hidden to count as
-                  "editable". */}
-              {active && renamingTab !== i ? (
+              {/* Rename affordance. On the active tab and on the one under
+                  the pointer: a pencil on EVERY tab turns the strip into a
+                  row of icons, and a double-click alone is too well hidden
+                  to count as "editable". */}
+              {(active || hoveredTab === i) && renamingTab !== i ? (
                 <button
                   type="button"
                   aria-label={`Rename ${label}`}
@@ -3729,10 +3738,11 @@ export default function PricingCalculator({
                   ✎
                 </button>
               ) : null}
-              {/* Duplicate sits with rename on the ACTIVE tab only, for the
-                  same reason: an icon on every tab turns the strip into a
-                  row of icons and none of them reads as a verb. */}
-              {active && renamingTab !== i ? (
+              {/* Duplicate sits with rename, and appears the same way.
+                  duplicateTab() snapshots the active tab before copying by
+                  index, so copying a tab you are NOT on is already safe --
+                  only the control was missing. */}
+              {(active || hoveredTab === i) && renamingTab !== i ? (
                 <button
                   type="button"
                   aria-label={`Duplicate ${label}`}
