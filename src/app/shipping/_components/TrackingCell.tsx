@@ -17,7 +17,10 @@ export default function TrackingCell({ number, link = true, copyLabel, copiedLab
 
   async function copy() {
     const plain = `FedEx Tracking: ${number} ${url}`;
-    const html = `FedEx Tracking: <a href="${esc(url)}">${esc(number)}</a>`;
+    // One inline <span>, nothing before it: bare text at the top of an HTML
+    // fragment makes Gmail and Outlook wrap it in their own indented block
+    // (seen 2026-11-17 as a wide gap before "FedEx Tracking:").
+    const html = `<span style="margin:0;padding:0">FedEx Tracking:&nbsp;<a href="${esc(url)}">${esc(number)}</a></span>`;
     try {
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
         await navigator.clipboard.write([
