@@ -2757,6 +2757,56 @@ export default function BottleCostingBoard({
     setActiveScenarioId(newId);
   };
 
+  /** Drag-to-reorder for the scenario pills. Carried pill and the pill it
+   *  would land on; both cleared on drop or cancel. Base is not in this
+   *  list and does not move -- it is the state the scenarios are variants
+   *  of, so it stays first. */
+  const [dragScenario, setDragScenario] = useState<{
+    product: number;
+    id: string;
+  } | null>(null);
+  const [dropScenarioId, setDropScenarioId] = useState<string | null>(null);
+
+  /** Splice one id into another's slot. Shared by both branches so the
+   *  drop lands the same way whichever product's pills you are dragging. */
+  const spliceById = <T extends { id: string }>(
+    list: T[],
+    fromId: string,
+    toId: string,
+  ): T[] | null => {
+    const from = list.findIndex((x) => x.id === fromId);
+    const to = list.findIndex((x) => x.id === toId);
+    if (from < 0 || to < 0 || from === to) return null;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    return next;
+  };
+
+  /** Reorder the ACTIVE product's scenarios. The other products' lists live
+   *  on `bundles`, which only exists inside the render, so that branch is
+   *  handled at the drop site -- same split the duplicate control uses. */
+  const reorderScenario = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    // Fold the screen back before touching the list, exactly as adding and
+    // duplicating do: the active scenario's edits are in `st`, and a
+    // reorder that read a stale list would write those edits away.
+    const cur = stripScenarios(st);
+    let scenarios = st.scenarios ?? [];
+    if (activeScenarioId === null) {
+      baseStashRef.current = cur;
+    } else {
+      scenarios = scenarios.map((sc) =>
+        sc.id === activeScenarioId ? { ...sc, state: cur } : sc,
+      );
+    }
+    const next = spliceById(scenarios, fromId, toId);
+    if (!next) return;
+    // Only the order changes: what is on screen, and which pill is active,
+    // are both left alone.
+    setSt({ ...cur, scenarios: next });
+  };
+
   const deleteScenario = (id: string) => {
     const scenarios = (st.scenarios ?? []).filter((x) => x.id !== id);
     if (activeScenarioId === id) {
@@ -4028,8 +4078,68 @@ export default function BottleCostingBoard({
                           }}
                           onMouseEnter={() => setHoveredScenarioId(sc.id)}
                           onMouseLeave={() => setHoveredScenarioId(null)}
-                          title="Right-click to rename"
-                          style={pillStyle(active)}
+                          draggable={renamingScenarioId !== sc.id}
+                          onDragStart={(e) => {
+                            setDragScenario({ product: i, id: sc.id });
+                            e.dataTransfer.effectAllowed = "move";
+                            // Firefox will not start a drag without payload.
+                            e.dataTransfer.setData("text/plain", sc.id);
+                          }}
+                          onDragOver={(e) => {
+                            // Only within one product's own run of pills:
+                            // a scenario belongs to its product and dropping
+                            // it under another would move it between quotes.
+                            if (!dragScenario || dragScenario.product !== i)
+                              return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            if (dropScenarioId !== sc.id)
+                              setDropScenarioId(sc.id);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (dragScenario && dragScenario.product === i) {
+                              if (isActiveProduct) {
+                                reorderScenario(dragScenario.id, sc.id);
+                              } else {
+                                const next = spliceById(
+                                  bundles[i].scenarios ?? [],
+                                  dragScenario.id,
+                                  sc.id,
+                                );
+                                if (next) {
+                                  bundles[i] = {
+                                    ...bundles[i],
+                                    scenarios: next,
+                                  };
+                                  forcePillRefresh((v) => v + 1);
+                                }
+                              }
+                            }
+                            setDragScenario(null);
+                            setDropScenarioId(null);
+                          }}
+                          onDragEnd={() => {
+                            setDragScenario(null);
+                            setDropScenarioId(null);
+                          }}
+                          title="Drag to reorder · right-click to rename"
+                          style={{
+                            ...pillStyle(active),
+                            cursor: "grab",
+                            // The carried pill fades and the one it would
+                            // land on takes a line on the edge it will be
+                            // pushed toward, so the result is visible before
+                            // the mouse comes up.
+                            opacity:
+                              dragScenario?.id === sc.id ? 0.4 : undefined,
+                            boxShadow:
+                              dropScenarioId === sc.id &&
+                              dragScenario &&
+                              dragScenario.id !== sc.id
+                                ? "inset 2px 0 0 0 var(--teal-700, #1d6c7b)"
+                                : undefined,
+                          }}
                         >
                           {sc.name || "Scenario"} —{" "}
                           {(() => {
