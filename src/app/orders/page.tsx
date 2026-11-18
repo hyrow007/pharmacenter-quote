@@ -6,7 +6,10 @@ import AppHeader from "../_components/AppHeader";
 import PrintButton from "./PrintButton";
 import AskChip from "./_components/AskChip";
 import OrdersChatHost from "./_components/OrdersChatHost";
-import { compareSoNumbers } from "./_lib/boardOrder";
+import { compareSoNumbers,
+  liveSoFilter,
+  ESTIMATE_STATUS_ID,
+} from "./_lib/boardOrder";
 import { describeFreshness } from "@/lib/freshness";
 import { getLangFromCookie } from "@/lib/i18n/server";
 import { makeT } from "@/lib/i18n/dict";
@@ -109,13 +112,10 @@ export default async function OrdersLandingPage() {
       .from("fishbowl_sales_orders")
       .select(SO_COLS)
       .in("status_id", OPEN_STATUS_IDS)
-      // Fishbowl decides what is still open. When an SO moves to
-      // Fulfilled / Closed Short / Void it stops appearing in the nightly
-      // sync, whose finalize step then flips is_open=false -- but it never
-      // rewrites status_id, so the row keeps its last-known Issued /
-      // In Progress label. Filtering on status alone left closed orders on
-      // the board indefinitely (17 of them as of 2026-09-23).
-      .eq("is_open", true)
+      // Committed orders by is_open, estimates by freshness. Both rules and
+      // the reasoning behind them live in liveSoFilter, because the Prev/Next
+      // sequence has to select exactly the same set.
+      .or(liveSoFilter())
       .order("customer_name", { ascending: true })
       .order("so_number", { ascending: true })
       .limit(500),
@@ -832,10 +832,26 @@ export default async function OrdersLandingPage() {
                           `${t("touchFishbowl")} ${describeFreshness(so.synced_at, t, lang).relative}`,
                         );
 
+                      // An estimate is quoted work, not committed work. Its
+                      // ship date is a placeholder nobody promised, and
+                      // nobody owes it a Monday update either -- so the
+                      // overdue and gone-quiet warnings would fire on every
+                      // old quote and mean nothing. What does matter about a
+                      // quote is its age, which gets its own line below.
+                      const isEstimate = so.status_id === ESTIMATE_STATUS_ID;
+                      const quotedAt = so.date_issued ?? so.synced_at ?? null;
+                      const quoteAgeDays =
+                        isEstimate && quotedAt
+                          ? Math.floor(
+                              (Date.now() - new Date(quotedAt).getTime()) /
+                                86400000,
+                            )
+                          : null;
+
                       const warnings: string[] = [];
-                      if (ship.overdue)
+                      if (!isEstimate && ship.overdue)
                         warnings.push(t("warnShipOverdue"));
-                      else if (ship.imminent)
+                      else if (!isEstimate && ship.imminent)
                         warnings.push(
                           t("warnShipImminent", { days: String(ship.daysAway) }),
                         );
@@ -847,7 +863,7 @@ export default async function OrdersLandingPage() {
                         notes?.last_session_date,
                         monday?.latest_update_at,
                       );
-                      if (stale)
+                      if (stale && !isEstimate)
                         warnings.push(
                           t("warnStale", { days: String(STALE_THRESHOLD_DAYS) }),
                         );
@@ -873,8 +889,20 @@ export default async function OrdersLandingPage() {
                           ),
                         )
                         .slice(0, 1);
-                      const cardWos = openWos.length ? openWos : lastFinished;
-                      const shortComponents = shortagesBySo.get(key) ?? [];
+                      // Work orders link to an SO by matching the finished
+                      // good against open order lines, so an estimate for a
+                      // part already in production would hoover up work
+                      // orders that were never for it -- and its components
+                      // are not allocated to anything yet. Neither block
+                      // belongs on a quote.
+                      const cardWos = isEstimate
+                        ? []
+                        : openWos.length
+                          ? openWos
+                          : lastFinished;
+                      const shortComponents = isEstimate
+                        ? []
+                        : (shortagesBySo.get(key) ?? []);
 
                       return (
                         <Link
@@ -908,7 +936,7 @@ export default async function OrdersLandingPage() {
                               statusId={so.status_id}
                               t={t}
                             />
-                            {so.date_first_ship ? (
+                            {so.date_first_ship && !isEstimate ? (
                               <ShipDatePill
                                 date={so.date_first_ship}
                                 classification={ship}
@@ -926,7 +954,12 @@ export default async function OrdersLandingPage() {
                                 {so.salesman}
                               </span>
                             ) : null}
-                            {so.total_price != null ? (
+                            {/* A $0 estimate is a placeholder someone has
+                                not priced yet. Printing "$0.00" next to real
+                                quotes makes it look like free work rather
+                                than an unanswered question. */}
+                            {so.total_price != null &&
+                            !(isEstimate && so.total_price === 0) ? (
                               <span
                                 style={{
                                   marginLeft: "auto",
@@ -942,9 +975,38 @@ export default async function OrdersLandingPage() {
                             <AskChip
                               so={so.so_number}
                               label={t("soChatOpen")}
-                              pushRight={so.total_price == null}
+                              pushRight={
+                                so.total_price == null ||
+                                (isEstimate && so.total_price === 0)
+                              }
                             />
                           </div>
+
+                          {/* How old the quote is. Nothing in Fishbowl
+                              expires an estimate: it sits at status 10 until
+                              someone closes it, and the sync keeps delivering
+                              it as current. A quote from February reading the
+                              same as one from last week is the failure mode
+                              here, so the age is stated outright. */}
+                          {isEstimate ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color:
+                                  quoteAgeDays != null && quoteAgeDays > 60
+                                    ? "#8a6a1d"
+                                    : "var(--ink-3, #8a9498)",
+                                marginBottom: 6,
+                              }}
+                            >
+                              {quotedAt
+                                ? t("quotedOn", {
+                                    date: formatShort(quotedAt, lang),
+                                    days: String(quoteAgeDays ?? 0),
+                                  })
+                                : t("quoteNoDate")}
+                            </div>
+                          ) : null}
 
                           {/* What was ordered — product lines up top,
                               before the meeting context, so the card
