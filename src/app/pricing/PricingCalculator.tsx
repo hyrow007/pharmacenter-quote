@@ -2124,11 +2124,27 @@ export default function PricingCalculator({
     !isFormulaProduct &&
     typeof pickedProduct.stockQtyOnHand === "number" &&
     pickedProduct.stockQtyOnHand <= 0;
+  // The workflow says WE make this bulk ("Manufactured at PharmaCenter"),
+  // whatever the product picker holds. That is a fact about where the bulk
+  // comes from, and it is true before anyone pins a formula.
+  const isPcManufactured = workflowState?.source === "pharmacenter";
   // True when the picked product needs no inbound costs. Stock qualifies
-  // only while there is stock; formula products always do.
+  // only while there is stock; formula products always do; and so does
+  // anything we manufacture.
+  //
+  // PC-manufactured used to qualify only VIA a pinned formula, and on a
+  // Finished Product the formula picker is labelled "Bulk formula
+  // (optional)". So a gummy made here and packed into sachets, with no
+  // formula pinned yet, was priced as an import: $500 lab testing, $200
+  // other costs and 25% duty on a bulk that never crosses a border and
+  // never ships to us. Q0072.
+  //
+  // Note this also outranks stockExhausted: an empty shelf means "make
+  // more", not "go buy some", when the shelf is ours to fill.
   const isStockProduct =
     (pickedProduct?.sourceMode === "stock" && !stockExhausted) ||
-    isFormulaProduct;
+    isFormulaProduct ||
+    isPcManufactured;
 
 
   // --- Vendor picker --------------------------------------------------
@@ -4303,6 +4319,19 @@ export default function PricingCalculator({
                 don&rsquo;t apply. The calculator goes straight to the sale
                 price using just your margin.
               </>
+            ) : isPcManufactured ? (
+              /* Made here, but no formula pinned yet. Says so rather than
+                 borrowing the "existing stock" copy below, which would
+                 claim a landed cost sits in Fishbowl for something nobody
+                 has bought. */
+              <>
+                This bulk is <strong>manufactured at PharmaCenter</strong>, so
+                it never ships inbound: freight, duties, insurance, customs
+                broker and inbound lab testing don&rsquo;t apply.{" "}
+                <strong>No formula is pinned</strong>, so nothing can be
+                imported — enter the bulk cost per unit above, or pin a Bulk
+                formula on the workflow to import its True Cost.
+              </>
             ) : (
               <>
                 This product is <strong>existing stock</strong>. The landed
@@ -5152,11 +5181,13 @@ export default function PricingCalculator({
                 <td>
                   {isFormulaProduct
                     ? "PC-manufactured (True Cost from Formula app)"
-                    : isStockProduct
-                      ? "Existing stock (landed cost from Fishbowl)"
-                      : stockExhausted
-                        ? "Purchase needed (no stock on hand)"
-                        : "Purchase needed"}
+                    : isPcManufactured
+                      ? "PC-manufactured (cost entered by hand — no formula pinned)"
+                      : isStockProduct
+                        ? "Existing stock (landed cost from Fishbowl)"
+                        : stockExhausted
+                          ? "Purchase needed (no stock on hand)"
+                          : "Purchase needed"}
                 </td>
               </tr>
             ) : null}
