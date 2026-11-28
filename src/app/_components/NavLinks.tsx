@@ -104,7 +104,9 @@ export default function NavLinks({
       ) : null}
       {appContext === "meetings" ? (
         <Link
-          href={onMeetingHost ? "/meetings" : "https://meeting.pharmacenter.app/meetings"}
+          // The meetings hub is retired; this lands on the orders board,
+          // which is what "Meetings" meant in practice.
+          href={onOrderHost ? "/" : "https://orders.pharmacenter.app/"}
           className={`app-nav__link${isMeetings ? " app-nav__link--active" : ""}`}
         >
           {t("navMeetings")}
