@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/workflows";
-import { runPush } from "./_lib/push";
+import { liveEnabled, runPush } from "./_lib/push";
+import { gql, loadBoardIds, loadBoards, loadLinks, loadMirror, loadRunLog, mondayToken } from "./_lib/load";
+import { reconcile } from "./_lib/reconcile";
 import { addSoItemsColumn, setupPoBoards } from "./_lib/setup";
 import type { EntityKey } from "./_lib/entity";
 
@@ -73,4 +75,56 @@ async function queueSync(db: any, email: string): Promise<void> {
   if (last && Date.now() - Date.parse(last) < 3 * 60_000) return;
   const { error } = await db.from("sync_requests").insert({ requested_by: email, status: "pending" });
   if (error) console.error("monday push: sync request failed:", error.message);
+}
+
+/**
+ * "Archive" beside an item in "On the Open board, not in Fishbowl at all".
+ * The push never touches those on its own -- it cannot tell a dead order
+ * (e.g. 14790, cancelled before the sync started keeping history) from
+ * something a person added by hand. This is the person deciding.
+ *
+ * Re-checks before writing: the item must still be on this entity's Open
+ * board and still match no order in the mirror. Archived, never deleted
+ * (restorable in Monday for 30 days), and logged in monday_push_runs.
+ */
+export async function archiveUnmatched(formData: FormData): Promise<void> {
+  const { db, email } = await adminDb();
+  const entity: EntityKey = formData.get("entity") === "po" ? "po" : "so";
+  const itemId = String(formData.get("itemId") ?? "");
+  if (!/^\d+$/.test(itemId)) throw new Error("bad item id");
+  if (!liveEnabled(entity)) throw new Error("this board's push is not live");
+
+  const ids = await loadBoardIds(db, entity);
+  if (!ids) throw new Error("boards not set up");
+  const [mirror, boards, links, runLog] = await Promise.all([
+    loadMirror(db, entity),
+    loadBoards(ids),
+    loadLinks(db, entity),
+    loadRunLog(db, entity),
+  ]);
+  const report = reconcile(mirror, boards.items, links, runLog);
+  const target = report.unknownOnOpen.find((r) => r.item?.id === itemId);
+  if (!target) throw new Error("that item is no longer unmatched on the Open board");
+
+  const action = { kind: "archive", so: target.so, itemId, lastStatus: "not in Fishbowl" };
+  let error: string | null = null;
+  try {
+    await gql(mondayToken(), `mutation ($i: ID!) { archive_item(item_id: $i) { id } }`, { i: itemId });
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (db as any).from("monday_push_runs").insert({
+    entity,
+    trigger: "manual",
+    dry_run: false,
+    mirror_as_of: report.latestRunAt,
+    planned: [action],
+    applied: error ? [] : [action],
+    errors: error ? [{ action, error }] : [],
+    started_by: email,
+    finished_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error);
+  revalidatePath("/admin/monday");
 }

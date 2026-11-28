@@ -11,7 +11,7 @@ import { ENTITIES, MAX_CREATES_PER_RUN, type EntityKey } from "./_lib/entity";
 import { reconcile, type BoardItem, type FieldDiff, type Report, type Row } from "./_lib/reconcile";
 import { changingWrites, mondayWrites, plan, type Action } from "./_lib/plan";
 import { liveEnabled, moveLosses, moveMapping } from "./_lib/push";
-import { addItemsColumn, createPoBoards, pushNow } from "./actions";
+import { addItemsColumn, archiveUnmatched, createPoBoards, pushNow } from "./actions";
 import { makeMT, type MT } from "./_lib/i18n";
 
 // /admin/monday — the Fishbowl → Monday reconciler, read-only.
@@ -205,7 +205,7 @@ function Body({ report, t, lang, entity }: { report: Report; t: MT; lang: "en" |
         <DiffTable diffs={report.fieldDiffs} t={t} />
       </Section>
       <Section title={t("sUnknown")} hint={t("hUnknown")} n={report.unknownOnOpen.length}>
-        <SoTable rows={report.unknownOnOpen} t={t} />
+        <SoTable rows={report.unknownOnOpen} t={t} archiveFor={liveEnabled(entity) ? entity : undefined} />
       </Section>
       <Section title={t("sDupes")} hint={t("hDupes")} n={report.duplicates.length}>
         <SoTable
@@ -258,7 +258,18 @@ function ItemLink({ item, t }: { item: BoardItem | null; t: MT }) {
   );
 }
 
-function SoTable({ rows, t, showMatch }: { rows: Row[]; t: MT; showMatch?: boolean }) {
+function SoTable({
+  rows,
+  t,
+  showMatch,
+  archiveFor,
+}: {
+  rows: Row[];
+  t: MT;
+  showMatch?: boolean;
+  // When set, each row gets an Archive button (unmatched Open-board items).
+  archiveFor?: EntityKey;
+}) {
   return (
     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
       <thead>
@@ -268,6 +279,7 @@ function SoTable({ rows, t, showMatch }: { rows: Row[]; t: MT; showMatch?: boole
           <th style={head}>{t("colStatus")}</th>
           <th style={head}>{t("colItem")}</th>
           {showMatch ? <th style={head}>{t("colMatch")}</th> : null}
+          {archiveFor ? <th style={head} /> : null}
         </tr>
       </thead>
       <tbody>
@@ -279,6 +291,17 @@ function SoTable({ rows, t, showMatch }: { rows: Row[]; t: MT; showMatch?: boole
             <td style={cell}><ItemLink item={r.item} t={t} /></td>
             {showMatch ? (
               <td style={cell}>{r.matchType === "prefix" ? t("matchPrefix") : t("matchFormat")}</td>
+            ) : null}
+            {archiveFor && r.item ? (
+              <td style={cell}>
+                <form action={archiveUnmatched}>
+                  <input type="hidden" name="entity" value={archiveFor} />
+                  <input type="hidden" name="itemId" value={r.item.id} />
+                  <button type="submit" className="button-secondary" style={{ fontSize: 12, padding: "3px 10px" }}>
+                    {t("archiveOne")}
+                  </button>
+                </form>
+              </td>
             ) : null}
           </tr>
         ))}
@@ -432,7 +455,9 @@ function Runs({ runs, t, lang }: { runs: RunRow[]; t: MT; lang: "en" | "es" }) {
             {" · "}
             {r.dry_run ? t("runDry") : t("runLive")}
             {" · "}
-            {r.trigger === "button" ? t("runButton", { who: r.started_by ?? "?" }) : t("runSchedule")}
+            {r.trigger === "button" || r.trigger === "manual"
+              ? t("runButton", { who: r.started_by ?? "?" })
+              : t("runSchedule")}
             {" · "}
             {r.refused
               ? t("runRefused", { why: r.refused })
