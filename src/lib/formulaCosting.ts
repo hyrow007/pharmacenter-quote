@@ -188,9 +188,18 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   if (fp === "PC-RW-0010") return 0; // Pectin Classic CS 502
   if (fp === "PC-RW-0012") return 0; // Regular white granulated sugar
   if (fp === "PC-RW-0108") return 20; // Corn Syrup (NON GMO)
+  // v85.13: this mirror had drifted -- the editor gained the tapioca
+  // defaults in v85.6 and polyglycitol here, and a mirror that disagrees
+  // hands the quote side a different carry-over water figure than the one
+  // the operator approved on the formula.
+  if (fp === "PC-RW-0063") return 20; // Tapioca DE 43 (Conventional)
+  if (fp === "PC-RW-0039") return 20; // Organic Tapioca Syrup DE43
+  if (fp === "PC-RW-0028") return 25; // Hystar 3375 Polyglycitol Syrup
   const name = (r.customName ?? "").trim().toLowerCase();
   if (name.startsWith("citric acid + water solution")) return 50;
   if (name.startsWith("sodium citrate + water solution")) return 75;
+  if (name.startsWith("tapioca")) return 20;
+  if (name.startsWith("hystar") || name.includes("polyglycitol")) return 25;
   return 0;
 }
 

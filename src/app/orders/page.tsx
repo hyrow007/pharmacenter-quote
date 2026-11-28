@@ -65,6 +65,8 @@ type SoRow = {
   note: string | null;
   note_es: string | null;
   date_issued: string | null;
+  date_created: string | null;
+  date_last_modified: string | null;
   date_first_ship: string | null;
   subtotal: number | null;
   total_price: number | null;
@@ -83,7 +85,8 @@ const SALE_TYPE_IDS = new Set([10, 30]);
 
 const SO_COLS =
   "so_number, status_id, status_name, is_open, customer_name, customer_po, " +
-  "salesman, note, note_es, date_issued, date_first_ship, subtotal, total_price, " +
+  "salesman, note, note_es, date_issued, date_created, date_last_modified, " +
+  "date_first_ship, subtotal, total_price, " +
   "items, synced_at";
 
 export default async function OrdersLandingPage() {
@@ -219,6 +222,10 @@ export default async function OrdersLandingPage() {
   // Outcomes that mean "working"; anything else is a failure worth shouting.
   const PLAUD_OK = ["INGESTED", "NOTHING", "ALREADY_INGESTED", "DRY_RUN"];
 
+  // Newest correction per SO. Typing an update into the assistant is now how
+  // an order gets updated between meetings, so it has to count as a touch --
+  // see isStale and the touch footer below.
+  const lastCorrectionBy = new Map<string, string>();
   const correctionsBy = new Map<string, Array<{ text: string; by: string }>>();
   for (const raw of (corrRes.data ?? []) as unknown[]) {
     const c = raw as {
@@ -227,7 +234,13 @@ export default async function OrdersLandingPage() {
       text_es: string | null;
       created_by: string;
       created_by_name: string | null;
+      created_at: string | null;
     };
+    if (typeof c.created_at === "string") {
+      const prev = lastCorrectionBy.get(c.so_number);
+      if (!prev || c.created_at > prev)
+        lastCorrectionBy.set(c.so_number, c.created_at);
+    }
     const list = correctionsBy.get(c.so_number) ?? [];
     list.push({
       text: lang === "es" && c.text_es ? c.text_es : c.text,
@@ -623,21 +636,12 @@ export default async function OrdersLandingPage() {
       iso: mondaySyncIso,
       staleAfterHours: 26,
     },
-    {
-      // The ingest runs Tue + Fri, so a gap past ~4 days means a run was
-      // missed entirely. When the job has reported in, show ITS clock and
-      // status; fall back to the last ingested meeting for the stretch
-      // before heartbeats existed.
-      key: "plaud",
-      label: "Plaud",
-      iso: plaudBeat?.ran_at ?? plaudSyncIso,
-      staleAfterHours: 4 * 24,
-      status:
-        plaudBeat?.status && !PLAUD_OK.includes(plaudBeat.status)
-          ? plaudBeat.status
-          : null,
-      detail: plaudBeat?.detail ?? null,
-    },
+    // Plaud was here. The weekly sales-order meeting stopped being recorded
+    // in November 2026 -- orders are updated by typing into the assistant
+    // instead -- so the feed has no new runs to report. Left in the header it
+    // would count up forever and then flag itself as failing, which is a
+    // retired job looking like a broken one. Historical meeting notes still
+    // show on the cards and SO pages; only the health stamp is gone.
   ].map((f) => {
     const fr = describeFreshness(f.iso, t, lang);
     const ageHours = f.iso
@@ -827,6 +831,11 @@ export default async function OrdersLandingPage() {
                         lastTouches.push(
                           `${t("touchMonday")} ${describeFreshness(monday.latest_update_at, t, lang).relative}`,
                         );
+                      const lastCorrection = lastCorrectionBy.get(key) ?? null;
+                      if (lastCorrection)
+                        lastTouches.push(
+                          `${t("touchTyped")} ${describeFreshness(lastCorrection, t, lang).relative}`,
+                        );
                       if (so.synced_at)
                         lastTouches.push(
                           `${t("touchFishbowl")} ${describeFreshness(so.synced_at, t, lang).relative}`,
@@ -839,7 +848,17 @@ export default async function OrdersLandingPage() {
                       // old quote and mean nothing. What does matter about a
                       // quote is its age, which gets its own line below.
                       const isEstimate = so.status_id === ESTIMATE_STATUS_ID;
-                      const quotedAt = so.date_issued ?? so.synced_at ?? null;
+                      // NOT synced_at. A live estimate is re-sent on every
+                      // run, so synced_at is always today and every quote
+                      // read "0 days ago" -- the February-looks-like-last-week
+                      // failure this line exists to prevent. date_issued is
+                      // null on an estimate too, because it has not been
+                      // issued; date_created is when the quote was written.
+                      const quotedAt =
+                        so.date_created ??
+                        so.date_issued ??
+                        so.date_last_modified ??
+                        null;
                       const quoteAgeDays =
                         isEstimate && quotedAt
                           ? Math.floor(
@@ -862,6 +881,7 @@ export default async function OrdersLandingPage() {
                       const stale = isStale(
                         notes?.last_session_date,
                         monday?.latest_update_at,
+                        lastCorrection,
                       );
                       if (stale && !isEstimate)
                         warnings.push(
@@ -1615,10 +1635,15 @@ function classifyShipDate(dateStr: string | null): ShipClassification {
 function isStale(
   lastSession: string | null | undefined,
   lastMonday: string | null | undefined,
+  // Updates typed into the SO assistant. From 2026-11 the weekly meeting is
+  // no longer recorded to Plaud -- orders are updated by typing instead -- so
+  // without this the one signal that now moves most often would not count,
+  // and an order updated this morning would still read "no touch in 14d".
+  lastCorrection: string | null | undefined,
 ): boolean {
   const now = Date.now();
   const threshold = STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
-  const candidates = [lastSession, lastMonday]
+  const candidates = [lastSession, lastMonday, lastCorrection]
     .filter((d): d is string => typeof d === "string")
     .map((d) => new Date(d).getTime())
     .filter((n) => Number.isFinite(n));

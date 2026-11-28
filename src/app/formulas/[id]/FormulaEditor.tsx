@@ -296,12 +296,17 @@ function carryOverDefaultMoisturePct(r: GummyFormulaIngredient): number {
   // leaving the batch.
   if (fp === "PC-RW-0063") return 20; // Tapioca DE 43 (Conventional)
   if (fp === "PC-RW-0039") return 20; // Organic Tapioca Syrup DE43
+  // v85.13: polyglycitol syrup is 75% solids as purchased -- a quarter of
+  // what goes in the kettle is water that boils off. Operator standard.
+  if (fp === "PC-RW-0028") return 25; // Hystar 3375 Polyglycitol Syrup
   const name = (r.customName ?? "").trim().toLowerCase();
   if (name.startsWith("citric acid + water solution")) return 50;
   if (name.startsWith("sodium citrate + water solution")) return 75;
   // Catches rows typed by hand and the library's tapioca solutions
   // ("Tapioca Syrup (80% sol)", "Tapioca + Water Solution (80/20)").
   if (name.startsWith("tapioca")) return 20;
+  // Hand-typed rows and any library solution built on the same syrup.
+  if (name.startsWith("hystar") || name.includes("polyglycitol")) return 25;
   return 0;
 }
 
