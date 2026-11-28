@@ -88,13 +88,16 @@ const en = {
   cardOpenOrders: "Open orders",
   cardOpenOrdersBody:
     "Every open Fishbowl SO right now — search, sort, expand for line items. This is what you drive the meeting from.",
-  cardComingWithPlaud: "COMING WITH PLAUD",
+  // Key names still say Plaud; the meeting stopped being recorded in
+  // November 2026 and orders are now updated by typing into the assistant.
+  // Renaming the keys would touch both dictionaries and every call site for
+  // no gain -- the copy is what people read.
+  cardComingWithPlaud: "MEETING RECORD",
   cardWeeklySessions: "Weekly sessions",
   cardWeeklySessionsBody:
-    "Each Plaud recording of the meeting becomes a session below. Notes are extracted per SO and cross-referenced against current Fishbowl state.",
+    "Sessions from when the meeting was recorded, with notes extracted per SO and cross-referenced against Fishbowl. Recording ended in November 2026 — orders are now updated by typing into the assistant on each SO.",
   sessionHistory: "Session history",
-  noSessionsPlaud:
-    "No sessions yet. Once Plaud is wired up, each weekly recording will appear here automatically.",
+  noSessionsPlaud: "No recorded sessions.",
   soCountPlural: "SOs",
   soCountSingle: "SO",
   plaudRecording: "Plaud recording",
@@ -228,7 +231,7 @@ const en = {
   timeHrAgo: "{n}h ago",
   timeDayAgo: "{n}d ago",
   noMeetingsForSo:
-    "This SO hasn't been discussed in a recorded meeting yet. Once Plaud ingestion is live, weekly mentions will appear here alongside the Fishbowl state at that time.",
+    "This SO was never discussed in a recorded meeting. Meetings stopped being recorded in November 2026; updates since then are typed into the assistant and appear under Corrections.",
   dueLabel: "due",
 
   // ---- Mismatch warnings — code-emitted, localized in the UI ----
@@ -513,13 +516,12 @@ const es: typeof en = {
   cardOpenOrders: "Órdenes abiertas",
   cardOpenOrdersBody:
     "Todas las SO abiertas en Fishbowl ahora mismo — búsqueda, ordenamiento, expandir para ver ítems de línea. Este es el documento que se usa en la reunión.",
-  cardComingWithPlaud: "PRÓXIMAMENTE CON PLAUD",
+  cardComingWithPlaud: "REGISTRO DE REUNIONES",
   cardWeeklySessions: "Sesiones semanales",
   cardWeeklySessionsBody:
-    "Cada grabación de Plaud se convierte en una sesión abajo. Las notas se extraen por SO y se cruzan con el estado actual de Fishbowl.",
+    "Sesiones de cuando la reunión se grababa, con notas extraídas por SO y cruzadas con Fishbowl. La grabación terminó en noviembre de 2026 — las órdenes ahora se actualizan escribiendo en el asistente de cada SO.",
   sessionHistory: "Historial de sesiones",
-  noSessionsPlaud:
-    "Aún no hay sesiones. Cuando Plaud esté conectado, cada grabación semanal aparecerá aquí automáticamente.",
+  noSessionsPlaud: "No hay sesiones grabadas.",
   soCountPlural: "SO",
   soCountSingle: "SO",
   plaudRecording: "Grabación de Plaud",
@@ -652,7 +654,7 @@ const es: typeof en = {
   timeHrAgo: "hace {n}h",
   timeDayAgo: "hace {n}d",
   noMeetingsForSo:
-    "Esta SO aún no se ha discutido en una reunión grabada. Cuando Plaud esté conectado, las menciones semanales aparecerán aquí junto con el estado de Fishbowl de ese momento.",
+    "Esta SO nunca se discutió en una reunión grabada. Las reuniones dejaron de grabarse en noviembre de 2026; las actualizaciones desde entonces se escriben en el asistente y aparecen en Correcciones.",
   dueLabel: "vence",
 
   // ---- Mismatch warnings ----
